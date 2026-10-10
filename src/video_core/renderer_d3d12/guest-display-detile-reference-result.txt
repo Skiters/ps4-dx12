@@ -1,0 +1,3 @@
+Original shadPS4 tiling.comp -> signed DXIL: 2692 bytes
+Hardware: Intel(R) Arc(TM) B390 GPU
+PASS: CPU guest macro/micro address decoder matches original shadPS4 detiler running natively in D3D12: 26428 visible texels, 4 mips, 2 layers

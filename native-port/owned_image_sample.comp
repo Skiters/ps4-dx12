@@ -1,0 +1,6 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+layout(local_size_x=1) in;
+layout(set=0,binding=0) uniform utexture2D source;
+layout(set=0,binding=1,r32ui) coherent uniform uimage2D target;
+void main(){imageStore(target,ivec2(0),uvec4(texelFetch(source,ivec2(0),0).r+100u));}

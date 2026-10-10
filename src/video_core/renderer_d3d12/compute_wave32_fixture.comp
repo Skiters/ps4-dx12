@@ -1,0 +1,9 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Output {uint values[];};
+void main() {
+    uint id=gl_GlobalInvocationID.x;
+    values[id]=id*3+7+(gl_SubgroupSize-32)*1000000+
+        (gl_SubgroupInvocationID-id%32)*10000;
+}

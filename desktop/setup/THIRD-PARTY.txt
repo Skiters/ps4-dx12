@@ -1,0 +1,11 @@
+Bundled components:
+shadPS4 fork: GPL-2.0-or-later; see LICENSE-shadPS4.txt and project source backup.
+Mesa SPIR-V to DXIL offline compiler: MIT; custom linked-stage/barycentric changes.
+DirectX Shader Compiler dxcompiler.dll/dxil.dll: https://github.com/microsoft/DirectXShaderCompiler
+Microsoft Visual C++ app-local runtime: Visual Studio 18 Community redist 14.51.36231 x64.
+.NET 10 Windows x64 self-contained runtime: Microsoft .NET; licenses included by publish.
+PKG reader: https://github.com/aderumier/shadps4_pkg_to_zar revision 1cf25ce48aab8bb1de569b1448ca0854684a809c.
+PyInstaller-bundled Python, cryptography/OpenSSL and reader dependencies: installer/_internal.
+FFmpeg 7 binaries and SDL/other native libraries inherited from the compiled shadPS4 build.
+Source, exact dependency revision list and build instructions are in the companion project backup.
+No games, PS4 firmware modules, saves, private keys or driver installers are included.

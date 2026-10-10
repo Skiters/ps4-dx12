@@ -1,0 +1,117 @@
+ЧТО УСТАНОВИТЬ НА НОВОМ ПК ДЛЯ ПРОДОЛЖЕНИЯ РАЗРАБОТКИ
+Обычному пользователю установщика эти инструменты не нужны.
+
+СРЕДСТВА РАЗРАБОТКИ (x64)
+1. Visual Studio 2026 Community или Build Tools 2026 (ветка 18).
+   В Visual Studio Installer выбрать «Разработка классических приложений C++»:
+   MSVC x64/x86, C++ Clang tools for Windows, CMake tools for Windows и Windows
+   SDK 10.0.26100.0 или совместимый более новый. Нужен именно clang-cl с MSVC
+   STL/linker/SDK, а не только отдельный LLVM без заголовков Windows.
+   Старая проверенная среда: clang-cl 22.1.3, MSVC redist 14.51.36231,
+   CMake 4.3.1-msvc1, VS 18 Community. Переносимые .cmd находят VS через vswhere.
+   https://visualstudio.microsoft.com/downloads/
+   https://learn.microsoft.com/en-us/cpp/overview/acquire-msvc
+   https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line
+2. .NET SDK 10 x64 для WinForms-меню; проверено с 10.0.401.
+   https://dotnet.microsoft.com/en-us/download/dotnet/10.0
+3. Git for Windows для скачивания pinned исходников/submodules.
+   https://git-scm.com/download/win
+4. Python 3.12 x64; проверенная версия 3.12.14. Использовать отдельную venv.
+   https://www.python.org/downloads/windows/
+5. В venv: meson, ninja, mako, PyYAML, packaging, cryptography, zstandard,
+   pyinstaller. Meson нужен >=1.4; Ninja нужен для Mesa/CMake.
+   https://mesonbuild.com/Getting-meson.html
+6. Inno Setup для повторной сборки установщика; текущая сборка сделана 6.7.3.
+   https://jrsoftware.org/isdl.php
+7. Microsoft DirectX Shader Compiler SDK, проверенный release v1.8.2403.2.
+   https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.8.2403.2
+   Распаковать Windows SDK-архив в work/dxc-sdk так, чтобы были inc/dxcapi.h,
+   inc/d3d12shader.h и bin/x64/dxcompiler.dll, bin/x64/dxil.dll. Эта версия
+   dxcompiler.dll имеет FileVersion 1.8.2403.37, DXIL — 1.8.2403.24.
+   Изначально заголовки брались из FidelityFX-SDK. Для нового core эта лишняя
+   зависимость устранена: SHADPS4_DXC_INCLUDE_DIR теперь задаётся явно.
+   Vulkan SDK, OptiScaler, XeSS SDK и FSR runtime для текущего форка не нужны.
+
+СТРУКТУРА ПОСЛЕ РАСПАКОВКИ И ВОССТАНОВЛЕНИЯ
+D:\PS4Dev\
+  work\shadps4-dx12-src\       — наш код из бэкапа
+  work\shadps4-xess-src\       — скачанная база, только read-only зависимости
+  work\mesa-dxil-source\       — скачанная Mesa с нашими 4 overlay-файлами
+  work\mesa-dxil-bary-overlay\ — linked C API header для include-пути
+  work\mesa-dxil-bary-build\   — новая сборка компилятора, не из старого ПК
+  work\dxc-sdk\               — официальный Windows DXC SDK
+  work\pkg-installer\         — скачанный reader/fixture generator
+  .venv\                      — локальные Python-инструменты нового ПК
+
+ИЗ КОРНЯ D:\PS4Dev В POWERSHELL
+  py -3.12 -m venv .venv
+  & .\.venv\Scripts\python.exe -m pip install meson ninja mako PyYAML packaging cryptography zstandard pyinstaller
+  $env:PATH = (Join-Path (Get-Location) '.venv\Scripts') + ';' + $env:PATH
+  & .\work\shadps4-dx12-src\migration\Restore-Dependencies.ps1
+
+Скрипт рассчитан на новую папку. Не запускать поверх уже изменённых сторонних
+исходников без их сохранения/сравнения. Он скачивает точную базу 74c07f...,
+инициализирует только список native submodules из dependency-lock.json, скачивает
+pkg-reader 1cf25ce... и Mesa b628375..., применяет наши Mesa overlay-файлы.
+Удалённые Vulkan/glslang/DLSS submodules не инициализируются и не участвуют в
+сборке форка. База может содержать их объявления: не строить её старый движок.
+SDK DXC распаковать отдельно по пункту 7, не заменять DLL работающего пакета
+более новой версией без проверки. Git/SDK/venv файлы не включены в бэкап намеренно.
+
+СБОРКА НАТИВНОГО КОМПИЛЯТОРА И CORE
+  & .\work\shadps4-dx12-src\migration\Build-Mesa-NewComputer.cmd
+  & .\work\shadps4-dx12-src\migration\Build-NewComputer.cmd
+
+Результат Mesa:
+work/mesa-dxil-bary-build/src/microsoft/spirv_to_dxil/spirv_to_dxil.dll
+Результат core:
+work/shadps4-dx12-src/build-migration-core/shadPS4-DX12-Core.exe
+и matching native-core.map. Не переносить старый CMakeCache/build.ninja — в них
+пути/инструменты старого компьютера. Сначала тестировать новый core в отдельной
+копии установленного native runtime, оставив упакованный E355... для сравнения.
+
+СТАНДАЛОН GPU/CPU-ПРОВЕРКИ
+Открыть x64 Native Tools Command Prompt для VS 2026, добавить venv/Scripts и
+VC/Tools/Llvm/x64/bin в PATH. Из корня проекта:
+  cmake -S work/shadps4-dx12-src/native-port -B work/shadps4-dx12-src/build-migration-checks -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang-cl -DSHADPS4_DXC_INCLUDE_DIR=D:/PS4Dev/work/dxc-sdk/inc -DSHADPS4_DXC_RUNTIME_DLL=D:/PS4Dev/work/dxc-sdk/bin/x64/dxcompiler.dll
+  cmake --build work/shadps4-dx12-src/build-migration-checks --parallel 4
+  ctest --test-dir work/shadps4-dx12-src/build-migration-checks --output-on-failure
+Заменить D:/PS4Dev на настоящий корень. Для shader/IR include-каталогов при
+необходимости явно добавить -DSHADPS4_DEPENDENCY_ROOT=D:/PS4Dev/work/shadps4-xess-src.
+Отсутствие кэша шейдеров Bloodborne уменьшает число опциональных тестов, поэтому
+не сравнивать только цифру 71 с новой машиной. Сравнивать реальные имена/coverage.
+
+МЕНЮ И PKG-WORKER
+  python work/shadps4-dx12-src/desktop/freeze_installer.py
+  dotnet publish work/shadps4-dx12-src/desktop/PS4Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o work/shadps4-dx12-src/desktop/publish
+Worker получается в desktop/installer-dist/PS4PackageInstaller. Скопировать эту
+папку целиком как desktop/publish/installer, включая _internal. Для тестов также
+нужны pkg_worker.py и reader из восстановленного desktop/reader.
+  python work/shadps4-dx12-src/desktop/test_installer.py
+Используются синтетические пакеты; игра не нужна и запуск игры не выполняется.
+
+ПОВТОРНАЯ СБОРКА УСТАНОВЩИКА
+  & .\work\shadps4-dx12-src\desktop\setup\Make-Installer.ps1 -InnoCompiler 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' -NativeRuntime "$env:LOCALAPPDATA\Programs\PS4Desktop-DX12\native" -PackageWorker '.\work\shadps4-dx12-src\desktop\installer-dist\PS4PackageInstaller' -OutputDir '.\packages'
+Пути Inno/native исправить по настоящей установке. Script берёт native runtime
+из установленного пакета для DLL/launcher/CRT; для выпуска обновлённого core
+использовать отдельную подготовленную копию native с новым exe и проверенным
+spirv_to_dxil.dll. Не выпускать старый core под видом нового. Игры/профили/старый
+settings.json в payload не добавлять. Make-Installer требует свежую setup/payload.
+
+ДИАГНОСТИКА ТОЛЬКО ДЛЯ СОБСТВЕННОГО ТЕСТОВОГО ПРОЦЕССА
+SHADPS4_NATIVE_DIAGNOSTICS=1 — ограниченные агрегаты/стадии.
+SHADPS4_NATIVE_STARTUP_TRACE — ограниченная трассировка старта.
+SHADPS4_NATIVE_D3D12_VALIDATION — debug layer; любое наличие переменной включает
+его, поэтому выключать удалением переменной, а не значением 0.
+SHADPS4_NATIVE_LOG_FILTER — временное переопределение фильтра.
+SHADPS4_BENCH_GAMEPAD — файл ввода тестового геймпада; не оставлять после теста.
+В обычном запуске через меню все эти переменные удаляются из дочернего окружения.
+Не включать фоновое кэширование метрик. Системное питание/драйверы не менять.
+
+ИНФОРМАЦИЯ О ПОЛНОТЕ
+Установщик и его PKG проверены после реальной локальной установки в новую папку.
+Восстановление и полный rebuild с нуля на другом физическом ПК ещё не проверены.
+Старые native-port/Build-*.cmd остаются историческими скриптами текущего ПК;
+использовать migration/Build-*-NewComputer.cmd. Новые сценарии могут потребовать
+адаптации под установленный VS/SDK. Не путать инструкции восстановления с уже
+выполненной проверкой нового железа; записывать ошибки нового окружения отдельно.

@@ -1,0 +1,6 @@
+EXPORTS
+    spirv_to_dxil
+    spirv_to_dxil_free
+    spirv_to_dxil_get_version
+    spirv_to_dxil_linked
+    spirv_to_dxil_compute_waves32

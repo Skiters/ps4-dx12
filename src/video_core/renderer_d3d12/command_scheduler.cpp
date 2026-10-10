@@ -1,0 +1,168 @@
+#include "command_scheduler.h"
+#include <algorithm>
+
+namespace NativeDX12 {
+
+CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), timeline_(device), copy_timeline_(device) {
+    if (!device) throw std::invalid_argument("null D3D12 scheduler device");
+    D3D12_COMMAND_QUEUE_DESC description{};
+    description.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    Check(DX12_API_CALL(device_->CreateCommandQueue(&description, IID_PPV_ARGS(&direct_queue_))));
+    description.Type=D3D12_COMMAND_LIST_TYPE_COPY;
+    Check(DX12_API_CALL(device_->CreateCommandQueue(&description,IID_PPV_ARGS(&copy_queue_))));
+    contexts_.reserve(8);
+    copy_contexts_.reserve(8);
+    active_ = AcquireContext();
+    recording_ = true;
+    priority_worker_ = std::jthread([this](std::stop_token token) { PriorityWorker(token); });
+}
+
+u64 CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record){
+    if(!record)throw std::invalid_argument("empty copy submission");
+    const auto index=AcquireCopyContext();
+    auto& context=copy_contexts_[index];
+    record(context.list.Get());
+    Check(DX12_API_CALL(context.list->Close()));
+    copy_submitted_=copy_timeline_.Submit(copy_queue_.Get(),context.list.Get());
+    context.fence=copy_submitted_;
+    context.closed=true;
+    Check(DX12_API_CALL(direct_queue_->Wait(copy_timeline_.Fence(),copy_submitted_)));
+    return copy_submitted_;
+}
+
+size_t CommandScheduler::AcquireCopyContext(){
+    const auto completed=copy_timeline_.Completed();
+    for(size_t index=0;index<copy_contexts_.size();++index){
+        auto& context=copy_contexts_[index];
+        if(context.fence>completed)continue;
+        Check(DX12_API_CALL(context.allocator->Reset()));
+        Check(DX12_API_CALL(context.list->Reset(context.allocator.Get(),nullptr)));
+        context.closed=false;
+        return index;
+    }
+    if(copy_contexts_.size()<8){
+        Context context;
+        Check(DX12_API_CALL(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY,
+            IID_PPV_ARGS(&context.allocator))));
+        Check(DX12_API_CALL(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_COPY,
+            context.allocator.Get(),nullptr,IID_PPV_ARGS(&context.list))));
+        copy_contexts_.push_back(std::move(context));
+        return copy_contexts_.size()-1;
+    }
+    const auto oldest=std::min_element(copy_contexts_.begin(),copy_contexts_.end(),
+        [](const Context& left,const Context& right){return left.fence<right.fence;});
+    const auto index=size_t(oldest-copy_contexts_.begin());
+    copy_timeline_.Wait(oldest->fence);
+    Check(DX12_API_CALL(oldest->allocator->Reset()));
+    Check(DX12_API_CALL(oldest->list->Reset(oldest->allocator.Get(),nullptr)));
+    oldest->closed=false;
+    return index;
+}
+
+CommandScheduler::~CommandScheduler() {
+    priority_worker_.request_stop();
+    pending_cv_.notify_all();
+    try { Finish(); } catch (...) {}
+}
+
+size_t CommandScheduler::AcquireContext() {
+    const auto completed = timeline_.Completed();
+    for (size_t index = 0; index < contexts_.size(); ++index) {
+        auto& context = contexts_[index];
+        if (context.fence > completed) continue;
+        Check(DX12_API_CALL(context.allocator->Reset()));
+        Check(DX12_API_CALL(context.list->Reset(context.allocator.Get(), nullptr)));
+        context.closed = false;
+        return index;
+    }
+    if (contexts_.size() < 16) {
+        Context context;
+        Check(DX12_API_CALL(device_->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&context.allocator))));
+        Check(DX12_API_CALL(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+            context.allocator.Get(), nullptr, IID_PPV_ARGS(&context.list))));
+        contexts_.push_back(std::move(context));
+        return contexts_.size() - 1;
+    }
+    const auto oldest = std::min_element(contexts_.begin(), contexts_.end(),
+        [](const Context& left, const Context& right) { return left.fence < right.fence; });
+    const auto index = size_t(oldest - contexts_.begin());
+    timeline_.Wait(oldest->fence);
+    Check(DX12_API_CALL(oldest->allocator->Reset()));
+    Check(DX12_API_CALL(oldest->list->Reset(oldest->allocator.Get(), nullptr)));
+    oldest->closed = false;
+    return index;
+}
+
+ID3D12GraphicsCommandList* CommandScheduler::Begin() {
+    if (!recording_) {
+        active_ = AcquireContext();
+        recording_ = true;
+    }
+    return contexts_[active_].list.Get();
+}
+
+u64 CommandScheduler::Submit(std::span<std::function<void(u64)>> retirements,
+                             std::span<std::function<void(u64)>> submitted) {
+    if (!recording_) {
+        Collect();
+        return submitted_;
+    }
+    auto& context = contexts_[active_];
+    Check(DX12_API_CALL(context.list->Close()));
+    submitted_ = timeline_.Submit(direct_queue_.Get(), context.list.Get());
+    context.fence = submitted_;
+    context.closed = true;
+    recording_ = false;
+    // Publish ownership/fences before collecting older retirement callbacks.
+    for(auto& callback:submitted)callback(submitted_);
+    for (auto& callback : retirements) Defer(submitted_, std::move(callback));
+    Collect();
+    return submitted_;
+}
+
+void CommandScheduler::Finish() {
+    const auto fence = Submit();
+    if (fence) timeline_.Wait(fence);
+    Collect();
+}
+
+void CommandScheduler::Defer(u64 fence, std::function<void(u64)> callback, bool priority) {
+    if (!fence || !callback) throw std::invalid_argument("invalid scheduler retirement");
+    {
+        std::lock_guard lock(pending_mutex_);
+        (priority ? priority_pending_ : pending_).push_back({fence, std::move(callback)});
+    }
+    pending_cv_.notify_one();
+}
+
+void CommandScheduler::Collect() {
+    const auto completed = timeline_.Completed();
+    std::deque<PendingOperation> ready;
+    {
+        std::lock_guard lock(pending_mutex_);
+        while (!pending_.empty() && pending_.front().fence <= completed) {
+            ready.push_back(std::move(pending_.front()));
+            pending_.pop_front();
+        }
+    }
+    for (auto& operation : ready) operation.callback(operation.fence);
+}
+
+void CommandScheduler::PriorityWorker(std::stop_token token) {
+    SetThreadDescription(GetCurrentThread(),L"shadPS4:DX12PriorityRetire");
+    while (!token.stop_requested()) {
+        PendingOperation operation;
+        {
+            std::unique_lock lock(pending_mutex_);
+            pending_cv_.wait(lock, [&] { return token.stop_requested() || !priority_pending_.empty(); });
+            if (token.stop_requested()) break;
+            operation = std::move(priority_pending_.front());
+            priority_pending_.pop_front();
+        }
+        timeline_.Wait(operation.fence);
+        if (!token.stop_requested()) operation.callback(operation.fence);
+    }
+}
+
+} // namespace NativeDX12

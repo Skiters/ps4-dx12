@@ -1,0 +1,14 @@
+#version 450
+layout(local_size_x=1) in;
+layout(set=0,binding=0,r32ui) coherent uniform uimage2DArray first_view;
+layout(set=0,binding=1,r32ui) coherent uniform uimage2DArray overlapping_view;
+layout(set=0,binding=2,r32ui) coherent uniform uimage2DArray other_mip;
+void main() {
+    // The first two descriptors name the same texel with different array origins.
+    uint next=imageLoad(first_view,ivec3(0)).r+1u;
+    imageStore(first_view,ivec3(0),uvec4(next));
+    memoryBarrierImage();
+    uint observed=imageLoad(overlapping_view,ivec3(0,0,1)).r;
+    imageStore(overlapping_view,ivec3(1,0,2),uvec4(observed+10u));
+    imageStore(other_mip,ivec3(0),uvec4(observed+100u));
+}

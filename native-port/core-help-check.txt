@@ -1,0 +1,27 @@
+shadPS4 Emulator CLI
+
+
+C:\Games\PS4-Desktop\native\core\shadPS4-DX12-Core.exe [OPTIONS] [guest_arg]
+
+
+POSITIONALS:
+  guest_arg TEXT              Game path or ID
+
+OPTIONS:
+  -h,     --help              Print this help message and exit
+  -g,     --game TEXT         Game path or ID
+  -p,     --patch TEXT        Patch file to apply
+  -i,     --ignore-game-patch Disable automatic loading of game patches
+  -f,     --fullscreen TEXT   Fullscreen mode (true|false)
+          --override-root TEXT:DIR 
+          --wait-for-debugger 
+          --wait-for-pid INT  
+          --show-fps          
+          --config-clean      
+          --config-global     
+          --log-append        
+          --add-game-folder TEXT:DIR 
+          --set-addon-folder TEXT:DIR 
+          --mount [TEXT,TEXT] ... 
+                              Mount source to destination
+  -e,     --env TEXT ...      Environment variables to pass to the guest

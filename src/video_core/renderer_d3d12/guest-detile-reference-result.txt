@@ -1,0 +1,25 @@
+work\shadps4-dx12-src\src\video_core\host_shaders\tiling.comp
+guest_texture_detile_reference_test.cpp
+guest_texture_cache.cpp
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(91): warning C4244: return: преобразование "u64" в "u32", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(222): warning C4244: return: преобразование "u64" в "u32", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(227): warning C4244: инициализация: преобразование "u64" в "u32", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(246): warning C4244: return: преобразование "u64" в "u32", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(291): warning C4244: return: преобразование "u64" в "u8", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(327): warning C4244: аргумент: преобразование "u64" в "const _Ty", возможна потеря данных
+        with
+        [
+            _Ty=u32
+        ]
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(328): warning C4244: return: преобразование "u64" в "u32", возможна потеря данных
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(341): warning C4244: аргумент: преобразование "u64" в "const _Ty", возможна потеря данных
+        with
+        [
+            _Ty=u32
+        ]
+work\shadps4-dx12-src\src\video_core/amdgpu/resource.h(342): warning C4244: return: преобразование "u64" в "u32", возможна потеря данных
+spirv_converter.cpp
+Создание кода...
+Original shadPS4 tiling.comp -> signed DXIL: 2692 bytes
+Hardware: Intel(R) Arc(TM) B390 GPU
+PASS: CPU guest macro/micro address decoder matches original shadPS4 detiler running natively in D3D12: 26428 visible texels, 4 mips, 2 layers

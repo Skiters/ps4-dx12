@@ -1,0 +1,20 @@
+# Include after shadps4_dxil_compiler has been defined in native-port build.
+get_filename_component(_compute_port_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(_compute_fixture "${CMAKE_CURRENT_BINARY_DIR}/compute_fixture.spv")
+set(_compute_glslang "${SHADPS4_GLSLANG_EXECUTABLE}")
+if(NOT EXISTS "${_compute_glslang}")
+  message(FATAL_ERROR "Set SHADPS4_GLSLANG_EXECUTABLE to the standalone fixture compiler")
+endif()
+set(_compute_mesa "${SHADPS4_MESA_CONVERTER_DLL}")
+add_custom_command(OUTPUT "${_compute_fixture}"
+  COMMAND "${_compute_glslang}" -V -S comp "${CMAKE_CURRENT_LIST_DIR}/compute_fixture.comp" -o "${_compute_fixture}"
+  DEPENDS "${CMAKE_CURRENT_LIST_DIR}/compute_fixture.comp" VERBATIM)
+add_executable(dx12-compute-test "${CMAKE_CURRENT_LIST_DIR}/compute_test.cpp" "${_compute_fixture}")
+target_compile_features(dx12-compute-test PRIVATE cxx_std_20)
+target_compile_definitions(dx12-compute-test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(dx12-compute-test PRIVATE "${_compute_port_root}/src")
+target_link_libraries(dx12-compute-test PRIVATE shadps4_dxil_compiler d3d12 dxgi)
+if(MSVC)
+  target_compile_options(dx12-compute-test PRIVATE /W4 /utf-8)
+endif()
+add_test(NAME dx12-compute-hardware COMMAND dx12-compute-test "${_compute_fixture}" "${_compute_mesa}")

@@ -1,0 +1,63 @@
+{
+  "General": {
+    "install_dirs": [],
+    "home_dir": "user/home",
+    "addon_install_dir": "user/addcont",
+    "sys_modules_dir": "user/sys_modules",
+    "font_dir": "user/fonts",
+    "extra_dmem_in_mbytes": 4000,
+    "extra_fmem_in_mbytes": 0,
+    "show_fps_counter": false,
+    "show_splash": false,
+    "connected_to_network": false,
+    "shad_net_enabled": false,
+    "discord_rpc_enabled": false,
+    "enable_upnp": false,
+    "console_language": 8
+  },
+  "GPU": {
+    "internal_screen_width": 1280,
+    "internal_screen_height": 800,
+    "window_width": 1280,
+    "window_height": 800,
+    "full_screen": false,
+    "full_screen_mode": "Fullscreen (Borderless)",
+    "vblank_frequency": 60,
+    "readbacks_mode": 1,
+    "readback_linear_images_enabled": false,
+    "fsr_enabled": false,
+    "rcas_enabled": false,
+    "hdr_allowed": false,
+    "null_gpu": false,
+    "dump_shaders": false
+  },
+  "DirectX12": {
+    "renderdoc_enabled": false
+  },
+  "Log": {
+    "enable": true,
+    "filter": "*:warning",
+    "sync": false,
+    "append": false,
+    "size_limit": 1048576,
+    "skip_duplicate": true
+  },
+  "Debug": {
+    "debug_dump": false,
+    "shader_collect": false,
+    "config_version": "74c07f5e97ced220404d4baa2f8cf652463bbaa4"
+  },
+  "Input": {
+    "background_controller_input": false,
+    "use_keyboard_as_keyboard": false,
+    "use_mice_as_mice": false,
+    "is_circle_enter": false,
+    "use_special_pad": false
+  },
+  "Audio": {
+    "audio_backend": 0,
+    "sdl_main_output_device": "Default Device",
+    "sdl_mic_device": "None",
+    "sdl_padSpk_output_device": "Default Device"
+  }
+}

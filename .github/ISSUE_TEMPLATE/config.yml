@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright 2026 IFreemz
+# SPDX-License-Identifier: GPL-2.0-or-later
+blank_issues_enabled: true
+contact_links:
+  - name: Problems that also happen without DLSS or FSR
+    url: https://github.com/shadps4-emu/shadPS4
+    about: If the problem happens with the DLLs removed too, it is a shadPS4 issue, not an upscaler one.

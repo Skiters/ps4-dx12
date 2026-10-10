@@ -1,0 +1,8 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) readonly buffer Source { uint source_data[]; };
+layout(set=0,binding=1,std430) buffer Destination { uint destination_data[]; };
+void main() {
+    uint index=gl_GlobalInvocationID.x;
+    if(index<256)destination_data[index+512]=source_data[index]*3+7;
+}

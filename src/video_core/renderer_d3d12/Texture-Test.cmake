@@ -1,0 +1,11 @@
+# Include from the standalone native backend CMake project, not the Vulkan build.
+add_executable(dx12-texture-test "${CMAKE_CURRENT_LIST_DIR}/texture_test.cpp")
+target_compile_features(dx12-texture-test PRIVATE cxx_std_20)
+target_compile_definitions(dx12-texture-test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(dx12-texture-test PRIVATE d3d12 dxgi)
+if(MSVC)
+  target_compile_options(dx12-texture-test PRIVATE /W4 /utf-8)
+endif()
+if(BUILD_TESTING)
+  add_test(NAME dx12-texture-hardware COMMAND dx12-texture-test)
+endif()
