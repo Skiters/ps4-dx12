@@ -86,9 +86,13 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     });
     SetBufferOwnership([this](VAddr address,u64 size){
         // Own only whole committed pages, never unrelated PS4 suballocations.
-        if(address%4096||size%4096||!has_backing_(address,size))return false;
+        if(address%4096||size%4096){Diagnostics::Count("buffer-own.unaligned");return false;}
+        if(!has_backing_(address,size)){Diagnostics::Count("buffer-own.no-backing");return false;}
         ReleaseImmutableWatch(address,size);ResolveMemory(address,size);
-        return page_watch_->Track(address,size);
+        const bool tracked=page_watch_->Track(address,size);
+        Diagnostics::Count(tracked?"buffer-own.accepted":"buffer-own.track-conflict");
+        Diagnostics::Count(tracked?"buffer-own.accepted-bytes":"buffer-own.rejected-bytes",size);
+        return tracked;
     },[this](VAddr address,std::span<const std::byte> data){return write_backing_(address,data);},
       [this](VAddr address,u64 size){page_watch_->Untrack(address,size);});
     SetBufferWriteWatch([this](VAddr address,u64 size){

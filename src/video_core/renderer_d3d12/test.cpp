@@ -246,6 +246,29 @@ int main(){try{
         Require(output[0]==0x11223344&&output[1]==0xaabbccdd&&output[2]==0&&output[3]==0);
     }
     {
+        // Multiple independent uploads recorded before one direct submission
+        // must all be visible after the direct timeline fence.  This catches
+        // missing copy-queue flushes and incomplete queue dependencies.
+        Rasterizer uploads(device.Get());
+        std::array<u32, 4097> first{}, second{};
+        first.fill(0x13579bdf);second.fill(0x2468ace0);
+        const auto first_address=reinterpret_cast<VAddr>(first.data());
+        const auto second_address=reinterpret_cast<VAddr>(second.data());
+        uploads.MapMemory(first_address,sizeof(first));uploads.MapMemory(second_address,sizeof(second));
+        const Rasterizer::ShaderBufferRequest requests[]{
+            {first_address,sizeof(first),false,false},{second_address,sizeof(second),false,false}};
+        auto views=uploads.PrepareShaderBuffers(requests);
+        auto output=Buffer(device.Get(),8,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        Resource left;left.handle=views[0].resource;left.state=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        Resource right;right.handle=views[1].resource;right.state=left.state;
+        auto* list=uploads.RecordingList();left.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);right.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,left.handle.Get(),views[0].offset,4));
+        DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),4,right.handle.Get(),views[1].offset,4));
+        uploads.Finish();void* mapped{};D3D12_RANGE range{0,8};Check(DX12_API_CALL(output.handle->Map(0,&range,&mapped)));
+        const auto* values=static_cast<const u32*>(mapped);Require(values[0]==first[0]&&values[1]==second[0]);
+        D3D12_RANGE none{};DX12_API_CALL(output.handle->Unmap(0,&none));
+    }
+    {
         // Two CPU versions of a read-only guest buffer must reach the GPU in
         // order even when both copies are recorded before a single retirement.
         Rasterizer batch(device.Get());std::array<u32,3073> words{};words.fill(7);

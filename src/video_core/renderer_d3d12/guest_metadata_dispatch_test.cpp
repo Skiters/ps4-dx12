@@ -158,19 +158,31 @@ int wmain(int argc,wchar_t** argv){try {
     // then reconcile exactly when guest CPU memory is requested.
     {
         Rasterizer deferred(device.Get());deferred.MapMemory(address,8192);
-        unsigned commits{};deferred.SetBufferOwnership([](VAddr,u64){return true;},
+        unsigned commits{},releases{};bool watched{};deferred.SetBufferOwnership([](VAddr,u64){return true;},
             [&](VAddr destination,std::span<const std::byte> data){
                 ++commits;memcpy(reinterpret_cast<void*>(destination),data.data(),data.size());return true;
-            },[](VAddr,u64){});
+            },[&](VAddr,u64){++releases;watched=false;});
+        deferred.SetBufferWriteWatch([&](VAddr,u64){watched=true;return true;});
         for(u32 i=0;i<1024;++i)guest[i]=i+9000;
         std::fill_n(guest+1024,1024,0xdeadbeef);
         const Rasterizer::BufferCopy owned_copy[]{{address+4096,address,4096}};
         deferred.CopyBufferBatch(owned_copy);
+        const Rasterizer::BufferCopy chained_copy[]{{address+4096+2048,address+4096,2048}};
+        deferred.CopyBufferBatch(chained_copy);
         if(commits)throw std::runtime_error("GPU-owned copy destination reconciled eagerly");
         if(!deferred.ReadMemory(address+4096,4096)||commits!=1)
             throw std::runtime_error("GPU-owned copy destination did not reconcile on CPU access");
-        for(u32 i=0;i<1024;++i)if(guest[1024+i]!=i+9000)
+        for(u32 i=0;i<1024;++i)if(guest[1024+i]!=(i%512)+9000)
             throw std::runtime_error("Deferred copy reconciliation changed destination bytes");
+        if(!watched)throw std::runtime_error("Reconciled GPU page was not write-watched");
+        const Rasterizer::ShaderBufferRequest writable[]{{address+4096,4096,true,true}};
+        deferred.PrepareShaderBuffers(writable);
+        if(watched||releases<2)throw std::runtime_error("Unchanged write-watch was not consumed by GPU preparation");
+        deferred.ReadMemory(address+4096,4096);
+        if(!watched)throw std::runtime_error("Clean writable page did not regain its write-watch");
+        deferred.ReleaseCpuBufferWatches(address+4096,4096);guest[1024]=0x10203040;
+        deferred.PrepareShaderBuffers(writable);deferred.ReadMemory(address+4096,4096);
+        if(guest[1024]!=0x10203040)throw std::runtime_error("Partial CPU edit was lost after watched GPU reconciliation");
         deferred.ValidateDebugMessages();
     }
     // Guest control arithmetic wraps at 32 bits before adding the base address.

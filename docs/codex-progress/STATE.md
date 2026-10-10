@@ -1,6 +1,6 @@
 # Native DX12 state
 
-Updated 2026-10-10 from baseline `01c0374`.
+Updated 2026-10-10 from baseline `5b0f555`.
 
 The native D3D12 backend now records bounded per-stage CPU wall-time distributions when
 `SHADPS4_NATIVE_DIAGNOSTICS=1`. The two-second report includes calls, total, average,
@@ -17,6 +17,12 @@ Confirmed in the controlled 66-second run: 1726 of 1727 copy-HLE dispatches used
 reconciliation, no DXIL recompilation occurred after disk-cache loading, and no D3D12 debug,
 device-removal or native exception marker was logged.
 
-GPU timestamp queries are not implemented. Stage values are CPU wall time; `fence-wait`
-and `buffer-reconcile/submit-and-wait` isolate CPU wait wall time. CPU execution time cannot
-be separated from scheduler preemption with the current portable instrumentation.
+Direct-list contexts now collect bounded D3D12 timestamp queries asynchronously when native
+diagnostics are enabled. Results are read only after the context fence completes, so measuring
+compute does not introduce a GPU wait. In the controlled sample the compute dispatch itself
+averaged about 0.0064 ms; CPU resource preparation and coherence dominate instead.
+
+Copy-queue uploads are accumulated until the consuming direct-list submission. One copy fence
+and one direct-queue wait preserve upload-before-use ordering for the batch. The controlled
+46-second comparison reduced copy submissions from 4,046 to 2,678 (-33.8%), while upload calls
+and bytes remained effectively unchanged. Full native validation passes 205/205.

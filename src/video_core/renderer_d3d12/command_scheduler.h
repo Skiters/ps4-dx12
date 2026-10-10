@@ -19,6 +19,12 @@ class CommandScheduler {
         ComPtr<ID3D12GraphicsCommandList> list;
         u64 fence{};
         bool closed{};
+        ComPtr<ID3D12QueryHeap> timestamps;
+        ComPtr<ID3D12Resource> timestamp_readback;
+        struct Timestamp {UINT begin{};const char* name{};};
+        std::vector<Timestamp> timestamp_samples;
+        UINT timestamp_cursor{};
+        bool timestamps_collected=true;
     };
     struct PendingOperation {
         u64 fence{};
@@ -31,6 +37,8 @@ class CommandScheduler {
     Timeline timeline_;
     Timeline copy_timeline_;
     std::vector<Context> copy_contexts_;
+    size_t copy_active_{};
+    bool copy_recording_{};
     u64 copy_submitted_{};
     std::vector<Context> contexts_;
     size_t active_{};
@@ -44,15 +52,20 @@ class CommandScheduler {
 
     size_t AcquireContext();
     size_t AcquireCopyContext();
+    u64 FlushCopy();
     void PriorityWorker(std::stop_token);
+    void CollectTimestamps(Context&);
 
 public:
+    struct GpuTimestamp {size_t context=SIZE_MAX;UINT begin{};explicit operator bool()const{return context!=SIZE_MAX;}};
     explicit CommandScheduler(ID3D12Device*);
     ~CommandScheduler();
     CommandScheduler(const CommandScheduler&) = delete;
     CommandScheduler& operator=(const CommandScheduler&) = delete;
 
     ID3D12GraphicsCommandList* Begin();
+    GpuTimestamp BeginTimestamp(const char* name);
+    void EndTimestamp(GpuTimestamp,const char* name);
     u64 Submit(std::span<std::function<void(u64)>> retirements = {},
                std::span<std::function<void(u64)>> submitted = {});
     void Wait(u64 fence) { timeline_.Wait(fence); }

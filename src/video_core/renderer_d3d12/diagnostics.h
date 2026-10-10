@@ -35,6 +35,10 @@ struct StageTotals {
     std::array<double, 512> samples{}; size_t sample_count{}, sample_cursor{};
 };
 struct Counter { const char* name{}; unsigned long long value{}; };
+struct GpuTotals {
+    const char* name{}; unsigned long long calls{}; double ms{}, max_ms{};
+    std::array<double,512> samples{};size_t sample_count{},sample_cursor{};
+};
 // Opt-in, bounded, aggregate diagnostics. No images, command history or persistent
 // profiler cache. The normal renderer never constructs the worker or takes its lock.
 class Hub {
@@ -45,6 +49,7 @@ public:
     std::array<Totals, size_t(Kind::Count)> totals{};
     std::array<StageTotals, 96> stages{};
     std::array<Counter, 64> counters{};
+    std::array<GpuTotals, 16> gpu{};
     unsigned lines{};
     const Clock::time_point started = Clock::now();
     FILE* output = [] {
@@ -92,6 +97,16 @@ public:
                 if(lines++<8192)fprintf(output,"DX12 diag t=%.3f counter=%s value=%llu\n",
                     Seconds(now),c.name,c.value);c.value=0;
             }
+            for(auto& g:gpu)if(g.calls){
+                auto samples=g.samples;const auto count=std::min(samples.size(),g.sample_count);
+                std::sort(samples.begin(),samples.begin()+count);
+                const auto percentile=[&](double p){return samples[std::min(count-1,size_t((count-1)*p))];};
+                if(lines++<8192)fprintf(output,
+                    "DX12 diag t=%.3f gpu-summary stage=%s calls=%llu total_ms=%.3f avg_ms=%.3f max_ms=%.3f samples=%zu p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f\n",
+                    Seconds(now),g.name,g.calls,g.ms,g.ms/g.calls,g.max_ms,count,
+                    percentile(.50),percentile(.95),percentile(.99));
+                g.calls=0;g.ms=0;g.max_ms=0;g.sample_count=0;g.sample_cursor=0;
+            }
             for (const auto& a : active) if (a.thread && a.stage && lines++ < 8192)
                 fprintf(output, "DX12 diag t=%.3f active tid=%lu op=%s stage=%s age_ms=%.3f stage_ms=%.3f %s\n",
                     Seconds(now), a.thread, Names[size_t(a.kind)], a.stage,
@@ -118,6 +133,14 @@ inline void Count(const char* name,unsigned long long value=1){
     Counter* target{};for(auto& counter:hub.counters)if(counter.name&&!std::strcmp(counter.name,name)){target=&counter;break;}
     if(!target)for(auto& counter:hub.counters)if(!counter.name){counter.name=name;target=&counter;break;}
     if(target)target->value+=value;
+}
+inline void GpuTime(const char* name,double elapsed){
+    if(!Enabled())return;auto& hub=Hub::Get();std::lock_guard lock(hub.mutex);GpuTotals* target{};
+    for(auto& gpu:hub.gpu)if(gpu.name&&!std::strcmp(gpu.name,name)){target=&gpu;break;}
+    if(!target)for(auto& gpu:hub.gpu)if(!gpu.name){gpu.name=name;target=&gpu;break;}
+    if(!target)return;++target->calls;target->ms+=elapsed;target->max_ms=std::max(target->max_ms,elapsed);
+    target->samples[target->sample_cursor++%target->samples.size()]=elapsed;
+    target->sample_count=std::min(target->sample_count+1,target->samples.size());
 }
 class Scope {
     Hub* hub_{}; size_t slot_{}; Active previous_{}, current_{}; int exceptions_{};

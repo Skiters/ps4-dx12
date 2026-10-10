@@ -197,13 +197,14 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     if(it!=mappings_.begin()){
         --it;
         if(address-it->first<=it->second.size&&size<=it->second.size-(address-it->first)){
-            if(!it->second.initial_upload_failed)return it->second;
+            if(!it->second.initial_upload_failed){Diagnostics::Count("buffer-cache.hit");return it->second;}
             // An upload failure can happen after copy submission. Keep its
             // allocation alive until the ordinary fence retirement path runs,
             // but never return partially initialized contents on a retry.
             DropCached(it->first,it->second.size,true);
         }
     }
+    Diagnostics::Count("buffer-cache.miss");Diagnostics::Count("buffer-materialized.bytes",size);
     // Correctness-first bounded cache: operation-sized materialization only.
     // A new overlapping slice reconciles previous GPU writes before rebuilding.
     // Bound materialization by the same address-cache capacity as the complete
@@ -282,6 +283,7 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     return true;
 }
 void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
+    Diagnostics::Count("buffer-upload.calls");Diagnostics::Count("buffer-upload.bytes",size);
     // A newly placed DEFAULT buffer starts in COMMON. Copy queues may
     // implicitly promote it to COPY_DEST and it decays back to COMMON when the
     // copy submission completes. The direct queue waits on the copy timeline,
@@ -532,16 +534,24 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         bool active=false,written=false,uav=false;for(const auto& r:requests)if(r.address>=base&&r.address+r.size<=base+mapping.size){active=true;written|=r.written;uav|=r.unordered_access;}
         if(!active)continue;
         const bool fresh=std::find(created.begin(),created.end(),base)!=created.end();
-        diagnostic.Stage("validate-and-refresh-buffer");
+        diagnostic.Stage("backing-validation");
         diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
             (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
         if(!mapping.gpu_owned)CheckBacking(base,mapping.size,written);
+        // A surviving write-watch proves that the CPU has not changed the
+        // reconciled bytes since the previous Finish. Release protection before
+        // acquiring GPU ownership, but retain that proof for this preparation.
+        const bool cpu_proven_unchanged=mapping.cpu_watched;
         if(written&&mapping.cpu_watched)ReleaseCpuBufferWatches(base,mapping.size);
         const auto* cpu=reinterpret_cast<const std::byte*>(base);
-        if(!mapping.gpu_owned&&!mapping.cpu_watched){
+        diagnostic.Stage("snapshot-compare");
+        if(!mapping.gpu_owned&&!mapping.cpu_watched&&!cpu_proven_unchanged){
+            Diagnostics::Count("buffer-snapshot.bytes",mapping.size);
             const bool unchanged=mapping.cpu_snapshot.size()==mapping.size&&
                 memcmp(mapping.cpu_snapshot.data(),cpu,size_t(mapping.size))==0;
+            Diagnostics::Count(unchanged?"buffer-snapshot.unchanged":"buffer-snapshot.changed");
             if(!unchanged){
+                diagnostic.Stage("snapshot-upload");
                 if(!fresh&&mapping.cpu_snapshot.size()==mapping.size){
                     constexpr u64 block=4096;
                     for(u64 offset=0;offset<mapping.size;){
@@ -561,10 +571,13 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                     mapping.cpu_snapshot.assign(cpu,cpu+mapping.size);
                 }
             }
-        }
+        }else if(cpu_proven_unchanged)Diagnostics::Count("buffer-snapshot.watch-hit");
         // A read-only use of a preceding GPU result must retain dirty ownership.
-        if(written){if(!mapping.gpu_owned&&own_buffer_)
+        diagnostic.Stage("ownership-and-transition");
+        if(written){if(!mapping.gpu_owned&&own_buffer_){
             mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
+            Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
+        }
             for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
                 request.address+request.size<=mapping.base+mapping.size)
                 MarkDirty(mapping,true,request.address-mapping.base,request.size);}
@@ -585,7 +598,8 @@ void Rasterizer::ExecuteCompute(const ShaderPipeline& pipeline,ResourceBindings&
     std::lock_guard lock(execution_mutex_);
     if(!pipeline.IsCompute()||!x||!y||!z||x>65535||y>65535||z>65535)
         throw std::invalid_argument("Invalid native compute pipeline or dispatch dimensions");
-    pipeline.Bind(RecordingList(),bindings);DX12_API_CALL(scheduler_.Begin()->Dispatch(x,y,z));
+    pipeline.Bind(RecordingList(),bindings);const auto timestamp=scheduler_.BeginTimestamp("compute-dispatch");
+    DX12_API_CALL(scheduler_.Begin()->Dispatch(x,y,z));scheduler_.EndTimestamp(timestamp,"compute-dispatch");
     // A global barrier over every historical dirty mapping grows with the
     // cache and serializes unrelated work.  Barrier only resources referenced
     // by this dispatch; later CPU access is synchronized by the ownership
@@ -795,7 +809,8 @@ void Rasterizer::Finish(){
         if(!r.readback.handle)r.readback=Buffer(device_.Get(),r.size,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         r.gpu.Transition(scheduler_.Begin(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         for(const auto& [begin,end]:r.dirty_ranges)
-            DX12_API_CALL(scheduler_.Begin()->CopyBufferRegion(r.readback.handle.Get(),begin,r.gpu.handle.Get(),begin,end-begin));
+            {Diagnostics::Count("buffer-readback.bytes",end-begin);
+            DX12_API_CALL(scheduler_.Begin()->CopyBufferRegion(r.readback.handle.Get(),begin,r.gpu.handle.Get(),begin,end-begin));}
         readbacks.emplace_back(&r,r.readback);}
     diagnostic.Detail("cached_buffers=%zu dirty_buffers=%zu",mappings_.size(),readbacks.size());
     diagnostic.Stage("submit-and-wait");
@@ -818,6 +833,11 @@ void Rasterizer::Finish(){
         for(const auto& [begin,end]:r->dirty_ranges)memcpy(r->cpu_snapshot.data()+begin,
             static_cast<const std::byte*>(data)+begin,size_t(end-begin));
         D3D12_RANGE no_write{0,0};DX12_API_CALL(rb.handle->Unmap(0,&no_write));MarkDirty(*r,false);
+        // Reconciled whole pages are identical on CPU and GPU. A write-watch
+        // makes the next writable binding O(1) when the guest CPU left them
+        // untouched; a real CPU store faults, removes the watch and retains the
+        // existing snapshot/block-diff upload path.
+        if(!r->cpu_watched&&watch_buffer_)r->cpu_watched=watch_buffer_(r->base,r->size);
     }
     scheduler_.Collect();
     uploads_.clear();

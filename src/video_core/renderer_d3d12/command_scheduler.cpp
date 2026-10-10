@@ -19,16 +19,26 @@ CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), time
 }
 
 u64 CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record){
-    Diagnostics::Count("gpu-submit.copy");
     if(!record)throw std::invalid_argument("empty copy submission");
-    const auto index=AcquireCopyContext();
-    auto& context=copy_contexts_[index];
+    if(!copy_recording_){copy_active_=AcquireCopyContext();copy_recording_=true;}
+    auto& context=copy_contexts_[copy_active_];
     record(context.list.Get());
+    Diagnostics::Count("gpu-copy.records");
+    // The pending copy list is submitted immediately before the next direct
+    // list. Its queue wait preserves the same upload-before-use dependency
+    // without one ExecuteCommandLists/Signal pair per buffer slice.
+    return 0;
+}
+
+u64 CommandScheduler::FlushCopy(){
+    if(!copy_recording_)return copy_submitted_;
+    auto& context=copy_contexts_[copy_active_];
     Check(DX12_API_CALL(context.list->Close()));
     copy_submitted_=copy_timeline_.Submit(copy_queue_.Get(),context.list.Get());
     context.fence=copy_submitted_;
     context.closed=true;
     Check(DX12_API_CALL(direct_queue_->Wait(copy_timeline_.Fence(),copy_submitted_)));
+    copy_recording_=false;Diagnostics::Count("gpu-submit.copy");
     return copy_submitted_;
 }
 
@@ -72,6 +82,7 @@ size_t CommandScheduler::AcquireContext() {
     for (size_t index = 0; index < contexts_.size(); ++index) {
         auto& context = contexts_[index];
         if (context.fence > completed) continue;
+        CollectTimestamps(context);
         Check(DX12_API_CALL(context.allocator->Reset()));
         Check(DX12_API_CALL(context.list->Reset(context.allocator.Get(), nullptr)));
         context.closed = false;
@@ -96,6 +107,20 @@ size_t CommandScheduler::AcquireContext() {
     return index;
 }
 
+void CommandScheduler::CollectTimestamps(Context& context){
+    if(context.timestamps_collected||context.timestamp_samples.empty()||context.fence>timeline_.Completed())return;
+    UINT64 frequency{};if(FAILED(DX12_API_CALL(direct_queue_->GetTimestampFrequency(&frequency)))||!frequency){
+        context.timestamp_samples.clear();context.timestamp_cursor=0;context.timestamps_collected=true;return;
+    }
+    const auto bytes=SIZE_T(context.timestamp_cursor)*sizeof(UINT64);void* mapped{};D3D12_RANGE range{0,bytes};
+    Check(DX12_API_CALL(context.timestamp_readback->Map(0,&range,&mapped)));
+    const auto* values=static_cast<const UINT64*>(mapped);
+    for(const auto& sample:context.timestamp_samples)if(values[sample.begin+1]>=values[sample.begin])
+        Diagnostics::GpuTime(sample.name,double(values[sample.begin+1]-values[sample.begin])*1000.0/double(frequency));
+    D3D12_RANGE none{};DX12_API_CALL(context.timestamp_readback->Unmap(0,&none));
+    context.timestamp_samples.clear();context.timestamp_cursor=0;context.timestamps_collected=true;
+}
+
 ID3D12GraphicsCommandList* CommandScheduler::Begin() {
     if (!recording_) {
         active_ = AcquireContext();
@@ -104,8 +129,38 @@ ID3D12GraphicsCommandList* CommandScheduler::Begin() {
     return contexts_[active_].list.Get();
 }
 
+CommandScheduler::GpuTimestamp CommandScheduler::BeginTimestamp(const char* name){
+    if(!Diagnostics::Enabled()||!name)return {};
+    auto* list=Begin();auto& context=contexts_[active_];constexpr UINT capacity=2048;
+    if(!context.timestamps){
+        D3D12_QUERY_HEAP_DESC desc{D3D12_QUERY_HEAP_TYPE_TIMESTAMP,capacity,0};
+        Check(DX12_API_CALL(device_->CreateQueryHeap(&desc,IID_PPV_ARGS(&context.timestamps))));
+        context.timestamp_readback=Buffer(device_.Get(),u64(capacity)*sizeof(UINT64),
+            D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST).handle;
+    }
+    if(context.timestamp_cursor>capacity-2)return {};
+    const UINT begin=context.timestamp_cursor;context.timestamp_cursor+=2;
+    DX12_API_CALL(list->EndQuery(context.timestamps.Get(),D3D12_QUERY_TYPE_TIMESTAMP,begin));
+    return {active_,begin};
+}
+
+void CommandScheduler::EndTimestamp(GpuTimestamp token,const char* name){
+    if(!token)return;
+    if(!recording_||token.context!=active_)throw std::logic_error("GPU timestamp crossed command-list submission");
+    auto& context=contexts_[active_];auto* list=context.list.Get();
+    DX12_API_CALL(list->EndQuery(context.timestamps.Get(),D3D12_QUERY_TYPE_TIMESTAMP,token.begin+1));
+    DX12_API_CALL(list->ResolveQueryData(context.timestamps.Get(),D3D12_QUERY_TYPE_TIMESTAMP,
+        token.begin,2,context.timestamp_readback.Get(),u64(token.begin)*sizeof(UINT64)));
+    context.timestamp_samples.push_back({token.begin,name});context.timestamps_collected=false;
+}
+
 u64 CommandScheduler::Submit(std::span<std::function<void(u64)>> retirements,
                              std::span<std::function<void(u64)>> submitted) {
+    // A copy batch must always be followed by a direct timeline signal.  Most
+    // callers already have a direct list open, but keeping this invariant here
+    // also makes a standalone SubmitCopy()/Submit() sequence waitable.
+    if (copy_recording_ && !recording_) Begin();
+    FlushCopy();
     if (!recording_) {
         Collect();
         return submitted_;
@@ -150,6 +205,7 @@ void CommandScheduler::Collect() {
         }
     }
     for (auto& operation : ready) operation.callback(operation.fence);
+    for(auto& context:contexts_)CollectTimestamps(context);
 }
 
 void CommandScheduler::PriorityWorker(std::stop_token token) {
