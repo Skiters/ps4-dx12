@@ -1,5 +1,13 @@
 # Open issues
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11 observed blockers: repeated Mv_AudioPlayThread null write of 0xDEADBA
+at eboot+0x20b56d2 (actual crash stack/trigger still needed); mixed CMASK exception
+at initial setup; title/setup artifacts. Bounded buffer overlap lookup is fixed and
+tested, but world entry remains unverified. Profile absolute-path mismatch prevents
+controlled scene comparison; see GAMEPLAY_BASELINE.md.
+
 Parity audit: GPU timestamp values at 774d095 require remeasurement; see BENCHMARKS.md.
 PrimitiveType::None / depth-override ordering is corrected to the pinned Vulkan revision.
 Seven classification states pass; end-to-end memory-side-effect reproduction remains outstanding.

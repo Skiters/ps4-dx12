@@ -1,5 +1,15 @@
 # Checkpoints
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11 — parent a824f9f65668d61080d2e90488435589efcd4f90, clean initial tree.
+Subject: perf(dx12): bound observed guest buffer reconciliation lookups.
+Live GPU-worker samples at ~10,831 mappings motivated lower_bound/predecessor lookup.
+New regression covers exclusive boundaries, ownership and preserved data; 208/208
+native tests and core build passed. Microbenchmark 26.789 -> 0.366 ms / 10,000 calls.
+Three integration runs documented in GAMEPLAY_BASELINE.md; no world-entry improvement.
+Commit identity is this entry's containing commit (git log); no push performed.
+
 ## PARITY-A01 — 2026-10-10 Vulkan draw-filter precedence
 
 - Input SHA: `e43ba4d`; output: commit containing this entry

@@ -1,5 +1,23 @@
 # Next session
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11 priority update (supersedes older plan below):
+1. Read GAMEPLAY_BASELINE.md. Freeze one copied full profile/home and rewrite absolute
+   General paths before either backend launch. Preserve original Vulkan saves/config.
+2. Capture real crash stack and preceding assertion condition at eboot+0x20b56d2,
+   Mv_AudioPlayThread; investigate relevant AvPlayer/audio HLE results. Do not suppress
+   the null write. LLDB needs bundled Python 3.11 on PATH; attach 0x80000003 is not
+   the game fault. Use the exact build map. Current fault logger stack words are zero.
+3. Separate renderer blocker: capture bounded CMASK contents, target descriptor and
+   metadata writes at setup. Compare upstream EliminateFastClear/TextureCache tracking.
+   Exact-pixel fixture required; do not skip mixed metadata or clear whole mixed surfaces.
+4. Paired isolated Vulkan run and bounded semantic capture remain outstanding.
+5. Preserve lookup/batching/query ownership/draw-filter fixes; repeat identical scenario
+   after target regression and native suite. No FPS claim without a verified game scene.
+Evidence: F:/PS4Dev/handoff/gameplay-a824f9f, gameplay-range-after,
+gameplay-range-saved-profile. Historical pre-e43ba4d GPU times remain invalid.
+
 Start with PORTING_ROADMAP.md and VULKAN_DX12_PARITY.md. Extend the corrected draw classifier
 with a GuestRasterizer memory-side-effect integration fixture. Do not use the old 0.0064 ms GPU timing as evidence; repeat
 timestamp measurements only with the corrected submitted-context lifetime checks.

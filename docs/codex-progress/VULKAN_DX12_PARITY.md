@@ -1,5 +1,14 @@
 # Vulkan / native D3D12 parity audit
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11: bounded ResolveGpuBuffers search is a tested local optimization, not
+proof of full Vulkan regional tracking parity. CMASK is now an observed game blocker:
+GuestColorClearPending/MaterializeGuestColorClear reject mixed slices; upstream
+0c9ca525b8add53e62b3ccd9c9c2f6ef2ebabbfa EliminateFastClear uses IsMetaCleared/TouchMeta
+and native clears. Mixed-tile addressing/coherent semantic tracking remains absent.
+No paired Vulkan/DX12 replay completed; audio-thread fault is not proven renderer divergence.
+
 Audit start: 2026-10-10. DX12 baseline: `774d0951ccb40caf47921856ede9c2446203699e`.
 Upstream reference: `shadps4-emu/shadPS4@0c9ca525b8add53e62b3ccd9c9c2f6ef2ebabbfa`.
 The local upstream directory is an extracted source archive, not a Git checkout.

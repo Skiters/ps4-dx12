@@ -1,5 +1,13 @@
 # Native DX12 state
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11 update: core builds; 208/208 tests pass. ResolveGpuBuffers now searches
+only overlapping disjoint mappings (26.789 -> 0.366 ms / 10,000 test lookups).
+No game FPS improvement established. Title/setup artifacts remain; guest audio-thread
+fault repeats at eboot+0x20b56d2; separate seed-home run fails on mixed CMASK codes.
+See GAMEPLAY_BASELINE.md; historical runtime claims below are not current gameplay proof.
+
 Functional port checkpoint A01: GuestRasterizer now applies the Vulkan draw-filter ordering
 through ClassifyGuestDraw. Fast clear/decompress and resolve keep priority; PrimitiveType::None
 then exits before depth/stencil override-copy. The state classifier has seven regression cases.

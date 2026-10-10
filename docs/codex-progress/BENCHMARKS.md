@@ -1,5 +1,13 @@
 # Benchmarks
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11: native-buffer-range-lookup-test, 1,024 resident disjoint mappings,
+10,000 interior lookups, Debug Layer on: CPU wall total 26.789 -> 0.366 ms.
+One sample each; no percentiles or FPS claim. Finish/barriers/ownership unchanged.
+Full native suite 208/208 (60.06 s), core build passed. Integration profiles/stages
+differed and still failed: no controlled frame-time or transfer/submission delta.
+
 ## Parity correctness checkpoints
 
 PARITY-E01: core build succeeds; native suite 206/206, 64.75 seconds.

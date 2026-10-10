@@ -263,8 +263,18 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
 }
 void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
-    for(const auto& [base,mapping]:mappings_)if(mapping.gpu_owned&&
-        base<address+size&&address<base+mapping.size)resolving_buffers_.insert(base);
+    if(!size)return;
+    if(address>UINT64_MAX-size)throw std::out_of_range("GPU buffer resolution range overflow");
+    // Find/DropCached keep mappings disjoint. Use the same predecessor rule as
+    // DropCached: a request can begin inside one earlier mapping, but unrelated
+    // resident buffers must not be scanned on every guest backing validation.
+    auto first=mappings_.lower_bound(address);
+    if(first!=mappings_.begin()){
+        const auto previous=std::prev(first);
+        if(previous->second.size>address-previous->first)first=previous;
+    }
+    for(auto it=first;it!=mappings_.end()&&it->first<address+size;++it)
+        if(it->second.gpu_owned)resolving_buffers_.insert(it->first);
     if(resolving_buffers_.empty())return;
     Finish();resolving_buffers_.clear();
 }

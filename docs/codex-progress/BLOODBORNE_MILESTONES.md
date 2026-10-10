@@ -1,5 +1,12 @@
 # Bloodborne milestones
 
+## Integration checkpoint 2026-10-11
+
+2026-10-11: startup/boot/title online-offline choices reverified visually. Colored
+artifacts prevent a correctness claim. Seed-home run reached brightness setup with
+different home state, not a new gameplay milestone. Save selection/world/60-second
+stable gameplay remain unverified. No new LEVEL 1–5 claimed. See GAMEPLAY_BASELINE.md.
+
 2026-10-10: this audit cycle has not launched either game backend. Historical evidence is
 listed separately so component tests cannot be mistaken for world-entry verification.
 
