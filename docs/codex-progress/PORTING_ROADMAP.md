@@ -4,9 +4,9 @@ Reference and evidence boundaries are in VULKAN_DX12_PARITY.md.
 
 1. EPIC E: timestamp retirement corrected; pending copy API now exposes recording rather
    than a false fence. Preserve batching and test exact completion visibility.
-2. EPIC A: reproduce PrimitiveType::None / depth-override ordering mismatch, then match
-   Vulkan FilterDraw ordering. Add an integration test through GuestRasterizer, not only
-   a test of a duplicated predicate.
+2. EPIC A: PrimitiveType::None / depth-override ordering now matches Vulkan FilterDraw.
+   Seven cases exercise the production classifier. Add an integration test through
+   GuestRasterizer to verify destination memory side effects, beyond classification.
 3. EPIC A/D: differential fixtures for indirect dispatch, especially direct-only HLE paths
    and arguments produced by previous GPU writes. Native ExecuteIndirect migration requires
    adapting resource preparation and resource lifetime; do not simply substitute the call.

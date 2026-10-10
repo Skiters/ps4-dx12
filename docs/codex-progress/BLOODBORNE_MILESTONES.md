@@ -5,7 +5,7 @@ listed separately so component tests cannot be mistaken for world-entry verifica
 
 | Milestone | Evidence / status |
 |---|---|
-| M1 startup | Prior core runs; current core compilation to be checked |
+| M1 startup | Prior core runs; current core compiles, no new runtime startup evidence |
 | M2 boot | Prior isolated-profile Bloodborne runs |
 | M3 title | Historical README/status evidence, not revalidated this cycle |
 | M4 menu | Historical README/status evidence, not revalidated this cycle |

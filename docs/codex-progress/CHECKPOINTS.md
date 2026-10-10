@@ -1,5 +1,20 @@
 # Checkpoints
 
+## PARITY-A01 — 2026-10-10 Vulkan draw-filter precedence
+
+- Input SHA: `e43ba4d`; output: commit containing this entry
+  (`git log -1 --format=%H -- native-port/draw_filter_test.cpp`).
+- Epic: A. Upstream `Vulkan::Rasterizer::FilterDraw` at the pinned reference revision.
+- Adaptation: special color clear/decompress/resolve remains before primitive rejection;
+  None now stops GuestRasterizer::DrawInternal before depth/stencil override-copy.
+- C++ changes: guest_graphics_state.h, guest_rasterizer.cpp, draw_filter_test.cpp.
+- Regression: seven production-classifier cases, including None with stale depth/stencil
+  override flags and special CB operations. This is not a full GuestRasterizer execution test.
+- Core compiled and linked; full native suite 207/207 passed in 54.09 seconds.
+- No game run, new milestone or performance result claimed. End-to-end memory-side-effect
+  fixture and deterministic Vulkan/DX12 command comparison remain the next priority.
+- Local commit subject: `port(dx12): match Vulkan draw filter precedence`; no push.
+
 ## PARITY-E01 — 2026-10-10 scheduler ownership audit
 
 - Input SHA: `774d0951ccb40caf47921856ede9c2446203699e`.

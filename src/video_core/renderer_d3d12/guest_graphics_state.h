@@ -5,6 +5,17 @@
 #include <span>
 #include <vector>
 namespace NativeDX12 {
+// Vulkan::Rasterizer::FilterDraw handles CB operations before primitive None,
+// then rejects None before any depth/stencil override copies or shader work.
+enum class GuestDrawOperation { Rasterize, Skip, FastClear, Resolve };
+inline GuestDrawOperation ClassifyGuestDraw(const AmdGpu::Regs& regs) {
+    using Mode = AmdGpu::ColorControl::OperationMode;
+    if (regs.color_control.mode == Mode::EliminateFastClear ||
+        regs.color_control.mode == Mode::FmaskDecompress) return GuestDrawOperation::FastClear;
+    if (regs.color_control.mode == Mode::Resolve) return GuestDrawOperation::Resolve;
+    if (regs.primitive_type == AmdGpu::PrimitiveType::None) return GuestDrawOperation::Skip;
+    return GuestDrawOperation::Rasterize;
+}
 // DB enable bits can remain set after the game unbinds one of the planes.
 // Match the guest attachment validity checks before translating host state.
 struct GuestDepthActivity {

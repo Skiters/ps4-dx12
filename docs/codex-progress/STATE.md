@@ -1,5 +1,10 @@
 # Native DX12 state
 
+Functional port checkpoint A01: GuestRasterizer now applies the Vulkan draw-filter ordering
+through ClassifyGuestDraw. Fast clear/decompress and resolve keep priority; PrimitiveType::None
+then exits before depth/stencil override-copy. The state classifier has seven regression cases.
+No Bloodborne world-entry or FPS improvement is claimed from this source-level correctness fix.
+
 Parity audit correction (2026-10-10): the historical GPU timings below are not validated.
 An open command context could reuse its previous fence when collecting query results.
 Collection now requires a closed submitted context; the regression reproduces the old

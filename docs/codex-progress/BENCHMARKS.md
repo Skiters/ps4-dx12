@@ -1,5 +1,12 @@
 # Benchmarks
 
+## Parity correctness checkpoints
+
+PARITY-E01: core build succeeds; native suite 206/206, 64.75 seconds.
+PARITY-A01: core build succeeds; native suite 207/207, 54.09 seconds.
+These are validation durations, not game performance benchmarks. No new CPU/GPU frame
+measurements or FPS comparison were performed for these correctness changes.
+
 ## Correction: GPU timing validity at 774d095
 
 The parity audit found that CollectTimestamps could consume a recording context using its

@@ -1,7 +1,7 @@
 # Next session
 
-Start with PORTING_ROADMAP.md and VULKAN_DX12_PARITY.md. Reproduce the draw-filter ordering
-issue through GuestRasterizer. Do not use the old 0.0064 ms GPU timing as evidence; repeat
+Start with PORTING_ROADMAP.md and VULKAN_DX12_PARITY.md. Extend the corrected draw classifier
+with a GuestRasterizer memory-side-effect integration fixture. Do not use the old 0.0064 ms GPU timing as evidence; repeat
 timestamp measurements only with the corrected submitted-context lifetime checks.
 
 Continue from the copy-batching checkpoint and prioritize the volume of guest-memory coherence

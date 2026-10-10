@@ -1,8 +1,8 @@
 # Open issues
 
 Parity audit: GPU timestamp values at 774d095 require remeasurement; see BENCHMARKS.md.
-PrimitiveType::None is filtered too late relative to depth-override copy in DX12 compared
-with the pinned Vulkan revision. Runtime reproduction and correction remain outstanding.
+PrimitiveType::None / depth-override ordering is corrected to the pinned Vulkan revision.
+Seven classification states pass; end-to-end memory-side-effect reproduction remains outstanding.
 Full command differential replay, texture alias parity and shader instruction parity remain
 unverified. Existing dirty_ranges must be accounted for before redesigning memory tracking.
 

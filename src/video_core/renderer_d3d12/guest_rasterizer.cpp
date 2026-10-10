@@ -273,8 +273,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     diagnostic.Detail("primitive=%u count=%u indexed=%u cb0=%llx",u32(r.primitive_type),r.num_indices,
         unsigned(indexed),(unsigned long long)r.color_buffers[0].Address());
     diagnostic.Stage("guest-state");
-    if(r.color_control.mode==AmdGpu::ColorControl::OperationMode::EliminateFastClear||
-       r.color_control.mode==AmdGpu::ColorControl::OperationMode::FmaskDecompress) {
+    const auto operation=ClassifyGuestDraw(r);
+    if(operation==GuestDrawOperation::Skip)return;
+    if(operation==GuestDrawOperation::FastClear) {
         const auto& b=r.color_buffers[0];
         if(b) {
             const auto d=DescribeGuestColorBuffer(b,gpu_.last_cb_extent[0]);
@@ -282,7 +283,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         return;
     }
-    if(r.color_control.mode==AmdGpu::ColorControl::OperationMode::Resolve){
+    if(operation==GuestDrawOperation::Resolve){
         diagnostic.Stage("color-resolve");ResolveColorTargets();return;
     }
     const bool color_disabled=r.color_control.mode==AmdGpu::ColorControl::OperationMode::Disable;
