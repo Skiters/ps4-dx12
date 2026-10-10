@@ -49,7 +49,7 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
     native_alpha_factor_=SUCCEEDED(DX12_API_CALL(device->CheckFeatureSupport(
         D3D12_FEATURE_D3D12_OPTIONS13,&blend_options,sizeof(blend_options))))&&blend_options.AlphaBlendFactorSupported;
     EnableHostSpanCache(true);
-    textures_.SetCopySubmission([this](const auto& record){return SubmitCopyCommands(record);});
+    textures_.SetCopySubmission([this](const auto& record){SubmitCopyCommands(record);});
     textures_.SetPendingRetirement([this]{
         Finish();const auto fence=Flush();if(fence)textures_.Submitted(fence);
         RecordingList();

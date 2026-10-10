@@ -1,5 +1,10 @@
 # Native DX12 state
 
+Parity audit correction (2026-10-10): the historical GPU timings below are not validated.
+An open command context could reuse its previous fence when collecting query results.
+Collection now requires a closed submitted context; the regression reproduces the old
+failure. See VULKAN_DX12_PARITY.md and PORTING_ROADMAP.md for the initial audit scope.
+
 Updated 2026-10-10 from baseline `5b0f555`.
 
 The native D3D12 backend now records bounded per-stage CPU wall-time distributions when

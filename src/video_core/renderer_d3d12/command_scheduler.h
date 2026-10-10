@@ -72,7 +72,9 @@ public:
     void Finish();
     void Collect();
     void Defer(u64 fence, std::function<void(u64)> callback, bool priority = false);
-    u64 SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record);
+    // Records into the pending upload list. Completion belongs to the next
+    // direct Submit() fence; no independent completed fence exists yet.
+    void SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record);
     void MakeQueueWait(ID3D12CommandQueue* queue, u64 fence) {
         if(!queue||!fence)throw std::invalid_argument("invalid scheduler consumer wait");
         Check(DX12_API_CALL(queue->Wait(timeline_.Fence(),fence)));

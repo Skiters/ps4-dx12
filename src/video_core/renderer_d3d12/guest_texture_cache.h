@@ -101,7 +101,7 @@ private:
     std::function<void(Entry&)> resolve_owned_;
     std::function<bool(Entry&)> acquire_owned_;
     std::function<void()> retire_pending_;
-    std::function<uint64_t(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
+    std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
 public:
     explicit GuestTextureCache(ID3D12Device* device);
@@ -125,7 +125,7 @@ public:
             CompatibleGuestShaderStorage(it->second->desc,desc))return true;
         return false;}
     void SetPendingRetirement(std::function<void()> retirement){retire_pending_=std::move(retirement);}
-    void SetCopySubmission(std::function<uint64_t(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
+    void SetCopySubmission(std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
         submit_copy_=std::move(submit);}
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}

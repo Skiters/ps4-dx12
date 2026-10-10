@@ -127,8 +127,8 @@ public:
     // Whole guarded pages stay GPU-owned until CPU access; other ranges reconcile.
     void CopyBufferBatch(std::span<const BufferCopy>);
     ID3D12GraphicsCommandList* RecordingList(){std::lock_guard lock(execution_mutex_);Begin();return scheduler_.Begin();}
-    u64 SubmitCopyCommands(const std::function<void(ID3D12GraphicsCommandList*)>& record){
-        std::lock_guard lock(execution_mutex_);return scheduler_.SubmitCopy(record);}
+    void SubmitCopyCommands(const std::function<void(ID3D12GraphicsCommandList*)>& record){
+        std::lock_guard lock(execution_mutex_);scheduler_.SubmitCopy(record);}
     VAddr GdsAddress() const {return reinterpret_cast<VAddr>(gds_.data());}
     u64 CompletedFence() const {return scheduler_.Completed();}
     u64 SubmittedFence() const {return scheduler_.Submitted();}

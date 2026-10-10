@@ -18,7 +18,7 @@ CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), time
     priority_worker_ = std::jthread([this](std::stop_token token) { PriorityWorker(token); });
 }
 
-u64 CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record){
+void CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record){
     if(!record)throw std::invalid_argument("empty copy submission");
     if(!copy_recording_){copy_active_=AcquireCopyContext();copy_recording_=true;}
     auto& context=copy_contexts_[copy_active_];
@@ -27,7 +27,6 @@ u64 CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandL
     // The pending copy list is submitted immediately before the next direct
     // list. Its queue wait preserves the same upload-before-use dependency
     // without one ExecuteCommandLists/Signal pair per buffer slice.
-    return 0;
 }
 
 u64 CommandScheduler::FlushCopy(){
@@ -101,6 +100,7 @@ size_t CommandScheduler::AcquireContext() {
         [](const Context& left, const Context& right) { return left.fence < right.fence; });
     const auto index = size_t(oldest - contexts_.begin());
     timeline_.Wait(oldest->fence);
+    CollectTimestamps(*oldest);
     Check(DX12_API_CALL(oldest->allocator->Reset()));
     Check(DX12_API_CALL(oldest->list->Reset(oldest->allocator.Get(), nullptr)));
     oldest->closed = false;
@@ -108,7 +108,9 @@ size_t CommandScheduler::AcquireContext() {
 }
 
 void CommandScheduler::CollectTimestamps(Context& context){
-    if(context.timestamps_collected||context.timestamp_samples.empty()||context.fence>timeline_.Completed())return;
+    // A reused recording context still carries its previous completed fence.
+    // Only a closed, submitted list owns the current timestamp resolve writes.
+    if(!context.closed||context.timestamps_collected||context.timestamp_samples.empty()||context.fence>timeline_.Completed())return;
     UINT64 frequency{};if(FAILED(DX12_API_CALL(direct_queue_->GetTimestampFrequency(&frequency)))||!frequency){
         context.timestamp_samples.clear();context.timestamp_cursor=0;context.timestamps_collected=true;return;
     }

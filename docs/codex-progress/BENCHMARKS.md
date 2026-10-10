@@ -1,5 +1,13 @@
 # Benchmarks
 
+## Correction: GPU timing validity at 774d095
+
+The parity audit found that CollectTimestamps could consume a recording context using its
+old completed fence (or zero on first use). A regression reproduced this before the fix.
+The historical 0.0064 ms GPU number below is therefore UNVERIFIED and must not be used to
+rule out a GPU bottleneck. CPU timing and submission counters have a separate mechanism.
+No replacement performance measurement is claimed in this correctness cycle.
+
 ## 2026-10-10 compute dispatch cycle
 
 Both runs used Bloodborne `CUSA03173`, the same profile seed cloned into separate directories,

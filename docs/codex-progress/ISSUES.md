@@ -1,5 +1,11 @@
 # Open issues
 
+Parity audit: GPU timestamp values at 774d095 require remeasurement; see BENCHMARKS.md.
+PrimitiveType::None is filtered too late relative to depth-override copy in DX12 compared
+with the pinned Vulkan revision. Runtime reproduction and correction remain outstanding.
+Full command differential replay, texture alias parity and shader instruction parity remain
+unverified. Existing dirty_ranges must be accounted for before redesigning memory tracking.
+
 ## Compute dispatch
 
 - `resource-upload-dispatch-writeback` remains expensive: 4.044 ms average in the latest
