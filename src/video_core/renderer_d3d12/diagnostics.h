@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <array>
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <mutex>
@@ -28,6 +30,11 @@ struct Active {
     Clock::time_point start{}, stage_start{}; char detail[160]{};
 };
 struct Totals { unsigned long long calls{}, failed{}; double ms{}, max_ms{}; };
+struct StageTotals {
+    Kind kind{}; const char* name{}; unsigned long long calls{}; double ms{}, max_ms{};
+    std::array<double, 512> samples{}; size_t sample_count{}, sample_cursor{};
+};
+struct Counter { const char* name{}; unsigned long long value{}; };
 // Opt-in, bounded, aggregate diagnostics. No images, command history or persistent
 // profiler cache. The normal renderer never constructs the worker or takes its lock.
 class Hub {
@@ -36,6 +43,8 @@ public:
     std::condition_variable wake;
     std::array<Active, 16> active{};
     std::array<Totals, size_t(Kind::Count)> totals{};
+    std::array<StageTotals, 96> stages{};
+    std::array<Counter, 64> counters{};
     unsigned lines{};
     const Clock::time_point started = Clock::now();
     FILE* output = [] {
@@ -68,6 +77,21 @@ public:
                     fprintf(output, "DX12 diag t=%.3f summary=%s calls=%llu failed=%llu total_ms=%.3f avg_ms=%.3f max_ms=%.3f (inclusive)\n",
                         Seconds(now), Names[i], t.calls, t.failed, t.ms, t.ms/t.calls, t.max_ms);
             }
+            for (auto& s : stages) {
+                if (!s.calls) continue;
+                auto samples=s.samples;const auto count=std::min(samples.size(),s.sample_count);
+                std::sort(samples.begin(),samples.begin()+count);
+                const auto percentile=[&](double p){return samples[std::min(count-1,size_t((count-1)*p))];};
+                if(lines++<8192)fprintf(output,
+                    "DX12 diag t=%.3f stage-summary op=%s stage=%s calls=%llu total_ms=%.3f avg_ms=%.3f max_ms=%.3f samples=%zu p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f (cpu-wall)\n",
+                    Seconds(now),Names[size_t(s.kind)],s.name,s.calls,s.ms,s.ms/s.calls,s.max_ms,count,
+                    percentile(.50),percentile(.95),percentile(.99));
+                s.calls=0;s.ms=0;s.max_ms=0;s.sample_count=0;s.sample_cursor=0;
+            }
+            for(auto& c:counters)if(c.value){
+                if(lines++<8192)fprintf(output,"DX12 diag t=%.3f counter=%s value=%llu\n",
+                    Seconds(now),c.name,c.value);c.value=0;
+            }
             for (const auto& a : active) if (a.thread && a.stage && lines++ < 8192)
                 fprintf(output, "DX12 diag t=%.3f active tid=%lu op=%s stage=%s age_ms=%.3f stage_ms=%.3f %s\n",
                     Seconds(now), a.thread, Names[size_t(a.kind)], a.stage,
@@ -80,7 +104,21 @@ public:
     static Hub& Get() { static Hub hub; return hub; }
     static double Milliseconds(Clock::duration d) { return std::chrono::duration<double, std::milli>(d).count(); }
     double Seconds(Clock::time_point t) const { return std::chrono::duration<double>(t-started).count(); }
+    void RecordStage(Kind kind,const char* name,double elapsed){
+        StageTotals* target{};
+        for(auto& stage:stages)if(stage.name&&stage.kind==kind&&!std::strcmp(stage.name,name)){target=&stage;break;}
+        if(!target)for(auto& stage:stages)if(!stage.name){stage.kind=kind;stage.name=name;target=&stage;break;}
+        if(!target)return;++target->calls;target->ms+=elapsed;target->max_ms=std::max(target->max_ms,elapsed);
+        target->samples[target->sample_cursor++%target->samples.size()]=elapsed;
+        target->sample_count=std::min(target->sample_count+1,target->samples.size());
+    }
 };
+inline void Count(const char* name,unsigned long long value=1){
+    if(!Enabled()||!value)return;auto& hub=Hub::Get();std::lock_guard lock(hub.mutex);
+    Counter* target{};for(auto& counter:hub.counters)if(counter.name&&!std::strcmp(counter.name,name)){target=&counter;break;}
+    if(!target)for(auto& counter:hub.counters)if(!counter.name){counter.name=name;target=&counter;break;}
+    if(target)target->value+=value;
+}
 class Scope {
     Hub* hub_{}; size_t slot_{}; Active previous_{}, current_{}; int exceptions_{};
 public:
@@ -99,6 +137,7 @@ public:
     void Stage(const char* stage) {
         if(!hub_)return; std::lock_guard lock(hub_->mutex);
         const auto now=Clock::now();const auto elapsed=Hub::Milliseconds(now-current_.stage_start);
+        hub_->RecordStage(current_.kind,current_.stage,elapsed);
         if(elapsed>=100&&hub_->lines++<8192)fprintf(hub_->output,
             "DX12 diag t=%.3f slow-stage tid=%lu op=%s stage=%s ms=%.3f %s\n",
             hub_->Seconds(now),current_.thread,Names[size_t(current_.kind)],current_.stage,elapsed,current_.detail);
@@ -110,7 +149,8 @@ public:
     }
     ~Scope() {
         if(!hub_)return; std::lock_guard lock(hub_->mutex);
-        const auto elapsed=Hub::Milliseconds(Clock::now()-current_.start);
+        const auto now=Clock::now();const auto elapsed=Hub::Milliseconds(now-current_.start);
+        hub_->RecordStage(current_.kind,current_.stage,Hub::Milliseconds(now-current_.stage_start));
         const bool failed=std::uncaught_exceptions()>exceptions_;
         auto& t=hub_->totals[size_t(current_.kind)];++t.calls;t.failed+=failed;t.ms+=elapsed;
         if(elapsed>t.max_ms)t.max_ms=elapsed;

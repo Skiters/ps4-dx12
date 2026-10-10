@@ -75,6 +75,10 @@ bool ExecuteGuestCopyShader(Rasterizer& rasterizer,const Shader::Info& info,
     // rasterizer keeps command order, uses scratch storage for overlapping
     // aliases, and reconciles only the exact destination ranges.  This avoids
     // serial CPU memmoves while preserving the shader's memmove semantics.
+    Diagnostics::Count("copy-hle.dispatches");
+    Diagnostics::Count("copy-hle.commands",copies.size());
+    unsigned long long copied_bytes{};for(const auto& copy:copies)copied_bytes+=copy.bytes;
+    Diagnostics::Count("copy-hle.bytes",copied_bytes);
     rasterizer.CopyBufferBatch(copies);
     return true;
 }

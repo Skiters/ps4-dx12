@@ -1,6 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "resource_bindings.h"
+#include "diagnostics.h"
 #include <dxcapi.h>
 #include <d3d12shader.h>
 #include <algorithm>
@@ -13,6 +14,7 @@ DescriptorHeapPool::Slice DescriptorHeapPool::Acquire(UINT count,D3D12_DESCRIPTO
     const UINT maximum=type==D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER?D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE:1000000;
     if(count>maximum)throw std::invalid_argument("Descriptor table exceeds shader-visible heap limit");
     for(auto& page:pages_)if(page->type==type&&count<=page->capacity&&page->cursor<=page->capacity-count){
+        Diagnostics::Count("descriptor-page.reused");Diagnostics::Count("descriptor-count",count);
         const auto offset=page->cursor;page->cursor+=count;++page->active;++reused_;return {page,offset,count};
     }
     // One resource page normally covers several PS4 frames; a sampler page uses
@@ -22,6 +24,7 @@ DescriptorHeapPool::Slice DescriptorHeapPool::Acquire(UINT count,D3D12_DESCRIPTO
     D3D12_DESCRIPTOR_HEAP_DESC desc{type,capacity,D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,0};
     auto page=std::make_shared<Page>();page->type=type;page->capacity=capacity;page->cursor=count;page->active=1;
     Check(DX12_API_CALL(device_->CreateDescriptorHeap(&desc,IID_PPV_ARGS(&page->heap))));
+    Diagnostics::Count("descriptor-page.created");Diagnostics::Count("descriptor-count",count);
     ++created_;pages_.push_back(page);return {std::move(page),0,count};
 }
 void DescriptorHeapPool::Release(Slice& slice){

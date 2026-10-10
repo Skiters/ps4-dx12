@@ -1,4 +1,5 @@
 #include "command_scheduler.h"
+#include "diagnostics.h"
 #include <algorithm>
 
 namespace NativeDX12 {
@@ -18,6 +19,7 @@ CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), time
 }
 
 u64 CommandScheduler::SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record){
+    Diagnostics::Count("gpu-submit.copy");
     if(!record)throw std::invalid_argument("empty copy submission");
     const auto index=AcquireCopyContext();
     auto& context=copy_contexts_[index];
@@ -108,6 +110,7 @@ u64 CommandScheduler::Submit(std::span<std::function<void(u64)>> retirements,
         Collect();
         return submitted_;
     }
+    Diagnostics::Count("gpu-submit.direct");
     auto& context = contexts_[active_];
     Check(DX12_API_CALL(context.list->Close()));
     submitted_ = timeline_.Submit(direct_queue_.Get(), context.list.Get());

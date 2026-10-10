@@ -154,6 +154,25 @@ int wmain(int argc,wchar_t** argv){try {
     const Rasterizer::BufferCopy invalid_packet[]{ {address+1024,address+4096,64},{address+8192,address,4} };
     bool invalid_copy=false;try{rasterizer.CopyBufferBatch(invalid_packet);}catch(const std::exception&){invalid_copy=true;}
     if(!invalid_copy||guest[256]!=unchanged)throw std::runtime_error("Invalid copy packet mutated a destination before validation");
+    // Page-owned copy destinations must submit without an eager CPU fence wait,
+    // then reconcile exactly when guest CPU memory is requested.
+    {
+        Rasterizer deferred(device.Get());deferred.MapMemory(address,8192);
+        unsigned commits{};deferred.SetBufferOwnership([](VAddr,u64){return true;},
+            [&](VAddr destination,std::span<const std::byte> data){
+                ++commits;memcpy(reinterpret_cast<void*>(destination),data.data(),data.size());return true;
+            },[](VAddr,u64){});
+        for(u32 i=0;i<1024;++i)guest[i]=i+9000;
+        std::fill_n(guest+1024,1024,0xdeadbeef);
+        const Rasterizer::BufferCopy owned_copy[]{{address+4096,address,4096}};
+        deferred.CopyBufferBatch(owned_copy);
+        if(commits)throw std::runtime_error("GPU-owned copy destination reconciled eagerly");
+        if(!deferred.ReadMemory(address+4096,4096)||commits!=1)
+            throw std::runtime_error("GPU-owned copy destination did not reconcile on CPU access");
+        for(u32 i=0;i<1024;++i)if(guest[1024+i]!=i+9000)
+            throw std::runtime_error("Deferred copy reconciliation changed destination bytes");
+        deferred.ValidateDebugMessages();
+    }
     // Guest control arithmetic wraps at 32 bits before adding the base address.
     copy_info.pgm_hash=0xfefebf9f;
     const u32 wrapped_commands[]{0,0x40000001,0,1,0,UINT_MAX};

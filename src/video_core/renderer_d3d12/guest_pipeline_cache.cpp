@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_pipeline_cache.h"
+#include "diagnostics.h"
 namespace NativeDX12 {
 namespace {
 // Serialize semantic fields, never host pointer values or struct padding.
@@ -47,7 +48,10 @@ const ShaderPipeline& GuestPipelineCache::Compute(AmdGpu::Liverpool& gpu) {
     return Compute(guest);
 }
 const ShaderPipeline& GuestPipelineCache::Compute(const GuestShaderStage& guest) {
-    if(auto found=compute_.find(guest.id);found!=compute_.end())return *found->second;
+    if(auto found=compute_.find(guest.id);found!=compute_.end()){
+        Diagnostics::Count("compute-pso.hit");return *found->second;
+    }
+    Diagnostics::Count("compute-pso.miss");
     const auto& dxil=shaders_.Compute(guest);
     auto pipeline=std::make_unique<ShaderPipeline>(device_.Get(),dxc_,dxil.bytecode);
     return *compute_.emplace(guest.id,std::move(pipeline)).first->second;

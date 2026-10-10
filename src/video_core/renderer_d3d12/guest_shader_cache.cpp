@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_shader_cache.h"
+#include "diagnostics.h"
 #include <stdexcept>
 
 namespace NativeDX12 {
@@ -95,15 +96,19 @@ const GuestDxilStages& GuestShaderCache::Graphics(const GuestGraphicsStages& gue
 const DXIL::SpirvConvertResult& GuestShaderCache::Compute(const GuestShaderStage& guest) {
     if (guest.info.sw_stage != Shader::SwStage::Compute)
         throw std::invalid_argument("Non-compute guest shader in compute pipeline");
-    if (const auto existing = compute_.find(guest.id); existing != compute_.end()) return existing->second;
+    if (const auto existing = compute_.find(guest.id); existing != compute_.end()) {
+        Diagnostics::Count("compute-dxil.memory-hit");return existing->second;
+    }
     auto options = options_;
     options.stage = DXIL::SpirvStage::Compute;
     auto disk_key=configuration_;disk_key.Text("compute");OptionsKey(disk_key,options);disk_key.Blob(std::as_bytes(std::span(guest.spirv)));
     std::vector<std::byte> saved;
     if(disk_.Load(disk_key.bytes,saved))try{
         CacheReader reader{saved};auto compiled=reader.Stage();if(!reader.data.empty())throw std::runtime_error("Trailing DXIL cache bytes");
-        ++disk_hits_;return compute_.emplace(guest.id,std::move(compiled)).first->second;
+        ++disk_hits_;Diagnostics::Count("compute-dxil.disk-hit");
+        return compute_.emplace(guest.id,std::move(compiled)).first->second;
     }catch(const std::exception&){}
+    Diagnostics::Count("compute-dxil.compile");
     auto compiled = DXIL::ConvertSpirv(converter_, guest.spirv, options);
     if (!compiled.success) throw std::runtime_error("Guest compute DXIL compilation failed: " + compiled.diagnostics);
     CacheKey data;SaveStage(data,compiled);disk_.Store(disk_key.bytes,data.bytes);

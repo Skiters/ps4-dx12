@@ -271,10 +271,14 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     std::lock_guard lock(execution_mutex_);
     for(const auto& request:requests)if(request.written){
         auto it=mappings_.upper_bound(request.address);
-        if(it==mappings_.begin())return false;--it;
-        if(!it->second.gpu_owned||request.address-it->first>it->second.size||
-           request.size>it->second.size-(request.address-it->first))return false;
+        if(it==mappings_.begin()){Diagnostics::Count("buffer-defer.no-mapping");return false;}--it;
+        if(!it->second.gpu_owned){Diagnostics::Count("buffer-defer.not-owned");return false;}
+        if(request.address-it->first>it->second.size||
+           request.size>it->second.size-(request.address-it->first)){
+            Diagnostics::Count("buffer-defer.not-covered");return false;
+        }
     }
+    Diagnostics::Count("buffer-defer.accepted");
     return true;
 }
 void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
@@ -679,6 +683,7 @@ void Rasterizer::CopyBuffer(VAddr dst,VAddr src,u32 s,bool dg,bool sg){
 void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
     std::lock_guard lock(execution_mutex_);
     constexpr u64 max_extent=64*1024*1024;
+    bool destinations_may_defer=!copies.empty();
     // Validate the whole dispatch before recording any destination writes.
     for(const auto& copy:copies){
         // D3D12 buffer copies are byte-addressed.  PS4 copy shaders routinely
@@ -709,8 +714,22 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
             // not one committed GPU allocation for every tiny copy region.
             // PrepareShaderBuffers creates raw views and therefore requires a
             // dword envelope; CopyBufferRegion below retains the exact bytes.
-            const auto aligned_src_begin=src_begin&~VAddr(3),aligned_src_end=(src_end+3)&~VAddr(3);
-            const auto aligned_dst_begin=dst_begin&~VAddr(3),aligned_dst_end=(dst_end+3)&~VAddr(3);
+            auto aligned_src_begin=src_begin&~VAddr(3),aligned_src_end=(src_end+3)&~VAddr(3);
+            auto aligned_dst_begin=dst_begin&~VAddr(3),aligned_dst_end=(dst_end+3)&~VAddr(3);
+            // Prefer complete guest pages when their backing is accessible.
+            // PageWatch can then keep copy results GPU-owned until an actual
+            // CPU access; exact byte ranges remain the fallback at PRT edges.
+            if(src_end<=UINT64_MAX-4095&&dst_end<=UINT64_MAX-4095){
+                const auto page_src_begin=src_begin&~VAddr(4095),page_src_end=(src_end+4095)&~VAddr(4095);
+                const auto page_dst_begin=dst_begin&~VAddr(4095),page_dst_end=(dst_end+4095)&~VAddr(4095);
+                try{
+                    ValidateHostMemory(page_src_begin,page_src_end-page_src_begin);
+                    ValidateHostMemory(page_dst_begin,page_dst_end-page_dst_begin,true);
+                    aligned_src_begin=page_src_begin;aligned_src_end=page_src_end;
+                    aligned_dst_begin=page_dst_begin;aligned_dst_end=page_dst_end;
+                    Diagnostics::Count("copy-hle.page-envelope");
+                }catch(const std::exception&){Diagnostics::Count("copy-hle.exact-envelope");}
+            }
             requests.push_back({aligned_src_begin,aligned_src_end-aligned_src_begin,false,true});
             requests.push_back({aligned_dst_begin,aligned_dst_end-aligned_dst_begin,true,true});
         }else for(size_t i=first;i<end;++i){const auto& c=copies[i];
@@ -722,6 +741,7 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
             requests.push_back({destination_begin,destination_end-destination_begin,true,true});
         }
         const auto views=PrepareShaderBuffers(requests);
+        destinations_may_defer&=BuffersMayDefer(requests);
         u64 scratch_bytes{};
         for(size_t i=first;i<end;++i){const auto n=coalesced?0:(i-first)*2;
             if(views[n].resource.Get()==views[n+1].resource.Get())scratch_bytes=std::max<u64>(scratch_bytes,copies[i].bytes);}
@@ -749,10 +769,12 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
         }
         first=end;
     }
-    // Keep every packet in this HLE dispatch on one ordered GPU timeline and
-    // reconcile once.  Page-fault ownership lets page-aligned destinations
-    // stay GPU-resident; unaligned destinations still become CPU-visible here.
-    Finish();
+    // Keep every packet in this HLE dispatch on one ordered GPU timeline.
+    // Whole guarded destinations remain GPU-owned and are reconciled by their
+    // first CPU access. Partial/unprotected destinations retain the eager
+    // readback required for guest memory coherence.
+    if(destinations_may_defer){Diagnostics::Count("copy-hle.deferred");Flush();}
+    else{Diagnostics::Count("copy-hle.reconciled");Finish();}
 }
 u64 Rasterizer::Flush(){
     std::lock_guard lock(execution_mutex_);
