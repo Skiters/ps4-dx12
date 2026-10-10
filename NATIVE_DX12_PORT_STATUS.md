@@ -1,5 +1,24 @@
 # Native DirectX 12 port — 2026-10-09
 
+## October 10 buffer-cache cycle
+
+The resident buffer cache no longer alternates allocations indefinitely when
+two large, read-only PS4 sharps partially overlap.  An eligible CPU-coherent
+mapping now grows once to the checked union and subsequent bindings retain the
+same D3D12 resource.  GPU-owned, dirty, failed-upload and mixed SRV/UAV ranges
+keep the conservative reconciliation path.  The regression test verifies the
+resource identity and both offsets with the D3D12 Debug Layer enabled.
+
+The focused hardware test and the complete native suite pass (205/205, 58.51s)
+on the RTX 5080, and the full emulator core links successfully.  A 66-second
+run from the isolated test profile produced no native fault, device removal or
+D3D12 validation error.  It presented 18–34 frames per two-second interval in
+the observed section, but this is not comparable to an earlier gameplay run
+because the profile and scene state differ.  No same-scene FPS gain or stable
+world entry is claimed.  The run instead identified compute dispatch as the
+next measured cost; diagnostic stages now distinguish image-operation
+recognition, copy-shader HLE and metadata-clear recognition.
+
 The separate Windows library/PKG menu connects to a full Release shadPS4 core using D3D12/DXGI. Saved-world rendering, playable performance, native 60 FPS and frame generation remain unverified. The installed host correctly reports `gameLaunchReady=false` while allowing an experimental launch.
 
 ## Deployment

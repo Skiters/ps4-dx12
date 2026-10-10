@@ -8,6 +8,7 @@
 using namespace NativeDX12;
 void Require(bool ok){if(!ok)throw std::runtime_error("assertion failed");}
 int main(){try{
+    ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(DX12_API_CALL(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory))));ComPtr<ID3D12Device> device;
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1> a;if(DX12_API_CALL(factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&a)))==DXGI_ERROR_NOT_FOUND)break;DXGI_ADAPTER_DESC1 info{};DX12_API_CALL(a->GetDesc1(&info));if(info.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)continue;if(SUCCEEDED(DX12_API_CALL(D3D12CreateDevice(a.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))){wprintf(L"Hardware: %ls\n",info.Description);break;}}
     Require(device!=nullptr);
@@ -29,6 +30,20 @@ int main(){try{
         source.Transition(arenas.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         arenas.Finish();void* data{};D3D12_RANGE range{0,65536};Check(rb.handle->Map(0,&range,&data));
         Require(memcmp(data,memory+8,65536)==0);D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+
+        // Alternating partially overlapping large read-only sharps must grow
+        // to one stable union instead of recreating one native resource per
+        // binding.  The second call performs the one required growth; both
+        // following directions must retain that identity.
+        const Rasterizer::ShaderBufferRequest left[]{{base+32768,98304,false,false}};
+        const Rasterizer::ShaderBufferRequest right[]{{base+98304,98304,false,false}};
+        arenas.PrepareShaderBuffers(left);arenas.Finish();
+        auto grown=arenas.PrepareShaderBuffers(right);arenas.Finish();
+        auto left_again=arenas.PrepareShaderBuffers(left);arenas.Finish();
+        auto right_again=arenas.PrepareShaderBuffers(right);
+        Require(grown[0].resource.Get()==left_again[0].resource.Get()&&
+            grown[0].resource.Get()==right_again[0].resource.Get());
+        Require(left_again[0].offset==32768&&right_again[0].offset==98304);
         arenas.UnmapMemory(base,bytes);VirtualFree(memory,0,MEM_RELEASE);
     }
     {

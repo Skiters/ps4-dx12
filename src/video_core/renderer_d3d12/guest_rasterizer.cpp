@@ -745,8 +745,9 @@ void GuestRasterizer::Dispatch(const u32 (&groups)[3]) {
     }
     diagnostic.Detail("groups=%u,%u,%u shader=%llu buffers=%zu images=%zu",groups[0],groups[1],groups[2],
         (unsigned long long)guest.id,guest.info.buffers.size(),guest.info.images.size());
-    diagnostic.Stage("copy-shader");
+    diagnostic.Stage("image-operation-recognition");
     if(ComputeImageOperation(guest.info,groups))return;
+    diagnostic.Stage("copy-shader-hle");
     if(ExecuteGuestCopyShader(*this,guest.info,invocation))return;
     // Same bounded heuristic as Vulkan's IsComputeMetaClear: metadata readers
     // and XOR address encoders must execute normally. Plain metadata clears
@@ -754,6 +755,7 @@ void GuestRasterizer::Dispatch(const u32 (&groups)[3]) {
     const bool reads_meta=std::any_of(guest.info.buffers.begin(),guest.info.buffers.end(),[&](const auto& b){
         return !b.IsSpecial()&&!b.is_written&&depth_metadata_.Contains(b.GetSharp(guest.info).base_address);
     });
+    diagnostic.Stage("metadata-clear-recognition");
     if(!reads_meta&&!guest.info.has_bitwise_xor){
         bool cleared=false;
         for(const auto& b:guest.info.buffers)if(!b.IsSpecial()&&b.is_written)

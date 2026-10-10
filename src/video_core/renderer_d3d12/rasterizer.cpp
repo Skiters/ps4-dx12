@@ -402,6 +402,40 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 (other.written||other.unordered_access!=request.unordered_access)){allowed=false;break;}
             if(allowed)for(const auto& [base,mapping]:mappings_)if(mapping.gpu_owned&&base<arena_last&&arena_first<base+mapping.size){allowed=false;break;}
             if(allowed){first=arena_first;last=arena_last;}
+
+            // A PS4 allocation is frequently rebound through slightly shifted
+            // sharps.  Replacing the old native slice with the exact new span
+            // makes two partially overlapping read-only views evict one another
+            // forever.  Grow once to their union so subsequent views are
+            // covered by one stable resource.  GPU-owned storage and a batch
+            // containing incompatible access classes retain the conservative
+            // reconciliation path below.
+            bool grew=true;
+            while(grew){
+                grew=false;
+                auto overlap=mappings_.lower_bound(first);
+                if(overlap!=mappings_.begin())--overlap;
+                for(;overlap!=mappings_.end()&&overlap->first<last;++overlap){
+                    const auto mapping_end=overlap->first+overlap->second.size;
+                    if(mapping_end<=first||overlap->second.gpu_owned||overlap->second.dirty||
+                       overlap->second.initial_upload_failed)continue;
+                    const auto union_first=std::min(first,overlap->first);
+                    const auto union_last=std::max(last,mapping_end);
+                    if(union_last-union_first>Shader::NativeDma::ResidentBufferBytes||
+                       !IsMapped(union_first,union_last-union_first)||
+                       !CoversSpan(committed_readable_,union_first,union_last))continue;
+                    bool compatible=true;
+                    for(const auto& other:requests)if(other.address<union_last&&
+                        union_first<other.address+other.size&&
+                        (other.written||other.unordered_access!=request.unordered_access)){
+                        compatible=false;break;
+                    }
+                    if(!compatible)continue;
+                    if(union_first!=first||union_last!=last){
+                        first=union_first;last=union_last;grew=true;break;
+                    }
+                }
+            }
         }
         ranges.emplace_back(first,last);
     }
