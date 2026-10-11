@@ -11,12 +11,28 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "reference_frames.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
 namespace ReferenceTrace {
 using U64 = unsigned long long;
-inline bool Enabled() { static const char* path = std::getenv("SHADPS4_REFERENCE_TRACE"); static const bool on = path && *path; return on; }
+inline bool Enabled() {
+    static const char* path = std::getenv("SHADPS4_REFERENCE_TRACE");
+    if (!path || !*path) return false;
+    static const char* marker = std::getenv("SHADPS4_REFERENCE_MARKER");
+    if (!marker || !*marker) return true;
+    static std::atomic<U64> checked{};
+    static std::atomic<bool> armed{};
+    const auto ms = U64(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+    auto previous = checked.load(std::memory_order_relaxed);
+    if (ms - previous >= 250 && checked.compare_exchange_strong(previous, ms)) {
+        std::error_code error;
+        armed = std::filesystem::exists(marker, error);
+    }
+    return armed.load(std::memory_order_relaxed);
+}
 inline U64 Now() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 inline U64 Cpu() {
 #ifdef _WIN32
@@ -49,7 +65,7 @@ inline void AggregateEvent(const Event& e){
     }++aggregate_overflow;
 }
 class Sink {
-    std::mutex lock; std::vector<Event> events; std::atomic<U64> dropped{};
+    std::mutex lock; std::vector<Event> events; std::atomic<U64> dropped{},filtered{};
     std::ofstream output; std::jthread worker; U64 written{}; const U64 cap=512ull<<20;
 public:
     Sink() {
@@ -75,7 +91,7 @@ public:
         }batch.clear();output.flush();
         const char* path=std::getenv("SHADPS4_REFERENCE_TRACE");
         std::ofstream status(std::filesystem::path(path)/"trace-status.json");
-        status<<"{\"mode\":\"B\",\"reference_revision\":\"c7e065d1b415be16c23e260a21f1dd8bbfc4cb57\",\"dropped_events\":"<<dropped<<",\"aggregate_overflow\":"<<aggregate_overflow<<",\"written_bytes\":"<<written<<",\"clock\":\"steady_clock nanoseconds; GPU durations are separate\",\"frame_hint_is_not_causal_attribution\":true}";
+        status<<"{\"mode\":\"B\",\"reference_revision\":\"c7e065d1b415be16c23e260a21f1dd8bbfc4cb57\",\"dropped_events\":"<<dropped<<",\"filtered_short_events\":"<<filtered<<",\"aggregate_overflow\":"<<aggregate_overflow<<",\"written_bytes\":"<<written<<",\"clock\":\"steady_clock nanoseconds; GPU durations are separate\",\"frame_hint_is_not_causal_attribution\":true}";
         std::ofstream counters(std::filesystem::path(path)/"aggregate-counters.csv");
         counters<<"name,calls,wall_ns,cpu_ns,exclusive_wall_ns,exclusive_cpu_ns,sum_a\n";
         for(const auto& a:totals)if(const char* name=a.name.load())counters<<name<<','<<a.calls<<','<<a.wall<<','<<a.cpu<<','<<a.exclusive_wall<<','<<a.exclusive_cpu<<','<<a.sum_a<<'\n';
@@ -83,7 +99,19 @@ public:
         packets<<"queue_kind,opcode,calls\n";
         for(unsigned i=0;i<packet_counts.size();++i)if(auto count=packet_counts[i].load())packets<<i/256<<','<<i%256<<','<<count<<'\n';
     }
-    void Add(Event e){AggregateEvent(e);if(!lock.try_lock()){++dropped;return;}if(events.size()<32768)events.push_back(e);else++dropped;lock.unlock();}
+    void Add(Event e){
+        AggregateEvent(e);
+        // Aggregates include every measured operation. Detailed short calls
+        // are explicitly filtered by default; they used to exhaust the file
+        // budget before gameplay and bury real frame completions.
+        static const bool detail = std::getenv("SHADPS4_REFERENCE_DETAIL") != nullptr;
+        if(!detail && e.end-e.start<100000 &&
+           std::strncmp(e.name,"frame.",6) && std::strncmp(e.name,"gpu.",4) &&
+           std::strncmp(e.name,"queue.",6)){++filtered;return;}
+        if(!lock.try_lock()){++dropped;return;}
+        if(events.size()<32768)events.push_back(e);else++dropped;
+        lock.unlock();
+    }
 };
 inline Sink& Output(){static Sink sink;return sink;}
 inline void Emit(const char* name,U64 a=0,U64 b=0,U64 c=0,U64 d=0,U64 frame=0,U64 parent_override=0){
@@ -92,7 +120,7 @@ inline void Emit(const char* name,U64 a=0,U64 b=0,U64 c=0,U64 d=0,U64 frame=0,U6
 inline void Packet(U64 opcode,unsigned queue_kind){
     if(!Enabled())return;
     if(opcode<256 && queue_kind<3)++packet_counts[queue_kind*256+opcode];else++invalid_packet_categories;
-    Emit("pm4.opcode",opcode,queue_kind);
+    // Keep opcode totals without a mutex, event ID, or disk record per packet.
 }
 struct Scope;
 inline thread_local Scope* current{};
@@ -106,5 +134,8 @@ struct Scope {
         Output().Add({name,id,parent?parent->id:0,frame,Tid(),start,end,used,wall>child_wall?wall-child_wall:0,used>child_cpu?used-child_cpu:0,a,b,c,d});
     }
 };
-inline U64 NewFrame(){if(!Enabled())return 0;const auto id=++next_frame;frame_hint=id;Emit("guest.frame.prepared",0,0,0,0,id);return id;}
+inline U64 NewFrame(){
+    const auto id=Common::GuestFrameTrace::Enabled()?Common::GuestFrameTrace::New():++next_frame;
+    frame_hint=id;Emit("guest.frame.prepared",0,0,0,0,id);return id;
+}
 }
