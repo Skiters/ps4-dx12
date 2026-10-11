@@ -1,5 +1,16 @@
 # Checkpoints
 
+## Final high-memory verification — 2026-10-11
+
+Initial c31111c -> 7a550c9 residency/pools -> 9527c90 bounded overlap lookups.
+Final source 9527c901a50256016072c4b67464946f78061ab1; all four runs use SHA256 db7e55e2e8f070bf3739a2e8aa50bb8b0f67cd2b393cc34a19cb25ccabcc44df.
+216/216 final high-memory tests. Same-scene final FPS A/B/C/D:
+0.6440 / 0.8400 / 0.7505 / 0.8078; C/A +16.53% observed,
+materialization per completed frame -96.91%. One run/mode; no significance claim.
+No new visible regression identified; old artifacts remain. Standalone C dev build,
+original installation and all 20 saves preserved. Raw evidence/report outside Git.
+
+
 ## 2026-10-11 — bounded residency lookups after measured B run
 
 Parent 7a550c9. B reduced materialization ~97% per completed frame but not average

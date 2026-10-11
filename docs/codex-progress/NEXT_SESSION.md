@@ -1,5 +1,19 @@
 # Next session
 
+## Final — next step after the high-memory experiment
+
+The requested residency/cache experiment is complete; do not repeat the earlier
+F1–F3 or implementation-pending work below. Read final BENCHMARKS.md and
+F:/PS4Dev/handoff/high-memory-20261011/FINAL-REPORT.md. Preserve the final C launcher.
+Do not raise budgets further without new evidence. The remaining large snapshot
+and backing-validation CPU work needs complete-frame critical-path attribution.
+Optional next implementation: direct ordinary 16/32-bit index residency at
+GuestRasterizer::DrawInternal. Integrate it into the common request batch and actual
+resource-state owner; test offsets/base vertex, GPU-written indices, aliases,
+restart/endian fallbacks and held fence leases before another game comparison.
+Single-agent work; auto-push verified commits per the user's standing instruction.
+
+
 ## Active — finish high-memory mode comparison
 
 Do not repeat F1–F3. The current single-agent task is the high-memory experiment.

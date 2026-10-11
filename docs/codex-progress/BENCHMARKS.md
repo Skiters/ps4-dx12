@@ -1,5 +1,144 @@
 # Benchmarks
 
+## Final high-memory experiment — 2026-10-11
+
+Supersedes the intermediate and historical measurements below.
+Initial source c31111c; high-memory implementation 7a550c9; final tested source
+9527c901a50256016072c4b67464946f78061ab1, clean Release build. Same executable in A/B/C/D:
+SHA256 db7e55e2e8f070bf3739a2e8aa50bb8b0f67cd2b393cc34a19cb25ccabcc44df.
+RTX 5080, driver 32.0.16.1692, 64 GB RAM; Bloodborne CUSA03173 v1.09,
+Hunter's Dream, stationary same saved scene/camera, internal 1280x800, partial render 0.
+Every run uses a fresh copy of the same immutable coherence-20261011/seed, including
+shader cache and patches (the assertion NOP was removed from that seed previously).
+Thirty-second warm-up after observing the world, then a 90-second requested capture.
+Validation/API tracing variables are absent in child processes; no builds/tests
+overlap gameplay captures. Control input is neutral during capture, checked afterward.
+
+| Mode | Budget MiB | Seconds | Completed frames | FPS | Median ms | P95 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| A | 512 | 91.615 | 59 | 0.6440 | 1560.733 | 1684.461 |
+| B | 2048 | 91.664 | 77 | 0.8400 | 1180.479 | 1209.101 |
+| C | 4096 | 91.942 | 69 | 0.7505 | 1321.244 | 1373.113 |
+| D | 8192 | 91.605 | 74 | 0.8078 | 1218.814 | 1390.598 |
+
+Best observed sample: mode B, +30.44% FPS relative to A and
+97.21% fewer materialized bytes per completed frame. The 2-GiB
+configuration is a reasonable dev-launch choice here; 8 GiB did not improve on it.
+Observed C/A FPS difference: +16.53%. Materialized bytes per completed frame:
+96.91% lower. One final run per configuration: these are observations,
+not statistical significance or a guarantee. Repeated Present is not counted;
+GPU-complete timestamps identify new guest frames. Timestamp polling is about 2 ms.
+
+| Mode | Effective cache GiB | Local GPU usage peak GiB | Buffer heaps peak GiB | Working set peak GiB | Private bytes peak GiB |
+|---|---:|---:|---:|---:|---:|
+| A | 0.500 | 2.544 | 0.750 | 3.951 | 4.948 |
+| B | 2.000 | 3.622 | 1.750 | 4.502 | 6.451 |
+| C | 4.000 | 3.622 | 1.750 | 4.457 | 6.484 |
+| D | 8.000 | 3.461 | 1.500 | 4.381 | 6.184 |
+
+DXGI budget/usage refers to this process; separate memory-samples.json records
+whole-adapter nvidia-smi usage, not interchangeable with process local usage.
+Peak DXGI observations include startup budget-change records and capture records.
+Configured budgets are caps, not allocations. All final modes retained their
+requested caps without a reported GPU pressure event. The 8-GiB trial was permitted by the
+observed DXGI budget after other-resource usage and the 2-GiB safety reserve.
+
+| Mode | Materializations | Materialized GB | MB/completed frame | Cache hits | New cached GPU buffers | Evictions | Upload GB | Readback GB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A | 74831 | 24.450 | 414.410 | 950038 | 5219 | 74606 | 24.488 | 1.570 |
+| B | 3704 | 0.889 | 11.550 | 1376203 | 349 | 3352 | 1.771 | 1.084 |
+| C | 4807 | 0.885 | 12.826 | 1213682 | 699 | 4108 | 1.663 | 0.965 |
+| D | 3773 | 1.082 | 14.625 | 1302619 | 703 | 3079 | 1.913 | 1.033 |
+
+| Mode | Snapshot spans GB | Watch-establishment GB | Snapshot compare CPU s | Materialization CPU s | Validation CPU s | Fence wait CPU s |
+|---|---:|---:|---:|---:|---:|---:|
+| A | 99.434 | 72.698 | 17.824 | 18.506 | 0.704 | 3.380 |
+| B | 160.091 | 124.645 | 29.511 | 0.601 | 0.791 | 3.048 |
+| C | 140.512 | 106.806 | 26.991 | 0.650 | 0.506 | 8.048 |
+| D | 152.142 | 116.600 | 29.301 | 0.708 | 0.637 | 2.897 |
+
+| Mode | Budget evictions | Envelope evictions | Other overlaps | DMA whole-cache clears / evicted mappings | GPU fence wait calls |
+|---|---:|---:|---:|---:|---:|
+| A | 0 | 44701 | 1309 | 57 / 28596 | 19799 |
+| B | 0 | 3276 | 76 | 0 / 0 | 20527 |
+| C | 0 | 4040 | 68 | 0 / 0 | 19589 |
+| D | 0 | 3006 | 73 | 0 / 0 | 19842 |
+
+| Mode | GPU pool reuse | Snapshot new / reused | Large staging new / reused | Retained snapshot peak MiB | Retained large staging peak MiB |
+|---|---:|---:|---:|---:|---:|
+| A | 69612 | 74831 / 0 | 1742 / 0 | 0.00 | 0.00 |
+| B | 3355 | 349 / 3355 | 0 / 89 | 247.55 | 124.73 |
+| C | 4108 | 699 / 4108 | 0 / 86 | 255.64 | 122.79 |
+| D | 3070 | 703 / 3070 | 2 / 73 | 253.46 | 122.66 |
+
+GB/MB above are decimal; memory-capacity GiB/MiB are binary. Snapshot spans count
+validation ranges, not hardware bytes read by memcmp. CPU stage times are inclusive
+and must not be summed. Counters use 2-second windows with slightly different edges
+from the frame marker, so normalized work is approximate. Cache hits count lookups,
+not unique draw requests. Misses correspond to materializations in these runs without observed buffer allocation/upload failures.
+Budget eviction behavior is proven by the production regression; the table shows
+whether it was exercised in each game window. No frame drops or diagnostic truncation
+were observed. Background desktop activity was not controlled, adding run-to-run
+variance; the measured differences do not isolate every component or establish
+that larger requested budgets monotonically improve performance.
+
+Changed functions: Rasterizer::RefreshBufferBudget, Find, PrepareShaderBuffers, DropCached, AcquireBuffer, RetireBuffer, Upload, Finish, CopyBuffer, ReleaseCpuBufferWatches and NotifyCpuWrite; PlacedBufferAllocator::CreatePage, SetBudget and Trim. New helpers manage bounded intersections, snapshots and pools. Allocation counters cover resident GPU-buffer backing, not every texture/index/descriptor allocation in the process.
+
+Confirmed mechanisms and changes:
+- A: address-ordered budget eviction discarded recently reused buffers. Mode uses
+  last-use order among inactive candidates, while preserving active batch mappings.
+- B/C: overlapping/incompatible envelopes still require safe retirement; no new
+  GPU-owned coalescing or expansion across PRT holes. The tiny legacy DMA path also
+  cleared the entire cache above 64 MiB. Mode routes aligned copies through the
+  existing exact-footprint batch path, retaining unrelated hot backing.
+- D/H: CPU changes continue to invalidate proof or upload changed content. They are
+  not classified as avoidable stale-data reuse. Dirty ranges and CPU reads still reconcile.
+- E: GPU ownership and PageWatch transfers remain authoritative; retained mappings
+  exposed full-map overlap scans, now replaced by ordered intersection queries.
+- F/G: 160-MiB allocations wasted 256-MiB heap pages. Compact large pages eliminate
+  that measured fragmentation; incompatible/in-flight/pinned pool entries remain ineligible.
+  Idle leases can be released and allocation retried once on a budget-specific failure.
+- Reusable snapshots and large mapped upload arenas keep capacity separate from
+  valid contents. Snapshot/staging content is verified with actual GPU readbacks.
+  SHADPS4_DX12_CPU_POOL_MB (default 512) partitions retained storage: half snapshots,
+  quarter large staging, quarter small upload pages. Required active/in-flight data
+  and the pre-existing constant/descriptor/stream pools are separate working memory.
+
+Diagnostics: exhaustive aggregate counters plus top-16 rows from a bounded first-4096
+guest-address sample, not global top-N. Each row records request/mapping extent,
+backing allocation identity, reuse/recreation, last retirement reason, ownership,
+dirty state, completed fence, materialized/uploaded bytes. Excluded events are reported.
+The initial A diagnostic used materialization-generation IDs and omitted global-clear
+counts; final A/B/C/D use persistent pool allocation IDs and explicit clear counters.
+
+Validation: original tests retained. 215/215 ordinary suite (69.36 s); 215/215
+high-memory after fragmentation fix (70.88 s); final high-memory 216/216 (70.85 s).
+Fail-before/pass-after regressions cover hot eviction, tiny-DMA cache destruction,
+and watch lookup complexity (10.24M -> 10k candidates; 27.958 -> 0.353 ms).
+Added tests cover real GPU-gated eviction, live leases under zero budget, compact
+heaps, snapshots/staging without stale bytes, changed envelopes and PRT holes.
+Existing production F1–F3, retry/recursion and concurrent/queued PageWatch tests pass.
+An earlier high-memory suite failed on heap fragmentation; it is preserved in
+suite-high-memory.log and was fixed, not bypassed.
+
+Game limitation: still below playable speed. Old color/edge artifacts remain;
+no new visible regression was identified. This is not proof of pixel correctness,
+absence of every possible memory fault, or measured input-to-photon latency.
+Optional index-buffer fast path is not included: the bounded session prioritized
+cache correctness and four same-build game comparisons. Next concrete entry point:
+GuestRasterizer::DrawInternal index conversion in guest_rasterizer.cpp around line 480.
+Any direct path must join index residency with the shader request batch, preserve
+the authoritative resource state, pin its allocation through the draw fence, and
+fall back for endian conversion, primitive expansion/restart rewriting or incompatible aliases.
+
+Tested dev launcher: F:/PS4Dev/handoff/high-memory-20261011/C-final/Launch-Bloodborne.cmd.
+Best-sample 2-GiB launcher: F:/PS4Dev/handoff/high-memory-20261011/B-final/Launch-Bloodborne.cmd.
+Exact core: F:/PS4Dev/handoff/high-memory-20261011/B-final/core/shadPS4-DX12-Core.exe.
+Original installed core and all 20 save files match their preserved hashes.
+Evidence: F:/PS4Dev/handoff/high-memory-20261011 (per-run analysis.json, CSV,
+memory samples, PID/executable identity, screenshots, source archives and test logs).
+
+
 ## High-memory intermediate B and range-scan attribution
 
 Clean 7a550c9, high-memory 2048 MiB: 54 completed frames / 91.348 s = 0.59115 FPS,

@@ -1,5 +1,16 @@
 # Native DX12 state
 
+## Final — high-memory mode measured, 2026-10-11
+
+Supersedes earlier pending sections. Source 9527c901a50256016072c4b67464946f78061ab1, clean tested core.
+Final A/B/C/D completed FPS: 0.6440 / 0.8400 / 0.7505 / 0.8078.
+Best observed mode B: +30.44% FPS; materialized bytes/completed frame
+reduced 97.21%. Main 4-GiB mode C/A difference is +16.53%.
+Full final high-memory suite 216/216. Default mode remains disabled; no installed
+program replacement. See BENCHMARKS.md for measurements, limits and executable hash.
+Old visual artifacts and unplayable speed remain. Original 20 save hashes match.
+
+
 ## Active — high-memory experiment, 2026-10-11
 
 Intermediate B on 7a550c9 substantially reduces materialization but stays at 0.591 FPS.
