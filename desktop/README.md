@@ -14,6 +14,27 @@ Checks: --self-test constructs the menu and scans games; --native-probe-test che
 
 Build: dotnet publish PS4Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
 
+«Версии ядра» lists immutable packages in `%LOCALAPPDATA%/PS4Desktop/cores`.
+Select a version to view its source identity, build date, validation status,
+executable hash and measurement notes. The selection survives restarts and applies
+to all games (the existing library has no per-game core selection). Launch and
+probe validate every manifested runtime file; missing/corrupt selections fail
+with a request to choose another version. The previous configured launcher stays
+available through «Вернуться к ранее настроенному ядру». No version is selected
+automatically. The bundled host implements the hardware `--probe`; full saved
+cores implement the game CLI and are validated separately.
+
+`package-core.ps1` packages an executable, adjacent DLLs and runtime subdirectories,
+records SHA256 for every file, and refuses an existing version ID. Supply source
+directory, destination root, ID, name, full commit, branch, description, status and
+dirty flag. Keep the exact binary's results in `Results`; a rebuild requires a
+new ID/hash. `--core-versions-test` checks discovery, persisted choice, rollback,
+corruption, missing versions and path containment without starting games.
+`--launch-game <game-directory> --capture-root <directory>` is an explicit isolated
+engineering launch through the same validated launch policy as the UI; ordinary
+launches retain their diagnostic opt-out. `PS4DESKTOP_DATA_ROOT` isolates settings
+and saves, and `PS4DESKTOP_CORE_ROOT` optionally shares the immutable catalogue.
+
 Migration build (2026-10-09): clean installs use profile-template and create their
 data under %LOCALAPPDATA%/PS4Desktop. No old Bloodborne folder, user name, external
 Python or original emulator is required by the packaged menu/PKG installer.

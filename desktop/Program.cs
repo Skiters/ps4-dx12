@@ -11,13 +11,14 @@ sealed class Settings
     public static string DataRoot => Path.GetFullPath(Environment.GetEnvironmentVariable("PS4DESKTOP_DATA_ROOT")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PS4Desktop"));
     public string Backend { get; set; } = "dx12";
+    public string SelectedCoreId { get; set; } = "";
     public string NativeCore { get; set; } = Path.Combine(AppContext.BaseDirectory, "native", "shadPS4-DX12.exe");
     public string ProfileRoot { get; set; } = Path.Combine(AppContext.BaseDirectory, "profile-template");
     public string NativeProfileRoot { get; set; } = Path.Combine(DataRoot, "native-profile");
     public string InstallRoot { get; set; } = Path.Combine(DataRoot, "Games");
     public List<string> LibraryRoots { get; set; } = [Path.Combine(DataRoot, "Games")];
     public string Python { get; set; } = "python";
-    public static string FilePath => File.Exists(Path.Combine(AppContext.BaseDirectory, "settings.json"))
+    public static string FilePath => Environment.GetEnvironmentVariable("PS4DESKTOP_DATA_ROOT") is null && File.Exists(Path.Combine(AppContext.BaseDirectory, "settings.json"))
         ? Path.Combine(AppContext.BaseDirectory, "settings.json") : Path.Combine(DataRoot, "settings.json");
     public static Settings Load() => File.Exists(FilePath)
         ? JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new() : new();
@@ -142,8 +143,13 @@ static class NativeConnection
 {
     public static async Task<NativeStatus> Probe(Settings settings)
     {
-        if (!File.Exists(settings.NativeCore)) throw new FileNotFoundException("Нативное DX12-ядро не найдено", settings.NativeCore);
-        var start = new ProcessStartInfo(settings.NativeCore) { UseShellExecute = false, CreateNoWindow = true,
+        // Saved full cores implement the game CLI, while --probe belongs to the
+        // bundled connection host. Validate the selected package first, then
+        // probe the device through that host without starting another game.
+        _ = CoreVersions.Resolve(settings);
+        string core = settings.NativeCore;
+        if (!File.Exists(core)) throw new FileNotFoundException("Нативное DX12-ядро не найдено", core);
+        var start = new ProcessStartInfo(core) { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8 };
         NativeLaunchPolicy.Apply(start);
         start.ArgumentList.Add("--probe");
@@ -270,6 +276,7 @@ sealed class MainWindow : Form
         AddButton("Добавить папку", AddFolder);
         AddButton("Обновить · Y", async () => await RefreshLibrary());
         AddButton("Настройки", Configure);
+        AddButton("Версии ядра", SelectCore);
         AddButton("Нативный DX12", async () => { settings.Backend = "dx12"; settings.Save(); await ProbeNative(); });
         AddButton("Отмена", Cancel);
         search.TextChanged += (_, _) => RenderLibrary();
@@ -289,7 +296,9 @@ sealed class MainWindow : Form
     {
         if (settings.Backend == "dx12")
         {
-            backend.Text = "  Нативное DX12-ядро · экспериментальный запуск. " + (nativeReady ? "Запуск проверен." : "Игровой рендерер ещё дорабатывается.");
+            string selected = string.IsNullOrEmpty(settings.SelectedCoreId) ? "Ранее настроенное ядро" :
+                CoreVersions.Discover().FirstOrDefault(v => v.Id == settings.SelectedCoreId)?.ToString() ?? "Выбранное ядро отсутствует";
+            backend.Text = "  " + selected + " · " + (nativeReady ? "Подключение проверено." : "Экспериментальный запуск.");
             playButton.Text = "▶ Запустить DX12 · A";
             playButton.Enabled = true;
         }
@@ -304,7 +313,7 @@ sealed class MainWindow : Form
             var result = await NativeConnection.Probe(settings);
             nativeReady = result.GameLaunchReady;
             UpdateBackend();
-            backend.Text = "  Нативный DX12 подключён · " + result.Adapter + (nativeReady ? " · запуск игр доступен" : " · игровой рендерер ещё не готов");
+            backend.Text += " · " + result.Adapter;
             status.Text = "DX12-устройство и вывод кадра проверены. Vulkan не загружен.";
         }
         catch (Exception ex) { status.Text = "Ошибка подключения DX12: " + ex.Message; }
@@ -361,6 +370,40 @@ sealed class MainWindow : Form
         settings.Save(); _ = RefreshLibrary();
     }
 
+    void SelectCore()
+    {
+        if (busy || launching || gameProcess is { HasExited: false }) return;
+        using var dialog = new Form { Text = "Версии ядра", Size = new(1050, 650), StartPosition = FormStartPosition.CenterParent, Font = Font };
+        var versions = new ListBox { Dock = DockStyle.Top, Height = 200, HorizontalScrollbar = true };
+        var details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        var select = new Button { Text = "Выбрать ядро", Dock = DockStyle.Bottom, Height = 45, Enabled = false };
+        var legacy = new Button { Text = "Вернуться к ранее настроенному ядру", Dock = DockStyle.Bottom, Height = 45 };
+        foreach (var version in CoreVersions.Discover()) versions.Items.Add(version);
+        versions.SelectedIndexChanged += (_, _) =>
+        {
+            if (versions.SelectedItem is not CoreVersion version) return;
+            string validation;
+            try { validation = CoreVersions.Validate(version); select.Enabled = true; }
+            catch (Exception ex) { validation = ex.Message; select.Enabled = false; }
+            details.Text = $"{version.Name}\r\nСтатус: {version.Status}\r\nДата сборки: {version.BuildDate:O}\r\nBackend: {version.Backend}\r\nВетка: {version.Branch}\r\nCommit: {version.Commit}\r\nИзменения поверх commit: {version.Dirty}\r\nSHA256: {version.Sha256}\r\n{validation}\r\n\r\n{version.Description}\r\n\r\n{version.Results}";
+        };
+        select.Click += (_, _) =>
+        {
+            try
+            {
+                var version = (CoreVersion)versions.SelectedItem!;
+                CoreVersions.Validate(version); settings.SelectedCoreId = version.Id; settings.Save();
+                dialog.DialogResult = DialogResult.OK;
+            }
+            catch (Exception ex) { MessageBox.Show(dialog, ex.Message); }
+        };
+        legacy.Click += (_, _) => { settings.SelectedCoreId = ""; settings.Save(); dialog.DialogResult = DialogResult.OK; };
+        dialog.Controls.Add(details); dialog.Controls.Add(versions); dialog.Controls.Add(select); dialog.Controls.Add(legacy);
+        for (int i = 0; i < versions.Items.Count; ++i)
+            if (((CoreVersion)versions.Items[i]).Id == settings.SelectedCoreId) versions.SelectedIndex = i;
+        if (dialog.ShowDialog(this) == DialogResult.OK) { UpdateBackend(); _ = ProbeNative(); }
+    }
+
     void Configure()
     {
         if (busy) return;
@@ -396,6 +439,7 @@ sealed class MainWindow : Form
                 if (!File.Exists(nativeCore.Text)) throw new IOException("Укажите существующее нативное DX12-ядро.");
                 settings.ProfileRoot = Path.GetFullPath(profile.Text);
                 settings.NativeProfileRoot = Path.GetFullPath(nativeProfile.Text);
+                if (!string.Equals(settings.NativeCore, Path.GetFullPath(nativeCore.Text), StringComparison.OrdinalIgnoreCase)) settings.SelectedCoreId = "";
                 settings.NativeCore = Path.GetFullPath(nativeCore.Text); settings.Backend = "dx12";
                 settings.InstallRoot = Path.GetFullPath(install.Text); if (!bundled) settings.Python = Path.GetFullPath(runtime.Text);
                 settings.Save(); form.DialogResult = DialogResult.OK;
@@ -415,10 +459,7 @@ sealed class MainWindow : Form
             var game = (Game)library.SelectedItems[0].Tag!;
             if (settings.Backend != "dx12") throw new IOException("В этом форке доступен только DirectX 12.");
             status.Text = "Загрузка игры… Подготовка профиля DX12";
-            string profile = await Task.Run(() => NativeProfile.Ensure(settings));
-            var start = new ProcessStartInfo(settings.NativeCore) { WorkingDirectory = profile, UseShellExecute = false };
-            NativeLaunchPolicy.Apply(start);
-            start.ArgumentList.Add("--game"); start.ArgumentList.Add(Path.Combine(game.Directory, "eboot.bin"));
+            var start = await Task.Run(() => NativeGameLaunch.Create(settings, game.Directory));
             gameProcess?.Dispose(); gameProcess = new Process { StartInfo = start, EnableRaisingEvents = true };
             var launched = gameProcess;
             gameProcess.Exited += (_, _) =>
@@ -427,6 +468,7 @@ sealed class MainWindow : Form
                 if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { status.Text = exitCode == 0 ? "Игра завершена. Библиотека готова." : $"Ядро завершилось с ошибкой {exitCode}. Нативный DX12 ещё дорабатывается."; Activate(); });
             };
             if (!gameProcess.Start()) throw new IOException("Не удалось запустить ядро");
+            NativeGameLaunch.Record(settings, gameProcess, Settings.DataRoot);
             status.Text = "Запущено: " + game.Title;
         }
         catch (Exception ex) { Error(ex); }
@@ -530,6 +572,32 @@ static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            if (args.Contains("--core-versions-test")) return CoreVersionTests.Run();
+            if (args.Contains("--list-cores"))
+            {
+                File.WriteAllText(Path.Combine(Settings.DataRoot, "core-list.json"), JsonSerializer.Serialize(CoreVersions.Discover()));
+                return 0;
+            }
+            int launchIndex = Array.IndexOf(args, "--launch-game");
+            if (launchIndex >= 0)
+            {
+                var launchSettings = Settings.Load();
+                int captureIndex = Array.IndexOf(args, "--capture-root");
+                string? captureRoot = captureIndex >= 0 ? args[captureIndex + 1] : null;
+                var start = NativeGameLaunch.Create(launchSettings, args[launchIndex + 1], captureRoot);
+                using var process = Process.Start(start) ?? throw new IOException("Не удалось запустить ядро");
+                NativeGameLaunch.Record(launchSettings, process, captureRoot ?? Settings.DataRoot);
+                if (captureRoot is not null)
+                {
+                    var output = process.StandardOutput.ReadToEndAsync();
+                    var errors = process.StandardError.ReadToEndAsync();
+                    process.WaitForExit();
+                    File.WriteAllText(Path.Combine(captureRoot, "stdout.txt"), output.GetAwaiter().GetResult());
+                    File.WriteAllText(Path.Combine(captureRoot, "stderr.txt"), errors.GetAwaiter().GetResult());
+                    File.WriteAllText(Path.Combine(captureRoot, "exit.json"), JsonSerializer.Serialize(new { exitCode = process.ExitCode }));
+                }
+                return 0;
+            }
             if (args.Contains("--prepare-native-profile"))
             {
                 NativeProfile.Ensure(Settings.Load());
