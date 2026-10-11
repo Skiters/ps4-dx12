@@ -1,5 +1,38 @@
 # Native DX12 state
 
+## Latest — Vulkan model adapted to native core, 2026-10-12
+
+Read [CORE_CONTRACT.md](vulkan-emulation-20261011/CORE_CONTRACT.md) before core
+changes. It records guest execution, CPU/GPU ownership, aliases, shader variants,
+queue domains and VideoOut; root AGENTS.md persists this work order and automatic
+push. [PINNED_PROBE.json](vulkan-emulation-20261011/PINNED_PROBE.json) adds a
+separate c7e065d1 compatible-source Vulkan probe with actual transfer-site bytes,
+PM4 counts, scheduler/tick joins and existing-fence completion observations.
+Three stationary windows produced 29.99 completed new flips/s at a 30 FPS cap.
+Trace raised mean CPU 2.5615 to 3.1924 cores (~24.6%); unchanged capped FPS does
+not imply zero profiler overhead. Shader identities and three missing source
+hooks remain explicit gaps. Two probe games closed with exit 0; all owned devices
+were removed. XInput confirmed movement, camera, chalice prompt and Workshop
+entry; enemy combat and death/respawn remain unvalidated.
+
+Production changes preserve clean CPU pages after stores, rearm only dirty gaps,
+and protect before comparing without publishing an unfinished equality proof.
+Ordinary 16/32-bit indices share the shader resource preparation batch and retain
+their allocation through command retirement. UAV aliases use a separate pooled
+GPU index snapshot; special index conversions retain the existing fallback.
+220/220 native regressions passed in 57.38 s; the incremental core linked.
+The final isolated launch loaded Hunter's Dream and completed 143 new guest
+frames in 90.098142 s (1.587158 FPS), versus the earlier 0.863128 baseline.
+See [BENCHMARKS.md](BENCHMARKS.md) for identities, failures and comparison limits.
+Latest user restriction: tests limited to game launches; no Computer Use,
+window activation or automated gameplay input while the user uses the computer.
+The final capture was passive, with focus/external input uncontrolled, so the
+observed +83.89% does not establish a matched stationary speedup. No fresh
+movement/camera/attack acceptance is claimed for this final build. Original
+17 home-file hashes match the installed-source manifest; owned pad was removed.
+Earlier installed-runtime evidence and parked experiments below retain their
+own revision/coverage limitations; they are not this probe or an accepted fix.
+
 ## Active — Vulkan emulation first, 2026-10-11
 
 The user accepted the complete autonomous engineering cycle, then corrected its

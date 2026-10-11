@@ -1,5 +1,45 @@
 # Next session
 
+## Current boundary: verified native changes; restricted gameplay acceptance
+
+Latest user instruction (2026-10-12): tests limited to game launches. Do not use
+Computer Use, activate windows or send gameplay input while the user uses the PC.
+The final core passed 220/220 regressions, loaded the world and produced 1.587158
+new completed frames/s in a passive 90.098142-s window. Baseline was 0.863128.
+Focus/external input were uncontrolled; this is not a strictly matched stationary
+comparison. Fresh movement/camera/attack acceptance remains open under this
+restriction. Do not silently resume the earlier authorized XInput/UI workflow.
+No game or virtual pad from this run should remain active after cleanup.
+
+Use [CORE_CONTRACT.md](vulkan-emulation-20261011/CORE_CONTRACT.md) and
+[PINNED_PROBE.json](vulkan-emulation-20261011/PINNED_PROBE.json). Compatible-source
+Vulkan measurements and internal queue/PM4/transfer attribution are now saved;
+do not rerun those completed steps or confuse them with installed 974-dirty.
+The justified port, checks, incremental core and one final capture are complete.
+Reuse the isolated profiles/builds and saved evidence; do not restart research.
+Pending protection cannot be a cache hit until comparison/upload succeeds;
+nested alias writes must release it. The port now preserves clean CPU pages
+after writes and includes ordinary indices in the shared resident resource batch.
+Do not import the old frozen patch without this distinction. If game acceptance
+fails, preserve the failure and fix/revert the change before publishing it.
+Automatic push applies to verified logical commits. Whole-engine parity, enemy
+combat/death and exact dirty-runtime attribution remain open.
+
+| Confirmed mechanism | DX12 action / expected effect |
+|---|---|
+| GCN frontend, shader/PSO cache, copy HLE, GPU ownership, fence retirement and completed flip tracking | Already implemented; preserve the existing contracts |
+| Dirty CPU pages / unchanged buffer reuse | `rasterizer.cpp`, `page_watch.h`, `guest_buffer_access.h`: invalidate/rearm only dirty pages, protect before comparing, retain clean proof; reduce whole-buffer comparisons |
+| Ordinary 16/32-bit index buffer binding | `guest_rasterizer.cpp`, `guest_compute.cpp`, `graphics_submission.cpp`, `rasterizer.cpp`: prepare/pin with shader resources, combine read states; UAV aliases get a pooled GPU snapshot; avoid CPU conversion/allocation/readback |
+| General GPU detile, newer DrawPipe implementation and unknown installed fork modifications | Insufficient exact format/implementation evidence for a blanket port; keep existing verified paths. Snapshot comparisons dominate the measured CPU cost |
+
+The last rearm fix removed full VirtualQuery scans of retained clean pieces;
+new gaps still validate through Track and ownership-mode transfers still validate
+their protection. Earlier attempts/failures are preserved outside Git. Remaining
+measured costs include reconciliation submit/wait (11.40 s), resident backing
+materialization (9.02 s) and overlap retirement (7.58 s) in the final window;
+these scopes are inclusive, not additive. Resource upload/materialization bytes
+remain high. Attribute the backing churn before another memory optimization.
+
 ## Current priority: understand Vulkan emulation before DX12 experiments
 
 Read [the new execution/ownership research](vulkan-emulation-20261011/RESEARCH.md)

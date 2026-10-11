@@ -95,9 +95,13 @@ int wmain(int argc,wchar_t** argv){try {
     const bool attachments_only=argc==3&&std::wstring_view(argv[2])==L"attachments";
     const bool readonly_alias=argc==3&&std::wstring_view(argv[2])==L"readonly-alias";
     const bool linear_color=argc==3&&std::wstring_view(argv[2])==L"linear-color";
+    const bool resident_indices=argc==3&&std::wstring_view(argv[2]).starts_with(L"indices");
+    const bool index16=resident_indices&&std::wstring_view(argv[2])==L"indices16";
+    const bool index_uav=resident_indices&&std::wstring_view(argv[2]).starts_with(L"indices-uav");
+    const bool index_uav_write=index_uav&&std::wstring_view(argv[2])==L"indices-uav-write";
     const bool bounds=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bounds");
     const bool bounds_reject=bounds&&std::wstring_view(argv[2])==L"depth-bounds-reject";
-    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias;
+    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices;
     const bool stale_stencil=argc==3&&std::wstring_view(argv[2])==L"depth-stale-stencil";
     const bool bias=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bias");
     const bool fractional_bias=bias&&std::wstring_view(argv[2])==L"depth-bias-fractional";
@@ -118,7 +122,7 @@ int wmain(int argc,wchar_t** argv){try {
         if(mode==L"stencil-nand")bitwise_op=AmdGpu::StencilFunc::Nand;
         if(mode==L"stencil-nor")bitwise_op=AmdGpu::StencilFunc::Nor;
     }
-    auto vs=Shader::Backend::DX12::CompileDxil(argv[1],cross_stage_alias?R"(
+    std::string vertex_source=cross_stage_alias?R"(
 ByteAddressBuffer tint_data:register(t2);RWTexture2D<float4> shared_image:register(u3);
 cbuffer Push:register(b0,space30){float4 transform;};
 cbuffer Runtime:register(b0,space31){uint first_vertex,base_instance,indexed,yz_mask,draw_id;float width,height;uint view_index;float depth_bias;};
@@ -134,7 +138,14 @@ struct Output {float4 position:SV_Position;float4 tint:COLOR0;};
 Output main(uint id:SV_VertexID){Output result;
 result.position=float4(float2(id==1?3:-1,id==2?3:-1)*float2(width/8.0,height/8.0)*transform.zw,depth_bias,1);
 result.tint=asfloat(tint_data.Load4(0));return result;}
-)",Shader::Backend::DX12::Stage::Vertex);
+)";
+    if(index_uav){
+        const std::string declaration="ByteAddressBuffer tint_data:register(t2);";
+        vertex_source.replace(vertex_source.find(declaration),declaration.size(),"RWByteAddressBuffer tint_data:register(u2);");
+        if(index_uav_write){const std::string load="result.tint=asfloat(tint_data.Load4(0));";
+            vertex_source.replace(vertex_source.find(load),load.size(),load+"tint_data.Store(48,0x12345678);");}
+    }
+    auto vs=Shader::Backend::DX12::CompileDxil(argv[1],vertex_source,Shader::Backend::DX12::Stage::Vertex);
     auto ps=Shader::Backend::DX12::CompileDxil(argv[1],cross_stage_alias?R"(
 RWTexture2D<float4> image:register(u0);
 float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{
@@ -175,6 +186,23 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     if(attachments_only){pixel.images.clear();pixel.samplers.clear();pixel.flattened_ud_buf.clear();}
     Shader::BufferResource buffer{};buffer.buffer_type=Shader::BufferType::Flatbuf;vertex.buffers.push_back(buffer);
     vertex.flattened_ud_buf.resize(4);const float tint[]{0.5f,1,0.25f,1};memcpy(vertex.flattened_ud_buf.data(),tint,16);
+    VAddr index_address{};UINT index_bytes{};DXGI_FORMAT index_format{};
+    std::vector<Rasterizer::ShaderBufferRequest> index_requests;
+    if(resident_indices){
+        memcpy(memory+16384,tint,16);
+        auto& source=vertex.buffers[0];source.buffer_type=Shader::BufferType::Guest;
+        source.is_written=index_uav_write;
+        source.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Buffer>::Summary::SingleLoad;source.sharp_fetch.offsets[0]=0;
+        AmdGpu::Buffer sharp{};sharp.base_address=reinterpret_cast<VAddr>(memory+16384);sharp.num_records=64;
+        memcpy(vertex.flattened_ud_buf.data(),&sharp,sizeof(sharp));
+        index_address=reinterpret_cast<VAddr>(memory+16384+(index16?18:20));
+        const u16 indices16[]{0,1,2};const u32 indices32[]{0,1,2};index_bytes=index16?sizeof(indices16):sizeof(indices32);
+        memcpy(reinterpret_cast<void*>(index_address),index16?static_cast<const void*>(indices16):static_cast<const void*>(indices32),index_bytes);
+        index_format=index16?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
+        const auto first=index_address&~VAddr(3),last=(index_address+index_bytes+3)&~VAddr(3);
+        index_requests.push_back({first,last-first,false,false,true});
+        rasterizer.EnableBufferStreaming(true);
+    }
     if(readonly_alias){
         // Vertex raw reads and fragment sampled reads address the same guest
         // float RGBA storage through different native resource types.
@@ -284,9 +312,11 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
             depth={&depth_target->texture,depth_target->Dsv(),false,false,
                 clear_depth||(htile&&metadata.Consume(0x1000,0)),0.75f,clear_stencil,7};
         }
-        rasterizer.ExecuteGraphics(pipeline,bindings,state,attachments,use_depth?&depth:nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+        Rasterizer::IndexBinding indices;
+        if(resident_indices)indices=rasterizer.PreparedIndexBuffer(index_address,index_bytes,index_format);
+        rasterizer.ExecuteGraphics(pipeline,bindings,state,attachments,use_depth?&depth:nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},resident_indices?&indices:nullptr,false);
         if(attachments_only)combined_readback=std::make_unique<GuestImageReadback>(device.Get(),*target,rasterizer.RecordingList());
-    },textures);
+    },textures,0,index_requests);
     // The async path deliberately returns while descriptors and temporary
     // buffers are retained. Retire before inspecting or destroying the cache.
     if(combined_readback){

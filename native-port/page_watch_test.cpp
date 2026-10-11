@@ -66,6 +66,29 @@ int main(){try{
     }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
     {
+        auto* pages=static_cast<unsigned char*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));Require(pages);
+        const auto base=reinterpret_cast<uint64_t>(pages);PageWatch* active{};unsigned callbacks{};
+        {
+            PageWatch watch([&](uint64_t address){++callbacks;
+                Require(active->UntrackReadOnly(address&~uint64_t(4095),4096));});active=&watch;
+            Require(watch.TrackReadOnly(base,16384));
+            *reinterpret_cast<volatile unsigned char*>(pages+4096+7)=0x35;
+            Require(callbacks==1&&!watch.Contains(base+4096)&&watch.Contains(base)&&watch.Contains(base+8192));
+            MEMORY_BASIC_INFORMATION region{};Require(VirtualQuery(pages,&region,sizeof(region))&&region.Protect==PAGE_READONLY);
+            Require(!watch.ChangeMode(base,16384,false)); // a hole is not an atomic proof
+            Require(watch.TrackReadOnly(base,16384));
+            Require(watch.ChangeMode(base,16384,false));
+            Require(VirtualQuery(pages+4096,&region,sizeof(region))&&region.Protect==PAGE_NOACCESS);
+            Require(!watch.UntrackReadOnly(base+4096,4096)); // cannot release GPU ownership
+            Require(watch.ChangeMode(base,16384,true));
+            *reinterpret_cast<volatile unsigned char*>(pages+8192+3)=0x81;
+            Require(callbacks==2&&pages[4096+7]==0x35&&pages[8192+3]==0x81);
+            watch.Untrack(base,16384);
+            Require(VirtualQuery(pages,&region,sizeof(region))&&region.Protect==PAGE_READWRITE);
+        }
+        Require(VirtualFree(pages,0,MEM_RELEASE));
+    }
+    {
         constexpr uint64_t pages=4097,stride=8192;
         auto* memory=static_cast<unsigned char*>(VirtualAlloc(nullptr,pages*stride,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         Require(memory!=nullptr);

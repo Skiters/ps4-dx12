@@ -154,14 +154,30 @@ memory coherence; page protection и physical backing нельзя обходи�
 | Shader/PSO reuse и bindings | `guest_shader_cache.cpp`, `guest_pipeline_cache.cpp`, `guest_shader.cpp` | Новый resource address при том же варианте, изменение specialization/render state, индексы 16/32 и restart |
 | Frame readiness и guest ordering | Guest VideoOut/PM4 integration, `CommandScheduler`, существующий frame capture | Раздельные record/submit/completion, новые и повторные flips, EOP без flip, события из разных fence domains |
 
-Приоритет следующей production-работы: устранить измеренную стоимость
-повторного сканирования CPU snapshot через корректное сохранение/инвалидацию
-dirty proof и диапазонов. Сначала определить, какое событие сейчас теряет proof
-или освобождает слишком большой watch. Новый алгоритм должен сохранять все
-строки таблицы памяти, а не только проходить тест неизменного буфера.
+Проверенная адаптация DX12 (2026-10-12): CPU store освобождает только грязные
+страницы, остальные сохраняют proof. Перед частичным сравнением защита дырок
+восстанавливается; pending proof не является cache hit и снимается при nested
+alias write/exception. Повторный TrackReadOnly проверяет новые дырки через Track,
+не сканируя уже защищённые чистые OS regions. Core remap/protection notifications
+должны по-прежнему освобождать proof; GPU ownership transfers валидируют защиту.
+
+Обычные индексы 16/32 участвуют в общей подготовке resident shader buffers.
+IA + shader read требуют объединения D3D12 read states. UAV + IA нельзя объединять:
+индексы копируются на GPU в отдельный pooled buffer перед shader writes этого
+draw. Allocation lease удерживается до retirement команд; пока lease жив,
+pool не переиспользует ресурс. Endian/primitive/restart conversions сохраняют
+существующий CPU fallback. Эти контракты покрыты 220 native regressions; ядро
+собрано, мир загрузился. Финальный пассивный замер 1.587158 completed frames/s
+имеет ограничения в BENCHMARKS.md; полноценная новая gameplay-приёмка открыта.
+
+Приоритет следующей работы: атрибутировать оставшиеся большие materialization,
+overlap retirement и reconciliation waits. Не сужать GPU ownership по одним
+счётчикам объёма; новое изменение должно сохранять все строки таблицы памяти.
 
 Приёмка: узкие проверки ошибочных interleavings → обязательный native suite →
 изолированная Bloodborne-сцена с XInput → реальные новые GPU-completed flips до
 и после при одинаковых game/profile/save/patch/cache условиях → повторение.
+Последнее ограничение пользователя запрещает Computer Use и автоматический
+gameplay input, пока он использует ПК; проверки ограничены запусками игры.
 Функциональные сценарии боя, смерти/respawn и длительной загрузки ещё открыты.
 Никакая запись этого документа не означает, что весь перенос уже выполнен.

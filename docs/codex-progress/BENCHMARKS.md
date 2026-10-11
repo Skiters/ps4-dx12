@@ -1,5 +1,38 @@
 # Benchmarks
 
+## Vulkan mechanisms adapted to DX12 — 2026-10-12
+
+Same immutable coherence seed, CUSA03173 1.09 game SHA256
+`6764938b23539d29c936bca9880fc4a774e7b0099ce31c7e8c4b0f8bd0befb80`,
+1280x800, partial render 0, 2048 MiB budget, no frame generation, 30 FPS guest cap.
+Normalized profile SHA256 `c897ac3e9cf8cc3212d4ff0b89bdc6e72de83b7e2ec5592c3d9933294dac7d55`.
+Baseline `dx12-before-1`: 90.368935 s, 78 new GPU-completed frames, 0.863128 FPS.
+Intermediate protected-only build: 89.802757 s, 80 frames, 0.890841 FPS.
+Final `dx12-protected-1`, PID 91108, executable SHA256
+`9438103c6eca8b5453971a55fc20159ce19091a75fc3784120d6cee50ad4c1c0`:
+UTC 2026-10-11 19:13:19.291489–19:14:49.306971, 90.098142 measured seconds,
+143 new GPU-completed frames, **1.587158 FPS**, median 624.685 ms, P95 707.203 ms,
+no dropped capture rows. Observed +83.89% over baseline is not a significance claim.
+
+User restricted further tests to launches and forbade Computer Use during this
+run. The world/camera was observed before that restriction; capture was passive,
+virtual pad removed, no automated input, focus/external input not controlled.
+The isolated cache was retained, native pipeline cache disabled; final capture
+had no additional scripted warm-up. A strictly matched stationary comparison and
+fresh movement/camera/attack acceptance are not established. Present/FG are not FPS.
+
+Dirty-page proof and shared resident indices passed 220/220 regressions (57.38 s)
+and incremental core linking. Earlier full-port attempts exposed an index SRV/UAV
+alias rejection and a rearm scan regression (~200 ms per 94,306,304-byte mapping);
+both were fixed before this final launch. PID 14184's 15-second **loading** diagnostic
+is archived under `previous-14184` and is excluded from world FPS comparison.
+Evidence is under `F:/PS4Dev/handoff/performance-recovery-20261011`.
+Final diagnostic totals: snapshot compare 46.95 GB, upload 38.03 GB, readback 2.00 GB,
+24,212 partial-proof comparisons, 1.72 GB index CPU copies avoided. Remaining
+inclusive scopes: submit/wait 11.40 s, backing materialization 9.02 s, overlap
+retirement 7.58 s, CPU detile 6.43 s. Do not add nested scopes or infer safe smaller
+GPU-written ranges from these totals. Playable native performance is not achieved.
+
 ## Final high-memory experiment — 2026-10-11
 
 Supersedes the intermediate and historical measurements below.

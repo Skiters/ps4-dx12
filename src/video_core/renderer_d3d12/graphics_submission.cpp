@@ -79,6 +79,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
            indices->bytes>d.Width-indices->offset||(u64(draw.first)+draw.count)*element>indices->bytes)
             throw std::out_of_range("Native indexed draw bounds");
         index_view={DX12_API_CALL(indices->resource->handle->GetGPUVirtualAddress())+indices->offset,indices->bytes,indices->format};
+        bindings.Retain(indices->resource->handle.Get());bindings.RetainAllocation(indices->allocation);
     }
     if(colors.size()>8)throw std::invalid_argument("Native draw exceeds eight color targets");
     if(!color_descriptors_)color_descriptors_=std::make_unique<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_RTV,8,false);
@@ -106,8 +107,16 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):
                 (depth->read_only_depth&&depth->read_only_stencil?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE));
         }
-        for(const auto& v:vertices)dependencies.Transition(*v.resource,D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-        if(indices)dependencies.Transition(*indices->resource,D3D12_RESOURCE_STATE_INDEX_BUFFER);
+        // Read usages combine. An IA buffer can also be fetched by a shader;
+        // switching it to INDEX_BUFFER alone would invalidate that SRV state.
+        std::map<Resource*,D3D12_RESOURCE_STATES> inputs;
+        for(const auto& v:vertices)inputs[v.resource]|=D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+        if(indices)inputs[indices->resource]|=D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        for(const auto& [resource,input_state]:inputs){
+            const auto shader_read=bindings.References(resource->handle.Get())?
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_COMMON;
+            dependencies.Transition(*resource,D3D12_RESOURCE_STATES(input_state|shader_read));
+        }
         dependencies.Flush(list);pipeline.Bind(list,bindings);
         DX12_API_CALL(list->RSSetViewports(UINT(viewports.size()),viewports.data()));DX12_API_CALL(list->RSSetScissorRects(UINT(scissors.size()),scissors.data()));
         ComPtr<ID3D12GraphicsCommandList4> render_list;D3D12_FEATURE_DATA_D3D12_OPTIONS5 render_options{};

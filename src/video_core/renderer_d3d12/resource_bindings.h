@@ -53,6 +53,7 @@ class ResourceBindings {
     ComPtr<ID3D12DescriptorHeap> owned_resources_,owned_samplers_;
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
+    std::vector<std::shared_ptr<void>> allocation_leases_;
     bool sealed_{};
     bool recycled_{};
     DescriptorHeapPool* pool_{};
@@ -60,6 +61,7 @@ class ResourceBindings {
     D3D12_CPU_DESCRIPTOR_HANDLE Slot(D3D12_DESCRIPTOR_RANGE_TYPE,UINT,UINT,UINT);
 public:
     void Retain(ID3D12Resource*);
+    void RetainAllocation(std::shared_ptr<void> lease){if(lease)allocation_leases_.push_back(std::move(lease));}
     void BeforeBind(std::function<void(ResourceBindings&)> prepare){
         if(sealed_||recycled_||before_bind_)throw std::logic_error("Invalid binding preparation");
         before_bind_=std::move(prepare);

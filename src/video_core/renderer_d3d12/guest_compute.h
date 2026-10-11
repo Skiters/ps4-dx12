@@ -31,5 +31,6 @@ struct GraphicsRuntime {
 // and guest writeback are owned here, including exceptional retirement.
 void ExecuteGuestGraphicsResources(ID3D12Device*,Rasterizer&,const ShaderPipeline&,
     std::span<const GuestResourceStage>,const Shader::PushData&,const GraphicsRuntime&,
-    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache&,VAddr border_colors=0);
+    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache&,VAddr border_colors=0,
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={});
 }

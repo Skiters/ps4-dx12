@@ -5,9 +5,15 @@
 using namespace NativeDX12;
 static void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 class Fixture final : public GuestBufferAccess {
+    std::function<void()> before_read_;
 public:
     using GuestBufferAccess::GuestBufferAccess;
     using GuestBufferAccess::SetBufferBackingAccess;
+    void BeforeRead(std::function<void()> callback){before_read_=std::move(callback);}
+    bool ReadMemory(VAddr a,u64 s,bool assume=false) override {
+        if(before_read_){auto callback=std::move(before_read_);before_read_={};callback();}
+        return Rasterizer::ReadMemory(a,s,assume);
+    }
 };
 static u64 Counter(const char* name){auto& hub=Diagnostics::Hub::Get();std::lock_guard lock(hub.mutex);
     for(const auto& c:hub.counters)if(c.name&&std::string_view(c.name)==name)return c.value;return 0;}
@@ -27,6 +33,69 @@ void Run(ID3D12Device* device,bool f2){
                 ++commits;committed+=data.size();memcpy(physical+a-base,data.data(),data.size());return true;});
         const Rasterizer::ShaderBufferRequest writable[]{{base,4096,true,true}};
         if(f2){
+            const Rasterizer::ShaderBufferRequest paged[]{{base+32768,16384,false,true,true}};
+            renderer.PrepareShaderBuffers(paged);
+            *reinterpret_cast<volatile unsigned char*>(guest+32768+4096+9)=0x67;
+            MEMORY_BASIC_INFORMATION neighbour{};VirtualQuery(guest+32768,&neighbour,sizeof(neighbour));
+            Require(neighbour.Protect==PAGE_READONLY,"one CPU store released the neighbouring clean page");
+            const auto compared_before=Counter("buffer-snapshot.bytes");
+            renderer.PrepareShaderBuffers(paged);
+            Require(Counter("buffer-snapshot.bytes")-compared_before==4096,"dirty proof rescanned clean pages");
+            const Rasterizer::BufferCopy page_copy{base+24576+300,base+32768+4096+9,1};
+            renderer.CopyBufferBatch(std::span(&page_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+300)==0x67,"dirty page upload missed a CPU store");
+            renderer.NotifyCpuWrite(base+32768+8192+9,1);physical[32768+8192+9]=std::byte{0x92};
+            const auto alias_before=Counter("buffer-snapshot.bytes");renderer.PrepareShaderBuffers(paged);
+            Require(Counter("buffer-snapshot.bytes")-alias_before==4096,"physical alias notification discarded clean proof");
+            const Rasterizer::BufferCopy alias_copy{base+24576+301,base+32768+8192+9,1};
+            renderer.CopyBufferBatch(std::span(&alias_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+301)==0x92,"physical alias data stayed stale");
+            *reinterpret_cast<volatile unsigned char*>(guest+32768+4096+10)=0x41;
+            renderer.BeforeRead([&]{renderer.ReleaseCpuBufferWatches(base+32768,16384);physical[32768+11]=std::byte{0xab};});
+            renderer.PrepareShaderBuffers(paged);
+            const Rasterizer::BufferCopy reentrant_copy{base+24576+302,base+32768+11,1};
+            renderer.CopyBufferBatch(std::span(&reentrant_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+302)==0xab,"reentrant partial-proof invalidation hid another page");
+            *reinterpret_cast<volatile unsigned char*>(guest+32768+4096+12)=0x74;
+            const Rasterizer::ShaderBufferRequest paged_writable[]{{base+32768,16384,true,true,true}};
+            const auto transfer_before=Counter("buffer-snapshot.bytes");renderer.PrepareShaderBuffers(paged_writable);
+            Require(Counter("buffer-snapshot.bytes")-transfer_before==4096,"dirty-page ownership upgrade rescanned clean pages");
+            VirtualQuery(guest+32768+8192,&neighbour,sizeof(neighbour));
+            Require(neighbour.Protect==PAGE_NOACCESS,"fragmented proof did not transfer GPU ownership atomically");
+            renderer.ResolveGpuBuffers(base+32768,16384);
+            const Rasterizer::ShaderBufferRequest read_only[]{{base+8192,4096,false,true}};
+            const auto establish=Counter("buffer-watch.establish-compare.bytes");
+            renderer.PrepareShaderBuffers(read_only);
+            Require(Counter("buffer-watch.establish-compare.bytes")==establish,
+                "read-only proof repeated the comparison after protecting the snapshot");
+            *reinterpret_cast<volatile unsigned char*>(guest+8192+19)=0xb7;
+            renderer.PrepareShaderBuffers(read_only);
+            Require(Counter("buffer-watch.establish-compare.bytes")==establish,
+                "changed read-only binding repeated its protected comparison");
+            const Rasterizer::BufferCopy protected_copy{base+24576+19,base+8192+19,1};
+            renderer.CopyBufferBatch(std::span(&protected_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+19)==0xb7,
+                "protected comparison hid a real CPU store from the GPU");
+            // Physical-alias writers must invalidate even a pending watch;
+            // this callback models reconciliation while Upload reads backing.
+            *reinterpret_cast<volatile unsigned char*>(guest+8192+20)=0xa4;
+            renderer.BeforeRead([&]{
+                renderer.ReleaseCpuBufferWatches(base+8192,4096);
+                physical[8192+19]=std::byte{0xc1};
+            });
+            renderer.PrepareShaderBuffers(read_only);
+            renderer.CopyBufferBatch(std::span(&protected_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+19)==0xc1,
+                "reentrant alias reconciliation retained a pending proof");
+            *reinterpret_cast<volatile unsigned char*>(guest+8192+20)=0xd2;
+            renderer.BeforeRead([]{throw std::runtime_error("injected upload read failure");});
+            bool failed{};try{renderer.PrepareShaderBuffers(read_only);}catch(const std::runtime_error&){failed=true;}
+            MEMORY_BASIC_INFORMATION failed_region{};VirtualQuery(guest+8192,&failed_region,sizeof(failed_region));
+            Require(failed&&failed_region.Protect==PAGE_READWRITE,"failed upload retained its pending watch");
+            *reinterpret_cast<volatile unsigned char*>(guest+8192+19)=0xe3;
+            renderer.PrepareShaderBuffers(read_only);renderer.CopyBufferBatch(std::span(&protected_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+19)==0xe3,
+                "retry after failed proof reused stale contents");
             renderer.PrepareShaderBuffers(writable);renderer.ResolveGpuBuffers(base,4096);
             const auto before=Counter("buffer-snapshot.bytes");
             renderer.PrepareShaderBuffers(writable);
@@ -59,6 +128,27 @@ void Run(ID3D12Device* device,bool f2){
         }else{
             const Rasterizer::BufferCopy first{base+16384+64,base+32,32};
             renderer.CopyBufferBatch(std::span(&first,1));Require(commits==0,"first GPU copy committed eagerly");
+            const Rasterizer::ShaderBufferRequest index_request[]{{base+16384,4096,false,false,true}};
+            auto index_views=renderer.PrepareShaderBuffers(index_request);
+            auto indices=renderer.PreparedIndexBuffer(base+16384+64,32,DXGI_FORMAT_R16_UINT);
+            Require(commits==0&&indices.resource->handle.Get()==index_views[0].resource.Get(),"GPU-written indices left residency");
+            auto index_readback=Buffer(device,32,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            indices.resource->Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            renderer.RecordingList()->CopyBufferRegion(index_readback.handle.Get(),0,indices.resource->handle.Get(),indices.offset,32);
+            indices.resource->Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            renderer.Finish();Require(commits==0,"resident index use reconciled GPU source to CPU");
+            void* mapped{};D3D12_RANGE used{0,32};Check(index_readback.handle->Map(0,&used,&mapped));
+            Require(!memcmp(mapped,physical+32,32),"resident index view did not see ordered GPU writes");
+            D3D12_RANGE unused{};index_readback.handle->Unmap(0,&unused);
+            const Rasterizer::ShaderBufferRequest uav_indices[]{{base+16384,4096,false,true,true}};
+            renderer.PrepareShaderBuffers(uav_indices);
+            auto held_index=renderer.PreparedIndexBuffer(base+16384+64,32,DXGI_FORMAT_R16_UINT);
+            auto* held_identity=held_index.resource->handle.Get();renderer.Finish();
+            auto second_index=renderer.PreparedIndexBuffer(base+16384+64,32,DXGI_FORMAT_R16_UINT);
+            Require(second_index.resource->handle.Get()!=held_identity,"index-copy pool reused a live IA lease");
+            held_index={};renderer.Finish();
+            auto reused_index=renderer.PreparedIndexBuffer(base+16384+64,32,DXGI_FORMAT_R16_UINT);
+            Require(reused_index.resource->handle.Get()==held_identity&&commits==0,"retired index-copy pool did not reuse GPU-only storage");
             const auto cpu_checks=Counter("buffer-access.cpu-reconcile");
             renderer.ValidateGpuBacking(base+16384+64,32);
             Require(Counter("buffer-access.cpu-reconcile")==cpu_checks,"legality check entered CPU path");

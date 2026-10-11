@@ -165,7 +165,7 @@ void GuestRasterizer::DiscardImages(VAddr address,u64 size){
 }
 bool GuestRasterizer::ReadMemory(VAddr address,u64 size,bool assume){std::lock_guard lock(execution_mutex_);ResolveMemory(address,size);return Rasterizer::ReadMemory(address,size,assume);}
 bool GuestRasterizer::InvalidateMemory(VAddr address,u64 size,bool assume){
-    ReleaseImmutableWatch(address,size);
+    InvalidateCpuBufferPages(address,size);ReleaseImageWatches(address,size);
     // A real CPU access has already resolved the guard before the write. Keep
     // the independent fresh-file fast path when no image owns these pages.
     if(page_watch_&&page_watch_->Contains(address))ResolveMemory(address,size);
@@ -477,6 +477,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool clear_stencil=depth_tests.stencil&&r.depth_render_control.stencil_clear_enable;
     const bool write_depth_stencil=state.WritesDepthStencil(clear_depth,clear_stencil);
     Resource index_storage;IndexBinding index_view{};
+    VAddr resident_index_address{};UINT resident_index_bytes{};
+    DXGI_FORMAT resident_index_format=DXGI_FORMAT_UNKNOWN;
+    std::vector<ShaderBufferRequest> index_requests;
     const bool expand_primitive=GuestPrimitiveNeedsExpansion(r.primitive_type);
     const bool strip=state.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||state.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
     const bool custom_strip_restart=indexed&&r.enable_primitive_restart&&strip&&
@@ -491,7 +494,22 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
-    if(indexed||expand_primitive) {
+    const bool resident_indices=indexed&&!expand_primitive&&!rewrite_restart&&
+        r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None;
+    if(resident_indices){
+        const auto type=r.index_buffer_type.index_type;
+        if(type!=AmdGpu::IndexType::Index16&&type!=AmdGpu::IndexType::Index32)
+            throw std::runtime_error("Invalid guest index element type");
+        const UINT element=type==AmdGpu::IndexType::Index16?2:4;
+        const u64 bytes=u64(draw.count)*element,offset=u64(index_offset)*element;
+        const auto base=r.index_base_address.Address<VAddr>();
+        if(bytes>64*1024*1024||base>UINT64_MAX-offset||base+offset>UINT64_MAX-bytes-3)
+            throw std::out_of_range("Guest index range overflow/budget");
+        resident_index_address=base+offset;resident_index_bytes=UINT(bytes);
+        resident_index_format=element==2?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
+        const auto first=resident_index_address&~VAddr(3),last=(resident_index_address+bytes+3)&~VAddr(3);
+        index_requests.push_back({first,last-first,false,false,true});draw.first=0;
+    }else if(indexed||expand_primitive) {
         const bool narrow=r.index_buffer_type.index_type==AmdGpu::IndexType::Index16;
         if(indexed&&!narrow&&r.index_buffer_type.index_type!=AmdGpu::IndexType::Index32)
             throw std::runtime_error("Invalid guest index element type");
@@ -551,7 +569,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     diagnostic.Stage("resource-upload-and-draw");
     ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,[&](ResourceBindings& bindings) {
-        if(index_view.resource)bindings.Retain(index_storage.handle.Get());
+        if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         std::array<ColorAttachment,8> attachments{};
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
             auto& entry=textures_.Upload(descriptions[i],
@@ -577,6 +595,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 clear_depth,r.depth_clear,clear_stencil,UINT8(r.stencil_clear)};
         }
         for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i!=8||write_depth_stencil))OwnImage(*targets[i]);
+        if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
         ExecuteGraphics(pipeline,bindings,state,std::span(attachments.data(),target_count),has_depth?&depth:nullptr,
             viewport.viewports,viewport.scissors,r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false);
@@ -586,7 +605,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         for(UINT i=0;i<targets.size();++i)if(targets[i]&&!targets[i]->gpu_owned&&(i!=8||write_depth_stencil))
             readbacks.push_back(std::make_unique<GuestImageReadback>(device_.Get(),*targets[i],RecordingList()));
-    },textures_,r.ta_bc_base.Address());
+    },textures_,r.ta_bc_base.Address(),index_requests);
     if(probe){
         Finish();
         void* data{};D3D12_RANGE range{0,sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS)};

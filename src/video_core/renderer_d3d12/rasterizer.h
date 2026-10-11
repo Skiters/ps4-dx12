@@ -34,8 +34,13 @@ public:
     std::shared_ptr<TemporaryBuffer> AcquireTemporaryBuffer(u64,const void* initial=nullptr);
 private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
+    std::vector<std::shared_ptr<Resource>> index_copy_pool_;
+    u64 index_copy_pool_bytes_{};
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
         std::vector<std::byte> cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
+        bool cpu_watch_pending=false; // Protected while comparing; not yet a CPU/GPU equality proof.
+        bool cpu_partial_proof=false;
+        std::map<u64,u64> cpu_dirty_ranges; // Unprotected CPU pages; the remaining snapshot is proved.
         bool initial_upload_failed=false;u64 allocation_id{},last_use{};};
     struct RetiredBuffer {Resource gpu;u64 fence;u64 allocation_id;};
     std::vector<RetiredBuffer> buffer_pool_;
@@ -58,6 +63,8 @@ private:
     std::function<bool(VAddr,std::span<const std::byte>)> commit_buffer_;
     std::function<void(VAddr,u64)> release_buffer_;
     std::function<bool(VAddr,u64)> watch_buffer_;
+    std::function<bool(VAddr,u64)> rewatch_buffer_;
+    std::function<bool(VAddr,u64)> release_cpu_pages_;
     std::function<bool(VAddr,u64,bool)> transfer_buffer_watch_;
     Resource AcquireBuffer(u64);
     void RetireBuffer(Mapping&);
@@ -141,11 +148,14 @@ public:
         own_buffer_=std::move(own);commit_buffer_=std::move(commit);release_buffer_=std::move(release);}
     void ResolveGpuBuffers(VAddr,u64);
     void ReleaseCpuBufferWatches(VAddr,u64);
+    void InvalidateCpuBufferPages(VAddr,u64);
     void SetBufferWriteWatch(std::function<bool(VAddr,u64)> watch){watch_buffer_=std::move(watch);}
+    void SetBufferPageRewatch(std::function<bool(VAddr,u64)> watch){rewatch_buffer_=std::move(watch);}
+    void SetCpuPageRelease(std::function<bool(VAddr,u64)> release){release_cpu_pages_=std::move(release);}
     void SetBufferWatchTransfer(std::function<bool(VAddr,u64,bool)> transfer){transfer_buffer_watch_=std::move(transfer);}
     void EnableBufferStreaming(bool enabled){stream_buffers_enabled_=enabled;}
     void EnableBufferArenas(bool enabled){buffer_arenas_enabled_=enabled;}
-    struct ShaderBufferRequest {VAddr address;u64 size;bool written=false;bool unordered_access=false;};
+    struct ShaderBufferRequest {VAddr address;u64 size;bool written=false;bool unordered_access=false;bool resident=false;};
     struct BufferWrite {VAddr address;u64 size;};
     bool BuffersMayDefer(std::span<const ShaderBufferRequest>);
     void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
@@ -200,8 +210,7 @@ public:
     // Data-only CPU writes do not change page protections or committed backing.
     // Caller retires GPU writes before modifying the guest bytes.
     void NotifyCpuWrite(VAddr address,u64 size){std::lock_guard lock(execution_mutex_);
-        ReleaseCpuBufferWatches(address,size);ResolveGpuBuffers(address,size);
-        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it)it->second.cpu_snapshot.clear();}
+        ResolveGpuBuffers(address,size);InvalidateCpuBufferPages(address,size);}
     void ExecuteCompute(const ShaderPipeline&,ResourceBindings&,u32 x,u32 y,u32 z,bool wait=true);
     void ValidateDebugMessages();
     struct ColorAttachment {Resource* resource{};D3D12_RENDER_TARGET_VIEW_DESC view{};};
@@ -215,7 +224,11 @@ public:
         UINT8 stencil_value{};
     };
     struct VertexBinding {Resource* resource{};u64 offset{};UINT bytes{},stride{};};
-    struct IndexBinding {Resource* resource{};u64 offset{};UINT bytes{};DXGI_FORMAT format=DXGI_FORMAT_R16_UINT;};
+    struct IndexBinding {Resource* resource{};u64 offset{};UINT bytes{};DXGI_FORMAT format=DXGI_FORMAT_R16_UINT;
+        std::shared_ptr<void> allocation;};
+    // The index envelope participates in the same prepared batch as shaders.
+    // Never materialize or replace another buffer after descriptors are built.
+    IndexBinding PreparedIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format);
     struct DrawArguments {UINT count{},instances=1,first{},first_instance{};INT base_vertex{};};
     void ExecuteGraphics(const ShaderPipeline&,ResourceBindings&,const GuestGraphicsState&,
         std::span<const ColorAttachment>,const DepthAttachment*,std::span<const D3D12_VIEWPORT>,

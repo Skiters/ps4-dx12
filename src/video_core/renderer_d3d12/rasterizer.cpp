@@ -280,7 +280,8 @@ Resource Rasterizer::AcquireBuffer(u64 size){
 }
 void Rasterizer::RetireBuffer(Mapping& mapping){
     if(mapping.gpu_owned)throw std::logic_error("Retiring GPU-owned buffer before CPU reconciliation");
-    if(mapping.cpu_watched){release_buffer_(mapping.base,mapping.size);mapping.cpu_watched=false;}
+    if(mapping.cpu_watched||mapping.cpu_watch_pending||mapping.cpu_partial_proof){release_buffer_(mapping.base,mapping.size);
+        mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();}
     const auto capacity=mapping.gpu.handle->GetDesc().Width;
     // Retired resources remain alive through their last fence. Keep a bounded
     // best-fit pool so changing PS4 slices do not allocate committed heaps per draw.
@@ -335,18 +336,43 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
     // unrelated guest CPU access scan the whole resident cache.
     for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
         ++memory_reuse_.watch_candidates;auto& mapping=it->second;
-        if(mapping.cpu_watched){release_buffer_(it->first,mapping.size);mapping.cpu_watched=false;}
+        if(mapping.cpu_watched||mapping.cpu_watch_pending||mapping.cpu_partial_proof){release_buffer_(it->first,mapping.size);
+            mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();}
+    }
+}
+void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
+    std::lock_guard lock(execution_mutex_);
+    if(!size)return;
+    if(address>UINT64_MAX-size)throw std::out_of_range("CPU dirty page range overflow");
+    for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
+        auto& m=it->second;
+        if(m.cpu_watch_pending){ReleaseCpuBufferWatches(m.base,m.size);continue;}
+        if(!m.cpu_watched&&!m.cpu_partial_proof)continue;
+        const auto begin=std::max(m.base,address&~VAddr(4095));
+        const auto last=std::min(m.base+m.size,address+size);
+        const auto end=std::min(m.base+m.size,(last+4095)&~VAddr(4095));
+        if(!release_cpu_pages_||!release_cpu_pages_(begin,end-begin)){
+            ReleaseCpuBufferWatches(m.base,m.size);continue;}
+        auto a=begin-m.base,b=end-m.base;auto next=m.cpu_dirty_ranges.lower_bound(a);
+        if(next!=m.cpu_dirty_ranges.begin()&&std::prev(next)->second>=a)--next;
+        while(next!=m.cpu_dirty_ranges.end()&&next->first<=b){
+            a=std::min(a,next->first);b=std::max(b,next->second);next=m.cpu_dirty_ranges.erase(next);}
+        m.cpu_dirty_ranges.emplace(a,b);m.cpu_watched=false;m.cpu_partial_proof=true;
+        Diagnostics::Count("buffer-watch.cpu-page-invalidations");
+        Diagnostics::Count("buffer-watch.cpu-page-invalidated.bytes",end-begin);
     }
 }
 void Rasterizer::InstallCpuWatch(Mapping& mapping){
     if(mapping.cpu_watched||!watch_buffer_||mapping.cpu_snapshot.size()!=mapping.size)return;
-    if(!watch_buffer_(mapping.base,mapping.size))return;
+    const auto& watch=mapping.cpu_partial_proof&&rewatch_buffer_?rewatch_buffer_:watch_buffer_;
+    if(!watch(mapping.base,mapping.size))return;
     // Protection is active BEFORE verifying the proof. A store in the gap
     // between the previous snapshot and Track must not become a watch hit.
     Diagnostics::Count("buffer-watch.establish-compare.bytes",mapping.size);
     if(memcmp(mapping.cpu_snapshot.data(),reinterpret_cast<const void*>(mapping.base),size_t(mapping.size))==0)
-        mapping.cpu_watched=true;
-    else{release_buffer_(mapping.base,mapping.size);Diagnostics::Count("buffer-watch.establish-changed");}
+        {mapping.cpu_watched=true;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();}
+    else{release_buffer_(mapping.base,mapping.size);mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();
+        Diagnostics::Count("buffer-watch.establish-changed");}
 }
 void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
@@ -502,9 +528,9 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         std::vector<bool> streamed(requests.size());std::vector<ShaderBufferRequest> resident;
         u64 stream_bytes{};
         for(size_t i=0;i<requests.size();++i){const auto& request=requests[i];
-            bool eligible=request.address&&request.size&&request.size<=16384&&!request.written&&!request.unordered_access&&
+            bool eligible=!request.resident&&request.address&&request.size&&request.size<=16384&&!request.written&&!request.unordered_access&&
                 request.address<=UINT64_MAX-request.size&&request.address%4==0&&request.size%4==0&&IsMapped(request.address,request.size);
-            if(eligible)for(const auto& other:requests)if(other.written&&
+            if(eligible)for(const auto& other:requests)if((other.written||other.resident)&&
                 request.address<other.address+other.size&&other.address<request.address+request.size){eligible=false;break;}
             if(eligible&&HasGpuOwnedOverlap(request.address,request.size))eligible=false;
             streamed[i]=eligible;if(eligible)stream_bytes+=(request.size+255)&~u64(255);else resident.push_back(request);
@@ -713,8 +739,40 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
             }
         }
         const auto* cpu=reinterpret_cast<const std::byte*>(base);
+        // For a read-only binding, establish protection before comparing or
+        // uploading. CPU writers then fault until this execution lock is
+        // released, so a second whole-buffer comparison is unnecessary.
+        // Pending protection is deliberately separate from a published proof:
+        // reentrant alias reconciliation must be able to invalidate it, and
+        // neither a nested binding nor an exception may reuse unfinished data.
+        const auto& compare_watch=mapping.cpu_partial_proof&&rewatch_buffer_?rewatch_buffer_:watch_buffer_;
+        const bool protected_compare=!mapping.gpu_owned&&!mapping.cpu_watched&&
+            compare_watch&&compare_watch(base,mapping.size);
+        if(protected_compare)mapping.cpu_watch_pending=true;
+        bool proof_published=false;
+        SCOPE_EXIT {
+            if(protected_compare&&!proof_published&&(mapping.cpu_watch_pending||mapping.cpu_watched)){
+                ReleaseCpuBufferWatches(base,mapping.size);
+            }
+        };
         diagnostic.Stage("snapshot-compare");
         if(!mapping.gpu_owned&&!mapping.cpu_watched&&!cpu_proven_unchanged){
+            if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_partial_proof&&
+               mapping.cpu_snapshot.size()==mapping.size){
+                // Only holes lost their protection. Protect them again BEFORE
+                // looking at data, then compare/upload those pages alone.
+                const auto dirty_pages=mapping.cpu_dirty_ranges;
+                for(const auto& [begin,end]:dirty_pages){
+                    Diagnostics::Count("buffer-snapshot.bytes",end-begin);
+                    if(memcmp(mapping.cpu_snapshot.data()+begin,cpu+begin,size_t(end-begin)))
+                        Upload(mapping,begin,end-begin,cpu+begin);
+                }
+                Diagnostics::Count("buffer-snapshot.partial-proof");
+            }
+            // Reentrant reconciliation can invalidate the partial proof while
+            // Upload reads memory. In that case rescan the complete snapshot.
+            if(!protected_compare||!mapping.cpu_watch_pending||!mapping.cpu_partial_proof||
+               mapping.cpu_snapshot.size()!=mapping.size){
             Diagnostics::Count("buffer-snapshot.bytes",mapping.size);
             const bool unchanged=mapping.cpu_snapshot.size()==mapping.size&&
                 memcmp(mapping.cpu_snapshot.data(),cpu,size_t(mapping.size))==0;
@@ -739,9 +797,22 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                     Upload(mapping,0,mapping.size,cpu);
                 }
             }
+            }
         }else if(cpu_proven_unchanged)Diagnostics::Count("buffer-snapshot.watch-hit");
+        if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_snapshot.size()==mapping.size){
+            mapping.cpu_watch_pending=false;mapping.cpu_watched=true;
+            mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();
+            Diagnostics::Count("buffer-watch.protected-compare");
+            Diagnostics::Count("buffer-watch.establish-compare-avoided.bytes",mapping.size);
+        }
         // A read-only use of a preceding GPU result must retain dirty ownership.
         diagnostic.Stage("ownership-and-transition");
+        if(written&&mapping.cpu_watched&&!mapping.gpu_owned){
+            if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
+                mapping.cpu_watched=false;mapping.gpu_owned=true;Diagnostics::Count("buffer-watch.upgraded");
+            }else{ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");}
+        }
+        if(mapping.cpu_watch_pending)ReleaseCpuBufferWatches(base,mapping.size);
         if(written){if(!mapping.gpu_owned&&own_buffer_){
             mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
             Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
@@ -755,6 +826,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
         mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        proof_published=true;
     }
     diagnostic.Stage("emit-buffer-views");
     std::vector<ShaderBufferView> views;views.reserve(requests.size());
@@ -763,6 +835,37 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation});
     }
     return views;
+}
+Rasterizer::IndexBinding Rasterizer::PreparedIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format){
+    std::lock_guard lock(execution_mutex_);
+    const UINT element=format==DXGI_FORMAT_R16_UINT?2:format==DXGI_FORMAT_R32_UINT?4:0;
+    if(!element||!bytes||address%element||bytes%element)throw std::invalid_argument("Invalid resident guest index range");
+    auto it=mappings_.upper_bound(address);
+    if(it==mappings_.begin())throw std::logic_error("Guest index buffer was not prepared");--it;
+    if(address-it->first>it->second.size||bytes>it->second.size-(address-it->first))
+        throw std::logic_error("Prepared guest index envelope was replaced");
+    auto& source=it->second.gpu;const auto offset=address-it->first;
+    Diagnostics::Count("index-buffer.cpu-copy-avoided.bytes",bytes);
+    if(source.state!=D3D12_RESOURCE_STATE_UNORDERED_ACCESS){
+        Diagnostics::Count("index-buffer.resident-bind");return {&source,offset,bytes,format,source.allocation};}
+    // D3D12 cannot combine UAV and IA reads. Snapshot the indices on the GPU
+    // before this draw's shader writes, matching the preceding CPU snapshot
+    // semantics without materializing GPU-owned guest memory on the CPU.
+    std::shared_ptr<Resource> copy;
+    for(const auto& candidate:index_copy_pool_)if(candidate.use_count()==1&&candidate->handle->GetDesc().Width>=bytes&&
+        (!copy||candidate->handle->GetDesc().Width<copy->handle->GetDesc().Width))copy=candidate;
+    if(!copy){const u64 capacity=(u64(bytes)+65535)&~u64(65535);
+        copy=std::make_shared<Resource>(Buffer(device_.Get(),capacity,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST));
+        if(capacity<=128*MemoryMiB-index_copy_pool_bytes_){index_copy_pool_.push_back(copy);index_copy_pool_bytes_+=capacity;}
+        Diagnostics::Count("index-buffer.copy-allocation");
+    }else Diagnostics::Count("index-buffer.copy-pool-reuse");
+    auto* list=RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+    copy->Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+    DX12_API_CALL(list->CopyBufferRegion(copy->handle.Get(),0,source.handle.Get(),offset,bytes));
+    source.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    copy->Transition(list,D3D12_RESOURCE_STATE_INDEX_BUFFER);
+    Diagnostics::Count("index-buffer.uav-gpu-copy");Diagnostics::Count("index-buffer.uav-gpu-copy.bytes",bytes);
+    return {copy.get(),0,bytes,format,copy};
 }
 void Rasterizer::ExecuteCompute(const ShaderPipeline& pipeline,ResourceBindings& bindings,u32 x,u32 y,u32 z,bool wait) {
     std::lock_guard lock(execution_mutex_);

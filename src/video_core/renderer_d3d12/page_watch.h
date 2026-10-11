@@ -107,36 +107,107 @@ public:
     ~PageWatch(){RemoveVectoredExceptionHandler(handler);active.store(nullptr);std::lock_guard lock(mutex);for(const auto& [_,range]:ranges)Restore(range);}
     bool Contains(uint64_t address){std::lock_guard lock(mutex);const auto it=ranges.upper_bound(address);return it!=ranges.begin()&&std::prev(it)->second.end>address;}
     bool WasTracked(uint64_t address){std::lock_guard lock(mutex);const auto it=retired.upper_bound(address);return it!=retired.begin()&&std::prev(it)->second>address;}
+    // Preserve protected neighbours when a CPU store invalidates one page.
+    // GPU ownership and image retirement still use the whole-range Untrack.
+    bool UntrackReadOnly(uint64_t address,uint64_t size){
+        if(!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
+        std::lock_guard lock(mutex);const auto end=address+size;
+        auto first=ranges.lower_bound(address);
+        if(first!=ranges.begin()&&std::prev(first)->second.end>address)--first;
+        for(auto it=first;it!=ranges.end()&&it->first<end;++it){
+            if(!it->second.read_only)return false;
+            for(const auto& p:it->second.protection){
+                const auto begin=std::max(p.begin,address),stop=std::min(p.begin+p.size,end);
+                if(begin>=stop)continue;
+                for(auto current=begin;current<stop;){MEMORY_BASIC_INFORMATION region{};
+                    if(!VirtualQuery(reinterpret_cast<void*>(current),&region,sizeof(region))||
+                       region.State!=MEM_COMMIT||region.Protect!=p.watched)return false;
+                    current=std::min(stop,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+                }
+            }
+        }
+        const auto slice=[](const Range& range,uint64_t begin,uint64_t stop,uint64_t generation){
+            Range result{stop,{},true,generation};
+            for(const auto& p:range.protection){const auto a=std::max(begin,p.begin),b=std::min(stop,p.begin+p.size);
+                if(a<b)result.protection.push_back({a,b-a,p.original,p.watched});}
+            return result;
+        };
+        for(auto it=first;it!=ranges.end()&&it->first<end;){
+            const auto begin=it->first,stop=it->second.end;
+            const auto a=std::max(begin,address),b=std::min(stop,end);
+            auto removed=slice(it->second,a,b,++next_generation);
+            for(const auto& p:removed.protection){DWORD previous{};
+                if(!VirtualProtect(reinterpret_cast<void*>(p.begin),p.size,p.original,&previous))
+                    throw std::runtime_error("Cannot release dirty CPU page protection");}
+            RememberRetired(a,b);
+            auto left=begin<a?slice(it->second,begin,a,++next_generation):Range{};
+            auto right=b<stop?slice(it->second,b,stop,++next_generation):Range{};
+            it=ranges.erase(it);
+            if(begin<a)ranges.emplace(begin,std::move(left));
+            if(b<stop)ranges.emplace(b,std::move(right));
+        }
+        return true;
+    }
+    // Rearm only the writable holes. Existing read-only pages never lose their
+    // proof; a NOACCESS owner or changed OS protection rejects the transfer.
+    bool TrackReadOnly(uint64_t address,uint64_t size){
+        if(!address||!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
+        std::vector<std::pair<uint64_t,uint64_t>> gaps;
+        {std::lock_guard lock(mutex);const auto end=address+size;auto cursor=address;
+            auto it=ranges.upper_bound(address);
+            if(it!=ranges.begin()&&std::prev(it)->second.end>address)--it;
+            for(;it!=ranges.end()&&it->first<end;++it){
+                if(!it->second.read_only)return false;
+                // These are the same retained pages accepted by an unchanged
+                // watch hit. Core remap/protection notifications retire that
+                // proof. Only gaps acquire new proof and need Track's complete
+                // OS validation; rescanning clean 16KiB mappings here scales
+                // with the whole PS4 allocation on every small CPU store.
+                if(cursor<it->first)gaps.emplace_back(cursor,it->first-cursor);
+                cursor=std::max(cursor,it->second.end);
+            }
+            if(cursor<end)gaps.emplace_back(cursor,end-cursor);
+        }
+        size_t added{};
+        try{for(const auto& [begin,bytes]:gaps){if(!Track(begin,bytes,true)){
+                for(size_t i=0;i<added;++i)Untrack(gaps[i].first,gaps[i].second);return false;}++added;}}
+        catch(...){for(size_t i=0;i<added;++i)Untrack(gaps[i].first,gaps[i].second);throw;}
+        return true;
+    }
     // Transfer an existing exact watch without ever allowing a CPU store.
     // The renderer holds its execution lock; pending faults resolve the new
     // generation after acquiring that lock. Retired history is untouched.
     bool ChangeMode(uint64_t address,uint64_t size,bool read_only){
         if(!size||address>UINT64_MAX-size)return false;
         std::lock_guard lock(mutex);
-        auto it=ranges.find(address);
-        if(it==ranges.end()||it->second.end!=address+size)return false;
-        auto& range=it->second;
-        if(range.read_only==read_only)return true;
-        for(const auto& p:range.protection){
+        auto first=ranges.find(address);if(first==ranges.end())return false;
+        auto last=first;auto cursor=address;
+        while(last!=ranges.end()&&last->first==cursor&&last->second.end<=address+size){
+            cursor=last->second.end;++last;if(cursor==address+size)break;}
+        if(cursor!=address+size)return false;
+        std::vector<Protection*> protections;
+        for(auto it=first;it!=last;++it)for(auto& p:it->second.protection){
             for(auto current=p.begin;current<p.begin+p.size;){
                 MEMORY_BASIC_INFORMATION region{};
                 if(!VirtualQuery(reinterpret_cast<void*>(current),&region,sizeof(region))||
                    region.State!=MEM_COMMIT||region.Protect!=p.watched)return false;
                 current=std::min(p.begin+p.size,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
             }
+            protections.push_back(&p);
         }
         const DWORD desired=read_only?PAGE_READONLY:PAGE_NOACCESS;
-        for(size_t i=0;i<range.protection.size();++i){auto& p=range.protection[i];DWORD previous{};
+        for(size_t i=0;i<protections.size();++i){auto& p=*protections[i];DWORD previous{};
             if(!VirtualProtect(reinterpret_cast<void*>(p.begin),p.size,desired,&previous)){
                 // Roll back to the old protected mode, never PAGE_READWRITE.
-                for(size_t j=0;j<i;++j){auto& old=range.protection[j];DWORD ignored{};
+                for(size_t j=0;j<i;++j){auto& old=*protections[j];DWORD ignored{};
                     if(!VirtualProtect(reinterpret_cast<void*>(old.begin),old.size,old.watched,&ignored))
                         throw std::runtime_error("Cannot restore native ownership protection");}
                 return false;
             }
         }
-        for(auto& p:range.protection)p.watched=desired;
-        range.read_only=read_only;range.generation=++next_generation;return true;
+        for(auto* p:protections)p->watched=desired;
+        for(auto it=first;it!=last;++it){it->second.read_only=read_only;it->second.generation=++next_generation;}
+        return true;
     }
     bool Track(uint64_t address,uint64_t size,bool read_only=false){
         if(!address||!size||address%4096||size%4096||address>UINT64_MAX-size)return false;

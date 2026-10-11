@@ -22,7 +22,7 @@ protected:
     void CheckBacking(VAddr address,u64 size,bool writing) override {
         Diagnostics::Count("buffer-access.cpu-reconcile");
         ResolveGpuBuffers(address,size);
-        if(writing){ReleaseCpuBufferWatches(address,size);ReleaseImageWatches(address,size);}
+        if(writing){InvalidateCpuBufferPages(address,size);ReleaseImageWatches(address,size);}
         Rasterizer::CheckBacking(address,size,writing);
     }
     void PrepareGpuBacking(VAddr address,u64 size,bool writing) override {
@@ -36,7 +36,7 @@ protected:
         has_backing_=std::move(has);
         if(!page_watch_)page_watch_=std::make_unique<PageWatch>([this](VAddr address){
             std::lock_guard lock(execution_mutex_);
-            ResolveGpuBuffers(address,1);ReleaseCpuBufferWatches(address,1);
+            ResolveGpuBuffers(address,1);InvalidateCpuBufferPages(address,1);
             ReleaseImageWatches(address,1);ResolveImages(address,1);
         });
         SetBufferOwnership([this](VAddr address,u64 size){
@@ -52,6 +52,10 @@ protected:
             if(address%4096||size%4096||!has_backing_(address,size)||page_watch_->Contains(address))return false;
             return page_watch_->Track(address,size,true);
         });
+        SetBufferPageRewatch([this](VAddr address,u64 size){
+            return has_backing_(address,size)&&page_watch_->TrackReadOnly(address,size);
+        });
+        SetCpuPageRelease([this](VAddr address,u64 size){return page_watch_->UntrackReadOnly(address,size);});
         SetBufferWatchTransfer([this](VAddr address,u64 size,bool read_only){
             return has_backing_(address,size)&&page_watch_->ChangeMode(address,size,read_only);
         });

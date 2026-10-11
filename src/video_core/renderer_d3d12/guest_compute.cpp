@@ -85,7 +85,8 @@ bool ExecuteGuestCopyShader(Rasterizer& rasterizer,const Shader::Info& info,
 static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const ComputeInvocation& invocation,Shader::PushData push,std::span<const std::byte> runtime_data,
-    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache* textures,VAddr border_colors) {
+    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache* textures,VAddr border_colors,
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={}) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
@@ -246,6 +247,17 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     const auto ordinary_count=requests.size();
     if(dma)dma->AppendRequests(rasterizer,requests);
+    const auto dma_count=requests.size()-ordinary_count;
+    for(const auto& buffer:read_buffers){
+        if(buffer.written||buffer.unordered_access||!buffer.resident)
+            throw std::invalid_argument("Graphics auxiliary buffer must be a resident read-only input");
+        auto input=buffer;
+        // Auxiliary IA reads are snapshotted to a separate GPU buffer when
+        // their shader envelope requires UAV access. Keep one coherent source.
+        for(const auto& shader:requests)if(shader.unordered_access&&
+            shader.address<input.address+input.size&&input.address<shader.address+shader.size)input.unordered_access=true;
+        requests.push_back(input);
+    }
     // Separate native buffer/texture views are valid for read-only aliases: both
     // are materialized from the same retired CPU-visible guest contents. Writes
     // require shared ownership/feedback semantics and remain explicit failures.
@@ -294,7 +306,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 bindings.Srv(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
         }
     }
-    if(dma){dma->Bind(rasterizer,bindings,std::span(views).subspan(ordinary_count));
+    if(dma){dma->Bind(rasterizer,bindings,std::span(views).subspan(ordinary_count,dma_count));
         for(const auto& target:dma_pending)dma->BindMetadata(bindings,target.reg,target.fault);}
     // Image/attachment uploads below may Finish and reset the constant arena.
     // Allocate only once their ownership resolution has ended, immediately
@@ -464,8 +476,9 @@ void ExecuteGuestBufferCompute(ID3D12Device* device,Rasterizer& rasterizer,
 void ExecuteGuestGraphicsResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const Shader::PushData& push,const GraphicsRuntime& runtime,
-    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache& textures,VAddr border_colors) {
+    const std::function<void(ResourceBindings&)>& submit,GuestTextureCache& textures,VAddr border_colors,
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers) {
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics command has compute PSO");
-    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors);
+    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers);
 }
 }
