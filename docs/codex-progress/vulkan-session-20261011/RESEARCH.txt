@@ -1,0 +1,81 @@
+VULKAN -> DX12: EXECUTION AND COHERENCE INVESTIGATION
+11 October 2026. Passive investigation; no game input, debugger, capture layer, settings change or rebuild.
+
+IDENTITY AND EVIDENCE BOUNDARY
+Running game's own log identifies shadPS4 v0.19.0 revision c7e065d1b415be16c23e260a21f1dd8bbfc4cb57.
+That exact commit was available in the local xess repository object database. 117 relevant source files were exported without changing any checkout; emulator_settings.h was added separately.
+Resolve source citations against https://github.com/shadps4-emu/shadPS4/tree/c7e065d1b415be16c23e260a21f1dd8bbfc4cb57/src . The local source-c7e065d export is available in the handoff archive. The earlier 0c9ca525 snapshot is historical and is not the reference for this session.
+DX12 source is 9527c901a50256016072c4b67464946f78061ab1, documentation HEAD e26dc4e7498f82562221fd7eb9d3e74970eee23e.
+Executable hash and log counts: runtime-evidence.json. Selected verbatim records: runtime-log-excerpts.txt. The complete log and exported source remain in the local handoff archive; they are not duplicated in this repository.
+Log events cover startup through snapshot time, not only the 5-second telemetry window. Log has duplicate suppression; event counts are observed records, not exhaustive call counts.
+
+CONFIRMED IN THE RUN
+* 1803 observed EnsureResident records; zero arena-migration records in snapshot.
+* 13 observed tiling pipeline creations, including Thin1DThin_32, Thick1DThick_8, Thin2DThin_32. These identify detile implementations requested at runtime, not their invocation counts/time.
+* 417 pipelines preloaded at startup.
+* Guest compute queue ASC pipe 0 queue 0 mapped to vqueue 1.
+* readbacksMode=1 = Relaxed, readbackLinearImages=false; directMemoryAccess=false; pipeline cache enabled; validation disabled.
+* No observed 'Accessed non-GPU cached memory' records. Fault support exists in source, but this does not prove it was exercised, nor prove faults were impossible.
+* The game configuration requests 3440x1440 internal/window dimensions and 4096 MiB extra guest direct memory. Actual attachment dimensions/patch effects are not measured. Extra guest direct memory is not a host GPU cache budget.
+* Existing nonfatal warnings/errors are in log; observation tool's zero errors meant successful sampling, not an error-free emulator.
+
+EXECUTION CHAIN
+Guest game threads -> GNM submission of PS4 PM4 command buffers -> Liverpool coroutine queues -> Rasterizer Draw/Dispatch -> pipeline and descriptor bindings -> BufferCache/TextureCache -> Runtime access tracking/barriers -> Scheduler command buffers/timeline -> GPU -> video-out presentation.
+Liverpool::Process cycles mapped guest queues on its command processor thread. One guest compute queue does NOT demonstrate a dedicated host async-compute queue or CPU parallelism. Scheduler submits its collected upload/primary command buffers on its configured queue.
+Source: amdgpu/liverpool.cpp:92, renderer_vulkan/vk_rasterizer.cpp:182, vk_scheduler.cpp:185.
+
+1. BUFFER IDENTITY IS ADDRESS-BASED SPARSE STORAGE
+Vulkan BufferCache uses 4-GiB VIRTUAL arena pages (ARENA_PAGE_BITS=32), not 4-GiB physical allocations. Blocks use max(device-required alignment,16 KiB). EnsureResident allocates only missing block intervals. GetArena can join neighbouring arenas by rebinding existing physical backing. A BDA table maps guest block indices to host GPU addresses. Pending sparse binds become submission dependencies.
+Source: buffer_cache/buffer_cache.h:39; buffer_cache.cpp:219,273,407 (check named functions when reading).
+DX12 mappings are materialized guest envelopes backed by individual resources/allocator leases; read-only envelope coalescing reduces churn but changing/conflicting envelopes still cause retirement/materialization. The high-memory run fixed important churn sources but did not implement the Vulkan storage model.
+Consequence: increasing an LRU byte limit cannot reproduce stable address identity. Required design contract: stable guest-range backing + overlap/alias handling + residency bookkeeping + descriptors referring to offsets + fence-pinned lifetime. D3D12 reserved/tiled resources or segmented persistent storage are candidates, not a validated implementation recommendation yet; capability/alignment/state constraints must be checked.
+
+2. CONTENT VALIDITY AND RESIDENCY ARE SEPARATE
+Vulkan MemoryTracker keeps CPU/GPU dirty bits at 4-KiB granularity in 16-MiB regions. SynchronizeMemory requests only CPU-modified upload ranges; GPU writes mark ownership/modified state. Small read-only buffers <=16 KiB without GPU modifications use a reusable 128-MiB stream buffer instead of the sparse path.
+ReadMemory posts a synchronized command to Liverpool and DownloadMemory copies intersecting GPU-written ranges within a widened 512-KiB window, then waits and writes backing. Vulkan DOES copy and wait; it does not universally avoid them.
+Sources: memory_tracker.h:60,86; region_definitions.h; buffer_cache.cpp:104,130,170,333.
+DX12 already has dirty ranges, GPU ownership and CPU watches, so 'DX12 lacks tracking' would be false. However loss/establishment of its watch proof uses snapshots and whole-mapping comparisons (InstallCpuWatch and PrepareShaderBuffers).
+Previous matched DX12 B run: 160.091 GB snapshot spans, 124.645 GB watch-establishment spans, 29.511 s inclusive snapshot-compare CPU time over ~92 s. These are existing DX12 diagnostics, not counts measured in this Vulkan run; spans are not hardware memory traffic.
+Priority: identify why watch proof is lost, report affected bytes/page ranges and release reasons, retain proof through safe transitions. Do not remove snapshot fallback or PageWatch guarantees without replacing the proof.
+
+3. RELAXED READBACK IS A MATERIAL COMPARISON DIFFERENCE
+Exact enum: Disabled=0, Relaxed=1, Precise=2 (core/emulator_settings.h:33).
+RegionManager::GetPageOp installs GPU modification protection only for Precise. Relaxed still tracks modified regions and has invalidation/readback paths; it must not be described as 'all readback disabled'.
+Current run thus has a different CPU-read protection policy from DX12's stricter ownership mechanisms. No claim can isolate API overhead from this observation. Do not silently weaken DX12 to match a faster relaxed mode. A later isolated comparison should explicitly record/readback policy and include a precise reference run.
+
+4. ORDINARY INDEX DATA REMAINS A GPU BUFFER IN VULKAN
+BindIndexBuffer obtains the range through the common buffer cache, records index-read access and binds buffer+offset. Small eligible data may use the stream buffer, so this is not universally zero-copy.
+DX12 GuestRasterizer::DrawInternal around line 480 reads CPU backing, builds source/logical/converted vectors, allocates and maps an upload buffer even for ordinary unmodified indices.
+Required fast-path contract: normal 16/32-bit indices, correct byte offset/base vertex, resource-state ownership shared with shader requests, GPU writes visible, allocation pinned through completion. Keep fallbacks for byte swapping, primitive expansion, restart conversion and incompatible aliases.
+Runtime frequency/benefit is not established by the passive log.
+
+5. INDIRECT COMMANDS ADD A CPU ROUND TRIP IN DX12
+Vulkan DrawIndirect obtains GPU argument/count buffers and issues drawIndexedIndirect[Count]/drawIndirect[Count]. DispatchIndirect similarly retains GPU arguments.
+DX12 GuestRasterizer::DrawIndirect:640 calls Finish, reads count/arguments to CPU, loops DrawInternal. DispatchIndirect:819 also waits and decodes CPU arguments.
+This converts GPU-produced control data into CPU synchronization. Implementing equivalent D3D12 indirect execution requires argument layout, SGPR/base vertex semantics, count support, transitions and fence lifetime; replacing one API call is insufficient.
+This is a proven source-level gap, NOT proof Bloodborne used indirect commands in this capture. Need PM4 opcode counts and GPU-producer attribution before ranking by frame-time contribution.
+
+6. TEXTURE CONVERSION ACTUALLY USES GPU COMPUTE IN THE VULKAN PATH
+TextureCache refresh -> ObtainBufferForImage -> TileManager::DetileImage -> compute dispatch -> image upload/copy. GPU-modified source data can stay in GPU buffers. Runtime log's 13 detiler pipeline creations provide session evidence for this subsystem.
+Sources: texture_cache.cpp around780; tile_manager.cpp:196,271.
+DX12 GuestTextureCache::Upload:825 runs DecodeGuestSubresource on CPU for each uploaded plane/layer/mip, copies rows into mapped upload footprints and then CopyTextureRegion. Existing valid cached images avoid this path; do not claim every draw re-detiles.
+Required port: compute detile/retile for exercised PS4 layouts, correct mip/layer/pitch/depth/stencil/compressed formats, metadata handling, buffer/image alias ownership and barriers. Compare exact pixels/bytes to existing CPU conversion; retain unsupported-layout fallback. Count detile bytes and CPU/GPU timing before/after.
+
+7. BARRIERS, SUBMISSION AND COMPLETION ARE DIFFERENT OPERATIONS
+Vulkan Runtime::AccessBuffer accumulates read/write intervals and stage/access information. IsBufferAccessed tests overlap; FlushBarriers emits pipelineBarrier2 and clears accumulated access tracking. Scheduler Flush submits; Finish submits and waits for a timeline tick. Deferred operations carry completion ticks.
+DX12 has both direct/copy queues, GPU queue waits, retirement callbacks and fence tracking. These are not absent. Host waits also occur for readbacks, reused command contexts and explicit Finish paths (including a read-only batch limit in PrepareShaderBuffers).
+Required audit unit: one dependency edge with producer, consumer, range, CPU visibility, and reason for host wait. A GPU dependency may need only a queue/barrier edge; a true CPU read needs completion. Removing all Finish calls would break correctness.
+
+8. PIPELINE CACHING IS REAL BUT NOT THE ONLY EXPLANATION
+Vulkan preloaded 417 pipelines. DX12 GuestPipelineCache already caches compute/graphics PSOs in memory and shader artifacts have separate caching. Its shown cache has no equivalent demonstrated startup warmup in this investigation. Separate cold creation, PSO hit rate and warm-frame cost before choosing a persistent PSO/warmup project.
+
+DELIVERY ORDER FOR DX12 PARITY
+A. Capture dependency/cost counters with bounded recording in a separate dev run: PM4 draw/index/indirect/dispatch counts; residency creates and changed envelopes; CPU-watch release reasons; bytes copied each direction; texture conversions; Finish cause and wait time; critical-path guest-frame IDs. No live injection into user's game.
+B. Ordinary resident index binding: small, bounded implementation with byte/state/lifetime regressions and same-scene comparison.
+C. GPU detile for layouts observed in this run; prioritize by measured conversion bytes/time.
+D. Stable buffer storage and page-level validity; migrate incrementally with alias/PRT/CPU-write/GPU-write tests, preserving current F1-F3 behavior.
+E. GPU indirect execution if opcode counts establish relevance; deferred readbacks and wait consolidation based on actual dependencies.
+These are dependency-aware implementation candidates, not claimed completed changes. No new backend code was changed in this read-only investigation.
+
+LIMITS
+No guest FPS, per-draw timing, hardware bandwidth, call stack sampling or exact pipeline/texture bind sequence was collected. Absence of a log message is not proof a subsystem did not run. Current free-play, Relaxed readback, config and scene differ from previous DX12 stationary measurements. No direct speed ratio or predicted FPS is justified.

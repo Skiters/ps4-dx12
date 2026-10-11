@@ -1,5 +1,14 @@
 # Next session
 
+## Vulkan execution investigation saved — 2026-10-11
+
+Read [the exact-version research](vulkan-session-20261011/RESEARCH.txt) before implementing Vulkan parity.
+Reference `c7e065d1` is the observed executable revision; readback mode is Relaxed.
+Priorities: bounded operation/dependency attribution, ordinary resident indices, GPU detile for observed
+layouts, stable buffer backing/page validity, and GPU indirect execution when opcode counts justify it.
+Preserve CPU/GPU ownership, aliases, PRT and fence lifetime; do not remove correctness mechanisms to match Relaxed performance.
+
+
 ## Final — next step after the high-memory experiment
 
 The requested residency/cache experiment is complete; do not repeat the earlier

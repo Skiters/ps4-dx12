@@ -1,5 +1,16 @@
 # Vulkan / native D3D12 parity audit
 
+## Observed Vulkan session — 2026-10-11
+
+The running Bloodborne v0.19.0 log identifies exact source `c7e065d1b415be16c23e260a21f1dd8bbfc4cb57`.
+The [execution/coherence investigation](vulkan-session-20261011/RESEARCH.txt) records source-level DX12 gaps,
+observed residency/detiler/pipeline activity, and implementation contracts. Supporting log excerpts,
+101 passive telemetry samples, their summary, game configuration and hash manifest are preserved
+in [vulkan-session-20261011](vulkan-session-20261011/manifest.json).
+This session used Relaxed readback. It establishes neither per-operation costs nor a matched FPS comparison.
+The older audit below uses a different reference revision and remains historical.
+
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11: bounded ResolveGpuBuffers search is a tested local optimization, not

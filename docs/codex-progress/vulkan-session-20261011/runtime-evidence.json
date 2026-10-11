@@ -1,0 +1,71 @@
+{
+  "resident_ranges": {
+    "count": 1803,
+    "examples": [
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=145738, end=145740 resident",
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=151780, end=152091 resident",
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=152511, end=152517 resident",
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=150844, end=150849 resident",
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=211395, end=211400 resident",
+      "[Render] <Info> (shadPS4:GpuCommandProcessor) buffer_cache.cpp:310 EnsureResident: Making range start=211411, end=211412 resident"
+    ]
+  },
+  "arena_migrations": {
+    "count": 0,
+    "examples": []
+  },
+  "shader_gpu_faults": {
+    "count": 0,
+    "examples": []
+  },
+  "tiling_pipeline": {
+    "count": 13,
+    "examples": [
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thin1DThin_32 detiler",
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thick1DThick_8 detiler",
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thin1DThin_64 detiler",
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thin1DThin_8 detiler",
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thin1DThin_128 detiler",
+      "[Render_Vulkan] <Info> (shadPS4:GpuCommandProcessor) tile_manager.cpp:172 GetTilingPipeline: Creating tiling pipeline Thin2DThin_32 detiler"
+    ]
+  },
+  "pipeline_preload": {
+    "count": 1,
+    "examples": [
+      "[Render] <Info> (shadPS4:Main) vk_pipeline_serialization.cpp:371 WarmUp: Preloaded 417 pipelines"
+    ]
+  },
+  "compute_queue": {
+    "count": 1,
+    "examples": [
+      "[Lib.GnmDriver] <Info> (GXRenderThread) gnmdriver.cpp:1230 sceGnmMapComputeQueue: ASC pipe 0 queue 0 mapped to vqueue 1"
+    ]
+  },
+  "errors": {
+    "count": 30,
+    "examples": [
+      "[Loader] <Error> (shadPS4:Main) emulator.cpp:248 ExtractTrophies: Couldn't extract trophy file trophy00.trp",
+      "[Core.Linker] <Error> (shadPS4:Main) module.cpp:278 LoadModuleToMemory: Unimplemented type Interpreter Path",
+      "[Core.Linker] <Error> (shadPS4:Main) module.cpp:278 LoadModuleToMemory: Unimplemented type SCE Comment",
+      "[Core.Linker] <Error> (shadPS4:Main) module.cpp:278 LoadModuleToMemory: Unimplemented type SCE Library Version",
+      "[Core.Linker] <Error> (Game:Main) module.cpp:278 LoadModuleToMemory: Unimplemented type SCE Module Parameters",
+      "[Core.Linker] <Error> (Game:Main) module.cpp:278 LoadModuleToMemory: Unimplemented type SCE Library Version"
+    ]
+  },
+  "warnings": {
+    "count": 181,
+    "examples": [
+      "[Loader] <Warning> (shadPS4:Main) emulator.cpp:664 Run: No dumped system fonts, expect missing text or instability",
+      "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_explicit_vertex_parameter unavailable.",
+      "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_EXT_shader_stencil_export unavailable.",
+      "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_image_load_store_lod unavailable.",
+      "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_gcn_shader unavailable.",
+      "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_trinary_minmax unavailable."
+    ]
+  },
+  "executable_sha256": "91eb69a59cb3ea3c35290fbd03a69718d2f6254c202ba86c6acbe1d1fc8b95f1",
+  "log_revision": [
+    "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57"
+  ],
+  "log_lastwrite": 1791714378.977166
+}

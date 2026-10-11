@@ -1,0 +1,25 @@
+{
+  "scope": "Research snapshot; telemetry through 2026-10-11T10:20:16.1536660Z, later architecture log snapshot; observation may continue independently",
+  "vulkan_revision": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+  "dx12_code_revision": "9527c901a50256016072c4b67464946f78061ab1",
+  "vulkan_executable_sha256": "91eb69a59cb3ea3c35290fbd03a69718d2f6254c202ba86c6acbe1d1fc8b95f1",
+  "complete_local_log_sha256": "de1f5ae915f70015ac5504c66397732f55d9f6f9834323105d0904e4e1ded86e",
+  "source_citations": "https://github.com/shadps4-emu/shadPS4/tree/c7e065d1b415be16c23e260a21f1dd8bbfc4cb57/src",
+  "telemetry_samples": 101,
+  "limitations": [
+    "Log counts include startup and duplicate suppression.",
+    "First samples lacking collection_session_utc have unreliable top_cpu_threads ordering; omit those thread rankings.",
+    "GPU adapter telemetry is not process telemetry.",
+    "No guest FPS or per-operation timings.",
+    "Relaxed readback free-play differs from stationary DX12 benchmarks."
+  ],
+  "files_sha256": {
+    "game-config.json": "b501f53bf0b866ab695898a9499b21805715e333a9544350b28d4ec4410a479d",
+    "RESEARCH.txt": "58bb808e66f4dfa52472a0ac39f7ff62ae94f2a33d69c9c7834483c82ee41391",
+    "runtime-evidence.json": "da2ece1b9b4ff385c25c450a5d1ca7db7f507a12eb4ec972e15e9f84a57ceabf",
+    "runtime-log-excerpts.txt": "75d1a51ba13812fbb19e355b3d6e6249c2136b3d0f007549d1dfa8c3f79f7582",
+    "samples.jsonl": "95824fed3637df5b716a31faa9f301b5d43e6226205ee027880899466ff4e36c",
+    "summary.json": "1d3a7a287a8378dc6402f573f47e8e3ef68937c39bd281a00b57c8720f00b51b"
+  },
+  "log_excerpt_normalization": "Trailing whitespace removed; complete local log SHA256 retained."
+}
