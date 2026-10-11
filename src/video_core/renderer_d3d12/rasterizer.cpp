@@ -572,11 +572,21 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 " written="+std::to_string(request.written)+" uav="+std::to_string(request.unordered_access));
         ValidateGpuBacking(request.address,request.size,request.written);
         VAddr first=request.address,last=request.address+request.size;
+        // Arena rounding is a materialization policy, not a binding contract.
+        // An exact writable envelope can already cover a later read-only sharp
+        // while rounding that sharp would extend outside it. Keep its backing,
+        // ownership and equality proof; the batch-wide SRV/UAV check below still
+        // splits allocations with incompatible simultaneous native states.
+        auto covering=mappings_.upper_bound(first);
+        const bool resident=covering!=mappings_.begin()&&
+            (--covering)->second.size>=first-covering->first&&
+            last-first<=covering->second.size-(first-covering->first)&&
+            !covering->second.initial_upload_failed;
         // Stable 64KiB residency windows for large read-only PS4 suballocations.
         // Small offset/length changes must not destroy the entire backing buffer.
         // Expand only into Core-confirmed committed readable memory, and never
         // across another binding's incompatible SRV/UAV or writable range.
-        if(buffer_arenas_enabled_&&!request.written&&request.size>=65536&&last<=UINT64_MAX-65535){
+        if(buffer_arenas_enabled_&&!resident&&!request.written&&request.size>=65536&&last<=UINT64_MAX-65535){
             const VAddr arena_first=first&~VAddr(65535),arena_last=(last+65535)&~VAddr(65535);
             bool allowed=arena_last-arena_first<=Shader::NativeDma::ResidentBufferBytes&&
                 IsMapped(arena_first,arena_last-arena_first)&&CoversSpan(committed_readable_,arena_first,arena_last);
