@@ -1,5 +1,57 @@
 # Bloodborne Vulkan emulation: execution, ownership and measured dependencies
 
+## Compatible-source probe and durable core model — 2026-10-11
+
+The [saved core contract](CORE_CONTRACT.md) connects guest execution, memory,
+shader specialization, queues and VideoOut to the current native implementation.
+[PINNED_PROBE.json](PINNED_PROBE.json) contains independently verified evidence
+from c7e065d1b415be16c23e260a21f1dd8bbfc4cb57 plus opt-in instrumentation.
+It is a different runtime/game configuration from installed 974-dirty below;
+there is no installed-to-native speed ratio. Both owned probe games closed with
+exit 0. Originals and immutable save seeds were preserved. The seed manifest's
+config hash was already stale; copied effective configurations were normalized
+and compared separately, without claiming every seed-manifest hash matched.
+
+Existing scheduler retirement callbacks observed 7,914 new completed flips in
+263.848488 s, 3,197 in 106.599407 s, and 1,718 in 57.275295 s (trace on):
+29.9945 / 29.9908 / 29.9955 flips/s at a 30 FPS cap. Median intervals were
+33.327 / 33.330 / 33.331 ms. Mean CPU in the adjacent off/on windows rose from
+2.5615 to 3.1924 cores (~24.6%). Unchanged capped FPS is not zero overhead;
+changed callback-observation lag is not reduced GPU latency.
+
+The trace retained 1,717 frame.ready records, all joined to actual queue submit
+by scheduler pointer and signal tick and to their new-frame completion identity.
+5,145 of 5,146 retained primary queries join to their queue-record parent and
+submit tick; one boundary/drop remains unlinked, with zero mismatched ticks.
+Renderer and presenter are distinct timeline domains. Primary GPU durations
+sum 9,076.713 ms (~5.2833 ms per completed flip over the window); nested detile
+and dispatch timings must not be added to that sum or called an exclusive
+per-frame critical path. CPU/GPU clocks are not calibrated.
+
+Actual dirty upload sites reported 3,435,376,640 bytes in 42,520 batches; mapped
+stream CPU copies separately reported 3,452,055,494 bytes in 4,131,157 calls.
+The warm window had 2,095,591 resident buffer hits and no observed physical
+buffer allocation or buffer-download label. RuntimeDownloadImage still occurred
+17,140 times, so this does not mean no readbacks. CompileModule was absent after
+warmup, but graphics/compute pipeline-creation and TextureCache TickFrame hooks
+were missing: their counts are unknown, not zero. Short compute.shader detail
+was filtered; aggregate dispatch counts cannot establish shader identities.
+
+Opcode counts include 14,541,739 SetContextReg, 7,535,797 SetShReg, 905,767
+AcquireMem, 577,111 EventWriteEop and 302,785 WaitRegMem. EOPs are not frames.
+Queue kinds 0/1/2 mean constant-engine/graphics-DE/guest-compute decoders.
+40,144,450 trace bytes, 1,482 lost detailed events, 211,410,723 intentionally
+filtered short details and zero aggregate overflow are recorded separately.
+This is bounded internal evidence, not exhaustive resource-version attribution.
+
+XInput and visible state verified rotation, movement, a chalice interaction prompt
+and Workshop entry. Attack/roll reports were acknowledged; enemy hits,
+Gherman dialogue, death and respawn are not confirmed. Full native engineering
+acceptance continues after this research checkpoint. Later frame-writer fixes
+for elapsed-time marker polling, explicit storage cap and final drain passed
+separate red/green smoke tests; the measured probe's compiled-header hashes are
+preserved and do not claim those later fixes were in its binary.
+
 Research checkpoint, 2026-10-11. The current priority is understanding the working
 Vulkan emulator before returning to production DX12 changes. This checkpoint
 does not complete the accepted performance-recovery engineering cycle.
