@@ -1,0 +1,157 @@
+{
+  "scenario": {
+    "id": "installed-vulkan-emulation-B-C-D-1",
+    "phases": [
+      {
+        "id": "B-walk-four-directions",
+        "actions": [
+          {
+            "ly": 17000,
+            "hold_ms": 1400,
+            "rest_ms": 700
+          },
+          {
+            "ly": -17000,
+            "hold_ms": 1400,
+            "rest_ms": 700
+          },
+          {
+            "lx": 17000,
+            "hold_ms": 1400,
+            "rest_ms": 700
+          },
+          {
+            "lx": -17000,
+            "hold_ms": 1400,
+            "rest_ms": 700
+          }
+        ]
+      },
+      {
+        "id": "C-camera-slow-fast",
+        "actions": [
+          {
+            "rx": 12000,
+            "hold_ms": 1700,
+            "rest_ms": 700
+          },
+          {
+            "rx": -12000,
+            "hold_ms": 1700,
+            "rest_ms": 700
+          },
+          {
+            "rx": 25000,
+            "hold_ms": 1100,
+            "rest_ms": 700
+          },
+          {
+            "rx": -25000,
+            "hold_ms": 1100,
+            "rest_ms": 700
+          }
+        ]
+      },
+      {
+        "id": "D-attack-roll-input",
+        "actions": [
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 180,
+            "rest_ms": 450
+          },
+          {
+            "buttons": [
+              "b"
+            ],
+            "lx": -20000,
+            "hold_ms": 100,
+            "rest_ms": 1000
+          },
+          {
+            "buttons": [
+              "b"
+            ],
+            "lx": 20000,
+            "hold_ms": 100,
+            "rest_ms": 1000
+          }
+        ]
+      }
+    ]
+  },
+  "start_utc": "2026-10-11T16:18:11.280066+00:00",
+  "phases": [
+    {
+      "id": "B-walk-four-directions",
+      "start_utc": "2026-10-11T16:18:11.280066+00:00",
+      "commands": 4,
+      "end_utc": "2026-10-11T16:18:20.300155+00:00"
+    },
+    {
+      "id": "C-camera-slow-fast",
+      "start_utc": "2026-10-11T16:18:20.300655+00:00",
+      "commands": 4,
+      "end_utc": "2026-10-11T16:18:29.425688+00:00"
+    },
+    {
+      "id": "D-attack-roll-input",
+      "start_utc": "2026-10-11T16:18:29.426185+00:00",
+      "commands": 10,
+      "end_utc": "2026-10-11T16:18:38.053708+00:00"
+    }
+  ],
+  "game_reaction_requires_pixel_validation": true,
+  "end_utc": "2026-10-11T16:18:38.054207+00:00"
+}

@@ -1,0 +1,26 @@
+{
+ "id":"installed-vulkan-emulation-B-C-D-1",
+ "phases":[
+  {"id":"B-walk-four-directions","actions":[
+   {"ly":17000,"hold_ms":1400,"rest_ms":700},
+   {"ly":-17000,"hold_ms":1400,"rest_ms":700},
+   {"lx":17000,"hold_ms":1400,"rest_ms":700},
+   {"lx":-17000,"hold_ms":1400,"rest_ms":700}]},
+  {"id":"C-camera-slow-fast","actions":[
+   {"rx":12000,"hold_ms":1700,"rest_ms":700},
+   {"rx":-12000,"hold_ms":1700,"rest_ms":700},
+   {"rx":25000,"hold_ms":1100,"rest_ms":700},
+   {"rx":-25000,"hold_ms":1100,"rest_ms":700}]},
+  {"id":"D-attack-roll-input","actions":[
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["rb"],"hold_ms":180,"rest_ms":450},
+   {"buttons":["b"],"lx":-20000,"hold_ms":100,"rest_ms":1000},
+   {"buttons":["b"],"lx":20000,"hold_ms":100,"rest_ms":1000}]}
+ ]
+}

@@ -1,0 +1,3320 @@
+{
+  "kind": "Vulkan emulation research checkpoint; not a completed DX12 recovery",
+  "runs": [
+    {
+      "run_id": "vulkan-installed-diag-1",
+      "launch": {
+        "runtime_files": [
+          {
+            "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78",
+            "name": "amd_fidelityfx_vk.dll"
+          },
+          {
+            "sha256": "83176ff8ce3394f927123cac7b53b25911dbde632b9bdfe485893e0f8497c189",
+            "name": "avcodec-61.dll"
+          },
+          {
+            "sha256": "9e2931a1bea307b084f222cf8fa6129ce2b143980f16ce0aad6f57936a313ba3",
+            "name": "avformat-61.dll"
+          },
+          {
+            "sha256": "0aa5fb2155e6bb0e37c1fc202f60d86a7eea1d4bc6e2b538b4f55ff95e06e5b3",
+            "name": "avutil-59.dll"
+          },
+          {
+            "sha256": "59d134ddc15ae0594f0a328979f8201662fc82634ddb7c537b156e7cf871f5eb",
+            "name": "icuuc.dll"
+          },
+          {
+            "sha256": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983",
+            "name": "nvngx_dlss.dll"
+          },
+          {
+            "sha256": "ff6e90eb78b827927dff5b4ecc6b1c870c2e9bca29ed9f48c7d348cc9e170b82",
+            "name": "nvngx_dlssg.dll"
+          },
+          {
+            "sha256": "e18204bcd9bceaf9a1f1897625f870aec519350b4007e92da196af7ae6a824a0",
+            "name": "Qt6Concurrent.dll"
+          },
+          {
+            "sha256": "864afdaeae550b6e32b64936c10d87165a8b901d348f5739bea8be42cbf23a71",
+            "name": "Qt6Core.dll"
+          },
+          {
+            "sha256": "2f5c0f45984523b40fb1ea09dc2a06d3d9eedf8e1f999db83d2c10fada6fc937",
+            "name": "Qt6Gui.dll"
+          },
+          {
+            "sha256": "5e1c72aa9a469bfdd91ccc822cf8b3ac0dba3ba87bade8aad69436900185fe71",
+            "name": "Qt6Multimedia.dll"
+          },
+          {
+            "sha256": "f06c85354c55f167704431725cd85af053807934b203df72b2ab211e0f5daa6f",
+            "name": "Qt6Network.dll"
+          },
+          {
+            "sha256": "a0051cef049439096fdeec079e0e5144dae1e0d80c6c4888b0826b8a539189eb",
+            "name": "Qt6Widgets.dll"
+          },
+          {
+            "sha256": "1447c5b632bf3859f33892f8898750904fe7c8a590008251437d6b226cdc7791",
+            "name": "shadps4_dlss.dll"
+          },
+          {
+            "sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773",
+            "name": "shadPS4.exe"
+          },
+          {
+            "sha256": "82924a8954dd671e09351c5de0eb87ad0eb25b944cc9f9ab955ca1d9950de15d",
+            "name": "sl.common.dll"
+          },
+          {
+            "sha256": "f4a6b2b14dcc0b1485989e430d3b4e3a44ac1800b92ba1ad74f476e64fb2b09c",
+            "name": "sl.dlss_g.dll"
+          },
+          {
+            "sha256": "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c",
+            "name": "sl.interposer.dll"
+          },
+          {
+            "sha256": "f13d51cfa05f4cd514df2026049e2db8adf359221713170ad386fd499915b582",
+            "name": "sl.pcl.dll"
+          },
+          {
+            "sha256": "0ce9725e3e03ea9e7f81d008b57f33ee365973d2e349131c8b1c3e3378fe2db0",
+            "name": "sl.reflex.dll"
+          },
+          {
+            "sha256": "f2ca17734a0b1e0ceb0af41a2081c66fd0887897a02f410659ce877d76b53e34",
+            "name": "swresample-5.dll"
+          },
+          {
+            "sha256": "7e7d4d8b3146b80fb8348f9eeb93131f8f677b9e886cc25dd57fd498603ee345",
+            "name": "swscale-8.dll"
+          }
+        ],
+        "config_note": "Installed profile copied, windowed 1920x1080; DLSS output setting 3840x2160 and FGx4 retained",
+        "isolated_profile": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-diag-1",
+        "pid": 8732,
+        "executable": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-diag-1\\core\\shadPS4.exe",
+        "game": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\CUSA03173\\eboot.bin",
+        "matched_dx12_benchmark": false,
+        "game_sha256": "d65f0b4f01d59166aed16f8604196d8b7dd805abbf0758b356e8f1354c9429f9",
+        "source_revision": "974f8c21-dirty: exact patch unavailable",
+        "sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773",
+        "start_utc": "2026-10-11T16:14:19.5460919Z"
+      },
+      "exit": {
+        "exit_code": -1073741819,
+        "exit_utc": "2026-10-11T16:25:50.1227370Z"
+      },
+      "resource_manifest": {
+        "mode": "A",
+        "session_id": "a4fc193dd4704e26b5cb27a093d3d534",
+        "segment_id": 134362088592629035,
+        "started_utc": "2026-10-11T16:15:09.490115+00:00",
+        "identity": {
+          "pid": 8732,
+          "executable": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-diag-1\\core\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362088592629035,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "collector_pid": 34580,
+        "counter_errors": {},
+        "monitor_sha256": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+        "interval_s": 1.0,
+        "clock": "perf_counter (Windows QPC), UTC paired per sample",
+        "frame_id": null,
+        "frame_id_reason": "External counters cannot identify a new guest frame",
+        "dropped_etw_events": null,
+        "dropped_etw_reason": "No ETW event stream captured by this counter collector",
+        "profile_root": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-diag-1\\user",
+        "build_label": "installed-DLSS-internal-diagnostics",
+        "config.json": {
+          "sha256": "f5eaca235e72563681206482ffe58c033efd8aa9c5660f51aaaddd033b9c1ac9"
+        },
+        "custom_configs/CUSA03173.json": {
+          "sha256": "ac0c59d14ef503dd55619bd67f1ca8f5f5c6cb05f74a0bfe306cec712da8a4b8"
+        },
+        "dlss.ini": {
+          "sha256": "6649f5d9921e2b5bc1b0f772848a5935fd6dd0d3f45cfd751ccfd41b56c66e96"
+        },
+        "shader_cache_identity": {
+          "root": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-diag-1\\user\\cache",
+          "method": "path only; mutable contents not hashed during gameplay",
+          "content_hash": null
+        },
+        "dxgi_adapters": [
+          {
+            "index": 0,
+            "description": "NVIDIA GeForce RTX 5080",
+            "vendor_id": 4318,
+            "device_id": 11266,
+            "luid_pdh": "luid_0x00000000_0x000170C8",
+            "dedicated_video_bytes": 16753098752,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 1,
+            "description": "AMD Radeon(TM) Graphics",
+            "vendor_id": 4098,
+            "device_id": 5056,
+            "luid_pdh": "luid_0x00000000_0x00018737",
+            "dedicated_video_bytes": 2119970816,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 2,
+            "description": "NVIDIA GeForce RTX 5080",
+            "vendor_id": 4318,
+            "device_id": 11266,
+            "luid_pdh": "luid_0x00000000_0x000223E7",
+            "dedicated_video_bytes": 16753098752,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 3,
+            "description": "Microsoft Basic Render Driver",
+            "vendor_id": 5140,
+            "device_id": 140,
+            "luid_pdh": "luid_0x00000000_0x000186EF",
+            "dedicated_video_bytes": 0,
+            "shared_system_bytes": 48975527936,
+            "flags": 2
+          }
+        ],
+        "revision": "974f8c21-dirty",
+        "title_id": "CUSA03173",
+        "sensor_test": false,
+        "frame_sources": {
+          "guest_fps": "unavailable: no guest frame identity",
+          "integration": "existing FRAME-GEN log: emulator EndPresent and Streamline reported shown, rounded 5-window updates; not guest simulation",
+          "presentmon": "not configured",
+          "fg_requested": "x4 requested (dlss)"
+        },
+        "coverage_definition": [
+          "process_cpu",
+          "user_cpu",
+          "kernel_cpu",
+          "thread_cpu",
+          "thread_names",
+          "working_set",
+          "private_bytes",
+          "process_io",
+          "page_faults",
+          "system_available_ram",
+          "memory_pressure",
+          "gpu_engines",
+          "process_dedicated_vram",
+          "process_shared_gpu_memory",
+          "process_gpu_commit",
+          "adapter_telemetry",
+          "collector_cpu",
+          "sampling_jitter",
+          "guest_frame_ids",
+          "host_present_rate",
+          "display_rate",
+          "generated_frame_ids",
+          "cpu_stacks",
+          "gpu_stage_timestamps",
+          "pm4_counts",
+          "buffer_transfer_bytes",
+          "texture_detile_time",
+          "frame_latency"
+        ],
+        "component_sha256": {
+          "mode_a.py": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+          "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+          "report.py": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+          "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+          "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+        },
+        "exit_code": 3221225477
+      },
+      "qpc_utc_anchor": {
+        "offset_s": 1791602954.107811,
+        "anchor_deviation_s": {
+          "n": 641,
+          "median": 3.24249267578125e-05,
+          "p95": 8.7738037109375e-05,
+          "minimum": 0.0,
+          "maximum": 0.0002808570861816406,
+          "mean": 3.647767065467775e-05
+        },
+        "source": "Win32 QPC/perf_counter and Windows steady_clock checked for same domain; GPU clock is not calibrated"
+      },
+      "csv": {
+        "bytes": 22501689,
+        "sha256": "5b5df55902eee2bbe5360a0db032afee465565a29ebaad66d0dd1481c18335a8",
+        "events": {
+          "multiplier": 1,
+          "reflex_options": 1,
+          "vblank": 41159,
+          "flip_dequeue": 41159,
+          "frame_pool_wait": 39911,
+          "frame_fence_wait": 39910,
+          "present_frame": 39908,
+          "acquire": 39909,
+          "queue_present": 39909,
+          "dlssg_state": 39908,
+          "end_present": 39909,
+          "present": 39909,
+          "present_and_lock": 39909,
+          "flip_submit": 39884,
+          "game_submit": 39884,
+          "reflex_sleep": 39884,
+          "flip_ready": 39883,
+          "flip_present": 39882
+        },
+        "duplicate_nonzero_tag_events": {},
+        "zero_tag_events": {
+          "multiplier": 1,
+          "reflex_options": 1,
+          "vblank": 41159,
+          "flip_dequeue": 1278,
+          "frame_pool_wait": 39911,
+          "frame_fence_wait": 39910,
+          "present_frame": 27,
+          "acquire": 39909,
+          "queue_present": 39909,
+          "dlssg_state": 39908,
+          "end_present": 39909,
+          "present": 39909,
+          "present_and_lock": 39909,
+          "flip_submit": 1,
+          "game_submit": 1,
+          "flip_ready": 1,
+          "flip_present": 1
+        },
+        "malformed_rows": 1,
+        "explicit_drop_counter": "NOT_AVAILABLE"
+      },
+      "scenarios": [
+        {
+          "id": "A-stationary-Central-Yharnam",
+          "start_utc": "2026-10-11T16:16:46.937269+00:00",
+          "end_utc": "2026-10-11T16:18:11.083148+00:00",
+          "duration_s": 84.14587903022766,
+          "unique_tagged_guest_flip_submissions": 5049,
+          "tagged_flip_submission_cadence_per_s": 60.00293844676875,
+          "submission_intervals_ms": {
+            "n": 5048,
+            "median": 16.659,
+            "p95": 17.155,
+            "minimum": 12.538,
+            "maximum": 21.211,
+            "mean": 16.666087757527734
+          },
+          "complete_tagged_chains": 5049,
+          "latency": {
+            "flip_submit_to_flip_ready_ms": {
+              "n": 5049,
+              "median": 4.575,
+              "p95": 4.89,
+              "minimum": 0.203,
+              "maximum": 6.582,
+              "mean": 4.593275698158051
+            },
+            "flip_ready_to_flip_dequeue_ms": {
+              "n": 5049,
+              "median": 24.291,
+              "p95": 25.785,
+              "minimum": 20.846,
+              "maximum": 26.342,
+              "mean": 24.26442424242424
+            },
+            "flip_submit_to_flip_present_ms": {
+              "n": 5049,
+              "median": 29.158,
+              "p95": 30.654,
+              "minimum": 24.183,
+              "maximum": 38.244,
+              "mean": 29.14555119825708
+            },
+            "game_submit_to_flip_ready_ms": {
+              "n": 5049,
+              "median": 4.568,
+              "p95": 4.884,
+              "minimum": 0.194,
+              "maximum": 6.574,
+              "mean": 4.586878391760744
+            }
+          },
+          "missing": {
+            "game_submit": 0,
+            "flip_ready": 0,
+            "flip_dequeue": 0,
+            "flip_present": 0,
+            "present_frame": 0
+          }
+        },
+        {
+          "id": "B-walk-four-directions",
+          "start_utc": "2026-10-11T16:18:11.280066+00:00",
+          "commands": 4,
+          "end_utc": "2026-10-11T16:18:20.300155+00:00",
+          "duration_s": 9.020088911056519,
+          "unique_tagged_guest_flip_submissions": 541,
+          "tagged_flip_submission_cadence_per_s": 59.977235849289755,
+          "submission_intervals_ms": {
+            "n": 540,
+            "median": 16.6935,
+            "p95": 17.226,
+            "minimum": 15.229,
+            "maximum": 18.169,
+            "mean": 16.66536851851852
+          },
+          "complete_tagged_chains": 541,
+          "latency": {
+            "flip_submit_to_flip_ready_ms": {
+              "n": 541,
+              "median": 4.692,
+              "p95": 6.219,
+              "minimum": 4.084,
+              "maximum": 6.796,
+              "mean": 4.918304990757856
+            },
+            "flip_ready_to_flip_dequeue_ms": {
+              "n": 541,
+              "median": 25.851,
+              "p95": 26.38,
+              "minimum": 22.547,
+              "maximum": 26.658,
+              "mean": 25.510591497227356
+            },
+            "flip_submit_to_flip_present_ms": {
+              "n": 541,
+              "median": 30.832,
+              "p95": 31.249,
+              "minimum": 29.132,
+              "maximum": 31.503,
+              "mean": 30.726146025878005
+            },
+            "game_submit_to_flip_ready_ms": {
+              "n": 541,
+              "median": 4.685,
+              "p95": 6.21,
+              "minimum": 4.078,
+              "maximum": 6.788,
+              "mean": 4.911859519408503
+            }
+          },
+          "missing": {
+            "game_submit": 0,
+            "flip_ready": 0,
+            "flip_dequeue": 0,
+            "flip_present": 0,
+            "present_frame": 0
+          }
+        },
+        {
+          "id": "C-camera-slow-fast",
+          "start_utc": "2026-10-11T16:18:20.300655+00:00",
+          "commands": 4,
+          "end_utc": "2026-10-11T16:18:29.425688+00:00",
+          "duration_s": 9.125033140182495,
+          "unique_tagged_guest_flip_submissions": 548,
+          "tagged_flip_submission_cadence_per_s": 60.05457641428799,
+          "submission_intervals_ms": {
+            "n": 547,
+            "median": 16.662,
+            "p95": 17.27,
+            "minimum": 14.801,
+            "maximum": 18.763,
+            "mean": 16.66637294332724
+          },
+          "complete_tagged_chains": 548,
+          "latency": {
+            "flip_submit_to_flip_ready_ms": {
+              "n": 548,
+              "median": 4.56,
+              "p95": 5.071,
+              "minimum": 3.298,
+              "maximum": 8.891,
+              "mean": 4.538569343065693
+            },
+            "flip_ready_to_flip_dequeue_ms": {
+              "n": 548,
+              "median": 26.582,
+              "p95": 27.863,
+              "minimum": 22.47,
+              "maximum": 29.681,
+              "mean": 26.628410583941605
+            },
+            "flip_submit_to_flip_present_ms": {
+              "n": 548,
+              "median": 31.446,
+              "p95": 31.899,
+              "minimum": 29.779,
+              "maximum": 34.677,
+              "mean": 31.428786496350366
+            },
+            "game_submit_to_flip_ready_ms": {
+              "n": 548,
+              "median": 4.554,
+              "p95": 5.065,
+              "minimum": 3.292,
+              "maximum": 8.885,
+              "mean": 4.532032846715328
+            }
+          },
+          "missing": {
+            "game_submit": 0,
+            "flip_ready": 0,
+            "flip_dequeue": 0,
+            "flip_present": 0,
+            "present_frame": 0
+          }
+        },
+        {
+          "id": "D-attack-roll-input",
+          "start_utc": "2026-10-11T16:18:29.426185+00:00",
+          "commands": 10,
+          "end_utc": "2026-10-11T16:18:38.053708+00:00",
+          "duration_s": 8.627523183822632,
+          "unique_tagged_guest_flip_submissions": 517,
+          "tagged_flip_submission_cadence_per_s": 59.92449848983549,
+          "submission_intervals_ms": {
+            "n": 516,
+            "median": 16.654,
+            "p95": 17.272,
+            "minimum": 14.251,
+            "maximum": 19.7,
+            "mean": 16.66549612403101
+          },
+          "complete_tagged_chains": 517,
+          "latency": {
+            "flip_submit_to_flip_ready_ms": {
+              "n": 517,
+              "median": 3.819,
+              "p95": 5.091,
+              "minimum": 0.445,
+              "maximum": 12.589,
+              "mean": 4.0612437137330755
+            },
+            "flip_ready_to_flip_dequeue_ms": {
+              "n": 517,
+              "median": 27.705,
+              "p95": 28.429,
+              "minimum": 19.288,
+              "maximum": 28.718,
+              "mean": 27.489961315280464
+            },
+            "flip_submit_to_flip_present_ms": {
+              "n": 517,
+              "median": 31.839,
+              "p95": 32.407,
+              "minimum": 29.029,
+              "maximum": 36.163,
+              "mean": 31.82514506769826
+            },
+            "game_submit_to_flip_ready_ms": {
+              "n": 517,
+              "median": 3.812,
+              "p95": 5.085,
+              "minimum": 0.438,
+              "maximum": 12.581,
+              "mean": 4.054887814313346
+            }
+          },
+          "missing": {
+            "game_submit": 0,
+            "flip_ready": 0,
+            "flip_dequeue": 0,
+            "flip_present": 0,
+            "present_frame": 0
+          }
+        }
+      ],
+      "stationary_resource_metrics": {
+        "cpu_core_equivalents": {
+          "n": 84,
+          "median": 4.304519578397885,
+          "p95": 4.562464869018575,
+          "minimum": 3.828523932222937,
+          "maximum": 4.656308203889192,
+          "mean": 4.2751323461888715
+        },
+        "working_set_bytes": {
+          "n": 84,
+          "median": 6414848000.0,
+          "p95": 6429716480,
+          "minimum": 6231441408,
+          "maximum": 6436753408,
+          "mean": 6342424185.904762
+        },
+        "private_bytes": {
+          "n": 84,
+          "median": 6111780864.0,
+          "p95": 6111780864,
+          "minimum": 6110736384,
+          "maximum": 6111780864,
+          "mean": 6111767942.095238
+        },
+        "thread_count": {
+          "n": 84,
+          "median": 128.0,
+          "p95": 128,
+          "minimum": 128,
+          "maximum": 128,
+          "mean": 128
+        },
+        "top_thread_cpu_core_equivalents": [
+          {
+            "name": "NexusRevolution Socket",
+            "n": 84,
+            "median": 0.9999925000573886,
+            "p95": 1.0000890079008993,
+            "minimum": 0.968758815715961,
+            "maximum": 1.0003378140609755,
+            "mean": 0.9987024175030953
+          },
+          {
+            "name": "Game:Main",
+            "n": 84,
+            "median": 0.9687577016272639,
+            "p95": 1.0000769059175432,
+            "minimum": 0.8905115488200779,
+            "maximum": 1.0001204145124754,
+            "mean": 0.9687546660924269
+          },
+          {
+            "name": "shadPS4:GpuDrawRecorder",
+            "n": 84,
+            "median": 0.31250812521823734,
+            "p95": 0.3437473531452351,
+            "minimum": 0.2656095415306585,
+            "maximum": 0.35937047193941085,
+            "mean": 0.3145476919371616
+          },
+          {
+            "name": "shadPS4:GpuCommandProcessor",
+            "n": 84,
+            "median": 0.312500203126742,
+            "p95": 0.34374116585479925,
+            "minimum": 0.2656095415306585,
+            "maximum": 0.34377922123619353,
+            "mean": 0.3121295458844377
+          },
+          {
+            "name": "shadPS4:GpuCmdRecorder",
+            "n": 84,
+            "median": 0.31247147136930176,
+            "p95": 0.31254941406567505,
+            "minimum": 0.2499854508523845,
+            "maximum": 0.34374116585479925,
+            "mean": 0.3017127813760459
+          },
+          {
+            "name": "shadPS4:AudioOutputThread:0x5d264c20",
+            "n": 84,
+            "median": 0.2343464098093861,
+            "p95": 0.26565698510487623,
+            "minimum": 0.18749518137534504,
+            "maximum": 0.28126743858300274,
+            "mean": 0.23251599574607149
+          },
+          {
+            "name": "shadPS4:AudioOutputThread:0x600356c8f930",
+            "n": 84,
+            "median": 0.23436193487165566,
+            "p95": 0.28125891591003876,
+            "minimum": 0.17186499746101436,
+            "maximum": 0.2968569510981748,
+            "mean": 0.23251592560464024
+          },
+          {
+            "name": "shadPS4:PresentThread",
+            "n": 84,
+            "median": 0.12498819487792515,
+            "p95": 0.1250106259040704,
+            "minimum": 0.062485253478823895,
+            "maximum": 0.12503025731977857,
+            "mean": 0.09988897654411914
+          },
+          {
+            "name": "SDLTimer",
+            "n": 84,
+            "median": 0.09375303291061923,
+            "p95": 0.14063695414207916,
+            "minimum": 0.031248990657191864,
+            "maximum": 0.17188435050983222,
+            "mean": 0.09914536070528271
+          },
+          {
+            "name": "unnamed-42524",
+            "n": 84,
+            "median": 0.07811905517722774,
+            "p95": 0.10937423438089594,
+            "minimum": 0.0,
+            "maximum": 0.12499758754638028,
+            "mean": 0.0680806991881513
+          },
+          {
+            "name": "GXWorker:4",
+            "n": 84,
+            "median": 0.06249839379178168,
+            "p95": 0.09375297197001292,
+            "minimum": 0.015621313369705974,
+            "maximum": 0.12498941339973985,
+            "mean": 0.05971001532731343
+          },
+          {
+            "name": "GXWorker:2",
+            "n": 84,
+            "median": 0.06249839379178168,
+            "p95": 0.09375542843971184,
+            "minimum": 0.0,
+            "maximum": 0.12499733755462644,
+            "mean": 0.058221858189864396
+          }
+        ],
+        "gpu_engine_instance_percent": {
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D": {
+            "n": 84,
+            "median": 90.4189060924976,
+            "p95": 90.72995180581546,
+            "minimum": 89.84905059630087,
+            "maximum": 90.93792207792207,
+            "mean": 90.39908694476809
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_8732_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1": {
+            "n": 84,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          }
+        },
+        "gpu_engine_source": "PDH process engine instances on selected NVIDIA adapter; each instance retained separately",
+        "gpu_process_dedicated_bytes": {
+          "n": 84,
+          "median": 4444270592.0,
+          "p95": 4444270592.0,
+          "minimum": 4444270592.0,
+          "maximum": 4444270592.0,
+          "mean": 4444270592.0
+        },
+        "gpu_process_shared_bytes": {
+          "n": 84,
+          "median": 118390784.0,
+          "p95": 118390784.0,
+          "minimum": 118390784.0,
+          "maximum": 118390784.0,
+          "mean": 118390784.0
+        },
+        "gpu_process_committed_bytes": {
+          "n": 84,
+          "median": 4562726912.0,
+          "p95": 4562726912.0,
+          "minimum": 4562726912.0,
+          "maximum": 4562726912.0,
+          "mean": 4562726912.0
+        },
+        "io_observed_interval_s": 82.99970483779907,
+        "io_deltas": {
+          "read_ops": 3860,
+          "write_ops": 2446,
+          "other_ops": 156732,
+          "read_bytes": 7923711,
+          "write_bytes": 2998342,
+          "other_bytes": 2583025
+        },
+        "adapter_wide_nvidia": {
+          "gpu_util_percent": {
+            "n": 17,
+            "median": 80.0,
+            "p95": 81.0,
+            "minimum": 79.0,
+            "maximum": 82.0,
+            "mean": 79.88235294117646
+          },
+          "memory_util_percent": {
+            "n": 17,
+            "median": 40.0,
+            "p95": 41.0,
+            "minimum": 40.0,
+            "maximum": 41.0,
+            "mean": 40.11764705882353
+          },
+          "used_memory_mib": {
+            "n": 17,
+            "median": 6808.0,
+            "p95": 6808.0,
+            "minimum": 6802.0,
+            "maximum": 6809.0,
+            "mean": 6807.294117647059
+          },
+          "total_memory_mib": {
+            "n": 17,
+            "median": 16303.0,
+            "p95": 16303.0,
+            "minimum": 16303.0,
+            "maximum": 16303.0,
+            "mean": 16303.0
+          },
+          "power_w": {
+            "n": 17,
+            "median": 226.35,
+            "p95": 228.16,
+            "minimum": 223.55,
+            "maximum": 229.48,
+            "mean": 226.2664705882353
+          },
+          "temperature_c": {
+            "n": 17,
+            "median": 61.0,
+            "p95": 62.0,
+            "minimum": 58.0,
+            "maximum": 62.0,
+            "mean": 60.529411764705884
+          },
+          "graphics_clock_mhz": {
+            "n": 17,
+            "median": 2887.0,
+            "p95": 2895.0,
+            "minimum": 2880.0,
+            "maximum": 2895.0,
+            "mean": 2886.4117647058824
+          },
+          "memory_clock_mhz": {
+            "n": 17,
+            "median": 15001.0,
+            "p95": 15001.0,
+            "minimum": 15001.0,
+            "maximum": 15001.0,
+            "mean": 15001.0
+          }
+        },
+        "adapter_wide_nvidia_scope": "whole adapter including other processes; memory utilization is not process bandwidth"
+      },
+      "stationary_host_scope_duration_ms": {
+        "game_submit": {
+          "n": 5049,
+          "median": 0.006,
+          "p95": 0.008,
+          "minimum": 0.004,
+          "maximum": 0.154,
+          "mean": 0.00626678550207962
+        },
+        "reflex_sleep": {
+          "n": 5049,
+          "median": 0.044,
+          "p95": 0.095,
+          "minimum": 0.023,
+          "maximum": 0.494,
+          "mean": 0.061199049316696376
+        },
+        "frame_pool_wait": {
+          "n": 5049,
+          "median": 0.0,
+          "p95": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.005,
+          "mean": 9.902951079421668e-07
+        },
+        "frame_fence_wait": {
+          "n": 5049,
+          "median": 0.002,
+          "p95": 0.003,
+          "minimum": 0.001,
+          "maximum": 0.007,
+          "mean": 0.002344028520499109
+        },
+        "acquire": {
+          "n": 5048,
+          "median": 0.018,
+          "p95": 0.028,
+          "minimum": 0.012,
+          "maximum": 0.174,
+          "mean": 0.01973098256735341
+        },
+        "queue_present": {
+          "n": 5048,
+          "median": 0.063,
+          "p95": 0.08,
+          "minimum": 0.042,
+          "maximum": 0.215,
+          "mean": 0.06445126782884311
+        },
+        "flip_present": {
+          "n": 5048,
+          "median": 0.2735,
+          "p95": 0.339,
+          "minimum": 0.196,
+          "maximum": 9.403,
+          "mean": 0.28552060221870046
+        }
+      },
+      "source_references": {
+        "base_revision": "974f8c211c5c6b277f8da2fadcd30c4d770cb27b",
+        "dirty_patch_available": false,
+        "files": [
+          {
+            "path": "src/core/linker.cpp",
+            "sha256": "5eaf99db4c792ac751aab00bdf9abfb1d9857bb3e2855f4756d96763d86b9412",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/linker.cpp"
+          },
+          {
+            "path": "src/core/memory.cpp",
+            "sha256": "6f65009046cd1d04e7719983fcab95426641a3936f2dfe6772b8172112986b34",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/memory.cpp"
+          },
+          {
+            "path": "src/core/libraries/gnmdriver/gnmdriver.cpp",
+            "sha256": "aa39decf3491a11b8c2ed2c43b56aa21e97574de8f7642345a9b616c2be7c0a4",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/gnmdriver/gnmdriver.cpp"
+          },
+          {
+            "path": "src/core/libraries/kernel/memory.cpp",
+            "sha256": "8116733ec6b54934786dfd2a4fc5ba33517666b142c86a57faf8005266da0064",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/kernel/memory.cpp"
+          },
+          {
+            "path": "src/core/libraries/kernel/threads/pthread.cpp",
+            "sha256": "50ba7c72c103a2e43e8c11dca9e77b4b9d3da10674db04fabd1a055ca40fb6f3",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/kernel/threads/pthread.cpp"
+          },
+          {
+            "path": "src/core/libraries/videoout/driver.cpp",
+            "sha256": "ce65dfd25e362de59e48e584215bc6fcd38c45675aa93b0174433317a60045cf",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/driver.cpp"
+          },
+          {
+            "path": "src/core/libraries/videoout/driver.h",
+            "sha256": "87e6eafe9aba535b2745fdf75697c1897a51f35f31cdc012085eac4be6fd2e88",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/driver.h"
+          },
+          {
+            "path": "src/core/libraries/videoout/video_out.cpp",
+            "sha256": "c3c3c859153f2c64cf59ed83e46c7d3da10804ee5e864ea42888c023add949f9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/video_out.cpp"
+          },
+          {
+            "path": "src/shader_recompiler/recompiler.cpp",
+            "sha256": "15610f38b69ea76b531fd96b3ad2490d8ed80816cfd9a7b75c4e81813d7331c8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/shader_recompiler/recompiler.cpp"
+          },
+          {
+            "path": "src/shader_recompiler/backend/spirv/emit_spirv.cpp",
+            "sha256": "37aa92e754ad15cef638be5deb1ec7428fb4b7ee7a9d820966f1fd359841e5d9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/shader_recompiler/backend/spirv/emit_spirv.cpp"
+          },
+          {
+            "path": "src/video_core/page_manager.cpp",
+            "sha256": "efbf34e06fd63914b51825462749f2f17a45a27bf1f1a4cfe6673685e3e671b8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/page_manager.cpp"
+          },
+          {
+            "path": "src/video_core/amdgpu/liverpool.cpp",
+            "sha256": "8ab9b0962de2410351a3bc57716beadc37639846f18d70c76613078985fc8dfe",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/amdgpu/liverpool.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer.cpp",
+            "sha256": "0029e8bf5eaf437af9dd40ec1f34e77e1a05658549058619811db35cf0038801",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer_cache.cpp",
+            "sha256": "83cab7f7b4af3966238b150060ec6a71a3800b4ec879ed3922b37a5d75be76f9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer_cache.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer_cache.h",
+            "sha256": "c57ff60d98e50a27fb8f4270dcad7f695bab5d13e64379fe36aef3d2913a4a6b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer_cache.h"
+          },
+          {
+            "path": "src/video_core/buffer_cache/fault_manager.cpp",
+            "sha256": "923e08b7d416473f66b74b44580decf53f6e8dbbb4b538696b809533077cb43e",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/fault_manager.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/memory_tracker.h",
+            "sha256": "af7da45a6ce551824324e8270bd40e14dfe430b900a44bbd34d1afe2fc20da62",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/memory_tracker.h"
+          },
+          {
+            "path": "src/video_core/buffer_cache/region_manager.h",
+            "sha256": "edd33db658a8b9003b730eff178c3106fc1f40788f38e6b566ca88b4a60df277",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/region_manager.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_bb_frame_gen.cpp",
+            "sha256": "ad242a206627f64a11013d4baeb418830365a1d43e57f4ee253d0e1c262565f6",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_bb_frame_gen.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_bb_temporal_dlss.cpp",
+            "sha256": "8e471389063ae410e3312413e95429cf9b23fdfe703b0f7e5855ca35301cd4f8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_bb_temporal_dlss.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_compute_pipeline.cpp",
+            "sha256": "6aa63e6e148aa6f4fc47a0cb23dfabb28b5a0edb7b3199b185f29df64fae1333",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_draw_pipe.h",
+            "sha256": "f826f2341e9f8c52a66fd63e2691f49bc611d188d203dedf42048aebc2bae2fe",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_draw_pipe.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_gpu_profiler.cpp",
+            "sha256": "a8c6b3cf6b400740b9ecfee042d57cb587763b06bccc210410af046aebe1e04f",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_gpu_profiler.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_gpu_profiler.h",
+            "sha256": "fd0adb13780989c071b4a93583c1c7a53d1be82b2fe355bf901fdc8ad878214b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_gpu_profiler.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp",
+            "sha256": "3d68a753393f617727678817fcbfd49f89f78f05b43636e1d28b0abd9f9d7d0a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+            "sha256": "92a5a5a49d617cf4f99371d479aabcd31b7b27e418216d14facf244503746b93",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_presenter.cpp",
+            "sha256": "9b50db4c46ebdb09f9da908d63beac9d16c44b25a66396d9e304f6aafba15eda",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_presenter.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+            "sha256": "5bef9e638f7e9df2125d1d4e6b05351f23ac7aaeeb5e10052ac2a1318da4be6b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+            "sha256": "7e56dafe7c6e9f366fde039cf9f1382544c45b387e6fe882572777ad2af52f3a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_runtime.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+            "sha256": "3cd777eaca3703b3ff6d97468a9190d98dabe93931d06c5140c2e2d754ca2355",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_scheduler.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_scheduler.h",
+            "sha256": "3465a409f6c79db77aa2cf46edbf8d2380abd077bc434d0ed2c283915f53e6f3",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_scheduler.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_shader_hle.cpp",
+            "sha256": "86cbe13e2d0a1d71b06a90742a282a9de75dde1dc44d0f7c5e2fbcbb039dc0bb",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_shader_hle.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_swapchain.cpp",
+            "sha256": "495cd903ebb1c2fd035a36197177c377ea6a2c1addaacae059a84ae9674cb054",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_swapchain.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/image.cpp",
+            "sha256": "99fa2b8b2eaacc16f44064a8250b4e0538890ece98a59b8c1169fa6a8805541a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/image.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/texture_cache.cpp",
+            "sha256": "125c6c5eabf82037add563a396957a2bb92a7f98f10ced42cd2cf51ff04a6ac9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/texture_cache.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/texture_cache.h",
+            "sha256": "692cc0dfc3ccf37702a6021b1a225117cadc5f1c48346f74e248c005cdd23a52",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/texture_cache.h"
+          },
+          {
+            "path": "src/video_core/texture_cache/tile_manager.cpp",
+            "sha256": "25683318ed2babc8ef2f89197577d644fcbaf931a91c6b0d12d848551a9c4aa6",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/tile_manager.cpp"
+          }
+        ]
+      },
+      "gpu_completed_guest_fps": "NOT_MEASURED",
+      "guest_simulation_cpu_time": "NOT_MEASURED",
+      "limitations": [
+        "Tagged flip submission is not GPU completion or guest simulation rate",
+        "flip_ready follows preparation/submission; it is not current-frame fence completion",
+        "flip_present duration ends after host Present call, not display",
+        "No guessed nearest-flip PM4/resource ownership",
+        "Internal 10-second aggregate blocks include menu/loading/movement; their UTC is unavailable",
+        "Core/DLL are byte-identical installed copies, configs/profile isolated",
+        "No matched DX12 speed ratio from different assets/profile/scene/patches",
+        "Draw scheduler timing includes its DLSS hooks, excludes presenter jobs; between-submission gaps may contain uploads/presenter/FG and are not measured hardware idle",
+        "GPU stage profiling remained off"
+      ],
+      "join_validation": {
+        "nonnegative_selected_latencies": true,
+        "nonzero_tags_only": true,
+        "same_event_duplicate_policy": "duplicates counted globally; require no duplicates before accepting selected joins"
+      },
+      "gpu_stage_profiler_on": false,
+      "internal_log_evidence": {
+        "total_blocks": 68,
+        "selected_blocks": [
+          {
+            "start_line": 5169,
+            "messages": [
+              "Threaded renderer: 137635 draws/s queued, 5049 waits/s, GPU command thread waited 9.4%, draw recorder busy 27.2%",
+              "  render state memo: 90% of draws reused the open pass",
+              "  image lookup memo: 97% of 986446 lookups/s remembered",
+              "  constant ring: 591530 buffers/s copied ahead, 0/s full",
+              "  vertex inputs prepared ahead: 104089/s, 0/s not",
+              "  game frames: 60.0/s, 1743 draws per frame",
+              "  GPU: 10.87 ms/frame executing, 5.80 ms/frame idle between submissions (2.0 submissions/frame); frame time 16.67 ms",
+              "  command recording (per 10 s): recording thread busy 10.1%; 7946202 deferred, 59499 direct; vk_runtime.cpp:601 x5409 vk_runtime.cpp:221 x3005 tile_manager.cpp:227 x2404 vk_rasterizer.cpp:362 x1202 vk_runtime.cpp:147 x601 vk_bb_velocity_mirror.cpp:436 x601",
+              "  command thread time: waiting for the game to submit 68.8% (recorder idle 68.8%); decoding/preparing draws 21.9% (recorder idle 3.8%); waiting for the draw recorder 9.3% (recorder idle 0.3%)",
+              "  draw recorder idle 73.0% of the time",
+              "  guest write faults: 27329/s",
+              "  guest waits: 915 mutex waits/s, 501 sleeps/s (asked 13572 us, slept 13945 us on average)",
+              "  page protection: 30356 calls/s, 283193 pages/s, 4.6% of a core; 238537 read-only uploads/s skipped without the lock",
+              "  draw recorder per draw: 2.45 us; packet 2% pending ops 4% render targets 7% buffers 10% textures 23% dlss 5% begin pass 4% vertex/index 24% barriers 1% descriptors 5% dynamic 5% record+mirror 5% reset 6%",
+              "  waits at line 245 opcode 0xffff: 3555/s, 8.1% of the time (void __cdecl AmdGpu::Liverpool::Process(std::stop_token))",
+              "  waits at line 311 opcode 0xffff: 330/s, 0.6% of the time (ecl AmdGpu::Liverpool::ProcessCeUpdate(std::span<const u32>))",
+              "  waits at line 539 opcode 0xffff: 360/s, 0.3% of the time (void __cdecl Vulkan::Rasterizer::Draw(bool, u32))",
+              "  waits at line 399 opcode 0xffff: 60/s, 0.2% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 901 opcode 0xffff: 355/s, 0.1% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 803 opcode 0x46: 388/s, 0.0% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))"
+            ]
+          },
+          {
+            "start_line": 5284,
+            "messages": [
+              "Threaded renderer: 137648 draws/s queued, 5048 waits/s, GPU command thread waited 9.3%, draw recorder busy 27.1%",
+              "  render state memo: 90% of draws reused the open pass",
+              "  image lookup memo: 97% of 986437 lookups/s remembered",
+              "  constant ring: 591520 buffers/s copied ahead, 0/s full",
+              "  vertex inputs prepared ahead: 104087/s, 0/s not",
+              "  game frames: 60.0/s, 1743 draws per frame",
+              "  GPU: 10.91 ms/frame executing, 5.76 ms/frame idle between submissions (2.0 submissions/frame); frame time 16.67 ms",
+              "  command recording (per 10 s): recording thread busy 10.1%; 7942298 deferred, 59499 direct; vk_runtime.cpp:601 x5409 vk_runtime.cpp:221 x3005 tile_manager.cpp:227 x2404 vk_rasterizer.cpp:362 x1202 vk_runtime.cpp:147 x601 vk_bb_velocity_mirror.cpp:436 x601",
+              "  command thread time: waiting for the game to submit 68.9% (recorder idle 68.9%); decoding/preparing draws 21.7% (recorder idle 3.8%); waiting for the draw recorder 9.3% (recorder idle 0.3%)",
+              "  draw recorder idle 73.1% of the time",
+              "  guest write faults: 26136/s",
+              "  guest waits: 992 mutex waits/s, 501 sleeps/s (asked 13560 us, slept 13934 us on average)",
+              "  page protection: 29034 calls/s, 275460 pages/s, 4.4% of a core; 238537 read-only uploads/s skipped without the lock",
+              "  draw recorder per draw: 2.42 us; packet 2% pending ops 4% render targets 7% buffers 10% textures 24% dlss 4% begin pass 4% vertex/index 24% barriers 1% descriptors 5% dynamic 5% record+mirror 5% reset 6%",
+              "  waits at line 245 opcode 0xffff: 3555/s, 8.1% of the time (void __cdecl AmdGpu::Liverpool::Process(std::stop_token))",
+              "  waits at line 311 opcode 0xffff: 330/s, 0.6% of the time (ecl AmdGpu::Liverpool::ProcessCeUpdate(std::span<const u32>))",
+              "  waits at line 539 opcode 0xffff: 360/s, 0.3% of the time (void __cdecl Vulkan::Rasterizer::Draw(bool, u32))",
+              "  waits at line 399 opcode 0xffff: 60/s, 0.2% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 901 opcode 0xffff: 355/s, 0.1% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 803 opcode 0x46: 388/s, 0.0% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))"
+            ]
+          }
+        ],
+        "scenario_attribution": "NOT_MEASURED: stdout has no timestamps; do not assign blocks to scenarios by guessed offsets"
+      },
+      "seed_identity": {
+        "copied_home_file_count": 17,
+        "home_file_manifest_sha256": "01ab8a9bae5b5f058a8bfcab3dd0a680a01eec3d1deb0959d094bd2df7407602",
+        "initial_shader_cache": "empty",
+        "patch_manifest": [
+          {
+            "sha256": "c23ee03660b17176e00b8251ede7ea8161577e19fdaabac9b9a5525fe553a99e",
+            "bytes": 1217,
+            "path": "patches\\shadPS4\\BlazeRush.xml"
+          },
+          {
+            "sha256": "a8d04ecf76f1a613859e0160c54a5cc9154fb8338767347e430a611ed9fbdaee",
+            "bytes": 295991,
+            "path": "patches\\shadPS4\\Bloodborne.xml"
+          },
+          {
+            "sha256": "913033139f75ddca43bf7d4f061e203c393ce244b1cd402c75738f5f248067a9",
+            "bytes": 406,
+            "path": "patches\\shadPS4\\BlueRider.xml"
+          },
+          {
+            "sha256": "2cecb3cefcd22ab5df7b19ae8bc11f56b03208416b03377a9065b0021b55678f",
+            "bytes": 1096,
+            "path": "patches\\shadPS4\\BurnoutParadiseRemastered.xml"
+          },
+          {
+            "sha256": "cb850d8edfe525c298c2ea854f1ec3e1555a043cd721810041687f9ba0e92c08",
+            "bytes": 950,
+            "path": "patches\\shadPS4\\Catherine_FullBody.xml"
+          },
+          {
+            "sha256": "2e2644a17994a92494de8c734c99227c7bae515f5644c9c137d2c02ab30ff25c",
+            "bytes": 3589,
+            "path": "patches\\shadPS4\\CrashBandicoot4.xml"
+          },
+          {
+            "sha256": "35917bb046188540f31dc3d0ca9740c09762d1daad2d1f7b031ebf14663671b7",
+            "bytes": 1891,
+            "path": "patches\\shadPS4\\DarkSoulsIII-Orbis.xml"
+          },
+          {
+            "sha256": "7f39d4b6f2636e367d093e14c10b300f746400d2b84c8ca4f5cd54e65fe9bad8",
+            "bytes": 20376,
+            "path": "patches\\shadPS4\\DeadNation.xml"
+          },
+          {
+            "sha256": "cedc9dad5c2b583206560fd0c71d9e043d9d1559d46033cb89699aad85410edb",
+            "bytes": 815,
+            "path": "patches\\shadPS4\\DetroitBecomeHuman.xml"
+          },
+          {
+            "sha256": "e57589cb1df6c8d5cc427b38765e0a878196f58b6d50cc4dde248ec6ef374877",
+            "bytes": 25760,
+            "path": "patches\\shadPS4\\Driveclub.xml"
+          },
+          {
+            "sha256": "56b59c1d95ac3fea47f544d97778b2ef6b27532ecc1f4b80d92c61fd2c4051ec",
+            "bytes": 4823,
+            "path": "patches\\shadPS4\\files.json"
+          },
+          {
+            "sha256": "97a3fd79d9f0c6aa9c34ad9c34dd4843c49b0aaa34708354296ea0a5078c6897",
+            "bytes": 1492,
+            "path": "patches\\shadPS4\\GeometryWarsDimensions.xml"
+          },
+          {
+            "sha256": "b8f3a36694be5fda6b7ba16e9abe648f4c12ba98276a73d84dee65dd8f2fff0f",
+            "bytes": 1307,
+            "path": "patches\\shadPS4\\God_of_War_III_Remastered.xml"
+          },
+          {
+            "sha256": "3b860c12d25e6c58c87edaaf9fc2fe63f20ff813c75ae2321d537d200e912b70",
+            "bytes": 813,
+            "path": "patches\\shadPS4\\GrandTheftAutoV.xml"
+          },
+          {
+            "sha256": "14fff597d032eeeedcc17d0d9af0c8036d30db65a39dc9268caacc6b5ae5f96b",
+            "bytes": 519,
+            "path": "patches\\shadPS4\\GranTurismo7.xml"
+          },
+          {
+            "sha256": "0ba61d19850a66a058c03ebf1db49e7806fcd292f676fa55296d75d23e933ede",
+            "bytes": 690,
+            "path": "patches\\shadPS4\\GranTurismoSport.xml"
+          },
+          {
+            "sha256": "0bbc6d161929412da65c167fad6e211b3f7cb12ec08eaf2f55be280aed4f6aea",
+            "bytes": 7807,
+            "path": "patches\\shadPS4\\GravityRush2.xml"
+          },
+          {
+            "sha256": "336db2c0c8966f1e698d2a72e87554912ff9aab2db1f732eb797f12d4d943784",
+            "bytes": 627,
+            "path": "patches\\shadPS4\\HatsuneMiku_ProjectDIVAFutureTone.xml"
+          },
+          {
+            "sha256": "cfb51ddd1e409b2b58b7e0934f1862dde1958f252d78e6ae4880d5dc9a1dc27f",
+            "bytes": 10148,
+            "path": "patches\\shadPS4\\HorizonZeroDawn.xml"
+          },
+          {
+            "sha256": "40c2e7cc1521f09f585d95e7d4df713078bd1c0cedb5a248798fb339a1cb6f7d",
+            "bytes": 8011,
+            "path": "patches\\shadPS4\\InfamousFirstLight.xml"
+          },
+          {
+            "sha256": "017c77c30d5e0a35ff48d4233ebf9b162490fdfb87dad1e2202550d6ef5f3008",
+            "bytes": 7387,
+            "path": "patches\\shadPS4\\InfamousSecondSon.xml"
+          },
+          {
+            "sha256": "702aafa8f5ea3d8466fd1513739f6f9091f7df1874c68116cc2fdab590858203",
+            "bytes": 1485,
+            "path": "patches\\shadPS4\\Journey.xml"
+          },
+          {
+            "sha256": "aa95718c10c48ab273fea2363b4434115cc56a6056f61ad737d92265759d889c",
+            "bytes": 1817,
+            "path": "patches\\shadPS4\\Knack.xml"
+          },
+          {
+            "sha256": "6bd29d11e6bc4ead52a2706a44fb720d7d01dd0f7409807a3deff84e0ca5f05e",
+            "bytes": 3751,
+            "path": "patches\\shadPS4\\LEGODimensions.xml"
+          },
+          {
+            "sha256": "81ad03b1469c0635cf339d8fd857e0e3a67ae5ac992deaa0c3d7dc841a928bb3",
+            "bytes": 564,
+            "path": "patches\\shadPS4\\LittleBigPlanet3.xml"
+          },
+          {
+            "sha256": "64683ee7be55e28b8ab8b63da7f53fe4e56daed921eeb68bd21b3fa14716ee46",
+            "bytes": 2638,
+            "path": "patches\\shadPS4\\MetaphorRefantazio.xml"
+          },
+          {
+            "sha256": "cd731839b0c872549166685a54bb15d77f7d020d6ff76a9470a1ce0f2ac62d62",
+            "bytes": 3077,
+            "path": "patches\\shadPS4\\MinecraftDungeons.xml"
+          },
+          {
+            "sha256": "08df06b0ebea838298e662fc248a283fab39a0071838f911539d19120b3f20a4",
+            "bytes": 865,
+            "path": "patches\\shadPS4\\MyFirstGranTurismo.xml"
+          },
+          {
+            "sha256": "29e97846f2cde007c8e633313ba9cca0723e3a7f02bc0b3e4aa4dae78ff1b2e0",
+            "bytes": 1253,
+            "path": "patches\\shadPS4\\NatsukiChronicles.xml"
+          },
+          {
+            "sha256": "4060622bd00d1ba9733b5d5439c685b321f2bf3b45a771594fda92b5e9f7033c",
+            "bytes": 10113,
+            "path": "patches\\shadPS4\\NHL19.xml"
+          },
+          {
+            "sha256": "3480f124fda6a13a255ce973bf1708497f00e13d951d70a43a99eef98758bf61",
+            "bytes": 3736,
+            "path": "patches\\shadPS4\\Persona3_DancingInMoonlight.xml"
+          },
+          {
+            "sha256": "27549c374e10b3c250acf545a03827eda30d2314d9f6228e1e3c0b7e04fc1de6",
+            "bytes": 4698,
+            "path": "patches\\shadPS4\\Persona4_DancingAllNight.xml"
+          },
+          {
+            "sha256": "9af69faa0f5f17cd10e66169b70ddd0d99290a6042523713ff55d1942a246a83",
+            "bytes": 3736,
+            "path": "patches\\shadPS4\\Persona5_DancingInStarlight.xml"
+          },
+          {
+            "sha256": "0b72533587a8e0d0cb0fab9b6c8e04948648193aac322c741e836abb92909faf",
+            "bytes": 1144,
+            "path": "patches\\shadPS4\\Persona5_Royal.xml"
+          },
+          {
+            "sha256": "d6992bf66dd8a8f16469cd66e77a7c6978a63130b45d0c77a0eddf249758c256",
+            "bytes": 2201,
+            "path": "patches\\shadPS4\\PT.xml"
+          },
+          {
+            "sha256": "53d10d74f833e877a1f57d44bd7a0772c82010a2986cdaf1fd2ca2e73673fa72",
+            "bytes": 1783,
+            "path": "patches\\shadPS4\\Ratchet_and_Clank.xml"
+          },
+          {
+            "sha256": "ce7186a1197c2f66a41c142bfbec4d70a9ca25fab152d9f75e9deb15ab0f5285",
+            "bytes": 9133,
+            "path": "patches\\shadPS4\\SakuraWars.xml"
+          },
+          {
+            "sha256": "13d823f9f4a92ee70bcc2d69490a23d3958eff3e9f212a8da890b6f8e69fbd44",
+            "bytes": 4289,
+            "path": "patches\\shadPS4\\SonicRacingCrossworlds.xml"
+          },
+          {
+            "sha256": "0c72bde70f25b4a4cc44eee03a2c1997be6e17857d0bf253d970d5cb08a7d21c",
+            "bytes": 2026,
+            "path": "patches\\shadPS4\\SotC.xml"
+          },
+          {
+            "sha256": "359a670c5a7272228f2c350a2c9e2f39c689305061840474c9ccaaa0f0cf1f62",
+            "bytes": 2622,
+            "path": "patches\\shadPS4\\TheLastGuardian.xml"
+          },
+          {
+            "sha256": "05bb7cb1cd71c283c995730d7830628b93ffebe1caf7c4a76007e2dc736937b7",
+            "bytes": 1985,
+            "path": "patches\\shadPS4\\TheLastOfUsRemastered.xml"
+          },
+          {
+            "sha256": "b45c64e37ca87b779c2183a00709d9b1408c57e1904f8981e7bfd1e2a4fbeeae",
+            "bytes": 2714,
+            "path": "patches\\shadPS4\\TheOrder1886.xml"
+          },
+          {
+            "sha256": "4b4d4e1f1e23bd7dcba2848dedde3caa1fca3a3a22e34a484de0afc619d4db0f",
+            "bytes": 6469,
+            "path": "patches\\shadPS4\\TheQuarry.xml"
+          },
+          {
+            "sha256": "7702a1fd6965caac9a4c86b56216c4a1cd02fb6313b866717264cea728a28251",
+            "bytes": 884,
+            "path": "patches\\shadPS4\\TheWitcher3.xml"
+          },
+          {
+            "sha256": "009fc4ad8e705a252ce70b18944dafed902dfc4479a8f7c7d5f1fe81c3b3e813",
+            "bytes": 5285,
+            "path": "patches\\shadPS4\\UnchartedTheNathanDrakeCollection.xml"
+          },
+          {
+            "sha256": "dba40bf1dba0bb4ce5867f88989630bc46d13ff7f51aa1c81dae5c7dad2ae4bb",
+            "bytes": 3341,
+            "path": "patches\\shadPS4\\UntilDawn.xml"
+          },
+          {
+            "sha256": "cf31ecd78697f048066fe3d5502294766262971e98668a49851b1bde9cd1aefb",
+            "bytes": 1225,
+            "path": "patches\\shadPS4\\Windjammers2.xml"
+          },
+          {
+            "sha256": "e48c5edb889ae38b5875df62107c3011bfc11a9211a90180b8112ca3a05cf93f",
+            "bytes": 1265,
+            "path": "patches\\shadPS4\\YokusIslandExpress.xml"
+          }
+        ],
+        "cache_warmup": "world loaded before neutral stationary interval; shader cache not hashed while active"
+      },
+      "xinput": {
+        "final_status": {
+          "status": "stopped",
+          "utc": "2026-10-11T16:25:50.124969+00:00",
+          "reason": "game_exited",
+          "xinput_index": 0,
+          "virtual_device_remove_result": 536870912,
+          "virtual_device_removed": true
+        },
+        "command_count": 31,
+        "error_count": 0,
+        "neutral_readback_verified": true,
+        "device_removed": true,
+        "game_reaction": "movement/camera, lowered stamina after attacks/rolls, and lamp travel Central Yharnam to Hunters Dream visually confirmed; no verified enemy fight"
+      }
+    },
+    {
+      "run_id": "vulkan-installed-gpu-1",
+      "launch": {
+        "matched_dx12_benchmark": false,
+        "pid": 19988,
+        "game_sha256": "d65f0b4f01d59166aed16f8604196d8b7dd805abbf0758b356e8f1354c9429f9",
+        "source_revision": "974f8c21-dirty: exact patch unavailable",
+        "config_note": "Installed profile copied, windowed 1920x1080; DLSS output setting 3840x2160 and FGx4 retained",
+        "executable": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-gpu-1\\core\\shadPS4.exe",
+        "runtime_files": [
+          {
+            "name": "amd_fidelityfx_vk.dll",
+            "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78"
+          },
+          {
+            "name": "avcodec-61.dll",
+            "sha256": "83176ff8ce3394f927123cac7b53b25911dbde632b9bdfe485893e0f8497c189"
+          },
+          {
+            "name": "avformat-61.dll",
+            "sha256": "9e2931a1bea307b084f222cf8fa6129ce2b143980f16ce0aad6f57936a313ba3"
+          },
+          {
+            "name": "avutil-59.dll",
+            "sha256": "0aa5fb2155e6bb0e37c1fc202f60d86a7eea1d4bc6e2b538b4f55ff95e06e5b3"
+          },
+          {
+            "name": "icuuc.dll",
+            "sha256": "59d134ddc15ae0594f0a328979f8201662fc82634ddb7c537b156e7cf871f5eb"
+          },
+          {
+            "name": "nvngx_dlss.dll",
+            "sha256": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
+          },
+          {
+            "name": "nvngx_dlssg.dll",
+            "sha256": "ff6e90eb78b827927dff5b4ecc6b1c870c2e9bca29ed9f48c7d348cc9e170b82"
+          },
+          {
+            "name": "Qt6Concurrent.dll",
+            "sha256": "e18204bcd9bceaf9a1f1897625f870aec519350b4007e92da196af7ae6a824a0"
+          },
+          {
+            "name": "Qt6Core.dll",
+            "sha256": "864afdaeae550b6e32b64936c10d87165a8b901d348f5739bea8be42cbf23a71"
+          },
+          {
+            "name": "Qt6Gui.dll",
+            "sha256": "2f5c0f45984523b40fb1ea09dc2a06d3d9eedf8e1f999db83d2c10fada6fc937"
+          },
+          {
+            "name": "Qt6Multimedia.dll",
+            "sha256": "5e1c72aa9a469bfdd91ccc822cf8b3ac0dba3ba87bade8aad69436900185fe71"
+          },
+          {
+            "name": "Qt6Network.dll",
+            "sha256": "f06c85354c55f167704431725cd85af053807934b203df72b2ab211e0f5daa6f"
+          },
+          {
+            "name": "Qt6Widgets.dll",
+            "sha256": "a0051cef049439096fdeec079e0e5144dae1e0d80c6c4888b0826b8a539189eb"
+          },
+          {
+            "name": "shadps4_dlss.dll",
+            "sha256": "1447c5b632bf3859f33892f8898750904fe7c8a590008251437d6b226cdc7791"
+          },
+          {
+            "name": "shadPS4.exe",
+            "sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          {
+            "name": "sl.common.dll",
+            "sha256": "82924a8954dd671e09351c5de0eb87ad0eb25b944cc9f9ab955ca1d9950de15d"
+          },
+          {
+            "name": "sl.dlss_g.dll",
+            "sha256": "f4a6b2b14dcc0b1485989e430d3b4e3a44ac1800b92ba1ad74f476e64fb2b09c"
+          },
+          {
+            "name": "sl.interposer.dll",
+            "sha256": "8c87c9499461da561edd529aa9bf7831d67d7b94ebb1c1a5ed54ef4934e1ea4c"
+          },
+          {
+            "name": "sl.pcl.dll",
+            "sha256": "f13d51cfa05f4cd514df2026049e2db8adf359221713170ad386fd499915b582"
+          },
+          {
+            "name": "sl.reflex.dll",
+            "sha256": "0ce9725e3e03ea9e7f81d008b57f33ee365973d2e349131c8b1c3e3378fe2db0"
+          },
+          {
+            "name": "swresample-5.dll",
+            "sha256": "f2ca17734a0b1e0ceb0af41a2081c66fd0887897a02f410659ce877d76b53e34"
+          },
+          {
+            "name": "swscale-8.dll",
+            "sha256": "7e7d4d8b3146b80fb8348f9eeb93131f8f677b9e886cc25dd57fd498603ee345"
+          }
+        ],
+        "game": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\CUSA03173\\eboot.bin",
+        "sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773",
+        "start_utc": "2026-10-11T16:33:20.7279901Z",
+        "isolated_profile": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-gpu-1"
+      },
+      "exit": {
+        "exit_utc": "2026-10-11T16:48:32.7479135Z",
+        "exit_code": -1073740791
+      },
+      "resource_manifest": {
+        "mode": "A",
+        "session_id": "d7732f3f520f43be993f080d76c5e137",
+        "segment_id": 134362100004018721,
+        "started_utc": "2026-10-11T16:33:53.621527+00:00",
+        "identity": {
+          "pid": 19988,
+          "executable": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-gpu-1\\core\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362100004018721,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "collector_pid": 36948,
+        "counter_errors": {},
+        "monitor_sha256": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+        "interval_s": 1,
+        "clock": "perf_counter (Windows QPC), UTC paired per sample",
+        "frame_id": null,
+        "frame_id_reason": "External counters cannot identify a new guest frame",
+        "dropped_etw_events": null,
+        "dropped_etw_reason": "No ETW event stream captured by this counter collector",
+        "profile_root": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-gpu-1\\user",
+        "build_label": "Installed Vulkan GPU diagnostic copy",
+        "config.json": {
+          "sha256": "58a829756cf61a2bfd61c0f07ac3f8f83beff9964be778a9ff0ee6324e73755b"
+        },
+        "custom_configs/CUSA03173.json": {
+          "sha256": "7c7fb79bcab350f36b91cb652b4b01650a2073d821aced0e1a69d4440222eb99"
+        },
+        "dlss.ini": {
+          "sha256": "6649f5d9921e2b5bc1b0f772848a5935fd6dd0d3f45cfd751ccfd41b56c66e96"
+        },
+        "shader_cache_identity": {
+          "root": "F:\\PS4Dev\\handoff\\performance-recovery-20261011\\vulkan-installed-gpu-1\\user\\cache",
+          "method": "path only; mutable contents not hashed during gameplay",
+          "content_hash": null
+        },
+        "dxgi_adapters": [
+          {
+            "index": 0,
+            "description": "NVIDIA GeForce RTX 5080",
+            "vendor_id": 4318,
+            "device_id": 11266,
+            "luid_pdh": "luid_0x00000000_0x000170C8",
+            "dedicated_video_bytes": 16753098752,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 1,
+            "description": "AMD Radeon(TM) Graphics",
+            "vendor_id": 4098,
+            "device_id": 5056,
+            "luid_pdh": "luid_0x00000000_0x00018737",
+            "dedicated_video_bytes": 2119970816,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 2,
+            "description": "NVIDIA GeForce RTX 5080",
+            "vendor_id": 4318,
+            "device_id": 11266,
+            "luid_pdh": "luid_0x00000000_0x000223E7",
+            "dedicated_video_bytes": 16753098752,
+            "shared_system_bytes": 48975527936,
+            "flags": 0
+          },
+          {
+            "index": 3,
+            "description": "Microsoft Basic Render Driver",
+            "vendor_id": 5140,
+            "device_id": 140,
+            "luid_pdh": "luid_0x00000000_0x000186EF",
+            "dedicated_video_bytes": 0,
+            "shared_system_bytes": 48975527936,
+            "flags": 2
+          }
+        ],
+        "revision": "974f8c21-dirty",
+        "title_id": "CUSA03173",
+        "sensor_test": false,
+        "frame_sources": {
+          "guest_fps": "unavailable: no guest frame identity",
+          "integration": "existing FRAME-GEN log: emulator EndPresent and Streamline reported shown, rounded 5-window updates; not guest simulation",
+          "presentmon": "not configured",
+          "fg_requested": "x4 requested (dlss)"
+        },
+        "coverage_definition": [
+          "process_cpu",
+          "user_cpu",
+          "kernel_cpu",
+          "thread_cpu",
+          "thread_names",
+          "working_set",
+          "private_bytes",
+          "process_io",
+          "page_faults",
+          "system_available_ram",
+          "memory_pressure",
+          "gpu_engines",
+          "process_dedicated_vram",
+          "process_shared_gpu_memory",
+          "process_gpu_commit",
+          "adapter_telemetry",
+          "collector_cpu",
+          "sampling_jitter",
+          "guest_frame_ids",
+          "host_present_rate",
+          "display_rate",
+          "generated_frame_ids",
+          "cpu_stacks",
+          "gpu_stage_timestamps",
+          "pm4_counts",
+          "buffer_transfer_bytes",
+          "texture_detile_time",
+          "frame_latency"
+        ],
+        "component_sha256": {
+          "mode_a.py": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+          "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+          "report.py": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+          "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+          "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+        },
+        "exit_code": 3221226505
+      },
+      "qpc_utc_anchor": {
+        "offset_s": 1791602954.107796,
+        "anchor_deviation_s": {
+          "n": 880,
+          "median": 2.47955322265625e-05,
+          "p95": 9.512901306152344e-05,
+          "minimum": 0.0,
+          "maximum": 0.00023317337036132812,
+          "mean": 3.30762429670854e-05
+        },
+        "source": "Win32 QPC/perf_counter and Windows steady_clock checked for same domain; GPU clock is not calibrated"
+      },
+      "csv": {
+        "bytes": 30581552,
+        "sha256": "b389298a95f3914cad50046b29887c63b28bf27b7dcc9dfd2358b2676fd6baa3",
+        "events": {
+          "multiplier": 1,
+          "reflex_options": 1,
+          "vblank": 54434,
+          "flip_dequeue": 54434,
+          "frame_pool_wait": 54321,
+          "frame_fence_wait": 54321,
+          "present_frame": 54320,
+          "acquire": 54321,
+          "queue_present": 54321,
+          "dlssg_state": 54319,
+          "end_present": 54320,
+          "present": 54320,
+          "present_and_lock": 54320,
+          "flip_submit": 54294,
+          "game_submit": 54294,
+          "reflex_sleep": 54293,
+          "flip_ready": 54293,
+          "flip_present": 54292
+        },
+        "duplicate_nonzero_tag_events": {},
+        "zero_tag_events": {
+          "multiplier": 1,
+          "reflex_options": 1,
+          "vblank": 54434,
+          "flip_dequeue": 142,
+          "frame_pool_wait": 54321,
+          "frame_fence_wait": 54321,
+          "present_frame": 28,
+          "acquire": 54321,
+          "queue_present": 54321,
+          "dlssg_state": 54319,
+          "end_present": 54320,
+          "present": 54320,
+          "present_and_lock": 54320,
+          "flip_submit": 1,
+          "game_submit": 1,
+          "flip_ready": 1,
+          "flip_present": 1
+        },
+        "malformed_rows": 1,
+        "explicit_drop_counter": "NOT_AVAILABLE"
+      },
+      "scenarios": [
+        {
+          "id": "A-stationary-Central-Yharnam",
+          "start_utc": "2026-10-11T16:35:56.588999+00:00",
+          "end_utc": "2026-10-11T16:36:36.311779+00:00",
+          "duration_s": 39.722779989242554,
+          "unique_tagged_guest_flip_submissions": 2383,
+          "tagged_flip_submission_cadence_per_s": 59.990766020035544,
+          "submission_intervals_ms": {
+            "n": 2382,
+            "median": 16.6675,
+            "p95": 17.497,
+            "minimum": 6.236,
+            "maximum": 29.11,
+            "mean": 16.67087237615449
+          },
+          "complete_tagged_chains": 2383,
+          "latency": {
+            "flip_submit_to_flip_ready_ms": {
+              "n": 2383,
+              "median": 4.771,
+              "p95": 5.4,
+              "minimum": 4.157,
+              "maximum": 11.148,
+              "mean": 4.839305077633235
+            },
+            "flip_ready_to_flip_dequeue_ms": {
+              "n": 2383,
+              "median": 15.738,
+              "p95": 21.978,
+              "minimum": 3.72,
+              "maximum": 22.463,
+              "mean": 16.903897608057072
+            },
+            "flip_submit_to_flip_present_ms": {
+              "n": 2383,
+              "median": 20.767,
+              "p95": 26.902,
+              "minimum": 9.242,
+              "maximum": 27.314,
+              "mean": 22.008674360050357
+            },
+            "game_submit_to_flip_ready_ms": {
+              "n": 2383,
+              "median": 4.763,
+              "p95": 5.39,
+              "minimum": 4.15,
+              "maximum": 11.142,
+              "mean": 4.832534200587495
+            }
+          },
+          "missing": {
+            "game_submit": 0,
+            "flip_ready": 0,
+            "flip_dequeue": 0,
+            "flip_present": 0,
+            "present_frame": 0
+          }
+        }
+      ],
+      "stationary_resource_metrics": {
+        "cpu_core_equivalents": {
+          "n": 40,
+          "median": 4.351585441557291,
+          "p95": 4.811656035546734,
+          "minimum": 4.015578419286254,
+          "maximum": 4.952613395032461,
+          "mean": 4.376561500415871
+        },
+        "working_set_bytes": {
+          "n": 40,
+          "median": 6205947904.0,
+          "p95": 6495088640,
+          "minimum": 6205136896,
+          "maximum": 6495834112,
+          "mean": 6262407577.6
+        },
+        "private_bytes": {
+          "n": 40,
+          "median": 6128898048.0,
+          "p95": 6128898048,
+          "minimum": 6128787456,
+          "maximum": 6128898048,
+          "mean": 6128864870.4
+        },
+        "thread_count": {
+          "n": 40,
+          "median": 128.0,
+          "p95": 128,
+          "minimum": 128,
+          "maximum": 128,
+          "mean": 128
+        },
+        "top_thread_cpu_core_equivalents": [
+          {
+            "name": "NexusRevolution Socket",
+            "n": 40,
+            "median": 0.9999924000455054,
+            "p95": 1.000216246768994,
+            "minimum": 0.9842733245648109,
+            "maximum": 1.0004684192992437,
+            "mean": 0.998828357069081
+          },
+          {
+            "name": "Game:Main",
+            "n": 40,
+            "median": 0.9532580327601569,
+            "p95": 1.0000149002481586,
+            "minimum": 0.8281253312526548,
+            "maximum": 1.0001416200547706,
+            "mean": 0.9550789685175983
+          },
+          {
+            "name": "shadPS4:GpuDrawRecorder",
+            "n": 40,
+            "median": 0.328134351894082,
+            "p95": 0.40617875624745153,
+            "minimum": 0.2656305782459643,
+            "maximum": 0.46896957154652047,
+            "mean": 0.33945444912603473
+          },
+          {
+            "name": "shadPS4:GpuCommandProcessor",
+            "n": 40,
+            "median": 0.3282047834298967,
+            "p95": 0.40617875624745153,
+            "minimum": 0.2500052501138488,
+            "maximum": 0.46896957154652047,
+            "mean": 0.33750117624476045
+          },
+          {
+            "name": "shadPS4:GpuCmdRecorder",
+            "n": 40,
+            "median": 0.3125464145784739,
+            "p95": 0.37498462562241636,
+            "minimum": 0.2343799219817332,
+            "maximum": 0.4533372524949698,
+            "mean": 0.3253916684723653
+          },
+          {
+            "name": "shadPS4:AudioOutputThread:0x5cda0200",
+            "n": 40,
+            "median": 0.22653710552351042,
+            "p95": 0.2500052501138488,
+            "minimum": 0.2030814999424666,
+            "maximum": 0.25011104930709055,
+            "mean": 0.22734437769795593
+          },
+          {
+            "name": "shadPS4:AudioOutputThread:0x5cda1da0",
+            "n": 40,
+            "median": 0.23433910012114423,
+            "p95": 0.26561865171999854,
+            "minimum": 0.18749265028671197,
+            "maximum": 0.28131081940377956,
+            "mean": 0.22656322209353663
+          },
+          {
+            "name": "SDLTimer",
+            "n": 40,
+            "median": 0.10936831763842941,
+            "p95": 0.17187541249912874,
+            "minimum": 0.06249493166064517,
+            "maximum": 0.2030814999424666,
+            "mean": 0.11015687645295426
+          },
+          {
+            "name": "shadPS4:PresentThread",
+            "n": 40,
+            "median": 0.1249896821016148,
+            "p95": 0.12501770250684632,
+            "minimum": 0.06249463796106689,
+            "maximum": 0.12505855241240546,
+            "mean": 0.1054688177292924
+          },
+          {
+            "name": "unnamed-18712",
+            "n": 40,
+            "median": 0.07812030109763489,
+            "p95": 0.10937504375035063,
+            "minimum": 0.0468649615251846,
+            "maximum": 0.10937662971464233,
+            "mean": 0.07929717077718357
+          },
+          {
+            "name": "nv.sl.dlss_g.thread.dlssg",
+            "n": 40,
+            "median": 0.0624991406369279,
+            "p95": 0.06251351542306212,
+            "minimum": 0.04687067852327309,
+            "maximum": 0.06252927620620273,
+            "mean": 0.06054687633963592
+          },
+          {
+            "name": "GXWorker:5",
+            "n": 40,
+            "median": 0.06249452860529258,
+            "p95": 0.09374962500137304,
+            "minimum": 0.0,
+            "maximum": 0.09376327688013474,
+            "mean": 0.05820320275277366
+          }
+        ],
+        "gpu_engine_instance_percent": {
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D": {
+            "n": 40,
+            "median": 76.62495311851976,
+            "p95": 90.41835910117952,
+            "minimum": 71.32297138201186,
+            "maximum": 90.60648948733947,
+            "mean": 79.7348708305485
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          },
+          "pid_19988_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1": {
+            "n": 40,
+            "median": 0.0,
+            "p95": 0.0,
+            "minimum": 0.0,
+            "maximum": 0.0,
+            "mean": 0.0
+          }
+        },
+        "gpu_engine_source": "PDH process engine instances on selected NVIDIA adapter; each instance retained separately",
+        "gpu_process_dedicated_bytes": {
+          "n": 40,
+          "median": 4461600768.0,
+          "p95": 4461600768.0,
+          "minimum": 4461600768.0,
+          "maximum": 4461600768.0,
+          "mean": 4461600768.0
+        },
+        "gpu_process_shared_bytes": {
+          "n": 40,
+          "median": 120487936.0,
+          "p95": 120487936.0,
+          "minimum": 120487936.0,
+          "maximum": 120487936.0,
+          "mean": 120487936.0
+        },
+        "gpu_process_committed_bytes": {
+          "n": 40,
+          "median": 4582154240.0,
+          "p95": 4582154240.0,
+          "minimum": 4582154240.0,
+          "maximum": 4582154240.0,
+          "mean": 4582154240.0
+        },
+        "io_observed_interval_s": 38.999932050704956,
+        "io_deltas": {
+          "read_ops": 3504,
+          "write_ops": 1927,
+          "other_ops": 84217,
+          "read_bytes": 4130055,
+          "write_bytes": 1507994,
+          "other_bytes": 1388101
+        },
+        "adapter_wide_nvidia": {
+          "gpu_util_percent": {
+            "n": 8,
+            "median": 76.0,
+            "p95": 81.0,
+            "minimum": 73.0,
+            "maximum": 82.0,
+            "mean": 77.125
+          },
+          "memory_util_percent": {
+            "n": 8,
+            "median": 40.5,
+            "p95": 41.0,
+            "minimum": 40.0,
+            "maximum": 43.0,
+            "mean": 40.75
+          },
+          "used_memory_mib": {
+            "n": 8,
+            "median": 6824.0,
+            "p95": 6825.0,
+            "minimum": 6819.0,
+            "maximum": 6830.0,
+            "mean": 6823.625
+          },
+          "total_memory_mib": {
+            "n": 8,
+            "median": 16303.0,
+            "p95": 16303.0,
+            "minimum": 16303.0,
+            "maximum": 16303.0,
+            "mean": 16303.0
+          },
+          "power_w": {
+            "n": 8,
+            "median": 227.91,
+            "p95": 228.9,
+            "minimum": 226.54,
+            "maximum": 228.96,
+            "mean": 227.92000000000002
+          },
+          "temperature_c": {
+            "n": 8,
+            "median": 64.0,
+            "p95": 66.0,
+            "minimum": 63.0,
+            "maximum": 67.0,
+            "mean": 64.5
+          },
+          "graphics_clock_mhz": {
+            "n": 8,
+            "median": 2880.0,
+            "p95": 2880.0,
+            "minimum": 2880.0,
+            "maximum": 2880.0,
+            "mean": 2880.0
+          },
+          "memory_clock_mhz": {
+            "n": 8,
+            "median": 15001.0,
+            "p95": 15001.0,
+            "minimum": 15001.0,
+            "maximum": 15001.0,
+            "mean": 15001.0
+          }
+        },
+        "adapter_wide_nvidia_scope": "whole adapter including other processes; memory utilization is not process bandwidth"
+      },
+      "stationary_host_scope_duration_ms": {
+        "game_submit": {
+          "n": 2383,
+          "median": 0.006,
+          "p95": 0.009,
+          "minimum": 0.003,
+          "maximum": 0.043,
+          "mean": 0.006703734788082249
+        },
+        "reflex_sleep": {
+          "n": 2383,
+          "median": 2.098,
+          "p95": 16.628,
+          "minimum": 0.025,
+          "maximum": 28.555,
+          "mean": 6.411541754091481
+        },
+        "acquire": {
+          "n": 2382,
+          "median": 0.018,
+          "p95": 0.026,
+          "minimum": 0.009,
+          "maximum": 0.113,
+          "mean": 0.01867548278757347
+        },
+        "queue_present": {
+          "n": 2382,
+          "median": 0.059,
+          "p95": 0.079,
+          "minimum": 0.033,
+          "maximum": 0.315,
+          "mean": 0.05856381192275399
+        },
+        "flip_present": {
+          "n": 2382,
+          "median": 0.27,
+          "p95": 0.33,
+          "minimum": 0.144,
+          "maximum": 0.587,
+          "mean": 0.2628266162888329
+        },
+        "frame_pool_wait": {
+          "n": 2382,
+          "median": 0.0,
+          "p95": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.004,
+          "mean": 1.6792611251049538e-06
+        },
+        "frame_fence_wait": {
+          "n": 2382,
+          "median": 0.002,
+          "p95": 0.003,
+          "minimum": 0.001,
+          "maximum": 0.014,
+          "mean": 0.0023790931989924433
+        }
+      },
+      "source_references": {
+        "base_revision": "974f8c211c5c6b277f8da2fadcd30c4d770cb27b",
+        "dirty_patch_available": false,
+        "files": [
+          {
+            "path": "src/core/linker.cpp",
+            "sha256": "5eaf99db4c792ac751aab00bdf9abfb1d9857bb3e2855f4756d96763d86b9412",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/linker.cpp"
+          },
+          {
+            "path": "src/core/memory.cpp",
+            "sha256": "6f65009046cd1d04e7719983fcab95426641a3936f2dfe6772b8172112986b34",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/memory.cpp"
+          },
+          {
+            "path": "src/core/libraries/gnmdriver/gnmdriver.cpp",
+            "sha256": "aa39decf3491a11b8c2ed2c43b56aa21e97574de8f7642345a9b616c2be7c0a4",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/gnmdriver/gnmdriver.cpp"
+          },
+          {
+            "path": "src/core/libraries/kernel/memory.cpp",
+            "sha256": "8116733ec6b54934786dfd2a4fc5ba33517666b142c86a57faf8005266da0064",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/kernel/memory.cpp"
+          },
+          {
+            "path": "src/core/libraries/kernel/threads/pthread.cpp",
+            "sha256": "50ba7c72c103a2e43e8c11dca9e77b4b9d3da10674db04fabd1a055ca40fb6f3",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/kernel/threads/pthread.cpp"
+          },
+          {
+            "path": "src/core/libraries/videoout/driver.cpp",
+            "sha256": "ce65dfd25e362de59e48e584215bc6fcd38c45675aa93b0174433317a60045cf",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/driver.cpp"
+          },
+          {
+            "path": "src/core/libraries/videoout/driver.h",
+            "sha256": "87e6eafe9aba535b2745fdf75697c1897a51f35f31cdc012085eac4be6fd2e88",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/driver.h"
+          },
+          {
+            "path": "src/core/libraries/videoout/video_out.cpp",
+            "sha256": "c3c3c859153f2c64cf59ed83e46c7d3da10804ee5e864ea42888c023add949f9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/core/libraries/videoout/video_out.cpp"
+          },
+          {
+            "path": "src/shader_recompiler/recompiler.cpp",
+            "sha256": "15610f38b69ea76b531fd96b3ad2490d8ed80816cfd9a7b75c4e81813d7331c8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/shader_recompiler/recompiler.cpp"
+          },
+          {
+            "path": "src/shader_recompiler/backend/spirv/emit_spirv.cpp",
+            "sha256": "37aa92e754ad15cef638be5deb1ec7428fb4b7ee7a9d820966f1fd359841e5d9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/shader_recompiler/backend/spirv/emit_spirv.cpp"
+          },
+          {
+            "path": "src/video_core/page_manager.cpp",
+            "sha256": "efbf34e06fd63914b51825462749f2f17a45a27bf1f1a4cfe6673685e3e671b8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/page_manager.cpp"
+          },
+          {
+            "path": "src/video_core/amdgpu/liverpool.cpp",
+            "sha256": "8ab9b0962de2410351a3bc57716beadc37639846f18d70c76613078985fc8dfe",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/amdgpu/liverpool.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer.cpp",
+            "sha256": "0029e8bf5eaf437af9dd40ec1f34e77e1a05658549058619811db35cf0038801",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer_cache.cpp",
+            "sha256": "83cab7f7b4af3966238b150060ec6a71a3800b4ec879ed3922b37a5d75be76f9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer_cache.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/buffer_cache.h",
+            "sha256": "c57ff60d98e50a27fb8f4270dcad7f695bab5d13e64379fe36aef3d2913a4a6b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/buffer_cache.h"
+          },
+          {
+            "path": "src/video_core/buffer_cache/fault_manager.cpp",
+            "sha256": "923e08b7d416473f66b74b44580decf53f6e8dbbb4b538696b809533077cb43e",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/fault_manager.cpp"
+          },
+          {
+            "path": "src/video_core/buffer_cache/memory_tracker.h",
+            "sha256": "af7da45a6ce551824324e8270bd40e14dfe430b900a44bbd34d1afe2fc20da62",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/memory_tracker.h"
+          },
+          {
+            "path": "src/video_core/buffer_cache/region_manager.h",
+            "sha256": "edd33db658a8b9003b730eff178c3106fc1f40788f38e6b566ca88b4a60df277",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/buffer_cache/region_manager.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_bb_frame_gen.cpp",
+            "sha256": "ad242a206627f64a11013d4baeb418830365a1d43e57f4ee253d0e1c262565f6",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_bb_frame_gen.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_bb_temporal_dlss.cpp",
+            "sha256": "8e471389063ae410e3312413e95429cf9b23fdfe703b0f7e5855ca35301cd4f8",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_bb_temporal_dlss.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_compute_pipeline.cpp",
+            "sha256": "6aa63e6e148aa6f4fc47a0cb23dfabb28b5a0edb7b3199b185f29df64fae1333",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_draw_pipe.h",
+            "sha256": "f826f2341e9f8c52a66fd63e2691f49bc611d188d203dedf42048aebc2bae2fe",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_draw_pipe.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_gpu_profiler.cpp",
+            "sha256": "a8c6b3cf6b400740b9ecfee042d57cb587763b06bccc210410af046aebe1e04f",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_gpu_profiler.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_gpu_profiler.h",
+            "sha256": "fd0adb13780989c071b4a93583c1c7a53d1be82b2fe355bf901fdc8ad878214b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_gpu_profiler.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp",
+            "sha256": "3d68a753393f617727678817fcbfd49f89f78f05b43636e1d28b0abd9f9d7d0a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+            "sha256": "92a5a5a49d617cf4f99371d479aabcd31b7b27e418216d14facf244503746b93",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_presenter.cpp",
+            "sha256": "9b50db4c46ebdb09f9da908d63beac9d16c44b25a66396d9e304f6aafba15eda",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_presenter.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+            "sha256": "5bef9e638f7e9df2125d1d4e6b05351f23ac7aaeeb5e10052ac2a1318da4be6b",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+            "sha256": "7e56dafe7c6e9f366fde039cf9f1382544c45b387e6fe882572777ad2af52f3a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_runtime.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+            "sha256": "3cd777eaca3703b3ff6d97468a9190d98dabe93931d06c5140c2e2d754ca2355",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_scheduler.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_scheduler.h",
+            "sha256": "3465a409f6c79db77aa2cf46edbf8d2380abd077bc434d0ed2c283915f53e6f3",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_scheduler.h"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_shader_hle.cpp",
+            "sha256": "86cbe13e2d0a1d71b06a90742a282a9de75dde1dc44d0f7c5e2fbcbb039dc0bb",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_shader_hle.cpp"
+          },
+          {
+            "path": "src/video_core/renderer_vulkan/vk_swapchain.cpp",
+            "sha256": "495cd903ebb1c2fd035a36197177c377ea6a2c1addaacae059a84ae9674cb054",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/renderer_vulkan/vk_swapchain.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/image.cpp",
+            "sha256": "99fa2b8b2eaacc16f44064a8250b4e0538890ece98a59b8c1169fa6a8805541a",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/image.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/texture_cache.cpp",
+            "sha256": "125c6c5eabf82037add563a396957a2bb92a7f98f10ced42cd2cf51ff04a6ac9",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/texture_cache.cpp"
+          },
+          {
+            "path": "src/video_core/texture_cache/texture_cache.h",
+            "sha256": "692cc0dfc3ccf37702a6021b1a225117cadc5f1c48346f74e248c005cdd23a52",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/texture_cache.h"
+          },
+          {
+            "path": "src/video_core/texture_cache/tile_manager.cpp",
+            "sha256": "25683318ed2babc8ef2f89197577d644fcbaf931a91c6b0d12d848551a9c4aa6",
+            "url": "https://raw.githubusercontent.com/eFMann/shadPS4-Bloodborne-DLSS-FSR/974f8c211c5c6b277f8da2fadcd30c4d770cb27b/src/video_core/texture_cache/tile_manager.cpp"
+          }
+        ]
+      },
+      "gpu_completed_guest_fps": "NOT_MEASURED",
+      "guest_simulation_cpu_time": "NOT_MEASURED",
+      "limitations": [
+        "Tagged flip submission is not GPU completion or guest simulation rate",
+        "flip_ready follows preparation/submission; it is not current-frame fence completion",
+        "flip_present duration ends after host Present call, not display",
+        "No guessed nearest-flip PM4/resource ownership",
+        "Internal 10-second aggregate blocks include menu/loading/movement; their UTC is unavailable",
+        "Core/DLL are byte-identical installed copies, configs/profile isolated",
+        "No matched DX12 speed ratio from different assets/profile/scene/patches",
+        "Draw scheduler timing includes its DLSS hooks, excludes presenter jobs; between-submission gaps may contain uploads/presenter/FG and are not measured hardware idle",
+        "GPU stage profiling changes render-pass boundaries and may query-wait"
+      ],
+      "join_validation": {
+        "nonnegative_selected_latencies": true,
+        "nonzero_tags_only": true,
+        "same_event_duplicate_policy": "duplicates counted globally; require no duplicates before accepting selected joins"
+      },
+      "gpu_stage_profiler_on": true,
+      "gpu_profile_log_window": {
+        "start_line": 5507,
+        "end_line": 5722,
+        "first_post_start_block_excluded": true,
+        "blocks": [
+          {
+            "line": 5563,
+            "logged_ms_per_frame": 16.67,
+            "collected_frames": 600,
+            "distinct_labels": 119,
+            "top_labels": [
+              {
+                "ms_per_frame": 4.321,
+                "segments_per_frame": 2.0,
+                "label": "(between submissions: GPU idle)"
+              },
+              {
+                "ms_per_frame": 3.06,
+                "segments_per_frame": 1.0,
+                "label": "DLSS (temporal upscale and passes)"
+              },
+              {
+                "ms_per_frame": 1.183,
+                "segments_per_frame": 219.8,
+                "label": "copy shader HLE"
+              },
+              {
+                "ms_per_frame": 0.785,
+                "segments_per_frame": 5.0,
+                "label": "dispatch cs 3d5ebf4e (58880x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.776,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs e2c27f0c (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.715,
+                "segments_per_frame": 11.8,
+                "label": "pass 32768x32768 (0 color) vs 89cda9e4 ps 00000000"
+              },
+              {
+                "ms_per_frame": 0.593,
+                "segments_per_frame": 4.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.397,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 1ea5a07e ps 5c02eaf8"
+              },
+              {
+                "ms_per_frame": 0.344,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 803b9d24 ps 70bb42af"
+              },
+              {
+                "ms_per_frame": 0.272,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.271,
+                "segments_per_frame": 6.8,
+                "label": "pass 2560x1440 (1 color + depth) vs 4cd21a0f ps 71c96598"
+              },
+              {
+                "ms_per_frame": 0.228,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 7620368b ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.212,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 061fbbf6 ps 11ffdfb5"
+              },
+              {
+                "ms_per_frame": 0.16,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs 306ce628 (17x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.151,
+                "segments_per_frame": 6.0,
+                "label": "pass 2560x1440 (1 color + depth) vs c6cdba2b ps 6720ae0d"
+              },
+              {
+                "ms_per_frame": 0.137,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color) vs 8747a367 ps 3fe9e964"
+              },
+              {
+                "ms_per_frame": 0.134,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs ecbef4c7 ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.133,
+                "segments_per_frame": 1.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps 1c3953c6"
+              },
+              {
+                "ms_per_frame": 0.131,
+                "segments_per_frame": 8.9,
+                "label": "pass 2560x1440 (1 color + depth) vs 41ae600f ps 5e224cb6"
+              },
+              {
+                "ms_per_frame": 0.127,
+                "segments_per_frame": 4.0,
+                "label": "pass 1280x720 (1 color) vs 0b0acf50 ps f7229091"
+              },
+              {
+                "ms_per_frame": 0.118,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs b28f5a56 ps 765450df"
+              },
+              {
+                "ms_per_frame": 0.117,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color + depth) vs 8747a367 ps d92266b9"
+              },
+              {
+                "ms_per_frame": 0.101,
+                "segments_per_frame": 0.5,
+                "label": "dispatch cs a509af23 (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.09,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs c829ee58 ps e54449c7"
+              },
+              {
+                "ms_per_frame": 0.09,
+                "segments_per_frame": 1.0,
+                "label": "pass 1280x720 (1 color) vs 0b0acf50 ps cbbca5dc"
+              },
+              {
+                "ms_per_frame": 0.089,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 061fbbf6 ps f55643de"
+              },
+              {
+                "ms_per_frame": 0.085,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps 1c3953c6"
+              },
+              {
+                "ms_per_frame": 0.084,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs 8747a367 ps 32e47788"
+              },
+              {
+                "ms_per_frame": 0.08,
+                "segments_per_frame": 1.0,
+                "label": "pass 1280x720 (1 color) vs 7ea47480 ps d3c8bb21"
+              },
+              {
+                "ms_per_frame": 0.079,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 0b0acf50 ps abf92450"
+              }
+            ]
+          },
+          {
+            "line": 5619,
+            "logged_ms_per_frame": 16.67,
+            "collected_frames": 601,
+            "distinct_labels": 119,
+            "top_labels": [
+              {
+                "ms_per_frame": 4.182,
+                "segments_per_frame": 2.0,
+                "label": "(between submissions: GPU idle)"
+              },
+              {
+                "ms_per_frame": 3.027,
+                "segments_per_frame": 1.0,
+                "label": "DLSS (temporal upscale and passes)"
+              },
+              {
+                "ms_per_frame": 1.246,
+                "segments_per_frame": 219.5,
+                "label": "copy shader HLE"
+              },
+              {
+                "ms_per_frame": 0.828,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs e2c27f0c (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.788,
+                "segments_per_frame": 5.0,
+                "label": "dispatch cs 3d5ebf4e (58880x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.688,
+                "segments_per_frame": 11.8,
+                "label": "pass 32768x32768 (0 color) vs 89cda9e4 ps 00000000"
+              },
+              {
+                "ms_per_frame": 0.569,
+                "segments_per_frame": 4.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.414,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 1ea5a07e ps 5c02eaf8"
+              },
+              {
+                "ms_per_frame": 0.375,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 803b9d24 ps 70bb42af"
+              },
+              {
+                "ms_per_frame": 0.269,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.221,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 7620368b ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.209,
+                "segments_per_frame": 6.6,
+                "label": "pass 2560x1440 (1 color + depth) vs 4cd21a0f ps 71c96598"
+              },
+              {
+                "ms_per_frame": 0.202,
+                "segments_per_frame": 9.6,
+                "label": "pass 2560x1440 (1 color + depth) vs 41ae600f ps 5e224cb6"
+              },
+              {
+                "ms_per_frame": 0.196,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 061fbbf6 ps 11ffdfb5"
+              },
+              {
+                "ms_per_frame": 0.166,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs 306ce628 (17x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.152,
+                "segments_per_frame": 1.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps 1c3953c6"
+              },
+              {
+                "ms_per_frame": 0.146,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color) vs 8747a367 ps 3fe9e964"
+              },
+              {
+                "ms_per_frame": 0.135,
+                "segments_per_frame": 6.0,
+                "label": "pass 2560x1440 (1 color + depth) vs c6cdba2b ps 6720ae0d"
+              },
+              {
+                "ms_per_frame": 0.124,
+                "segments_per_frame": 4.0,
+                "label": "pass 1280x720 (1 color) vs 0b0acf50 ps f7229091"
+              },
+              {
+                "ms_per_frame": 0.122,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color + depth) vs 8747a367 ps d92266b9"
+              },
+              {
+                "ms_per_frame": 0.121,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs ecbef4c7 ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.113,
+                "segments_per_frame": 0.5,
+                "label": "dispatch cs a509af23 (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.101,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs b28f5a56 ps 765450df"
+              },
+              {
+                "ms_per_frame": 0.092,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color + depth) vs 8747a367 ps 370174f7"
+              },
+              {
+                "ms_per_frame": 0.091,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs c829ee58 ps e54449c7"
+              },
+              {
+                "ms_per_frame": 0.09,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs 8747a367 ps 32e47788"
+              },
+              {
+                "ms_per_frame": 0.087,
+                "segments_per_frame": 1.0,
+                "label": "pass 1280x720 (1 color) vs 7ea47480 ps d3c8bb21"
+              },
+              {
+                "ms_per_frame": 0.087,
+                "segments_per_frame": 1.0,
+                "label": "pass 1280x720 (1 color) vs 0b0acf50 ps cbbca5dc"
+              },
+              {
+                "ms_per_frame": 0.086,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 0b0acf50 ps abf92450"
+              },
+              {
+                "ms_per_frame": 0.084,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps 1c3953c6"
+              }
+            ]
+          },
+          {
+            "line": 5672,
+            "logged_ms_per_frame": 16.68,
+            "collected_frames": 601,
+            "distinct_labels": 119,
+            "top_labels": [
+              {
+                "ms_per_frame": 5.759,
+                "segments_per_frame": 2.0,
+                "label": "(between submissions: GPU idle)"
+              },
+              {
+                "ms_per_frame": 2.84,
+                "segments_per_frame": 1.0,
+                "label": "DLSS (temporal upscale and passes)"
+              },
+              {
+                "ms_per_frame": 1.046,
+                "segments_per_frame": 220.1,
+                "label": "copy shader HLE"
+              },
+              {
+                "ms_per_frame": 0.698,
+                "segments_per_frame": 5.0,
+                "label": "dispatch cs 3d5ebf4e (58880x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.618,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs e2c27f0c (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.608,
+                "segments_per_frame": 11.8,
+                "label": "pass 32768x32768 (0 color) vs 89cda9e4 ps 00000000"
+              },
+              {
+                "ms_per_frame": 0.434,
+                "segments_per_frame": 4.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.412,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 803b9d24 ps 70bb42af"
+              },
+              {
+                "ms_per_frame": 0.402,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 1ea5a07e ps 5c02eaf8"
+              },
+              {
+                "ms_per_frame": 0.244,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps bb10e440"
+              },
+              {
+                "ms_per_frame": 0.196,
+                "segments_per_frame": 6.7,
+                "label": "pass 2560x1440 (1 color + depth) vs 4cd21a0f ps 71c96598"
+              },
+              {
+                "ms_per_frame": 0.184,
+                "segments_per_frame": 1.5,
+                "label": "pass 2560x1440 (6 color + depth) vs 9da6aacb ps 1c3953c6"
+              },
+              {
+                "ms_per_frame": 0.17,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 7620368b ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.161,
+                "segments_per_frame": 3.0,
+                "label": "dispatch cs 306ce628 (17x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.127,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 061fbbf6 ps 11ffdfb5"
+              },
+              {
+                "ms_per_frame": 0.115,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color + depth) vs 8747a367 ps d92266b9"
+              },
+              {
+                "ms_per_frame": 0.105,
+                "segments_per_frame": 9.3,
+                "label": "pass 2560x1440 (1 color + depth) vs 41ae600f ps 5e224cb6"
+              },
+              {
+                "ms_per_frame": 0.103,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color) vs 8747a367 ps 3fe9e964"
+              },
+              {
+                "ms_per_frame": 0.101,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs ecbef4c7 ps 8aba0ecd"
+              },
+              {
+                "ms_per_frame": 0.093,
+                "segments_per_frame": 6.0,
+                "label": "pass 2560x1440 (1 color + depth) vs c6cdba2b ps 6720ae0d"
+              },
+              {
+                "ms_per_frame": 0.091,
+                "segments_per_frame": 0.5,
+                "label": "dispatch cs a509af23 (1x1x1 groups)"
+              },
+              {
+                "ms_per_frame": 0.088,
+                "segments_per_frame": 4.0,
+                "label": "pass 1280x720 (1 color) vs 0b0acf50 ps f7229091"
+              },
+              {
+                "ms_per_frame": 0.088,
+                "segments_per_frame": 1.0,
+                "label": "pass 1280x720 (1 color) vs 7ea47480 ps d3c8bb21"
+              },
+              {
+                "ms_per_frame": 0.086,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs 8747a367 ps 32e47788"
+              },
+              {
+                "ms_per_frame": 0.084,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (2 color + depth) vs 8747a367 ps 370174f7"
+              },
+              {
+                "ms_per_frame": 0.084,
+                "segments_per_frame": 2.0,
+                "label": "pass 2560x1440 (1 color) vs 0b0acf50 ps abf92450"
+              },
+              {
+                "ms_per_frame": 0.076,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 0b0acf50 ps ed4c7668"
+              },
+              {
+                "ms_per_frame": 0.074,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (6 color + depth) vs 6a833138 ps 1c3953c6"
+              },
+              {
+                "ms_per_frame": 0.071,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color) vs 0b0acf50 ps ccbf44a6"
+              },
+              {
+                "ms_per_frame": 0.068,
+                "segments_per_frame": 1.0,
+                "label": "pass 2560x1440 (1 color + depth) vs b28f5a56 ps 765450df"
+              }
+            ]
+          }
+        ],
+        "time_accuracy": "stdout publication bounds; no precise per-block UTC/frame IDs",
+        "semantics": "next ALL_COMMANDS timestamp includes intervening barriers/copies/gaps; top 30 labels only; query-wait possible; not exclusive GPU operation time"
+      },
+      "internal_log_evidence": {
+        "total_blocks": 90,
+        "selected_blocks": [
+          {
+            "start_line": 5594,
+            "messages": [
+              "Threaded renderer: 137460 draws/s queued, 5043 waits/s, GPU command thread waited 9.8%, draw recorder busy 28.2%",
+              "  render state memo: 90% of draws reused the open pass",
+              "  image lookup memo: 97% of 985453 lookups/s remembered",
+              "  constant ring: 590889 buffers/s copied ahead, 0/s full",
+              "  vertex inputs prepared ahead: 103964/s, 0/s not",
+              "  game frames: 59.9/s, 1742 draws per frame",
+              "  GPU: 12.35 ms/frame executing, 4.32 ms/frame idle between submissions (2.0 submissions/frame); frame time 16.68 ms",
+              "  command recording (per 10 s): recording thread busy 10.5%; 8187825 deferred, 67800 direct; vk_runtime.cpp:601 x5400 vk_runtime.cpp:221 x3000 tile_manager.cpp:227 x2400 vk_rasterizer.cpp:362 x1200 vk_runtime.cpp:147 x600 vk_bb_velocity_mirror.cpp:436 x600",
+              "  command thread time: waiting for the game to submit 67.2% (recorder idle 67.2%); decoding/preparing draws 23.3% (recorder idle 4.8%); waiting for the draw recorder 9.5% (recorder idle 0.3%)",
+              "  draw recorder idle 72.4% of the time",
+              "  guest write faults: 31256/s",
+              "  guest waits: 936 mutex waits/s, 501 sleeps/s (asked 13574 us, slept 13947 us on average)",
+              "  page protection: 34324 calls/s, 300075 pages/s, 5.0% of a core; 239008 read-only uploads/s skipped without the lock",
+              "  draw recorder per draw: 2.51 us; packet 2% pending ops 4% render targets 7% buffers 9% textures 24% dlss 4% begin pass 4% vertex/index 24% barriers 1% descriptors 5% dynamic 5% record+mirror 5% reset 6%",
+              "  waits at line 245 opcode 0xffff: 3556/s, 8.6% of the time (void __cdecl AmdGpu::Liverpool::Process(std::stop_token))",
+              "  waits at line 311 opcode 0xffff: 330/s, 0.6% of the time (ecl AmdGpu::Liverpool::ProcessCeUpdate(std::span<const u32>))",
+              "  waits at line 539 opcode 0xffff: 359/s, 0.3% of the time (void __cdecl Vulkan::Rasterizer::Draw(bool, u32))",
+              "  waits at line 399 opcode 0xffff: 60/s, 0.2% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 901 opcode 0xffff: 350/s, 0.1% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 803 opcode 0x46: 388/s, 0.0% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))"
+            ]
+          },
+          {
+            "start_line": 5650,
+            "messages": [
+              "Threaded renderer: 137443 draws/s queued, 5041 waits/s, GPU command thread waited 10.2%, draw recorder busy 28.9%",
+              "  render state memo: 90% of draws reused the open pass",
+              "  image lookup memo: 97% of 985429 lookups/s remembered",
+              "  constant ring: 590904 buffers/s copied ahead, 0/s full",
+              "  vertex inputs prepared ahead: 103971/s, 0/s not",
+              "  game frames: 59.9/s, 1742 draws per frame",
+              "  GPU: 12.48 ms/frame executing, 4.18 ms/frame idle between submissions (2.0 submissions/frame); frame time 16.68 ms",
+              "  command recording (per 10 s): recording thread busy 10.7%; 8203623 deferred, 67913 direct; vk_runtime.cpp:601 x5409 vk_runtime.cpp:221 x3005 tile_manager.cpp:227 x2404 vk_rasterizer.cpp:362 x1202 vk_runtime.cpp:147 x601 vk_bb_velocity_mirror.cpp:436 x601",
+              "  command thread time: waiting for the game to submit 66.0% (recorder idle 66.0%); decoding/preparing draws 23.9% (recorder idle 5.3%); waiting for the draw recorder 9.9% (recorder idle 0.4%)",
+              "  draw recorder idle 71.8% of the time",
+              "  guest write faults: 33438/s",
+              "  guest waits: 958 mutex waits/s, 501 sleeps/s (asked 13559 us, slept 13932 us on average)",
+              "  page protection: 36470 calls/s, 305471 pages/s, 5.3% of a core; 238996 read-only uploads/s skipped without the lock",
+              "  draw recorder per draw: 2.59 us; packet 2% pending ops 4% render targets 7% buffers 9% textures 24% dlss 5% begin pass 4% vertex/index 24% barriers 1% descriptors 5% dynamic 5% record+mirror 5% reset 6%",
+              "  waits at line 245 opcode 0xffff: 3556/s, 9.0% of the time (void __cdecl AmdGpu::Liverpool::Process(std::stop_token))",
+              "  waits at line 311 opcode 0xffff: 330/s, 0.6% of the time (ecl AmdGpu::Liverpool::ProcessCeUpdate(std::span<const u32>))",
+              "  waits at line 539 opcode 0xffff: 360/s, 0.3% of the time (void __cdecl Vulkan::Rasterizer::Draw(bool, u32))",
+              "  waits at line 399 opcode 0xffff: 60/s, 0.2% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 901 opcode 0xffff: 350/s, 0.1% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 803 opcode 0x46: 386/s, 0.0% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))"
+            ]
+          },
+          {
+            "start_line": 5703,
+            "messages": [
+              "Threaded renderer: 137678 draws/s queued, 5051 waits/s, GPU command thread waited 9.7%, draw recorder busy 27.9%",
+              "  render state memo: 90% of draws reused the open pass",
+              "  image lookup memo: 97% of 986896 lookups/s remembered",
+              "  constant ring: 591738 buffers/s copied ahead, 0/s full",
+              "  vertex inputs prepared ahead: 104110/s, 0/s not",
+              "  game frames: 60.0/s, 1742 draws per frame",
+              "  GPU: 10.92 ms/frame executing, 5.76 ms/frame idle between submissions (2.0 submissions/frame); frame time 16.66 ms",
+              "  command recording (per 10 s): recording thread busy 10.4%; 8199594 deferred, 67913 direct; vk_runtime.cpp:601 x5409 vk_runtime.cpp:221 x3005 tile_manager.cpp:227 x2404 vk_rasterizer.cpp:362 x1202 vk_runtime.cpp:147 x601 vk_bb_velocity_mirror.cpp:436 x601",
+              "  command thread time: waiting for the game to submit 67.8% (recorder idle 67.8%); decoding/preparing draws 22.4% (recorder idle 4.3%); waiting for the draw recorder 9.6% (recorder idle 0.2%)",
+              "  draw recorder idle 72.5% of the time",
+              "  guest write faults: 26686/s",
+              "  guest waits: 943 mutex waits/s, 501 sleeps/s (asked 13573 us, slept 13946 us on average)",
+              "  page protection: 29721 calls/s, 264562 pages/s, 4.7% of a core; 239523 read-only uploads/s skipped without the lock",
+              "  draw recorder per draw: 2.50 us; packet 2% pending ops 4% render targets 7% buffers 9% textures 24% dlss 5% begin pass 4% vertex/index 24% barriers 1% descriptors 5% dynamic 5% record+mirror 5% reset 6%",
+              "  waits at line 245 opcode 0xffff: 3561/s, 8.5% of the time (void __cdecl AmdGpu::Liverpool::Process(std::stop_token))",
+              "  waits at line 311 opcode 0xffff: 330/s, 0.6% of the time (ecl AmdGpu::Liverpool::ProcessCeUpdate(std::span<const u32>))",
+              "  waits at line 539 opcode 0xffff: 360/s, 0.3% of the time (void __cdecl Vulkan::Rasterizer::Draw(bool, u32))",
+              "  waits at line 399 opcode 0xffff: 60/s, 0.2% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 901 opcode 0xffff: 351/s, 0.1% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))",
+              "  waits at line 803 opcode 0x46: 389/s, 0.0% of the time (:ProcessGraphics(std::span<const u32>, std::span<const u32>))"
+            ]
+          }
+        ],
+        "scenario_attribution": "stationary stdout publication window, excluding first partial window; delayed logging precision unknown"
+      },
+      "seed_identity": {
+        "copied_home_file_count": 17,
+        "home_file_manifest_sha256": "01ab8a9bae5b5f058a8bfcab3dd0a680a01eec3d1deb0959d094bd2df7407602",
+        "initial_shader_cache": "empty",
+        "patch_manifest": [
+          {
+            "path": "patches\\shadPS4\\BlazeRush.xml",
+            "sha256": "c23ee03660b17176e00b8251ede7ea8161577e19fdaabac9b9a5525fe553a99e",
+            "bytes": 1217
+          },
+          {
+            "path": "patches\\shadPS4\\Bloodborne.xml",
+            "sha256": "a8d04ecf76f1a613859e0160c54a5cc9154fb8338767347e430a611ed9fbdaee",
+            "bytes": 295991
+          },
+          {
+            "path": "patches\\shadPS4\\BlueRider.xml",
+            "sha256": "913033139f75ddca43bf7d4f061e203c393ce244b1cd402c75738f5f248067a9",
+            "bytes": 406
+          },
+          {
+            "path": "patches\\shadPS4\\BurnoutParadiseRemastered.xml",
+            "sha256": "2cecb3cefcd22ab5df7b19ae8bc11f56b03208416b03377a9065b0021b55678f",
+            "bytes": 1096
+          },
+          {
+            "path": "patches\\shadPS4\\Catherine_FullBody.xml",
+            "sha256": "cb850d8edfe525c298c2ea854f1ec3e1555a043cd721810041687f9ba0e92c08",
+            "bytes": 950
+          },
+          {
+            "path": "patches\\shadPS4\\CrashBandicoot4.xml",
+            "sha256": "2e2644a17994a92494de8c734c99227c7bae515f5644c9c137d2c02ab30ff25c",
+            "bytes": 3589
+          },
+          {
+            "path": "patches\\shadPS4\\DarkSoulsIII-Orbis.xml",
+            "sha256": "35917bb046188540f31dc3d0ca9740c09762d1daad2d1f7b031ebf14663671b7",
+            "bytes": 1891
+          },
+          {
+            "path": "patches\\shadPS4\\DeadNation.xml",
+            "sha256": "7f39d4b6f2636e367d093e14c10b300f746400d2b84c8ca4f5cd54e65fe9bad8",
+            "bytes": 20376
+          },
+          {
+            "path": "patches\\shadPS4\\DetroitBecomeHuman.xml",
+            "sha256": "cedc9dad5c2b583206560fd0c71d9e043d9d1559d46033cb89699aad85410edb",
+            "bytes": 815
+          },
+          {
+            "path": "patches\\shadPS4\\Driveclub.xml",
+            "sha256": "e57589cb1df6c8d5cc427b38765e0a878196f58b6d50cc4dde248ec6ef374877",
+            "bytes": 25760
+          },
+          {
+            "path": "patches\\shadPS4\\files.json",
+            "sha256": "56b59c1d95ac3fea47f544d97778b2ef6b27532ecc1f4b80d92c61fd2c4051ec",
+            "bytes": 4823
+          },
+          {
+            "path": "patches\\shadPS4\\GeometryWarsDimensions.xml",
+            "sha256": "97a3fd79d9f0c6aa9c34ad9c34dd4843c49b0aaa34708354296ea0a5078c6897",
+            "bytes": 1492
+          },
+          {
+            "path": "patches\\shadPS4\\God_of_War_III_Remastered.xml",
+            "sha256": "b8f3a36694be5fda6b7ba16e9abe648f4c12ba98276a73d84dee65dd8f2fff0f",
+            "bytes": 1307
+          },
+          {
+            "path": "patches\\shadPS4\\GrandTheftAutoV.xml",
+            "sha256": "3b860c12d25e6c58c87edaaf9fc2fe63f20ff813c75ae2321d537d200e912b70",
+            "bytes": 813
+          },
+          {
+            "path": "patches\\shadPS4\\GranTurismo7.xml",
+            "sha256": "14fff597d032eeeedcc17d0d9af0c8036d30db65a39dc9268caacc6b5ae5f96b",
+            "bytes": 519
+          },
+          {
+            "path": "patches\\shadPS4\\GranTurismoSport.xml",
+            "sha256": "0ba61d19850a66a058c03ebf1db49e7806fcd292f676fa55296d75d23e933ede",
+            "bytes": 690
+          },
+          {
+            "path": "patches\\shadPS4\\GravityRush2.xml",
+            "sha256": "0bbc6d161929412da65c167fad6e211b3f7cb12ec08eaf2f55be280aed4f6aea",
+            "bytes": 7807
+          },
+          {
+            "path": "patches\\shadPS4\\HatsuneMiku_ProjectDIVAFutureTone.xml",
+            "sha256": "336db2c0c8966f1e698d2a72e87554912ff9aab2db1f732eb797f12d4d943784",
+            "bytes": 627
+          },
+          {
+            "path": "patches\\shadPS4\\HorizonZeroDawn.xml",
+            "sha256": "cfb51ddd1e409b2b58b7e0934f1862dde1958f252d78e6ae4880d5dc9a1dc27f",
+            "bytes": 10148
+          },
+          {
+            "path": "patches\\shadPS4\\InfamousFirstLight.xml",
+            "sha256": "40c2e7cc1521f09f585d95e7d4df713078bd1c0cedb5a248798fb339a1cb6f7d",
+            "bytes": 8011
+          },
+          {
+            "path": "patches\\shadPS4\\InfamousSecondSon.xml",
+            "sha256": "017c77c30d5e0a35ff48d4233ebf9b162490fdfb87dad1e2202550d6ef5f3008",
+            "bytes": 7387
+          },
+          {
+            "path": "patches\\shadPS4\\Journey.xml",
+            "sha256": "702aafa8f5ea3d8466fd1513739f6f9091f7df1874c68116cc2fdab590858203",
+            "bytes": 1485
+          },
+          {
+            "path": "patches\\shadPS4\\Knack.xml",
+            "sha256": "aa95718c10c48ab273fea2363b4434115cc56a6056f61ad737d92265759d889c",
+            "bytes": 1817
+          },
+          {
+            "path": "patches\\shadPS4\\LEGODimensions.xml",
+            "sha256": "6bd29d11e6bc4ead52a2706a44fb720d7d01dd0f7409807a3deff84e0ca5f05e",
+            "bytes": 3751
+          },
+          {
+            "path": "patches\\shadPS4\\LittleBigPlanet3.xml",
+            "sha256": "81ad03b1469c0635cf339d8fd857e0e3a67ae5ac992deaa0c3d7dc841a928bb3",
+            "bytes": 564
+          },
+          {
+            "path": "patches\\shadPS4\\MetaphorRefantazio.xml",
+            "sha256": "64683ee7be55e28b8ab8b63da7f53fe4e56daed921eeb68bd21b3fa14716ee46",
+            "bytes": 2638
+          },
+          {
+            "path": "patches\\shadPS4\\MinecraftDungeons.xml",
+            "sha256": "cd731839b0c872549166685a54bb15d77f7d020d6ff76a9470a1ce0f2ac62d62",
+            "bytes": 3077
+          },
+          {
+            "path": "patches\\shadPS4\\MyFirstGranTurismo.xml",
+            "sha256": "08df06b0ebea838298e662fc248a283fab39a0071838f911539d19120b3f20a4",
+            "bytes": 865
+          },
+          {
+            "path": "patches\\shadPS4\\NatsukiChronicles.xml",
+            "sha256": "29e97846f2cde007c8e633313ba9cca0723e3a7f02bc0b3e4aa4dae78ff1b2e0",
+            "bytes": 1253
+          },
+          {
+            "path": "patches\\shadPS4\\NHL19.xml",
+            "sha256": "4060622bd00d1ba9733b5d5439c685b321f2bf3b45a771594fda92b5e9f7033c",
+            "bytes": 10113
+          },
+          {
+            "path": "patches\\shadPS4\\Persona3_DancingInMoonlight.xml",
+            "sha256": "3480f124fda6a13a255ce973bf1708497f00e13d951d70a43a99eef98758bf61",
+            "bytes": 3736
+          },
+          {
+            "path": "patches\\shadPS4\\Persona4_DancingAllNight.xml",
+            "sha256": "27549c374e10b3c250acf545a03827eda30d2314d9f6228e1e3c0b7e04fc1de6",
+            "bytes": 4698
+          },
+          {
+            "path": "patches\\shadPS4\\Persona5_DancingInStarlight.xml",
+            "sha256": "9af69faa0f5f17cd10e66169b70ddd0d99290a6042523713ff55d1942a246a83",
+            "bytes": 3736
+          },
+          {
+            "path": "patches\\shadPS4\\Persona5_Royal.xml",
+            "sha256": "0b72533587a8e0d0cb0fab9b6c8e04948648193aac322c741e836abb92909faf",
+            "bytes": 1144
+          },
+          {
+            "path": "patches\\shadPS4\\PT.xml",
+            "sha256": "d6992bf66dd8a8f16469cd66e77a7c6978a63130b45d0c77a0eddf249758c256",
+            "bytes": 2201
+          },
+          {
+            "path": "patches\\shadPS4\\Ratchet_and_Clank.xml",
+            "sha256": "53d10d74f833e877a1f57d44bd7a0772c82010a2986cdaf1fd2ca2e73673fa72",
+            "bytes": 1783
+          },
+          {
+            "path": "patches\\shadPS4\\SakuraWars.xml",
+            "sha256": "ce7186a1197c2f66a41c142bfbec4d70a9ca25fab152d9f75e9deb15ab0f5285",
+            "bytes": 9133
+          },
+          {
+            "path": "patches\\shadPS4\\SonicRacingCrossworlds.xml",
+            "sha256": "13d823f9f4a92ee70bcc2d69490a23d3958eff3e9f212a8da890b6f8e69fbd44",
+            "bytes": 4289
+          },
+          {
+            "path": "patches\\shadPS4\\SotC.xml",
+            "sha256": "0c72bde70f25b4a4cc44eee03a2c1997be6e17857d0bf253d970d5cb08a7d21c",
+            "bytes": 2026
+          },
+          {
+            "path": "patches\\shadPS4\\TheLastGuardian.xml",
+            "sha256": "359a670c5a7272228f2c350a2c9e2f39c689305061840474c9ccaaa0f0cf1f62",
+            "bytes": 2622
+          },
+          {
+            "path": "patches\\shadPS4\\TheLastOfUsRemastered.xml",
+            "sha256": "05bb7cb1cd71c283c995730d7830628b93ffebe1caf7c4a76007e2dc736937b7",
+            "bytes": 1985
+          },
+          {
+            "path": "patches\\shadPS4\\TheOrder1886.xml",
+            "sha256": "b45c64e37ca87b779c2183a00709d9b1408c57e1904f8981e7bfd1e2a4fbeeae",
+            "bytes": 2714
+          },
+          {
+            "path": "patches\\shadPS4\\TheQuarry.xml",
+            "sha256": "4b4d4e1f1e23bd7dcba2848dedde3caa1fca3a3a22e34a484de0afc619d4db0f",
+            "bytes": 6469
+          },
+          {
+            "path": "patches\\shadPS4\\TheWitcher3.xml",
+            "sha256": "7702a1fd6965caac9a4c86b56216c4a1cd02fb6313b866717264cea728a28251",
+            "bytes": 884
+          },
+          {
+            "path": "patches\\shadPS4\\UnchartedTheNathanDrakeCollection.xml",
+            "sha256": "009fc4ad8e705a252ce70b18944dafed902dfc4479a8f7c7d5f1fe81c3b3e813",
+            "bytes": 5285
+          },
+          {
+            "path": "patches\\shadPS4\\UntilDawn.xml",
+            "sha256": "dba40bf1dba0bb4ce5867f88989630bc46d13ff7f51aa1c81dae5c7dad2ae4bb",
+            "bytes": 3341
+          },
+          {
+            "path": "patches\\shadPS4\\Windjammers2.xml",
+            "sha256": "cf31ecd78697f048066fe3d5502294766262971e98668a49851b1bde9cd1aefb",
+            "bytes": 1225
+          },
+          {
+            "path": "patches\\shadPS4\\YokusIslandExpress.xml",
+            "sha256": "e48c5edb889ae38b5875df62107c3011bfc11a9211a90180b8112ca3a05cf93f",
+            "bytes": 1265
+          }
+        ],
+        "cache_warmup": "world loaded before neutral stationary interval; shader cache not hashed while active"
+      },
+      "xinput": {
+        "final_status": {
+          "status": "stopped",
+          "utc": "2026-10-11T16:48:31.405290+00:00",
+          "reason": "stop_requested",
+          "xinput_index": 0,
+          "virtual_device_remove_result": 536870912,
+          "virtual_device_removed": true
+        },
+        "command_count": 36,
+        "error_count": 0,
+        "neutral_readback_verified": true,
+        "device_removed": true,
+        "game_reaction": "movement and camera visually confirmed; no verified enemy combat; diagnostic route met collision obstacles"
+      }
+    }
+  ]
+}

@@ -1,5 +1,30 @@
 # Next session
 
+## Current priority: understand Vulkan emulation before DX12 experiments
+
+Read [the new execution/ownership research](vulkan-emulation-20261011/RESEARCH.md)
+and its RESULTS.json. The complete engineering cycle and autonomous isolated
+XInput gameplay are already authorized. Do not ask the user to play or reconfirm
+these actions. Preserve the original installed 974f8c21-dirty runtime/profile;
+use copies, verify no user game is active and bind feeder to PID/start/SHA.
+
+Built-in diagnostics and actual EOP/VideoOut tags now provide internal reference
+evidence. Resolve the remaining PM4/resource versions/completion fence/GPU clock
+gaps using a pinned compatible-source Vulkan probe if exact dirty source cannot
+be obtained. Keep revision differences explicit; measure bounded capture and
+probe overhead. Do not treat Present, logged base FPS, generated output or flip
+submission cadence as completed guest FPS. Between-submission timestamp gaps are
+not hardware idle; detile callsite counts are recorder synchronizations.
+
+All owned games, pads and collectors for this checkpoint stopped. Ordinary
+Vulkan teardown exceptions remain unresolved. The new GPU-label session had
+collision-limited navigation, not confirmed enemy combat. Complete those scenario
+gaps and a matched Vulkan/DX12 scene/config/cache protocol before claiming parity
+or speed ratios. Parked local patches/builds under performance-recovery-20261011
+are unverified and must not be treated as accepted production work. Continue the
+measured DX12 fix/test/gameplay loop after Vulkan attribution is sufficient.
+Standing automatic push applies after verified logical commits; no force push.
+
 ## Continue the installed DLSS companion
 
 Read vulkan-live-monitor-20261011/VULKAN_LIVE_MONITOR_REPORT.md, HUD_VALIDATION.md,

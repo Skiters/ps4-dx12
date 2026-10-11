@@ -1,5 +1,27 @@
 # Native DX12 state
 
+## Active — Vulkan emulation first, 2026-10-11
+
+The user accepted the complete autonomous engineering cycle, then corrected its
+order: understand the working Vulkan emulator before testing further DX12
+changes. See [execution and ownership research](vulkan-emulation-20261011/RESEARCH.md)
+and compact RESULTS.json. Existing XInput verified movement/camera, attack/roll
+inputs and Central Yharnam → Hunter's Dream lamp travel on byte-identical copies
+of the installed 974f8c21-dirty executable. Separate CPU/queue and detailed GPU
+diagnostic runs exercised recording/cache/copy/detile paths. Actual EOP/VideoOut
+tags linked 5,049 stationary flip submissions; 60.0029 submissions/s is **not**
+GPU-completed guest FPS. Full PM4/resource/fence causal attribution remains open.
+
+Three owned Vulkan runs ended with 0xC0000409 / 0xC0000005 / 0xC0000409 during
+ordinary closing; causes unresolved. Collectors stopped and virtual devices were
+removed. Original copied 17 home-file hashes still match. Enemy combat and
+death/respawn are not validated. Producer's dirty patch is unavailable; compatible
+pinned-source Vulkan instrumentation is authorized but must remain separate from
+installed-runtime evidence. Earlier unverified DX12 and profiler edits are parked
+under F:/PS4Dev/handoff/performance-recovery-20261011, outside the clean checkout.
+No new DX12 fix or performance improvement is accepted here. Prior notes asking
+for game-run permission are superseded by the user's explicit authorization.
+
 ## Installed Vulkan HUD and XInput validation — 2026-10-11
 
 See [live companion report](vulkan-live-monitor-20261011/VULKAN_LIVE_MONITOR_REPORT.md)
