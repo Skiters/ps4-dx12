@@ -3,6 +3,7 @@
 
 #include "common/assert.h"
 #include "common/debug.h"
+#include "common/guest_frame_trace.h"
 #include "common/thread.h"
 #include "core/debug_state.h"
 #include "core/emulator_settings.h"
@@ -253,7 +254,9 @@ void VideoOutDriver::Flip(const Request& req) {
     video_presenter->SetHDR(req.port->is_hdr);
 
     // Present the frame.
+    const auto trace_id=req.frame->trace_id;
     video_presenter->Present(req.frame);
+    Common::GuestFrameTrace::Record(trace_id,"present-queued");
 
     // Update flip status.
     auto* port = req.port;
@@ -307,7 +310,7 @@ void VideoOutDriver::DrawLastFrame() {
 }
 
 bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
-                                bool is_eop /*= false*/) {
+                                bool is_eop /*= false*/, u64 trace_id) {
     {
         std::unique_lock lock{port->port_mutex};
         if (index != -1 && port->flip_status.flip_pending_num > 16) {
@@ -322,17 +325,19 @@ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
         port->flip_status.submit_tsc = Libraries::Kernel::sceKernelReadTsc();
     }
 
+    if(index!=-1&&!trace_id)trace_id=Common::GuestFrameTrace::New();
     if (!is_eop) {
         // Non EOP flips can arrive from any thread so ask GPU thread to perform them
-        liverpool->SendCommand([=, this]() { SubmitFlipInternal(port, index, flip_arg, is_eop); });
+        liverpool->SendCommand([=, this]() { SubmitFlipInternal(port, index, flip_arg, is_eop, trace_id); });
     } else {
-        SubmitFlipInternal(port, index, flip_arg, is_eop);
+        SubmitFlipInternal(port, index, flip_arg, is_eop, trace_id);
     }
 
     return true;
 }
 
-void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
+void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop, u64 trace_id) {
+    Common::GuestFrameTrace::Record(trace_id,is_eop?"pm4-flip-ready":"gpu-thread-ready");
     VideoCore::HostFrame* frame;
     if (index == -1) {
         frame = video_presenter->PrepareBlankFrame(false);
@@ -343,6 +348,9 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
         frame = video_presenter->PrepareFrame(group, buffer.address_left);
     }
 
+    frame->trace_id=trace_id;
+    Common::GuestFrameTrace::Record(trace_id,"prepared");
+    frame->TraceGpuCompletion();
     {
         std::scoped_lock lock{mutex};
         requests.push({

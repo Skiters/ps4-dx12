@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <array>
+#include <atomic>
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -61,12 +62,17 @@ public:
         return fopen(path,"wb");
     }();
     unsigned performance_rows{};
+    std::atomic<bool> capturing{std::getenv("SHADPS4_NATIVE_CAPTURE_MARKER")==nullptr};
     std::jthread worker;
     Hub() : worker([this](std::stop_token stop) {
         std::unique_lock lock(mutex);
         while (!stop.stop_requested()) {
             wake.wait_for(lock, std::chrono::seconds(2), [&] { return stop.stop_requested(); });
             if (stop.stop_requested()) break;
+            if(const auto* marker=std::getenv("SHADPS4_NATIVE_CAPTURE_MARKER")){
+                std::error_code error;capturing=std::filesystem::exists(marker,error);
+                if(!capturing)continue;
+            }
             const auto now = Clock::now();
             if(performance&&performance_rows++<2048){
                 const auto& frames=totals[size_t(Kind::PrepareFrame)];
@@ -129,13 +135,13 @@ public:
     }
 };
 inline void Count(const char* name,unsigned long long value=1){
-    if(!Enabled()||!value)return;auto& hub=Hub::Get();std::lock_guard lock(hub.mutex);
+    if(!Enabled()||!value)return;auto& hub=Hub::Get();if(!hub.capturing)return;std::lock_guard lock(hub.mutex);
     Counter* target{};for(auto& counter:hub.counters)if(counter.name&&!std::strcmp(counter.name,name)){target=&counter;break;}
     if(!target)for(auto& counter:hub.counters)if(!counter.name){counter.name=name;target=&counter;break;}
     if(target)target->value+=value;
 }
 inline void GpuTime(const char* name,double elapsed){
-    if(!Enabled())return;auto& hub=Hub::Get();std::lock_guard lock(hub.mutex);GpuTotals* target{};
+    if(!Enabled())return;auto& hub=Hub::Get();if(!hub.capturing)return;std::lock_guard lock(hub.mutex);GpuTotals* target{};
     for(auto& gpu:hub.gpu)if(gpu.name&&!std::strcmp(gpu.name,name)){target=&gpu;break;}
     if(!target)for(auto& gpu:hub.gpu)if(!gpu.name){gpu.name=name;target=&gpu;break;}
     if(!target)return;++target->calls;target->ms+=elapsed;target->max_ms=std::max(target->max_ms,elapsed);
@@ -147,7 +153,7 @@ class Scope {
 public:
     explicit Scope(Kind kind, const char* stage) {
         if (!Enabled()) return;
-        hub_ = &Hub::Get(); std::lock_guard lock(hub_->mutex);
+        hub_ = &Hub::Get();if(!hub_->capturing){hub_=nullptr;return;} std::lock_guard lock(hub_->mutex);
         const auto tid = GetCurrentThreadId(); slot_ = hub_->active.size();
         for (size_t i=0; i<hub_->active.size(); ++i) if(hub_->active[i].thread==tid) {slot_=i;break;}
         if(slot_==hub_->active.size()) for(size_t i=0;i<hub_->active.size();++i)

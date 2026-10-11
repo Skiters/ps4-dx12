@@ -2,6 +2,7 @@
 #pragma once
 #include "video_core/presenter_interface.h"
 #include "presenter.h"
+#include "common/guest_frame_trace.h"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -10,6 +11,8 @@ namespace NativeDX12 {
 struct GuestSurfaceSnapshot {
     std::shared_ptr<Resource> texture;
     std::function<void()> wait_ready;
+    ComPtr<ID3D12Fence> ready_fence;
+    u64 ready_value{};
 };
 class GuestSurfaceProvider {
 public:
@@ -21,6 +24,12 @@ class GuestPresenter final : public VideoCore::PresenterInterface {
     struct Frame final : VideoCore::HostFrame {
         GuestPresenter* owner{};
         GuestSurfaceSnapshot surface;
+        void TraceGpuCompletion() override {
+            if(!trace_id||!surface.ready_fence)return;
+            Common::GuestFrameTrace::Record(trace_id,"gpu-submitted",surface.ready_value);
+            Common::GuestFrameTrace::Await(trace_id,surface.ready_value,
+                [fence=surface.ready_fence,value=surface.ready_value]{const auto done=fence->GetCompletedValue();return done!=UINT64_MAX&&done>=value;});
+        }
     };
     ComPtr<ID3D12Device> device_;
     ComPtr<ID3D12CommandQueue> queue_;

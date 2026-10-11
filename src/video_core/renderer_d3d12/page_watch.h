@@ -107,6 +107,37 @@ public:
     ~PageWatch(){RemoveVectoredExceptionHandler(handler);active.store(nullptr);std::lock_guard lock(mutex);for(const auto& [_,range]:ranges)Restore(range);}
     bool Contains(uint64_t address){std::lock_guard lock(mutex);const auto it=ranges.upper_bound(address);return it!=ranges.begin()&&std::prev(it)->second.end>address;}
     bool WasTracked(uint64_t address){std::lock_guard lock(mutex);const auto it=retired.upper_bound(address);return it!=retired.begin()&&std::prev(it)->second>address;}
+    // Transfer an existing exact watch without ever allowing a CPU store.
+    // The renderer holds its execution lock; pending faults resolve the new
+    // generation after acquiring that lock. Retired history is untouched.
+    bool ChangeMode(uint64_t address,uint64_t size,bool read_only){
+        if(!size||address>UINT64_MAX-size)return false;
+        std::lock_guard lock(mutex);
+        auto it=ranges.find(address);
+        if(it==ranges.end()||it->second.end!=address+size)return false;
+        auto& range=it->second;
+        if(range.read_only==read_only)return true;
+        for(const auto& p:range.protection){
+            for(auto current=p.begin;current<p.begin+p.size;){
+                MEMORY_BASIC_INFORMATION region{};
+                if(!VirtualQuery(reinterpret_cast<void*>(current),&region,sizeof(region))||
+                   region.State!=MEM_COMMIT||region.Protect!=p.watched)return false;
+                current=std::min(p.begin+p.size,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+            }
+        }
+        const DWORD desired=read_only?PAGE_READONLY:PAGE_NOACCESS;
+        for(size_t i=0;i<range.protection.size();++i){auto& p=range.protection[i];DWORD previous{};
+            if(!VirtualProtect(reinterpret_cast<void*>(p.begin),p.size,desired,&previous)){
+                // Roll back to the old protected mode, never PAGE_READWRITE.
+                for(size_t j=0;j<i;++j){auto& old=range.protection[j];DWORD ignored{};
+                    if(!VirtualProtect(reinterpret_cast<void*>(old.begin),old.size,old.watched,&ignored))
+                        throw std::runtime_error("Cannot restore native ownership protection");}
+                return false;
+            }
+        }
+        for(auto& p:range.protection)p.watched=desired;
+        range.read_only=read_only;range.generation=++next_generation;return true;
+    }
     bool Track(uint64_t address,uint64_t size,bool read_only=false){
         if(!address||!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
         std::lock_guard lock(mutex);const auto end=address+size;

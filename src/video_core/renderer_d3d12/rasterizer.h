@@ -11,6 +11,7 @@
 #include <set>
 #include <functional>
 #include <deque>
+#include <optional>
 namespace NativeDX12 {
 class ShaderPipeline;
 class ResourceBindings;
@@ -40,8 +41,10 @@ private:
     std::function<bool(VAddr,std::span<const std::byte>)> commit_buffer_;
     std::function<void(VAddr,u64)> release_buffer_;
     std::function<bool(VAddr,u64)> watch_buffer_;
+    std::function<bool(VAddr,u64,bool)> transfer_buffer_watch_;
     Resource AcquireBuffer(u64);
     void RetireBuffer(Mapping&);
+    void InstallCpuWatch(Mapping&);
     unsigned read_only_batches_{};
     ComPtr<ID3D12Device> device_;
     CommandScheduler scheduler_;
@@ -90,14 +93,21 @@ private:
         if(!dirty){dirty_mappings_.erase(mapping.base);mapping.dirty_ranges.clear();mapping.dirty=false;return;}
         if(offset>mapping.size)throw std::out_of_range("dirty buffer offset");
         bytes=std::min(bytes,mapping.size-offset);if(!bytes)return;
+        u64 newly_dirty=bytes;
         u64 begin=offset,end=offset+bytes;auto it=mapping.dirty_ranges.lower_bound(begin);
         if(it!=mapping.dirty_ranges.begin()&&std::prev(it)->second>=begin)it=std::prev(it);
-        while(it!=mapping.dirty_ranges.end()&&it->first<=end){begin=std::min(begin,it->first);end=std::max(end,it->second);it=mapping.dirty_ranges.erase(it);}
+        while(it!=mapping.dirty_ranges.end()&&it->first<=end){
+            const auto overlap_first=std::max(offset,it->first),overlap_last=std::min(offset+bytes,it->second);
+            if(overlap_last>overlap_first)newly_dirty-=overlap_last-overlap_first;
+            begin=std::min(begin,it->first);end=std::max(end,it->second);it=mapping.dirty_ranges.erase(it);}
+        Diagnostics::Count("buffer-dirty.new-bytes",newly_dirty);
         mapping.dirty_ranges.emplace(begin,end);dirty_mappings_.insert(mapping.base);mapping.dirty=true;}
     void ForgetBacking(VAddr,u64);
     static void Unsupported(const char* operation);
 protected:
     virtual void CheckBacking(VAddr,u64,bool);
+    virtual void CheckGpuBacking(VAddr address,u64 size,bool writing){Rasterizer::CheckBacking(address,size,writing);}
+    virtual void PrepareGpuBacking(VAddr,u64,bool) {}
 public:
     void SetBufferOwnership(std::function<bool(VAddr,u64)> own,
         std::function<bool(VAddr,std::span<const std::byte>)> commit,std::function<void(VAddr,u64)> release){
@@ -105,9 +115,11 @@ public:
     void ResolveGpuBuffers(VAddr,u64);
     void ReleaseCpuBufferWatches(VAddr,u64);
     void SetBufferWriteWatch(std::function<bool(VAddr,u64)> watch){watch_buffer_=std::move(watch);}
+    void SetBufferWatchTransfer(std::function<bool(VAddr,u64,bool)> transfer){transfer_buffer_watch_=std::move(transfer);}
     void EnableBufferStreaming(bool enabled){stream_buffers_enabled_=enabled;}
     void EnableBufferArenas(bool enabled){buffer_arenas_enabled_=enabled;}
     struct ShaderBufferRequest {VAddr address;u64 size;bool written=false;bool unordered_access=false;};
+    struct BufferWrite {VAddr address;u64 size;};
     bool BuffersMayDefer(std::span<const ShaderBufferRequest>);
     void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
         std::lock_guard lock(execution_mutex_);for(const auto& request:requests)if(request.written){
@@ -121,7 +133,8 @@ public:
     };
     // Coalesce and pin guest buffers. Guarded GPU-owned versions remain resident;
     // CPU-visible fallbacks reconcile writes before taking their next snapshot.
-    std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>);
+    std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>,
+        std::optional<std::span<const BufferWrite>> known_writes=std::nullopt);
     struct BufferCopy {VAddr destination,source;u32 bytes;};
     // Ordered GPU copy packets, bounded like the guest copy-shader HLE batches.
     // Whole guarded pages stay GPU-owned until CPU access; other ranges reconcile.
@@ -137,6 +150,8 @@ public:
     void WaitExternalFence(ID3D12Fence* fence,u64 value){
         std::lock_guard lock(execution_mutex_);scheduler_.WaitExternal(fence,value);}
     void ValidateHostMemory(VAddr,u64,bool writing=false);
+    // Legality only: no CPU reconciliation, ownership change or commands.
+    void ValidateGpuBacking(VAddr,u64,bool writing=false);
     bool IsDmaReadable(VAddr,u64);
     GuestDmaMemory& DmaMemory();
     // Caller holds ExecutionMutex through the copy and GPU retirement. Never

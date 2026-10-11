@@ -225,6 +225,6 @@ GuestSurfaceSnapshot MemorySurfaceProvider::Snapshot(const Libraries::VideoOut::
     // image. Put the reciprocal wait behind this immutable copy so subsequent
     // guest rendering may safely reuse the same non-simultaneous texture.
     if(cached)renderer_.WaitExternalFence(completion_.Fence(),context.fence);
-    return {std::move(texture),{}};
+    return {std::move(texture),{},completion_.Fence(),context.fence};
 }
 }

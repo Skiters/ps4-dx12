@@ -43,7 +43,7 @@ bool ImageOverlap(VAddr address,u64 size,const GuestTextureCache::Entry& image) 
 }
 GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
     const Shader::Profile& profile,std::wstring converter,std::wstring dxc)
-    :Rasterizer(device),device_(device),gpu_(gpu),frontend_(profile),shaders_(std::move(converter),NativeOptions()),
+    :GuestBufferAccess(device),device_(device),gpu_(gpu),frontend_(profile),shaders_(std::move(converter),NativeOptions()),
      pipelines_(device,std::move(dxc),frontend_,shaders_),textures_(device) {
     D3D12_FEATURE_DATA_D3D12_OPTIONS13 blend_options{};
     native_alpha_factor_=SUCCEEDED(DX12_API_CALL(device->CheckFeatureSupport(
@@ -80,25 +80,9 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
 GuestRasterizer::~GuestRasterizer(){try{ResolveGpuBuffers(0,UINT64_MAX);ResolveMemory(0,UINT64_MAX);Finish();}catch(...) {/* retire before shader/texture ownership ends */}}
 void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     std::function<bool(VAddr,std::span<std::byte>)> read,std::function<bool(VAddr,std::span<const std::byte>)> write){
-    std::lock_guard lock(execution_mutex_);has_backing_=std::move(has);read_backing_=std::move(read);write_backing_=std::move(write);
-    if(!page_watch_)page_watch_=std::make_unique<PageWatch>([this](VAddr address){
-        std::lock_guard lock(execution_mutex_);ResolveGpuBuffers(address,1);ReleaseCpuBufferWatches(address,1);ReleaseImmutableWatch(address,1);ResolveMemory(address,1);
-    });
-    SetBufferOwnership([this](VAddr address,u64 size){
-        // Own only whole committed pages, never unrelated PS4 suballocations.
-        if(address%4096||size%4096){Diagnostics::Count("buffer-own.unaligned");return false;}
-        if(!has_backing_(address,size)){Diagnostics::Count("buffer-own.no-backing");return false;}
-        ReleaseImmutableWatch(address,size);ResolveMemory(address,size);
-        const bool tracked=page_watch_->Track(address,size);
-        Diagnostics::Count(tracked?"buffer-own.accepted":"buffer-own.track-conflict");
-        Diagnostics::Count(tracked?"buffer-own.accepted-bytes":"buffer-own.rejected-bytes",size);
-        return tracked;
-    },[this](VAddr address,std::span<const std::byte> data){return write_backing_(address,data);},
-      [this](VAddr address,u64 size){page_watch_->Untrack(address,size);});
-    SetBufferWriteWatch([this](VAddr address,u64 size){
-        if(address%4096||size%4096||!has_backing_(address,size)||page_watch_->Contains(address))return false;
-        return page_watch_->Track(address,size,true);
-    });
+    std::lock_guard lock(execution_mutex_);
+    read_backing_=std::move(read);write_backing_=std::move(write);
+    SetBufferBackingAccess(std::move(has),write_backing_);
     EnableBufferStreaming(true);
     EnableBufferArenas(true);
     textures_.SetImmutableWatch([this](auto& image){
@@ -160,14 +144,13 @@ void GuestRasterizer::ResolveMemory(VAddr address,u64 size){
 void GuestRasterizer::ReleaseImmutableWatch(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
     ReleaseCpuBufferWatches(address,size);
+    ReleaseImageWatches(address,size);
+}
+void GuestRasterizer::ReleaseImageWatches(VAddr address,u64 size){
+    std::lock_guard lock(execution_mutex_);
     for(auto& image:textures_.Entries())if(image->cpu_watched&&Overlap(address,size,image->desc.address,image->layout.guest_bytes)){
         image->cpu_watched=false;page_watch_->Untrack(image->desc.address,image->layout.guest_bytes);
     }
-}
-void GuestRasterizer::CheckBacking(VAddr address,u64 size,bool writing){
-    ResolveGpuBuffers(address,size);
-    if(writing)ReleaseImmutableWatch(address,size);
-    Rasterizer::CheckBacking(address,size,writing);
 }
 void GuestRasterizer::DiscardImages(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);

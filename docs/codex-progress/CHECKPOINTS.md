@@ -1,5 +1,24 @@
 # Checkpoints
 
+## 2026-10-11 — complete coherence package, game verification pending
+
+- Base: 3d14e008aa4313abce0e1bf006d06089d02d2964, fix/mixed-cmask.
+- F1: explicit BufferWrite spans, conservative default shader writes, persistent dirty union.
+- F2: READONLY/NOACCESS transfer under PageWatch lock, fresh generation, no writable gap;
+  protected downgrade after successful commit; actual upload-version snapshots and safe watch establishment.
+- F3: ValidateGpuBacking checks mapped/committed/right coverage, then separate image preparation;
+  CPU control records, new uploads, unsupported aliases and actual faults remain coherent.
+- Production GuestBufferAccess fixture covers unchanged watch, CPU stores, 16 concurrent
+  transfers, GPU chains/scratch/partial aliases, prior dirty writes, unrelated CPU-visible
+  dirty storage, failed commit/retry, rights rejection, PRT hole, unmap/remap.
+- Existing GPU PageWatch fixture now supplies Core's committed mapping notification;
+  all original assertions, rearm and queued-fault checks remain.
+- 5 targeted tests pass (package.log); full native suite 211/211 in 67.40 s
+  (suite-verified.log). Core compile/link also succeeded; rebuild from commit follows.
+- Frame instrumentation is opt-in and bounded, arms after world loading, separates new
+  guest flip creation, copy-fence completion and Present queueing. Poll resolution 2 ms;
+  Present queueing is not physical scanout. No repeated/blank frames are counted.
+
 ## 2026-10-11 — recursive buffer reconciliation
 
 - Parent: `ee765f40925fbe7c32aa3ede718161202e6a2a78`, branch `fix/mixed-cmask`.

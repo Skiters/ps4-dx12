@@ -1,5 +1,16 @@
 # Next session
 
+## Active — finish F1–F3 game verification
+
+Supersedes older priorities below. Do not redo the original GXWorker investigation.
+The full native suite passed 211/211 (67.40 s). Commit the package locally, rebuild a clean Release,
+and compare Hunter's Dream at rest against the archived instrumented baseline.
+Do not push, alter installed cores/saves, or expand into F4/F5.
+Baseline-1: 60 completed new guest frames / 98.844 s, 0.607 FPS,
+median interval 1610.690 ms, P95 1703.886 ms; no dropped trace events.
+Baseline-2 crashed before measurement: c0000096 at eboot+0x1196254.
+Evidence/profiles/launchers are under F:/PS4Dev/handoff/coherence-20261011.
+
 ## Final-run priority — slow world updates after ab1bf1a
 
 The final committed build now reaches the world, responds to control beyond 120 s,

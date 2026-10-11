@@ -173,6 +173,13 @@ void Rasterizer::ValidateHostMemory(VAddr address,u64 size,bool writing) {
     if(!IsMapped(address,size))throw std::out_of_range("Native shader memory is unmapped: address="+std::to_string(address)+" bytes="+std::to_string(size)+" writing="+std::to_string(writing));
     CheckBacking(address,size,writing);
 }
+void Rasterizer::ValidateGpuBacking(VAddr address,u64 size,bool writing) {
+    std::lock_guard lock(execution_mutex_);
+    if(!address||!size||address>UINT64_MAX-size||!IsMapped(address,size))
+        throw std::out_of_range("Invalid native GPU backing range");
+    CheckGpuBacking(address,size,writing);
+    Diagnostics::Count("buffer-access.gpu-validation");
+}
 UploadArena::Slice Rasterizer::UploadConstants(std::span<const std::byte> data) {
     std::lock_guard lock(execution_mutex_);
     if(data.empty()||data.size()>65536)throw std::invalid_argument("Native constant data size");
@@ -262,6 +269,16 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
         release_buffer_(base,mapping.size);mapping.cpu_watched=false;
     }
 }
+void Rasterizer::InstallCpuWatch(Mapping& mapping){
+    if(mapping.cpu_watched||!watch_buffer_||mapping.cpu_snapshot.size()!=mapping.size)return;
+    if(!watch_buffer_(mapping.base,mapping.size))return;
+    // Protection is active BEFORE verifying the proof. A store in the gap
+    // between the previous snapshot and Track must not become a watch hit.
+    Diagnostics::Count("buffer-watch.establish-compare.bytes",mapping.size);
+    if(memcmp(mapping.cpu_snapshot.data(),reinterpret_cast<const void*>(mapping.base),size_t(mapping.size))==0)
+        mapping.cpu_watched=true;
+    else{release_buffer_(mapping.base,mapping.size);Diagnostics::Count("buffer-watch.establish-changed");}
+}
 void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
     if(!size)return;
@@ -307,6 +324,16 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
 }
 void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     Diagnostics::Count("buffer-upload.calls");Diagnostics::Count("buffer-upload.bytes",size);
+    const auto exceptions=std::uncaught_exceptions();
+    SCOPE_EXIT {if(std::uncaught_exceptions()>exceptions)range.cpu_snapshot.clear();};
+    const auto snapshot=[&](const void* source)->const void*{
+        if(range.cpu_snapshot.empty()&&!offset&&size==range.size)range.cpu_snapshot.resize(size_t(size));
+        if(range.cpu_snapshot.size()!=range.size)return source;
+        // Snapshot the exact upload version in ordinary cached host memory.
+        // Never read back a write-combined D3D12 UPLOAD heap on the CPU.
+        memcpy(range.cpu_snapshot.data()+offset,source,size_t(size));
+        return range.cpu_snapshot.data()+offset;
+    };
     // A newly placed DEFAULT buffer starts in COMMON. Copy queues may
     // implicitly promote it to COPY_DEST and it decays back to COMMON when the
     // copy submission completes. The direct queue waits on the copy timeline,
@@ -318,6 +345,7 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         // a page-fault resolver may Finish(), which resets upload pages.
         const auto source=reinterpret_cast<VAddr>(data);
         if(IsMapped(source,size))ReadMemory(source,size);
+        data=snapshot(data);
         Begin();
         constexpr u64 page_size=4*1024*1024;
         const auto reserved=(size+255)&~u64(255);
@@ -343,6 +371,7 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     // while the caller holds ExecutionMutex and waits for their copies.
     const auto source=reinterpret_cast<VAddr>(data);
     if(IsMapped(source,size))ReadMemory(source,size);
+    data=snapshot(data);
     Begin();auto upload=Buffer(device_.Get(),size,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
     void* dest=nullptr;D3D12_RANGE empty{0,0};Check(DX12_API_CALL(upload.handle->Map(0,&empty,&dest)));
     const unsigned jobs=size>=4*1024*1024?std::min(14u,std::max(1u,std::thread::hardware_concurrency()/2)):1u;
@@ -364,8 +393,16 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     range.gpu.Transition(scheduler_.Begin(),D3D12_RESOURCE_STATE_COPY_DEST);
     DX12_API_CALL(scheduler_.Begin()->CopyBufferRegion(range.gpu.handle.Get(),offset,upload_resource,0,size));
 }
-std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::span<const ShaderBufferRequest> requests) {
+std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::span<const ShaderBufferRequest> requests,
+    std::optional<std::span<const BufferWrite>> known_writes) {
     std::lock_guard streaming_lock(execution_mutex_);
+    if(known_writes)for(const auto& write:*known_writes){
+        if(!write.size||write.address>UINT64_MAX-write.size||
+           !std::any_of(requests.begin(),requests.end(),[&](const auto& r){
+               return r.written&&write.address>=r.address&&write.address-r.address<=r.size&&
+                   write.size<=r.size-(write.address-r.address);}))
+            throw std::invalid_argument("Known write is outside writable resource envelope");
+    }
     if(stream_buffers_enabled_){
         std::vector<bool> streamed(requests.size());std::vector<ShaderBufferRequest> resident;
         u64 stream_bytes{};
@@ -387,7 +424,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 // stream slices. A view lease pins pages across attachment Finish
                 // and the later draw/dispatch, including asynchronous submission.
                 struct StreamingGuard{bool& enabled;StreamingGuard(bool& e):enabled(e){enabled=false;}~StreamingGuard(){enabled=true;}} guard(stream_buffers_enabled_);
-                auto remaining=resident.empty()?std::vector<ShaderBufferView>{}:PrepareShaderBuffers(resident);
+                auto remaining=resident.empty()?std::vector<ShaderBufferView>{}:PrepareShaderBuffers(resident,known_writes);
                 for(size_t i=0;i<requests.size();++i)if(streamed[i]){
                     CheckBacking(requests[i].address,requests[i].size,false);ReadMemory(requests[i].address,requests[i].size);}
                 page->Reset(scheduler_.Completed());
@@ -413,11 +450,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
             throw std::invalid_argument("Invalid native shader guest buffer range: address="+std::to_string(request.address)+
                 " bytes="+std::to_string(request.size)+" mapped="+std::to_string(IsMapped(request.address,request.size))+
                 " written="+std::to_string(request.written)+" uav="+std::to_string(request.unordered_access));
-        auto cached=mappings_.upper_bound(request.address);
-        const bool gpu_resident=cached!=mappings_.begin()&&(--cached)->second.gpu_owned&&
-            request.address-cached->first<=cached->second.size&&
-            request.size<=cached->second.size-(request.address-cached->first);
-        if(!gpu_resident)CheckBacking(request.address,request.size,request.written);
+        ValidateGpuBacking(request.address,request.size,request.written);
         VAddr first=request.address,last=request.address+request.size;
         // Stable 64KiB residency windows for large read-only PS4 suballocations.
         // Small offset/length changes must not destroy the entire backing buffer.
@@ -488,11 +521,18 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
     // The next submission has not been recorded yet. Retire the preceding
     // dirty ranges before recreating slices, so aliases share one GPU resource.
     diagnostic.Stage("retire-previous-buffers");
+    for(const auto& request:requests){
+        auto cached=mappings_.upper_bound(request.address);
+        const bool protected_resident=cached!=mappings_.begin()&&(--cached)->second.size>=request.address-cached->first&&
+            request.size<=cached->second.size-(request.address-cached->first)&&
+            (cached->second.gpu_owned||cached->second.cpu_watched);
+        if(!protected_resident)PrepareGpuBacking(request.address,request.size,request.written);
+    }
     // Bound retained constants/descriptors while allowing a useful packet of
     // read-only passes to reach the GPU together instead of waiting per draw.
     const bool cpu_visible_dirty=std::any_of(dirty_mappings_.begin(),dirty_mappings_.end(),
         [&](VAddr base){return !mappings_.at(base).gpu_owned;});
-    if(cpu_visible_dirty||read_only_batches_>=32)Finish();
+    if(cpu_visible_dirty||read_only_batches_>=32){Diagnostics::Count(cpu_visible_dirty?"buffer-finish.cpu-visible":"buffer-finish.batch-limit");Finish();}
     ++read_only_batches_;
     // Retire partial-overlap cache entries before retaining any batch mappings.
     // Otherwise a later Find can erase the mapping selected for an earlier,
@@ -560,12 +600,19 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         diagnostic.Stage("backing-validation");
         diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
             (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
-        if(!mapping.gpu_owned)CheckBacking(base,mapping.size,written);
-        // A surviving write-watch proves that the CPU has not changed the
-        // reconciled bytes since the previous Finish. Release protection before
-        // acquiring GPU ownership, but retain that proof for this preparation.
-        const bool cpu_proven_unchanged=mapping.cpu_watched;
-        if(written&&mapping.cpu_watched)ReleaseCpuBufferWatches(base,mapping.size);
+        ValidateGpuBacking(base,mapping.size,written);
+        bool cpu_proven_unchanged=mapping.cpu_watched;
+        if(written&&mapping.cpu_watched){
+            if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
+                mapping.cpu_watched=false;mapping.gpu_owned=true;
+                Diagnostics::Count("buffer-watch.upgraded");
+            }else{
+                // No proof survives a release of protection. Use the snapshot
+                // fallback after a rejected or unavailable atomic transfer.
+                ReleaseCpuBufferWatches(base,mapping.size);cpu_proven_unchanged=false;
+                Diagnostics::Count("buffer-watch.transfer-fallback");
+            }
+        }
         const auto* cpu=reinterpret_cast<const std::byte*>(base);
         diagnostic.Stage("snapshot-compare");
         if(!mapping.gpu_owned&&!mapping.cpu_watched&&!cpu_proven_unchanged){
@@ -587,11 +634,9 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                             offset+=next;
                         }
                         Upload(mapping,first,offset-first,cpu+first);
-                        memcpy(mapping.cpu_snapshot.data()+first,cpu+first,size_t(offset-first));
                     }
                 }else{
-                    if(!fresh)Upload(mapping,0,mapping.size,cpu);
-                    mapping.cpu_snapshot.assign(cpu,cpu+mapping.size);
+                    Upload(mapping,0,mapping.size,cpu);
                 }
             }
         }else if(cpu_proven_unchanged)Diagnostics::Count("buffer-snapshot.watch-hit");
@@ -601,11 +646,13 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
             mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
             Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
         }
-            for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
+            if(known_writes){
+                for(const auto& write:*known_writes)if(write.address>=mapping.base&&write.address+write.size<=mapping.base+mapping.size)
+                    MarkDirty(mapping,true,write.address-mapping.base,write.size);
+            }else for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
                 request.address+request.size<=mapping.base+mapping.size)
                 MarkDirty(mapping,true,request.address-mapping.base,request.size);}
-        else if(!mapping.gpu_owned&&!mapping.cpu_watched&&watch_buffer_)
-            mapping.cpu_watched=watch_buffer_(mapping.base,mapping.size);
+        else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
         mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
@@ -721,6 +768,7 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
     std::lock_guard lock(execution_mutex_);
     constexpr u64 max_extent=64*1024*1024;
     bool destinations_may_defer=!copies.empty();
+    std::map<VAddr,VAddr> destinations;
     // Validate the whole dispatch before recording any destination writes.
     for(const auto& copy:copies){
         // D3D12 buffer copies are byte-addressed.  PS4 copy shaders routinely
@@ -728,8 +776,18 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
         // rejects valid packets even though CopyBufferRegion supports them.
         if(!copy.bytes||copy.bytes>max_extent)
             throw std::invalid_argument("Native GPU copy packet needs 1..64 MiB regions");
-        ValidateHostMemory(copy.source,copy.bytes);ValidateHostMemory(copy.destination,copy.bytes,true);
+        ValidateGpuBacking(copy.source,copy.bytes);ValidateGpuBacking(copy.destination,copy.bytes,true);
+        // Preflight the minimum raw-view envelopes for EVERY packet too;
+        // a late partial-page failure must not follow earlier GPU writes.
+        if(copy.source+copy.bytes>UINT64_MAX-3||copy.destination+copy.bytes>UINT64_MAX-3)
+            throw std::out_of_range("GPU copy envelope overflow");
+        const auto source_begin=copy.source&~VAddr(3),destination_begin=copy.destination&~VAddr(3);
+        ValidateGpuBacking(source_begin,((copy.source+copy.bytes+3)&~VAddr(3))-source_begin);
+        ValidateGpuBacking(destination_begin,((copy.destination+copy.bytes+3)&~VAddr(3))-destination_begin,true);
+        Diagnostics::Count("copy-requested.bytes",copy.bytes);
+        RememberSpan(destinations,copy.destination,copy.destination+copy.bytes);
     }
+    for(const auto& [begin,end]:destinations)Diagnostics::Count("copy-destination.union-bytes",end-begin);
     for(size_t first=0;first<copies.size();) {
         const auto& initial=copies[first];
         VAddr src_begin=initial.source,src_end=initial.source+initial.bytes;
@@ -744,7 +802,7 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
         }
         std::vector<ShaderBufferRequest> requests;
         bool coalesced=true;
-        try{ValidateHostMemory(src_begin,src_end-src_begin);ValidateHostMemory(dst_begin,dst_end-dst_begin,true);}
+        try{ValidateGpuBacking(src_begin,src_end-src_begin);ValidateGpuBacking(dst_begin,dst_end-dst_begin,true);}
         catch(const std::exception&){coalesced=false;}
         if(coalesced){
             // Like the original copy HLE, materialize bounded common operands,
@@ -760,8 +818,8 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
                 const auto page_src_begin=src_begin&~VAddr(4095),page_src_end=(src_end+4095)&~VAddr(4095);
                 const auto page_dst_begin=dst_begin&~VAddr(4095),page_dst_end=(dst_end+4095)&~VAddr(4095);
                 try{
-                    ValidateHostMemory(page_src_begin,page_src_end-page_src_begin);
-                    ValidateHostMemory(page_dst_begin,page_dst_end-page_dst_begin,true);
+                    ValidateGpuBacking(page_src_begin,page_src_end-page_src_begin);
+                    ValidateGpuBacking(page_dst_begin,page_dst_end-page_dst_begin,true);
                     aligned_src_begin=page_src_begin;aligned_src_end=page_src_end;
                     aligned_dst_begin=page_dst_begin;aligned_dst_end=page_dst_end;
                     Diagnostics::Count("copy-hle.page-envelope");
@@ -777,7 +835,9 @@ void Rasterizer::CopyBufferBatch(std::span<const BufferCopy> copies) {
             requests.push_back({source_begin,source_end-source_begin,false,true});
             requests.push_back({destination_begin,destination_end-destination_begin,true,true});
         }
-        const auto views=PrepareShaderBuffers(requests);
+        std::vector<BufferWrite> writes;writes.reserve(end-first);
+        for(size_t i=first;i<end;++i)writes.push_back({copies[i].destination,copies[i].bytes});
+        const auto views=PrepareShaderBuffers(requests,std::span<const BufferWrite>(writes));
         destinations_may_defer&=BuffersMayDefer(requests);
         u64 scratch_bytes{};
         for(size_t i=first;i<end;++i){const auto n=coalesced?0:(i-first)*2;
@@ -842,12 +902,19 @@ void Rasterizer::Finish(){
     for(auto& [r,rb]:readbacks){
         const auto first_dirty=r->dirty_ranges.begin()->first,last_dirty=r->dirty_ranges.rbegin()->second;
         void* data=nullptr;D3D12_RANGE all{SIZE_T(first_dirty),SIZE_T(last_dirty)};Check(DX12_API_CALL(rb.handle->Map(0,&all,&data)));
+        SCOPE_EXIT {D3D12_RANGE no_write{0,0};DX12_API_CALL(rb.handle->Unmap(0,&no_write));};
         if(r->gpu_owned){
-            for(const auto& [begin,end]:r->dirty_ranges)
+            for(const auto& [begin,end]:r->dirty_ranges){
                 if(!commit_buffer_(r->base+begin,std::span(static_cast<const std::byte*>(data)+begin,size_t(end-begin))))
                     throw std::runtime_error("Cannot commit GPU buffer through PS4 physical backing");
-            release_buffer_(r->base,r->size);r->gpu_owned=false;
+                Diagnostics::Count("buffer-commit.bytes",end-begin);
+            }
+            if(r->cpu_snapshot.size()==r->size&&transfer_buffer_watch_&&transfer_buffer_watch_(r->base,r->size,true)){
+                r->cpu_watched=true;Diagnostics::Count("buffer-watch.downgraded");
+            }else release_buffer_(r->base,r->size);
+            r->gpu_owned=false;
         }else{for(const auto& [begin,end]:r->dirty_ranges){CheckBacking(r->base+begin,end-begin,true);
+            Diagnostics::Count("buffer-commit.bytes",end-begin);
             memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,end-begin);}}
         // Finish establishes identical CPU/GPU contents. Preserve that version
         // so the next writable binding uploads only subsequent CPU changes.
@@ -855,12 +922,12 @@ void Rasterizer::Finish(){
             reinterpret_cast<const std::byte*>(r->base),reinterpret_cast<const std::byte*>(r->base)+r->size);
         for(const auto& [begin,end]:r->dirty_ranges)memcpy(r->cpu_snapshot.data()+begin,
             static_cast<const std::byte*>(data)+begin,size_t(end-begin));
-        D3D12_RANGE no_write{0,0};DX12_API_CALL(rb.handle->Unmap(0,&no_write));MarkDirty(*r,false);
+        MarkDirty(*r,false);
         // Reconciled whole pages are identical on CPU and GPU. A write-watch
         // makes the next writable binding O(1) when the guest CPU left them
         // untouched; a real CPU store faults, removes the watch and retains the
         // existing snapshot/block-diff upload path.
-        if(!r->cpu_watched&&watch_buffer_)r->cpu_watched=watch_buffer_(r->base,r->size);
+        InstallCpuWatch(*r);
     }
     scheduler_.Collect();
     uploads_.clear();

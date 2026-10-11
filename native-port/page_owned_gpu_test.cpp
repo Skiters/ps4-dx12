@@ -272,6 +272,9 @@ int main(int argc,char**){try{
         auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,buffer_bytes));Require(memory&&physical);
         const auto base=reinterpret_cast<VAddr>(memory);
         OwnershipRenderer buffers(device.Get());buffers.MapMemory(base,buffer_bytes);
+        // The fixture owns a committed physical alias, just as Core does.
+        // Reservation alone cannot authorize GPU access through NOACCESS.
+        buffers.NotifyHostMapping(base,buffer_bytes,true,true);
         std::atomic<unsigned> commits{},faults{};
         bool rearm_after_resolve=false;
         PageWatch watch([&](uint64_t at){

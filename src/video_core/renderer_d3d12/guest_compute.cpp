@@ -69,8 +69,8 @@ bool ExecuteGuestCopyShader(Rasterizer& rasterizer,const Shader::Info& info,
         ranges.resize(count);
     };
     merge(reads);merge(writes);
-    for(auto [begin,end]:reads)rasterizer.ValidateHostMemory(begin,end-begin);
-    for(auto [begin,end]:writes)rasterizer.ValidateHostMemory(begin,end-begin,true);
+    for(auto [begin,end]:reads)rasterizer.ValidateGpuBacking(begin,end-begin);
+    for(auto [begin,end]:writes)rasterizer.ValidateGpuBacking(begin,end-begin,true);
     // Execute the recognized PS4 copy shader on the native copy path.  The
     // rasterizer keeps command order, uses scratch storage for overlapping
     // aliases, and reconciles only the exact destination ranges.  This avoids

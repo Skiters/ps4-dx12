@@ -7,6 +7,8 @@ namespace VideoCore {
 // Backend-owned frame. Ownership remains with the presenter until presentation
 // completes. Guest flip acknowledgement remains the VideoOut driver's duty.
 struct HostFrame {
+    u64 trace_id{};
+    virtual void TraceGpuCompletion() {}
     virtual ~HostFrame() = default;
 };
 class PresenterInterface {

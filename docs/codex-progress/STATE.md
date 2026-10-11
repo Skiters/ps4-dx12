@@ -1,5 +1,21 @@
 # Native DX12 state
 
+## Active — 2026-10-11 memory coherence F1–F3
+
+This supersedes the next-priority statements in historical sections below.
+The complete F1–F3 package is implemented: separate exact copy write footprints,
+protected PageWatch mode transfer, and GPU legality checks separated from CPU
+reconciliation. GuestRasterizer uses the same GuestBufferAccess implementation as
+the new native integration fixture; image aliases retain conversion/readback.
+Targeted fail-before/pass-after evidence is in
+`F:/PS4Dev/handoff/coherence-20261011/`: F1 12288 vs 64 committed bytes;
+F2 4096 vs 0 snapshot-check bytes; F3 1 vs 0 commits before CPU access.
+Native suite: 211/211 passed in 67.40 s (suite-verified.log).
+Clean committed Release/world verification is the remaining gate.
+No playable-performance claim yet. No push is authorized for this task.
+Original installations and saves remain separate from all test profiles.
+The supplied audit ZIP was not available; implementation follows the request and source review.
+
 ## Final verification — world and control in committed ab1bf1a
 
 Supersedes the precommit outcome below: the dev launcher reaches the saved world,

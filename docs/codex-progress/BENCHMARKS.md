@@ -1,5 +1,30 @@
 # Benchmarks
 
+## Active 2026-10-11 F1–F3 baseline
+
+RTX 5080; Release /O2; separate full copies of one seed profile/save/shader cache;
+Bloodborne CUSA03173 1.09, Hunter's Dream, stationary original camera, 1280x800 patch,
+partial render 0. No Debug Layer/API trace; bounded diagnostics and frame capture
+enabled only for the measured world interval. No builds/tests during game measurements.
+Original ab1bf1a executable archived (SHA256 4d5c6944e6fd0594ace84a45abe37ade9365510edc37f5caad46321c0f8d8097).
+Instrumented baseline: 3d14e00 plus instrumentation-only diff/header archived in baseline-1;
+exe SHA256 a0e9a6f92bcd5f3e5cb9cc7c7f489b132c0967a48b6a19902ff5d45b0f2e44db.
+
+| Run | Seconds | Completed frames | FPS | Median / P95 interval ms |
+|---|---:|---:|---:|---:|
+| baseline-1 | 98.844 | 60 | 0.6070 | 1610.690 / 1703.886 |
+| baseline-2 | — | — | — | crash during loading, c0000096, eboot+0x1196254 |
+
+Baseline-1 aggregate counters: snapshot validation spans 220,238,045,228 bytes,
+buffer readback 7,453,798,204; upload 26,403,089,712; materialized 26,391,368,000.
+`buffer-snapshot.bytes` is the existing checked-span counter (including a missing
+snapshot), not an exact count of bytes loaded by libc memcmp. Stage CPU wall totals
+are inclusive/nested; do not sum them into frame time. Marker sampling and 2-second
+summary windows do not have identical boundaries to frame capture.
+Camera response is visible; original color/edge artifacts are present. No FPS
+claim from Present repetition, menu, microtests or the theoretical F1 ratio.
+Corrected-build and repeated-baseline measurements remain pending.
+
 ## 2026-10-11 reconciliation recursion checkpoint
 
 Baseline `ee765f4`, forced rebuilt core; fixed core uses request-local reconciliation.
