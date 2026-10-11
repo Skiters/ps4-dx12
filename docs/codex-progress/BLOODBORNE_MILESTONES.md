@@ -1,5 +1,14 @@
 # Bloodborne milestones
 
+## Latest verification — 2026-10-11 saved-character loading
+
+Forced baseline and fixed core both visually reached saved-world loading using copies
+of the original DX12 profile. Baseline hit native reconciliation stack exhaustion;
+fixed run hit a separate GXWorker:1 guest fault before a world frame. No new gameplay
+milestone, stable world rendering, full-frame timing or FPS gain is claimed.
+The recursion fix is proven by regression tests, not by passing the same game operation.
+See FULL_FRAME_PROFILE.md. Older setup-profile observations remain separate below.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11: startup/boot/title online-offline choices reverified visually. Colored

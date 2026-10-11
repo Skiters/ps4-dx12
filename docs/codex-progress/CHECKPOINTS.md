@@ -1,5 +1,21 @@
 # Checkpoints
 
+## 2026-10-11 — recursive buffer reconciliation
+
+- Parent: `ee765f40925fbe7c32aa3ede718161202e6a2a78`, branch `fix/mixed-cmask`.
+- Output: containing commit (`git log -1 --format=%H -- docs/codex-progress/FULL_FRAME_PROFILE.md`).
+- Proven cause: an outer nonempty resolving_buffers_ made unrelated CheckBacking
+  requests call Finish recursively; 1,943 repeated sequences exhausted the worker stack.
+- Change: Rasterizer::ResolveGpuBuffers tracks request-local new overlaps; scope cleanup
+  preserves outer state and releases this request's entries after success or exception.
+- Regression: actual GPU copies, exact bytes/padding, nested backing checks, commit failure
+  and retry. Old code fails; fixed code passes. Core built; native suite 208/208, 96.62s.
+- Game: original saved-character profile copies, rebuilt baseline/fixed binaries, partial 0.
+  Fixed run exits at GXWorker:1 `eboot+0x26b2b0b`; no world/FPS improvement established.
+- Evidence, executable hashes and timing limits: FULL_FRAME_PROFILE.md.
+- Next: capture original GXWorker fault context and PageWatch ownership/protection.
+- User authorized commit/push after verified changes; remote delivery is verified separately.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11 — parent a824f9f65668d61080d2e90488435589efcd4f90, clean initial tree.

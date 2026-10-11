@@ -1,5 +1,19 @@
 # Benchmarks
 
+## 2026-10-11 reconciliation recursion checkpoint
+
+Baseline `ee765f4`, forced rebuilt core; fixed core uses request-local reconciliation.
+Regression fails before and passes after; native suite 208/208 in 96.62s with Debug Layer.
+This duration is validation, not performance evidence; the game overlapped part of it.
+Baseline loading window at t=153.615 (~2s): 523 draws, 233 dispatches, 634 direct and
+29 copy submissions; 1,279 buffer misses, 692,477,504 materialized bytes,
+2,559,965,256 snapshot bytes, 389,699,720 readback bytes; fence waits 114.473ms/1,267 calls.
+Fixed final window: snapshot comparison 605.094ms, materialization 182.217ms,
+overlap retirement 108.483ms, snapshot upload 162.979ms. These are nested stage totals,
+not identical-scene comparisons or frame times. No before/after full-frame result exists.
+Exclude debugger pauses; compute timestamps do not cover complete GPU frames.
+See FULL_FRAME_PROFILE.md for evidence and limitations.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11: native-buffer-range-lookup-test, 1,024 resident disjoint mappings,

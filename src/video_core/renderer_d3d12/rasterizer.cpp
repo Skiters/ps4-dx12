@@ -5,6 +5,7 @@
 #include "shader_pipeline.h"
 #include "compute_pipeline.h"
 #include "guest_dma.h"
+#include "common/scope_exit.h"
 #include <algorithm>
 #include <execution>
 #include <numeric>
@@ -273,10 +274,22 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
         const auto previous=std::prev(first);
         if(previous->second.size>address-previous->first)first=previous;
     }
+    std::vector<VAddr> requested;
+    SCOPE_EXIT {
+        for(const auto base:requested)resolving_buffers_.erase(base);
+    };
     for(auto it=first;it!=mappings_.end()&&it->first<address+size;++it)
-        if(it->second.gpu_owned)resolving_buffers_.insert(it->first);
-    if(resolving_buffers_.empty())return;
-    Finish();resolving_buffers_.clear();
+        if(it->second.gpu_owned&&!resolving_buffers_.contains(it->first)){
+            requested.push_back(it->first);
+            resolving_buffers_.insert(it->first);
+        }
+    // Finish also writes CPU-visible dirty mappings. Their virtual CheckBacking
+    // calls return here while an unrelated owned mapping is still resolving.
+    // Only this request's new GPU-owned overlaps may start a reconciliation;
+    // the outer set is not evidence that this CPU range needs another Finish.
+    // Retain outer ownership, and unwind only our additions even on failure.
+    if(requested.empty())return;
+    Finish();
 }
 bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     std::lock_guard lock(execution_mutex_);

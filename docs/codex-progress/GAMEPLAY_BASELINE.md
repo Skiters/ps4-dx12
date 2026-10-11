@@ -1,5 +1,25 @@
 # Bloodborne integration baseline — 2026-10-11
 
+## Latest baseline — saved-character profile and rebuilt core
+
+Source `ee765f4`; both decisive runs used independent copies of the original installed
+DX12 profile with an existing character and Skip Intro, rewritten absolute paths,
+and `SHADPS4_DX12_PARTIAL_RENDER=0`. Both removed only the existing resolution patch's
+assertion-suppression NOP at patch address `0x024B56D2`. Other behavioral patch lines
+remain a comparison caveat. Original profiles and saves were preserved.
+
+| Run | Last verified stage | Outcome |
+|---|---|---|
+| Forced baseline rebuild, PID 34752 | Menu, saved-world loading/item screen | GPU-worker stack exhaustion from recursive buffer reconciliation |
+| Fixed rebuilt core, PID 37116 | Saved-world loading | GXWorker:1 fault at `eboot+0x26b2b0b`, write `0x24347e980` |
+
+The baseline saved-profile menu lacked the previously prominent colored noise, but
+no correct world image was verified. Fixed run ended before baseline's last draw count;
+no later gameplay stage or FPS improvement is proven. The deterministic regression
+proves the recursion fix. FULL_FRAME_PROFILE.md records exact executable/save hashes,
+matching maps, stacks and timing limits. Installed desktop core was not replaced.
+The sections below describe earlier profiles and are not the current launch recipe.
+
 Baseline: `a824f9f65668d61080d2e90488435589efcd4f90`. After runs use this source plus
 the bounded ResolveGpuBuffers lookup in this checkpoint. Native core rebuilt;
 diagnostics enabled; installed Bloodborne CUSA03173. No original Vulkan installation

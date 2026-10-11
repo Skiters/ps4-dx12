@@ -1,5 +1,31 @@
 # Next session
 
+## Current priority — saved-character loading after recursion fix
+
+This supersedes every older plan below. Do not repeat the setup-profile/audio audit.
+
+1. Check current Git HEAD and read FULL_FRAME_PROFILE.md and GAMEPLAY_BASELINE.md.
+   Preserve mixed CMASK and the request-local ResolveGpuBuffers recursion fix.
+2. Use a new copy of `C:/Users/skei/AppData/Local/PS4Desktop/native-profile/user`,
+   with its existing character and Skip Intro. Rewrite absolute General paths. Remove
+   only assertion NOP `0x024B56D2` from the copied patch; preserve original saves/config.
+   The remaining 1280x800 patch includes behavioral changes, a comparison caveat.
+3. Build the current core and verify the launched executable hash/path. Installed
+   desktop core was not updated by this checkpoint. Prior fixed executable/map/PDB:
+   `F:/PS4Dev/handoff/freeze-20261011/fixed-core/`. Set partial render explicitly to 0.
+4. Attach before GXWorker:1 write fault at `eboot+0x26b2b0b` (last address `0x24347e980`).
+   Capture original context, page protection, ownership and all stacks. Determine whether
+   PageWatch should handle the write or the guest address is invalid; fix only with evidence.
+5. Validate with targeted regression and rerun the same saved-world scenario. After a
+   stable world frame, complete CPU/PM4/GPU/present correlation and full-frame measurements.
+   Neither Present counts nor nested stage totals prove FPS; old 0.0064ms remains invalid.
+
+Prior run: baseline stack overflow proven; fixed regression and 208/208 native tests pass.
+Fixed game run ended earlier at a different guest fault, so no game improvement is proven.
+Separate captured CMASK code 2 and audio mutex lifetime issues remain in the report.
+All session-owned game/debugger processes stopped. Commit and push verified changes per
+the user's standing authorization. Keep evidence/binaries/saves outside Git.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11 priority update (supersedes older plan below):

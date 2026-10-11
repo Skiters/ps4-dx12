@@ -1,5 +1,21 @@
 # Open issues
 
+## Current priority — 2026-10-11 saved-character profile
+
+- Fixed: native ResolveGpuBuffers -> Finish -> CheckBacking recursion, confirmed
+  by 1,943 repeated stack sequences and a failing-before/passing-after regression.
+- Next: fixed core exits during saved-world loading on GXWorker:1 at
+  `eboot+0x26b2b0b`, writing `0x24347e980`. Capture original context, protection,
+  ownership and all stacks; distinguish PageWatch handling from an invalid guest address.
+- World-frame freeze/sub-1 FPS remains unverified in these runs; full-frame correlation
+  is still missing. The new run ends before the baseline's last draw count.
+- Separate setup-profile audio assertion is now identified: `Mutex is not initialized.`,
+  DLLightMutex.cpp:126, concurrent with AvPlayer teardown. Lifetime cause remains unknown.
+- Separate captured CMASK code 2 surface has metadata 0x10..0x13. Producer/alias history
+  remains unknown; mixed 0/F implementation stays enabled, unsupported codes stay rejected.
+
+Use FULL_FRAME_PROFILE.md and NEXT_SESSION.md; older priorities below are historical.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11 observed blockers: repeated Mv_AudioPlayThread null write of 0xDEADBA

@@ -1,5 +1,17 @@
 # Native DX12 state
 
+## Current checkpoint — 2026-10-11 saved-world loading
+
+From `ee765f4`: rebuilt core and tested copies of the original DX12 saved-character
+profile (Skip Intro, partial render 0). Confirmed recursive ResolveGpuBuffers/Finish
+writeback exhausted the GPU-worker stack. Request-local reconciliation now prevents
+unrelated nested backing checks from restarting Finish; exception cleanup preserves
+outer state. Baseline regression fails, fixed regression and all 208 native tests pass.
+Fixed game run stopped at a separate GXWorker:1 write fault, `eboot+0x26b2b0b`, before
+a world frame. No full-frame/FPS improvement established. Installed desktop core is
+still the old binary; tested rebuilds are isolated. See FULL_FRAME_PROFILE.md for
+hashes, stacks, timings and next operation. This supersedes older priorities below.
+
 ## Integration checkpoint 2026-10-11
 
 2026-10-11 update: core builds; 208/208 tests pass. ResolveGpuBuffers now searches
