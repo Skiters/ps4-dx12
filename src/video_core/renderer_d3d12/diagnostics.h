@@ -49,7 +49,7 @@ public:
     std::array<Active, 16> active{};
     std::array<Totals, size_t(Kind::Count)> totals{};
     std::array<StageTotals, 96> stages{};
-    std::array<Counter, 64> counters{};
+    std::array<Counter, 128> counters{};
     std::array<GpuTotals, 16> gpu{};
     unsigned lines{};
     const Clock::time_point started = Clock::now();

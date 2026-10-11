@@ -1,5 +1,20 @@
 # Checkpoints
 
+## 2026-10-11 — high-memory implementation checkpoint
+
+- Parent c31111c; single-agent work, dedicated dev profiles and immutable save seed.
+- Configurable DXGI-aware cache/arena budget; no upfront allocation, pressure trimming
+  respects both completed fences and externally held allocation leases.
+- Fixed address-order hot eviction and 64-MiB DMA whole-cache clear in experimental mode.
+  Both regressions fail before and pass after (test-before.log / test-after.log).
+- High-memory full suite first exposed 160-MiB buffers wasting 256-MiB heaps;
+  compact large heaps fix it. suite-high-memory-fixed.log: 215/215, 70.88 s.
+- Real GPU-gated eviction test, snapshot/staging content verification, PRT edge,
+  zero-budget/live-lease checks added; all previous tests retained.
+- Game performance comparison pending; ordinary diagnostic A is archived with its
+  source diff, new header, executable hash and per-frame/counter evidence.
+
+
 
 ## 2026-10-11 — F1–F3 complete, Release world comparison
 

@@ -1,5 +1,21 @@
 # Benchmarks
 
+## Active — high-memory baseline (comparison pending)
+
+2026-10-11: diagnostic A, c31111c plus archived instrumentation and explicit
+512-MiB cap, high-memory disabled. Same prior seed and stationary Hunter's Dream;
+30 seconds warm-up after visible world, then 91.267 seconds capture.
+54 new completed frames, 0.59167 FPS; median 1734.169 ms, P95 1834.414 ms.
+No dropped frame events. 63,958 materializations, 21,329,256,844 materialized bytes,
+852,849 cache hits; 4,912 new GPU backing allocations, 59,046 pool reuses.
+35,837 envelope retirements and 1,318 other overlap retirements were captured;
+this initial instrumentation did not count whole-cache DMA clears. The final
+control build adds their separate counter. 1,518 large upload allocations confirm
+reusable staging work. Top sampled span rematerialized 159 times / 3.04 GB.
+Counters use the diagnostic window, whose boundaries differ slightly from frames.
+This is a new baseline, not the historical F1–F3 aggregate. No high-memory result yet.
+
+
 
 ## Active — final F1–F3 comparison, 2026-10-11
 

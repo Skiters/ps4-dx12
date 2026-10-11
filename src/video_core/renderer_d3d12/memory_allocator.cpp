@@ -33,18 +33,27 @@ void PlacedBufferAllocator::SetBudget(u64 bytes){
     std::lock_guard lock(mutex_);
     // Existing leases remain valid above a reduced budget, but that old
     // commitment must not become the permanent limit for future allocations.
-    budget_=std::max(AlignHeap(bytes),page_size_);
+    budget_=AlignHeap(bytes);
+}
+void PlacedBufferAllocator::Trim(){
+    std::lock_guard lock(mutex_);
+    for(auto it=pages_.begin();it!=pages_.end();){
+        if(it->use_count()==1){committed_-=(*it)->size;it=pages_.erase(it);}else ++it;
+    }
 }
 
 std::shared_ptr<PlacedBufferAllocator::Page> PlacedBufferAllocator::CreatePage(u64 minimum){
-    const auto bytes=std::max(page_size_,AlignHeap(minimum));
+    // Large non-power-of-two buffers otherwise waste nearly an entire arena
+    // page each (e.g. twelve 160-MiB buffers consume twelve 256-MiB heaps).
+    const auto bytes=compact_large_pages_&&minimum>=page_size_/2?AlignHeap(minimum):
+        std::max(std::min(page_size_,budget_),AlignHeap(minimum));
     // Leases are the only owners besides pages_.  Drop completely unused
     // heaps before enforcing the current Windows memory budget.
     for(auto it=pages_.begin();it!=pages_.end();){
         if(it->use_count()==1){committed_-=(*it)->size;it=pages_.erase(it);}
         else ++it;
     }
-    if(bytes>budget_||committed_>budget_-bytes)throw std::runtime_error("D3D12 buffer arena residency budget exhausted");
+    if(bytes>budget_||committed_>budget_-bytes)throw BufferBudgetExhausted();
     D3D12_HEAP_DESC description{};description.SizeInBytes=bytes;description.Alignment=HeapAlignment;
     description.Properties.Type=D3D12_HEAP_TYPE_DEFAULT;
     description.Flags=D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;

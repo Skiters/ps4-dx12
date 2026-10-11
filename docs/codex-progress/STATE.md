@@ -1,5 +1,32 @@
 # Native DX12 state
 
+## Active — high-memory experiment, 2026-10-11
+
+Starting HEAD c31111c, branch fix/mixed-cmask. F1–F3 remain in place.
+SHADPS4_DX12_MEMORY_PERF=1 enables lazy DXGI-budgeted buffer residency;
+SHADPS4_DX12_BUFFER_BUDGET_MB accepts caps up to 8192 MiB (default 4096
+when enabled). Mode off preserves the old adaptive policy unless an explicit
+lower cap is supplied; the 512-MiB control is therefore explicit.
+SHADPS4_DX12_CPU_POOL_MB bounds retained snapshot/upload pools (default 512 MiB).
+Active snapshots and in-flight transfers are separate, required working memory.
+
+Implemented: cold-first eviction, exact-sized large heaps, safe idle-heap trimming,
+snapshot and large staging reuse; aligned DMA copies reuse the exact-footprint
+batch path instead of clearing unrelated residency above the legacy 64-MiB cutoff.
+No speculative expansion across PRT holes or new GPU-owned coalescing.
+Budget reserves max(2 GiB, DXGI budget/8) after accounting for other process
+resources. The physical arena cap includes 25% headroom over the requested
+logical cache; a shortage reduces the effective target. Active bindings and
+outstanding leases survive a reduced target; growth can fail explicitly if safe
+reclamation cannot fit a required allocation. No limit is allocated at startup.
+
+Component regressions reproduced both hot-buffer eviction and tiny-DMA global
+cache destruction, then passed. High-memory full suite: 215/215, 70.88 s.
+Its first attempt exposed large-heap fragmentation (214/215); fixed, not hidden.
+Game comparison is IN PROGRESS; no high-memory FPS improvement claimed yet.
+Evidence: F:/PS4Dev/handoff/high-memory-20261011. Installed program/saves unchanged.
+
+
 
 ## Active — F1–F3 implemented and measured, 2026-10-11
 

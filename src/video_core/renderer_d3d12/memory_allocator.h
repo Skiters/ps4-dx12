@@ -6,6 +6,10 @@
 #include <mutex>
 
 namespace NativeDX12 {
+class BufferBudgetExhausted : public std::runtime_error {
+public:
+    BufferBudgetExhausted():std::runtime_error("D3D12 buffer arena residency budget exhausted"){}
+};
 
 // Buffer heap arena following D3D12 placed-resource alignment and residency
 // rules.  Each lease returns its range when the last Resource copy retires.
@@ -31,6 +35,7 @@ class PlacedBufferAllocator {
     u64 page_size_;
     u64 committed_{};
     u64 budget_;
+    bool compact_large_pages_{};
 
     std::shared_ptr<Page> CreatePage(u64 minimum);
 
@@ -40,6 +45,8 @@ public:
     Resource Allocate(u64 size,D3D12_RESOURCE_FLAGS flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                       D3D12_RESOURCE_STATES initial=D3D12_RESOURCE_STATE_COMMON);
     void SetBudget(u64 bytes);
+    void Trim(); // Releases only pages with no resource leases.
+    void SetCompactLargePages(bool enabled){compact_large_pages_=enabled;}
     u64 CommittedBytes() const { return committed_; }
 };
 

@@ -1,5 +1,20 @@
 # Next session
 
+## Active — finish high-memory mode comparison
+
+Do not repeat F1–F3. The current single-agent task is the high-memory experiment.
+Code and production regressions are implemented. Complete clean-core identity,
+then fresh same-seed 512/2048/4096-MiB runs; 8192 only if DXGI budget permits.
+Use F:/PS4Dev/handoff/high-memory-20261011/prepare.py and capture.ps1;
+same immutable coherence-20261011/seed, saved world, 1280x800, partial render 0.
+Remove validation/API tracing variables from performance child environments.
+Do not run builds/tests during a game measurement. Retain the bounded top-16
+first-4096-address sample caveat; cache counters are exhaustive, sample is not.
+Normalize work by new GPU-completed frames, not repeated presentation.
+Index-buffer fast path remains a separate optional follow-up after cache results.
+The user's standing automatic-push authorization applies after verified commits.
+
+
 
 ## Active — remaining frame cost after verified F1–F3
 

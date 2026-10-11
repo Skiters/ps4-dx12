@@ -1,5 +1,7 @@
 #pragma once
 #include "resources.h"
+#include "buffer_churn.h"
+#include "memory_perf.h"
 #include "command_scheduler.h"
 #include "memory_allocator.h"
 #include "common/fair_recursive_mutex.h"
@@ -26,16 +28,31 @@ protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
+    struct MemoryReuseStats {u64 snapshots{},staging{};};
+    MemoryReuseStats MemoryReuse()const {std::lock_guard lock(execution_mutex_);return memory_reuse_;}
     struct TemporaryBuffer {std::vector<u32> words;};
     std::shared_ptr<TemporaryBuffer> AcquireTemporaryBuffer(u64,const void* initial=nullptr);
 private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
         std::vector<std::byte> cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
-        bool initial_upload_failed=false;};
-    struct RetiredBuffer {Resource gpu;u64 fence;};
+        bool initial_upload_failed=false;u64 allocation_id{},last_use{};};
+    struct RetiredBuffer {Resource gpu;u64 fence;u64 allocation_id;};
     std::vector<RetiredBuffer> buffer_pool_;
     u64 pooled_buffer_bytes_{};
+    BufferChurn churn_;u64 next_allocation_id_{},acquired_allocation_id_{},use_clock_{};
+    MemoryPerfConfig memory_perf_=MemoryPerfConfig::Environment();
+    u64 gpu_pool_budget_=128*MemoryMiB;
+    bool memory_pressure_{};
+    std::vector<std::vector<std::byte>> snapshot_pool_;
+    u64 snapshot_pool_bytes_{};
+    struct LargeUpload {std::unique_ptr<UploadArena> arena;u64 capacity;bool used;};
+    std::vector<LargeUpload> large_upload_pool_;
+    u64 large_upload_pool_bytes_{};
+    MemoryReuseStats memory_reuse_{};
+    void TrimPools();
+    void ResizeSnapshot(Mapping&);
+    void TraceMapping(Mapping&,const char*);
     std::set<VAddr> resolving_buffers_;
     std::function<bool(VAddr,u64)> own_buffer_;
     std::function<bool(VAddr,std::span<const std::byte>)> commit_buffer_;
@@ -85,7 +102,7 @@ private:
     std::vector<std::function<void(u64)>> submission_callbacks_;
     void Begin();
     Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0);
-    void DropCached(VAddr address,u64 size,bool reconcile);
+    void DropCached(VAddr address,u64 size,bool reconcile,const char* reason="overlap");
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);
     void ClearMappings(){for(auto& [_,mapping]:mappings_)RetireBuffer(mapping);mappings_.clear();dirty_mappings_.clear();cached_buffer_bytes_=0;
         std::lock_guard lock(memory_index_mutex_);indexed_buffers_.clear();}

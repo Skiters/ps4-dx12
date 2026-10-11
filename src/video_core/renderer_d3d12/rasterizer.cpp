@@ -63,7 +63,7 @@ struct BufferBudgetObserver {
     }
     bool Query(DXGI_QUERY_VIDEO_MEMORY_INFO& memory){
         const auto now=GetTickCount64();
-        if(checked&&now-checked<10000&&(!event||WaitForSingleObject(event,0)!=WAIT_OBJECT_0))return false;
+        if(checked&&now-checked<1000&&(!event||WaitForSingleObject(event,0)!=WAIT_OBJECT_0))return false;
         checked=now;
         return adapter&&SUCCEEDED(DX12_API_CALL(adapter->QueryVideoMemoryInfo(0,DXGI_MEMORY_SEGMENT_GROUP_LOCAL,&memory)))&&memory.Budget;
     }
@@ -72,17 +72,21 @@ void Rasterizer::RefreshBufferBudget(){
     std::lock_guard lock(execution_mutex_);
     DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
     if(!buffer_budget_observer_->Query(memory))return;
-    // Half of the buffer arena share remains available for placed-resource
-    // alignment, in-flight versions and pooling. Shrinking the logical cache
-    // evicts inactive mappings through the existing fence-safe preparation path.
-    const auto budget=std::clamp<u64>(memory.Budget/8,128ull*1024*1024,Shader::NativeDma::ResidentBufferBytes);
-    if(Diagnostics::Enabled()&&budget!=buffer_cache_budget_)fprintf(stderr,
-        "DX12 buffer budget: cache_bytes=%llu adapter_budget=%llu process_usage=%llu\n",
-        (unsigned long long)budget,(unsigned long long)memory.Budget,(unsigned long long)memory.CurrentUsage);
-    buffer_allocator_.SetBudget(std::clamp<u64>(memory.Budget/4,1024ull*1024*1024,8ull*1024*1024*1024));
-    buffer_cache_budget_=budget;
+    const auto limits=memory_perf_.Budget(memory.Budget,memory.CurrentUsage,buffer_allocator_.CommittedBytes());
+    memory_pressure_=memory_perf_.enabled&&limits.cache<memory_perf_.requested;
+    if(Diagnostics::Enabled()&&(limits.cache!=buffer_cache_budget_||Diagnostics::Hub::Get().capturing))fprintf(stderr,
+        "DX12 memory mode=%u requested=%llu cache=%llu arena=%llu local_usage=%llu local_budget=%llu buffer_heaps=%llu resident=%llu gpu_pool=%llu snapshot_pool=%llu staging_pool=%llu pressure=%u\n",
+        unsigned(memory_perf_.enabled),memory_perf_.requested,limits.cache,limits.arena,memory.CurrentUsage,memory.Budget,
+        buffer_allocator_.CommittedBytes(),cached_buffer_bytes_,pooled_buffer_bytes_,snapshot_pool_bytes_,large_upload_pool_bytes_,unsigned(memory_pressure_));
+    buffer_allocator_.SetBudget(limits.arena);
+    buffer_cache_budget_=limits.cache;
+    gpu_pool_budget_=memory_perf_.enabled?std::min<u64>(512*MemoryMiB,limits.cache/8):128*MemoryMiB;
+    MEMORYSTATUSEX ram{sizeof(ram)};
+    if(memory_perf_.enabled&&GlobalMemoryStatusEx(&ram)&&ram.ullAvailPhys<4ull*1024*MemoryMiB)memory_pressure_=true;
+    TrimPools();
 }
 Rasterizer::Rasterizer(ID3D12Device* device):device_(device),scheduler_(device),buffer_allocator_(device) {
+    buffer_allocator_.SetCompactLargePages(memory_perf_.enabled);
     buffer_budget_observer_=std::make_unique<BufferBudgetObserver>(device);
     RefreshBufferBudget();
     MapMemory(reinterpret_cast<VAddr>(gds_.data()),gds_.size());
@@ -205,11 +209,12 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     if(it!=mappings_.begin()){
         --it;
         if(address-it->first<=it->second.size&&size<=it->second.size-(address-it->first)){
-            if(!it->second.initial_upload_failed){Diagnostics::Count("buffer-cache.hit");return it->second;}
+            if(!it->second.initial_upload_failed){Diagnostics::Count("buffer-cache.hit");it->second.last_use=++use_clock_;
+                churn_.Record(address,size,it->first,it->second.size,it->second.allocation_id,false,it->second.dirty,it->second.gpu_owned,scheduler_.Completed());return it->second;}
             // An upload failure can happen after copy submission. Keep its
             // allocation alive until the ordinary fence retirement path runs,
             // but never return partially initialized contents on a retry.
-            DropCached(it->first,it->second.size,true);
+            DropCached(it->first,it->second.size,true,"failed-reuse");
         }
     }
     Diagnostics::Count("buffer-cache.miss");Diagnostics::Count("buffer-materialized.bytes",size);
@@ -221,7 +226,7 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     const auto cache_budget=std::max(buffer_cache_budget_,batch_budget);
     if(size>max_slice||size>cache_budget)throw std::runtime_error("Native buffer slice exceeds current slice/residency budget");
     DropCached(address,size,true);
-    if(CachedBufferBytes()>cache_budget-size){ResolveGpuBuffers(0,UINT64_MAX);Finish();ClearMappings();}
+    if(CachedBufferBytes()>cache_budget-size){ResolveGpuBuffers(0,UINT64_MAX);Finish();for(auto& [_,m]:mappings_)TraceMapping(m,"budget");ClearMappings();}
     CheckBacking(address,size,false);
     // Publish before GPU allocation/upload; concurrent CPU invalidation must
     // take the serialized path as soon as a GPU view is being materialized.
@@ -229,7 +234,9 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     Mapping* stored{};
     try{
         Mapping range{address,size,AcquireBuffer((size+3)&~u64(3))};
+        range.allocation_id=acquired_allocation_id_;range.last_use=++use_clock_;
         stored=&mappings_.emplace(address,std::move(range)).first->second;
+        churn_.Record(address,size,address,size,stored->allocation_id,true,false,false,scheduler_.Completed());
     }catch(...){
         // No GPU command references this allocation yet. Do not leave the CPU
         // invalidation index advertising a mapping that was never created.
@@ -249,7 +256,25 @@ Resource Rasterizer::AcquireBuffer(u64 size){
         if(it->fence<=completed&&capacity>=size&&capacity-size<=std::max<u64>(65536,size/4)&&
            (best==buffer_pool_.end()||capacity<best->gpu.handle->GetDesc().Width))best=it;
     }
-    if(best==buffer_pool_.end())return buffer_allocator_.Allocate(size);
+    if(best==buffer_pool_.end()){
+        Diagnostics::Count("buffer-allocation.new");
+        Diagnostics::Count(buffer_pool_.empty()?"buffer-pool.empty":"buffer-pool.no-compatible-retired-allocation");
+        acquired_allocation_id_=++next_allocation_id_;
+        try{return buffer_allocator_.Allocate(size);}
+        catch(const BufferBudgetExhausted&){
+            if(!memory_perf_.enabled)throw;
+            // Idle pool resources can occupy otherwise reusable arena pages.
+            // Never reclaim a lease held by a view or an unfinished submission.
+            for(auto it=buffer_pool_.begin();it!=buffer_pool_.end();){
+                if(it->fence>completed||(it->gpu.allocation&&it->gpu.allocation.use_count()>1)){++it;continue;}
+                pooled_buffer_bytes_-=it->gpu.handle->GetDesc().Width;it=buffer_pool_.erase(it);
+            }
+            buffer_allocator_.Trim();Diagnostics::Count("buffer-allocation.pressure-retry");
+            return buffer_allocator_.Allocate(size);
+        }
+    }
+    Diagnostics::Count("buffer-allocation.reuse");
+    acquired_allocation_id_=best->allocation_id;
     pooled_buffer_bytes_-=best->gpu.handle->GetDesc().Width;
     auto result=std::move(best->gpu);buffer_pool_.erase(best);return result;
 }
@@ -259,9 +284,47 @@ void Rasterizer::RetireBuffer(Mapping& mapping){
     const auto capacity=mapping.gpu.handle->GetDesc().Width;
     // Retired resources remain alive through their last fence. Keep a bounded
     // best-fit pool so changing PS4 slices do not allocate committed heaps per draw.
-    if(pooled_buffer_bytes_+capacity<=128ULL*1024*1024&&buffer_pool_.size()<4096){
-        pooled_buffer_bytes_+=capacity;buffer_pool_.push_back({std::move(mapping.gpu),scheduler_.Submitted()});
+    // Every caller submits and waits before retirement; never label open-list
+    // users with the previous submission's fence.
+    if(scheduler_.Recording()||scheduler_.Completed()<scheduler_.Submitted())
+        throw std::logic_error("Retiring buffer before its recorded GPU users complete");
+    if(memory_perf_.enabled&&!memory_pressure_&&mapping.cpu_snapshot.capacity()&&
+       mapping.cpu_snapshot.capacity()<=memory_perf_.cpu_pool/2-snapshot_pool_bytes_&&snapshot_pool_.size()<4096){
+        mapping.cpu_snapshot.clear();snapshot_pool_bytes_+=mapping.cpu_snapshot.capacity();
+        snapshot_pool_.push_back(std::move(mapping.cpu_snapshot));
     }
+    if(pooled_buffer_bytes_+capacity<=gpu_pool_budget_&&buffer_pool_.size()<4096){
+        pooled_buffer_bytes_+=capacity;buffer_pool_.push_back({std::move(mapping.gpu),scheduler_.Submitted(),mapping.allocation_id});
+    }
+}
+void Rasterizer::TrimPools(){
+    if(!memory_perf_.enabled)return;
+    const auto limit=memory_pressure_?0:gpu_pool_budget_;
+    for(auto it=buffer_pool_.begin();it!=buffer_pool_.end()&&pooled_buffer_bytes_>limit;){
+        if(it->fence>scheduler_.Completed()||(it->gpu.allocation&&it->gpu.allocation.use_count()>1)){++it;continue;}
+        pooled_buffer_bytes_-=it->gpu.handle->GetDesc().Width;it=buffer_pool_.erase(it);
+    }
+    if(memory_pressure_){snapshot_pool_.clear();snapshot_pool_bytes_=0;
+        for(auto it=large_upload_pool_.begin();it!=large_upload_pool_.end();){
+            if(it->used){++it;continue;}large_upload_pool_bytes_-=it->capacity;it=large_upload_pool_.erase(it);
+        }
+        buffer_allocator_.Trim();
+    }
+}
+void Rasterizer::ResizeSnapshot(Mapping& mapping){
+    if(memory_perf_.enabled&&mapping.cpu_snapshot.capacity()<mapping.size){
+        auto best=snapshot_pool_.end();
+        for(auto it=snapshot_pool_.begin();it!=snapshot_pool_.end();++it)
+            if(it->capacity()>=mapping.size&&it->capacity()-mapping.size<=std::max<u64>(65536,mapping.size/4)&&
+               (best==snapshot_pool_.end()||it->capacity()<best->capacity()))best=it;
+        if(best!=snapshot_pool_.end()){
+            snapshot_pool_bytes_-=best->capacity();mapping.cpu_snapshot=std::move(*best);snapshot_pool_.erase(best);
+            Diagnostics::Count("buffer-snapshot.allocation-reuse");
+            ++memory_reuse_.snapshots;
+        }
+    }
+    if(mapping.cpu_snapshot.capacity()<mapping.size)Diagnostics::Count("buffer-snapshot.allocation-new");
+    mapping.cpu_snapshot.resize(size_t(mapping.size));
 }
 void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
@@ -324,10 +387,11 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
 }
 void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     Diagnostics::Count("buffer-upload.calls");Diagnostics::Count("buffer-upload.bytes",size);
+    churn_.Record(range.base,size,range.base,range.size,range.allocation_id,false,range.dirty,range.gpu_owned,scheduler_.Completed(),nullptr,size);
     const auto exceptions=std::uncaught_exceptions();
     SCOPE_EXIT {if(std::uncaught_exceptions()>exceptions)range.cpu_snapshot.clear();};
     const auto snapshot=[&](const void* source)->const void*{
-        if(range.cpu_snapshot.empty()&&!offset&&size==range.size)range.cpu_snapshot.resize(size_t(size));
+        if(range.cpu_snapshot.empty()&&!offset&&size==range.size)ResizeSnapshot(range);
         if(range.cpu_snapshot.size()!=range.size)return source;
         // Snapshot the exact upload version in ordinary cached host memory.
         // Never read back a write-combined D3D12 UPLOAD heap on the CPU.
@@ -352,7 +416,8 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         if(upload_page_cursor_%page_size+reserved>page_size)
             upload_page_cursor_=(upload_page_cursor_+page_size-1)&~(page_size-1);
         const auto page=size_t(upload_page_cursor_/page_size);
-        if(page==upload_pages_.size())upload_pages_.push_back(std::make_unique<UploadArena>(device_.Get(),page_size));
+        if(page==upload_pages_.size()){Diagnostics::Count("buffer-staging.new");upload_pages_.push_back(std::make_unique<UploadArena>(device_.Get(),page_size));}
+        else Diagnostics::Count("buffer-staging.reuse");
         auto slice=upload_pages_[page]->Allocate(reserved);
         upload_page_cursor_+=reserved;
         memcpy(slice.cpu,data,size);
@@ -372,6 +437,30 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     const auto source=reinterpret_cast<VAddr>(data);
     if(IsMapped(source,size))ReadMemory(source,size);
     data=snapshot(data);
+    if(memory_perf_.enabled&&size<=memory_perf_.cpu_pool/4){
+        const auto source=reinterpret_cast<VAddr>(data);
+        if(IsMapped(source,size))ReadMemory(source,size);
+        auto best=large_upload_pool_.end();
+        for(auto it=large_upload_pool_.begin();it!=large_upload_pool_.end();++it)
+            if(!it->used&&it->capacity>=size&&(best==large_upload_pool_.end()||it->capacity<best->capacity))best=it;
+        if(best==large_upload_pool_.end()&&!memory_pressure_&&size<=memory_perf_.cpu_pool/4-large_upload_pool_bytes_){
+            auto arena=std::make_unique<UploadArena>(device_.Get(),size);
+            large_upload_pool_.push_back({std::move(arena),size,false});large_upload_pool_bytes_+=size;
+            best=std::prev(large_upload_pool_.end());Diagnostics::Count("buffer-staging.large-new");
+        }else if(best!=large_upload_pool_.end()){
+            Diagnostics::Count("buffer-staging.large-reuse");++memory_reuse_.staging;
+        }
+        if(best!=large_upload_pool_.end()){
+            data=snapshot(data);auto slice=best->arena->Allocate(size);best->used=true;
+            memcpy(slice.cpu,data,size_t(size));
+            if(copy_queue_eligible)scheduler_.SubmitCopy([&](ID3D12GraphicsCommandList* copy){
+                DX12_API_CALL(copy->CopyBufferRegion(range.gpu.handle.Get(),offset,slice.resource,slice.offset,size));});
+            else{range.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+                DX12_API_CALL(RecordingList()->CopyBufferRegion(range.gpu.handle.Get(),offset,slice.resource,slice.offset,size));}
+            return;
+        }
+    }
+    Diagnostics::Count("buffer-staging.large-new");
     Begin();auto upload=Buffer(device_.Get(),size,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
     void* dest=nullptr;D3D12_RANGE empty{0,0};Check(DX12_API_CALL(upload.handle->Map(0,&empty,&dest)));
     const unsigned jobs=size>=4*1024*1024?std::min(14u,std::max(1u,std::thread::hardware_concurrency()/2)):1u;
@@ -551,7 +640,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
             // larger allocation with incompatible simultaneous native states.
             if(srv&&uav)covered=false;
         }
-        if(!covered)DropCached(first,last-first,true);
+        if(!covered)DropCached(first,last-first,true,"envelope");
     }
     // Reserve only genuinely new backing. Counting already resident requests
     // twice evicted every large (>256 MiB) unchanged batch on every draw.
@@ -574,10 +663,15 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         }
         // Finish has retired all users. Drop only inactive mappings before
         // considering full rematerialization of oversized covered allocations.
-        for(auto it=mappings_.begin();it!=mappings_.end()&&CachedBufferBytes()>cache_budget-additional;){
-            if(protected_mappings.contains(it->first)){++it;continue;}
-            ResolveGpuBuffers(it->first,it->second.size);
-            cached_buffer_bytes_-=it->second.size;dirty_mappings_.erase(it->first);RemoveBufferIndex(it->first);RetireBuffer(it->second);it=mappings_.erase(it);
+        std::vector<VAddr> candidates;
+        for(const auto& [base,mapping]:mappings_)if(!protected_mappings.contains(base))candidates.push_back(base);
+        if(memory_perf_.enabled)std::sort(candidates.begin(),candidates.end(),[&](VAddr a,VAddr b){
+            return mappings_.at(a).last_use<mappings_.at(b).last_use;
+        });
+        for(const auto base:candidates){
+            if(CachedBufferBytes()<=cache_budget-additional)break;
+            auto it=mappings_.find(base);ResolveGpuBuffers(it->first,it->second.size);
+            TraceMapping(it->second,"budget");cached_buffer_bytes_-=it->second.size;dirty_mappings_.erase(it->first);RemoveBufferIndex(it->first);RetireBuffer(it->second);mappings_.erase(it);
         }
         if(CachedBufferBytes()>cache_budget-additional){ResolveGpuBuffers(0,UINT64_MAX);ClearMappings();}
     }
@@ -621,6 +715,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 memcmp(mapping.cpu_snapshot.data(),cpu,size_t(mapping.size))==0;
             Diagnostics::Count(unchanged?"buffer-snapshot.unchanged":"buffer-snapshot.changed");
             if(!unchanged){
+                Diagnostics::Count("buffer-content.changed");
                 diagnostic.Stage("snapshot-upload");
                 if(!fresh&&mapping.cpu_snapshot.size()==mapping.size){
                     constexpr u64 block=4096;
@@ -704,13 +799,18 @@ bool Rasterizer::IsMapped(VAddr a,u64 s){
     std::lock_guard lock(execution_mutex_);
     if(!s||a>UINT64_MAX-s)return false;auto it=mapped_ranges_.upper_bound(a);if(it==mapped_ranges_.begin())return false;--it;return a+s<=it->second;
 }
-void Rasterizer::DropCached(VAddr a,u64 s,bool reconcile){
+void Rasterizer::TraceMapping(Mapping& m,const char* reason){
+    Diagnostics::Count("buffer-eviction.count");
+    Diagnostics::Count(reason==std::string_view("budget")?"buffer-eviction.budget":reason==std::string_view("envelope")?"buffer-eviction.envelope":reason==std::string_view("failed-reuse")?"buffer-eviction.failed-reuse":reason==std::string_view("dma-global-clear")?"buffer-eviction.dma-global-clear":"buffer-eviction.overlap");
+    churn_.Record(m.base,m.size,m.base,m.size,m.allocation_id,false,m.dirty,m.gpu_owned,scheduler_.Completed(),reason);
+}
+void Rasterizer::DropCached(VAddr a,u64 s,bool reconcile,const char* reason){
     auto first=mappings_.lower_bound(a);
     if(first!=mappings_.begin()){auto previous=std::prev(first);if(previous->first+previous->second.size>a)first=previous;}
     if(first==mappings_.end()||first->first>=a+s)return;
     ResolveGpuBuffers(a,s);
     if(reconcile)Finish();else{auto token=Flush();if(token)scheduler_.Wait(token);}
-    while(first!=mappings_.end()&&first->first<a+s){cached_buffer_bytes_-=first->second.size;
+    while(first!=mappings_.end()&&first->first<a+s){TraceMapping(first->second,reason);cached_buffer_bytes_-=first->second.size;
         dirty_mappings_.erase(first->first);RemoveBufferIndex(first->first);RetireBuffer(first->second);first=mappings_.erase(first);}
 }
 void Rasterizer::UnmapMemory(VAddr a,u64 s){
@@ -744,12 +844,24 @@ void Rasterizer::FillBuffer(VAddr a,u32 s,u32 value,bool gds){
 }
 void Rasterizer::CopyBuffer(VAddr dst,VAddr src,u32 s,bool dg,bool sg){
     std::lock_guard lock(execution_mutex_);
+    if((dg&&(dst>gds_.size()||s>gds_.size()-dst))||(sg&&(src>gds_.size()||s>gds_.size()-src)))
+        throw std::out_of_range("GDS copy range");
     auto da=dg?dst+reinterpret_cast<VAddr>(gds_.data()):dst;
     auto sa=sg?src+reinterpret_cast<VAddr>(gds_.data()):src;
     if(!s||s>32*1024*1024)throw std::invalid_argument("copy requires 1..32 MiB bounded slices");
     if(da>UINT64_MAX-s||sa>UINT64_MAX-s)throw std::out_of_range("copy address overflow");
+    if(memory_perf_.enabled&&!(da%4)&&!(sa%4)&&!(s%4)){
+        // Reuse the verified exact-footprint copy path. Its active batch pins
+        // both operands, retains dirty neighbors, handles same-resource scratch
+        // and reconciles before CPU access. A tiny DMA must not flush unrelated
+        // resident backing merely because the total cache exceeds 64 MiB.
+        const BufferCopy copy{da,sa,s};CopyBufferBatch(std::span(&copy,1));return;
+    }
     // Pin both participating slices by reserving the worst-case pair budget.
-    if(CachedBufferBytes()>64*1024*1024-u64(s)*2){ResolveGpuBuffers(0,UINT64_MAX);Finish();ClearMappings();}
+    if(CachedBufferBytes()>64*1024*1024-u64(s)*2){
+        Diagnostics::Count("buffer-cache.dma-global-clear");
+        ResolveGpuBuffers(0,UINT64_MAX);Finish();
+        for(auto& [_,mapping]:mappings_)TraceMapping(mapping,"dma-global-clear");ClearMappings();}
     // Discard existing overlapping cache spans before taking references: one
     // old span may partially cover both requests and invalidate the first Find.
     DropCached(da,s,true);DropCached(sa,s,true);
@@ -918,8 +1030,8 @@ void Rasterizer::Finish(){
             memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,end-begin);}}
         // Finish establishes identical CPU/GPU contents. Preserve that version
         // so the next writable binding uploads only subsequent CPU changes.
-        if(r->cpu_snapshot.size()!=r->size)r->cpu_snapshot.assign(
-            reinterpret_cast<const std::byte*>(r->base),reinterpret_cast<const std::byte*>(r->base)+r->size);
+        if(r->cpu_snapshot.size()!=r->size){ResizeSnapshot(*r);
+            memcpy(r->cpu_snapshot.data(),reinterpret_cast<const void*>(r->base),size_t(r->size));}
         for(const auto& [begin,end]:r->dirty_ranges)memcpy(r->cpu_snapshot.data()+begin,
             static_cast<const std::byte*>(data)+begin,size_t(end-begin));
         MarkDirty(*r,false);
@@ -931,11 +1043,17 @@ void Rasterizer::Finish(){
     }
     scheduler_.Collect();
     uploads_.clear();
+    for(auto& page:large_upload_pool_){page.arena->Reset(scheduler_.Completed());page.used=false;}
+    TrimPools();
     // Every recorded list has completed here. Constant descriptors may retain
     // the arena resource, but their GPU reads have retired before the reset.
     if(constants_)DX12_API_CALL(constants_->Reset(scheduler_.Completed()));
     for(auto& page:upload_pages_)page->Reset(scheduler_.Completed());
     upload_page_cursor_=0;
+    if(memory_perf_.enabled){
+        const auto keep=memory_pressure_?0:size_t(memory_perf_.cpu_pool/(4*4*MemoryMiB));
+        if(upload_pages_.size()>keep)upload_pages_.resize(keep);
+    }
 }
 bool Rasterizer::ReadMemory(VAddr a,u64 s,bool){
     std::lock_guard lock(execution_mutex_);if(!IsMapped(a,s))return false;
