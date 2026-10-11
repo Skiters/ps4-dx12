@@ -5,6 +5,7 @@
 #include "video_core/amdgpu/regs_color.h"
 #include "video_core/amdgpu/regs_depth.h"
 #include "video_core/amdgpu/cb_db_extent.h"
+#include "video_core/amdgpu/tiling.h"
 #include <bit>
 #include <algorithm>
 #include <cstring>
@@ -211,63 +212,119 @@ GuestTextureDesc DescribeGuestColorBuffer(const AmdGpu::ColorBuffer& buffer,AmdG
         throw std::runtime_error("Native guest color buffer padded storage extent needs explicit layout");
     return desc;
 }
-// GFX6-9 single-sample CMASK: nibble 0 means CB_CLEAR_WORD, F means
-// expanded color. Uniform slices need no metadata address equation. Mixed tiles
-// remain rejected until the PS4 CMASK equation is implemented. The guest memory
-// is materialized before native attachment upload, so sampled aliases also see
-// the clear, and a later FCE is idempotent.
+// Single-sample GCN CMASK: 0 selects CB_CLEAR_WORD, F selects expanded color.
 uint64_t GuestCmaskBytes(const AmdGpu::ColorBuffer& b) {
     return (uint64_t(b.cmask_slice.tile_max)+1)*128*b.NumSlices();
 }
-bool GuestColorClearPending(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
+namespace {
+struct CmaskTile { uint32_t layer,x,y; uint64_t byte; uint32_t shift; };
+struct CmaskClearPlan {
+    std::vector<uint32_t> uniform_layers;
+    std::vector<CmaskTile> tiles;
+    bool Pending() const {return !uniform_layers.empty()||!tiles.empty();}
+};
+// AMD AddrLib SiLib::HwlComputeXmaskAddrFromCoord and
+// TileCoordToMaskElementIndex, specialized for base PS4 P8_32x32_16x16.
+// Tile-mode indices are NOT pipe configurations.  Eight 256-byte pipe lanes
+// interleave 4-bit elements for 8x8 color tiles. A cache tile is 512x256 pixels;
+// the complete metadata slice is padded to the 2048-byte pipe-group alignment.
+struct CmaskLayout {
+    uint32_t pitch,height;
+    uint64_t slice_bytes;
+    bool linear;
+    explicit CmaskLayout(const AmdGpu::ColorBuffer& b):linear(b.info.cmask_is_linear) {
+        const auto tile=uint32_t(b.GetTileMode());
+        if(b.info.alt_tile_mode||b.info.cmask_addr_type||
+           !(tile<=10||tile==12||tile==13||tile==14||tile==17||tile==18||tile==19||tile==20||tile==23||tile==25))
+            throw std::runtime_error("Native CMASK requires base PS4 P8_32x32_16x16 addressing");
+        const uint32_t mw=linear?64:512,mh=linear?64:256;
+        pitch=Align(b.Pitch(),mw);height=Align(b.Height(),mh);
+        while((uint64_t(pitch)*height/128)%2048)height+=mh;
+        slice_bytes=uint64_t(pitch)*height/128;
+        if(slice_bytes!=(uint64_t(b.cmask_slice.tile_max)+1)*128)
+            throw std::runtime_error("Native CMASK descriptor does not match padded metadata slice");
+    }
+    CmaskTile At(uint32_t layer,uint32_t x,uint32_t y) const {
+        const uint32_t tx=x/8,ty=y/8;
+        const uint32_t pipe=((tx^ty^(tx>>1))&1)|((((tx>>1)^(ty>>1))&1)<<1)|
+            ((((tx>>2)^(ty>>2))&1)<<2);
+        const uint32_t elem=(((tx>>1)^ty)&1)|(tx&2);
+        uint64_t micro,macro_bits;
+        if(linear) {
+            micro=uint64_t(tx/4+(ty/4)*(pitch/32))*2;
+            macro_bits=uint64_t(layer)*(pitch/8)*(height/8)/8*4;
+        } else {
+            micro=uint64_t((x%512)/32+((y%256)/32)*16)*2;
+            const auto macro=uint64_t(x/512)+uint64_t(y/256)*(pitch/512)+
+                uint64_t(layer)*(pitch/512)*(height/256);
+            macro_bits=macro*1024;
+        }
+        micro=(micro&~3ull)+elem;
+        const uint64_t bits=macro_bits+micro*4;
+        const uint64_t byte=(bits%2048)/8+uint64_t(pipe)*256+(bits/2048)*2048;
+        if(byte<layer*slice_bytes||byte>=(layer+1)*slice_bytes)
+            throw std::out_of_range("Native CMASK tile exceeds metadata slice");
+        return {layer,x,y,byte,uint32_t(bits%8)};
+    }
+};
+CmaskClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
     const GuestTextureLayout& l,std::span<const std::byte> cmask) {
-    if(!b.info.fast_clear||!b.cmask_base_address)return false;
+    CmaskClearPlan plan;
+    if(!b.info.fast_clear||!b.cmask_base_address)return plan;
     if(b.NumSamples()!=1||b.info.compression||b.info.dcc_enable||l.block_extent!=1)
         throw std::runtime_error("Native CMASK requires uncompressed single-sample color");
     if(cmask.size()<GuestCmaskBytes(b)||d.first_layer>=b.NumSlices()||
        !d.view_layers||d.view_layers>b.NumSlices()-d.first_layer)
         throw std::out_of_range("Native CMASK storage/view too short");
     const auto slice_bytes=GuestCmaskBytes(b)/b.NumSlices();
-    bool pending=false;
-    for(uint32_t layer=d.first_layer;layer<d.first_layer+d.view_layers;++layer){
-        const auto slice=cmask.subspan(size_t(slice_bytes*layer),size_t(slice_bytes));
-        if(std::all_of(slice.begin(),slice.end(),[](auto v){return v==std::byte{0xff};}))continue;
-        if(!std::all_of(slice.begin(),slice.end(),[](auto v){return v==std::byte{0};}))
-            throw std::runtime_error("Native CMASK mixed tile codes require address equation: address="+
-                std::to_string(b.CmaskAddress())+" layer="+std::to_string(layer));
-        pending=true;
-    }
-    return pending;
-}
-bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
-    const GuestTextureLayout& l,std::span<std::byte> color,std::span<std::byte> cmask) {
-    if(!GuestColorClearPending(b,d,l,cmask))return false;
-    const auto slice_bytes=GuestCmaskBytes(b)/b.NumSlices();
-    if(color.size()<l.guest_bytes||cmask.size()<GuestCmaskBytes(b))
-        throw std::out_of_range("Native CMASK/color storage span too short");
-    std::vector<uint32_t> cleared;
-    // Validate every selected layer before modifying any guest storage.
     for(uint32_t layer=d.first_layer;layer<d.first_layer+d.view_layers;++layer) {
         const auto slice=cmask.subspan(size_t(slice_bytes*layer),size_t(slice_bytes));
         if(std::all_of(slice.begin(),slice.end(),[](auto v){return v==std::byte{0xff};}))continue;
-        if(!std::all_of(slice.begin(),slice.end(),[](auto v){return v==std::byte{0};}))
-            throw std::runtime_error("Native CMASK mixed tile codes require address equation: address="+
-                std::to_string(b.CmaskAddress())+" layer="+std::to_string(layer)+
-                " slice_bytes="+std::to_string(slice_bytes)+" first="+std::to_string(std::to_integer<unsigned>(slice[0])));
-        cleared.push_back(layer);
+        if(std::all_of(slice.begin(),slice.end(),[](auto v){return v==std::byte{0};})) {
+            plan.uniform_layers.push_back(layer);continue;
+        }
+        const CmaskLayout layout(b);
+        for(uint32_t y=0;y<d.height;y+=8)for(uint32_t x=0;x<d.width;x+=8) {
+            const auto tile=layout.At(layer,x,y);
+            const auto code=(std::to_integer<unsigned>(cmask[tile.byte])>>tile.shift)&15;
+            if(code!=0&&code!=15)
+                throw std::runtime_error("Native single-sample CMASK unsupported tile code="+std::to_string(code)+
+                    " address="+std::to_string(b.CmaskAddress())+" x="+std::to_string(x)+" y="+std::to_string(y));
+            if(code==0)plan.tiles.push_back(tile);
+        }
     }
-    if(cleared.empty())return false;
-    // Clear words are in the target's packed memory format, before component
-    // swizzling or sRGB decoding. 128-bit formats replicate word0 into RGB.
+    return plan;
+}
+}
+bool GuestColorClearPending(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
+    const GuestTextureLayout& l,std::span<const std::byte> cmask) {
+    return PlanGuestColorClear(b,d,l,cmask).Pending();
+}
+bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
+    const GuestTextureLayout& l,std::span<std::byte> color,std::span<std::byte> cmask) {
+    // Validate every selected layer and tile before modifying either plane.
+    const auto plan=PlanGuestColorClear(b,d,l,cmask);
+    if(!plan.Pending())return false;
+    if(color.size()<l.guest_bytes)throw std::out_of_range("Native CMASK color storage span too short");
     const uint32_t words[]{b.clear_word0,b.clear_word1};
     const uint32_t wide[]{b.clear_word0,b.clear_word0,b.clear_word0,b.clear_word1};
     const auto* pixel=reinterpret_cast<const std::byte*>(l.bytes_per_pixel==16?wide:words);
-    std::vector<std::byte> linear(size_t(d.width)*d.height*l.bytes_per_pixel);
-    for(size_t offset=0;offset<linear.size();offset+=l.bytes_per_pixel)
-        memcpy(linear.data()+offset,pixel,l.bytes_per_pixel);
-    for(auto layer:cleared) {
-        EncodeGuestSubresource(d,l,color,linear,0,layer);
-        std::fill_n(cmask.begin()+size_t(slice_bytes*layer),size_t(slice_bytes),std::byte{0xff});
+    const auto slice_bytes=GuestCmaskBytes(b)/b.NumSlices();
+    if(!plan.uniform_layers.empty()) {
+        std::vector<std::byte> linear(size_t(d.width)*d.height*l.bytes_per_pixel);
+        for(size_t offset=0;offset<linear.size();offset+=l.bytes_per_pixel)memcpy(linear.data()+offset,pixel,l.bytes_per_pixel);
+        for(auto layer:plan.uniform_layers) {
+            EncodeGuestSubresource(d,l,color,linear,0,layer);
+            std::fill_n(cmask.begin()+size_t(slice_bytes*layer),size_t(slice_bytes),std::byte{0xff});
+        }
+    }
+    for(const auto& tile:plan.tiles) {
+        for(uint32_t y=tile.y;y<std::min(tile.y+8,d.height);++y)
+        for(uint32_t x=tile.x;x<std::min(tile.x+8,d.width);++x) {
+            const auto offset=GuestPixelOffset(d,l,0,tile.layer,x,y);
+            memcpy(color.data()+offset,pixel,l.bytes_per_pixel);
+        }
+        cmask[tile.byte]|=std::byte(15u<<tile.shift);
     }
     return true;
 }

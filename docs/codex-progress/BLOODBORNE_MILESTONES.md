@@ -25,3 +25,7 @@ listed separately so component tests cannot be mistaken for world-entry verifica
 
 Future comparison must clone the same profile, save and settings into independent test
 directories. Original installed Vulkan application, configuration and saves remain untouched.
+
+## 2026-10-11 — mixed CMASK implementation
+
+Native mixed CMASK regression passes with exact tile readback. Bloodborne source/post runs remain below world entry: the known `Mv_AudioPlayThread` null write at guest offset `eboot+0x20b56d2` recurred. Colored setup artifacts remain. No new gameplay milestone is claimed.

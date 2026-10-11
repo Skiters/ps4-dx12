@@ -35,3 +35,7 @@ work inside `resource-upload-dispatch-writeback`.
    narrow ownership based on assumptions about shader access.
 5. Keep copy batching queue order, allocator fence ownership, overlap handling and exact guest
    memory coherence covered by the native tests.
+
+## CMASK-M01 continuation
+
+Verify the equation against a captured Bloodborne CMASK surface (the opt-in `SHADPS4_CMASK_CAPTURE` path is available) and run the post-change core from the cloned `F:/PS4Dev/handoff/mixed-cmask-20261011/after` profile. Keep audio assertion evidence separate.

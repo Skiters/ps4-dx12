@@ -66,3 +66,10 @@ Commit identity is this entry's containing commit (git log); no push performed.
 - Validation: targeted 3/3; full native 205/205; no D3D12 validation errors in the game run.
 - Local commit subject: `perf(dx12): batch buffer upload copy submissions`.
 - Remote push: not performed.
+
+## CMASK-M01 — 2026-10-11
+
+- Input: `7984fed0e789e4ea48af2487c7d1095826aa2c3c`.
+- Changes: `GuestColorClearPending`/`MaterializeGuestColorClear` now build a per-layer mixed CMASK plan; zero tiles use a GCN AddrLib-derived pipe-interleaved address, F tiles remain untouched, materialized nibbles become F. `GuestRasterizer::MaterializeColorClear` preserves the original exception and adds only opt-in bounded capture diagnostics.
+- Regression: `native_guest_cmask_fast_clear` exact changed/unchanged tile checks, idempotence, untouched layer and actual D3D12 readback; full native suite passes 208/208.
+- Core build passes. Bloodborne was tested from cloned/rebased profiles; the audio guest assertion recurred before an additional CMASK-stage proof. No PASS game claim.

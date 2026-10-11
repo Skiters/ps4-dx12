@@ -41,3 +41,7 @@ EQUIVALENT below is restricted to the named tested invariant, never an entire su
 Do not add totals of nested diagnostics. The earlier GPU compute average of 0.0064 ms
 must be remeasured after the query ownership fix. CPU wall-time and submission counts
 are separate measurements and are not invalidated by the GPU timestamp bug.
+
+## Mixed CMASK checkpoint — 2026-10-11
+
+DX12 adaptation added per-layer/per-tile CMASK planning in `guest_texture_cache.cpp`. It follows Vulkan's semantic model (tracked clear ownership, clear only when metadata says the tile is clear, retire the metadata state after materialization) while using AMD GCN AddrLib-style pipe-interleaved addresses for the native guest metadata plane. Vulkan itself tracks `IsMetaCleared`/`TouchMeta` and issues a native image clear; it does not decode arbitrary mixed bytes.

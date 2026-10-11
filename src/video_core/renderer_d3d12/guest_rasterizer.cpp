@@ -221,8 +221,31 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     if(!ReadMemory(b.CmaskAddress(),meta_bytes))
         throw std::runtime_error("Native CMASK backing is not mapped");
     ValidateHostMemory(b.CmaskAddress(),meta_bytes,true);
-    if(!GuestColorClearPending(b,d,l,
-        {reinterpret_cast<const std::byte*>(b.CmaskAddress()),size_t(meta_bytes)}))return;
+    bool pending{};
+    try {
+        pending=GuestColorClearPending(b,d,l,
+            {reinterpret_cast<const std::byte*>(b.CmaskAddress()),size_t(meta_bytes)});
+    } catch(...) {
+        // Opt-in, bounded reproduction data; keep the original failure intact.
+        if(const auto* directory=std::getenv("SHADPS4_CMASK_CAPTURE")) {
+            const auto path=std::filesystem::path(directory);
+            std::filesystem::create_directories(path);
+            std::ofstream(path/"color-buffer.bin",std::ios::binary).write(
+                reinterpret_cast<const char*>(&b),sizeof(b));
+            std::ofstream(path/"descriptor.bin",std::ios::binary).write(
+                reinterpret_cast<const char*>(&d),sizeof(d));
+            std::ofstream(path/"cmask.bin",std::ios::binary).write(
+                reinterpret_cast<const char*>(b.CmaskAddress()),size_t(meta_bytes));
+            if(l.guest_bytes<=64*1024*1024&&ReadMemory(d.address,l.guest_bytes))
+                std::ofstream(path/"color.bin",std::ios::binary).write(
+                    reinterpret_cast<const char*>(d.address),size_t(l.guest_bytes));
+            fprintf(stderr,"CMASK capture: color=%llx meta=%llx size=%ux%u pitch=%u height=%u tile=%u format=%u linear=%u addr_type=%u meta_bytes=%llu\n",
+                (unsigned long long)d.address,(unsigned long long)b.CmaskAddress(),d.width,d.height,d.pitch,d.storage_height,d.tile_mode,d.data_format,
+                b.info.cmask_is_linear,b.info.cmask_addr_type,(unsigned long long)meta_bytes);
+        }
+        throw;
+    }
+    if(!pending)return;
     if(!ReadMemory(d.address,l.guest_bytes))
         throw std::runtime_error("Native color backing is not mapped");
     ValidateHostMemory(d.address,l.guest_bytes,true);

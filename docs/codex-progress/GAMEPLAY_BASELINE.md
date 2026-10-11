@@ -68,3 +68,9 @@ gameplay-range-after, gameplay-range-saved-profile; gameplay-range-suite.log and
 gameplay-range-core.log. Fault records are under each run's user/log. Live stacks
 require the matching map; exported-symbol names alone are unreliable. No saves,
 binaries, memory dumps or large traces are included in this checkpoint.
+
+## Mixed CMASK implementation checkpoint — 2026-10-11
+
+DX12 now plans CMASK per selected layer and per 8x8 tile. Uniform zero slices retain the existing fast path; mixed zero/F slices use a GCN AddrLib-derived pipe-interleaved equation, materialize only zero tiles, preserve expanded tiles, and mark only materialized nibbles expanded. The native regression performs exact changed/unchanged pixel checks, idempotence, untouched-layer checks and D3D12 GPU readback.
+
+The paired Bloodborne run used independent copies of one profile with rewritten absolute paths. The source run visually reached brightness/setup and reproduced the existing colored artifacts; the same run later hit the known guest audio assertion at `eboot+0x20b56d2` before a CMASK capture was produced. The post-change game run was built but did not provide an additional CMASK-stage proof because the audio assertion remained earlier in that attempt. No world-entry or full image-correctness claim is made.
