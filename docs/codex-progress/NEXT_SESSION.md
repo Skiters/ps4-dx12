@@ -4,9 +4,10 @@
 
 Read vulkan-reference-profiler-20261011/REPORT.md, TELEMETRY_COVERAGE.md,
 EVENT_SCHEMA.md, DX12_PERFORMANCE_PARITY_MATRIX.md and CONTROLLED_AB_PROTOCOL.md.
-One agent. Do not rebuild/start games/open UI while the user plays. Existing
-hidden collector and checking automation continue independently; use advancing
-status + actual PID, never stale status alone. Finalize its reports when stopped.
+One agent. Do not rebuild/start games/open UI while the user plays. Last collector
+and game exited: complete 1254-sample capture finalized, automation deleted.
+For another explicitly requested passive session, use the start script to verify
+new PID/SHA and create a new segment. Use actual PID + advancing status, not stale status.
 Mode B exact source/build/isolated profile/launch scripts are prepared in the
 handoff. Ask for explicit game-run authorization before executing that launch.
 Complete causal frame/dependency/graphics timestamp gaps before claiming full

@@ -66,5 +66,20 @@
   "trace-smoke\\SESSION_SUMMARY.md": "00ecf64bdb1e9bdbe0667bc5ce843aa39d4f7874203a6a5b4182b337a4247308",
   "trace-smoke\\summary.json": "ef5dd175dc6a29f61a79b4f7bc3348b4bd2924554f8b947fa1aeb59351b763dc",
   "trace-smoke\\trace-clock.json": "0808ef171a4354a4e35533541f801ae13917456b36fd9ec052bcf67542c52d7d",
-  "trace-smoke\\trace-status.json": "080adcdf12123dbb9dbc1dfef4fd8cbb6c3c9cee5bfe6663b82b1699fa53a41f"
+  "trace-smoke\\trace-status.json": "080adcdf12123dbb9dbc1dfef4fd8cbb6c3c9cee5bfe6663b82b1699fa53a41f",
+  "mode-a-20261011T113008Z-4ac4efcb\\anomalies.jsonl": "81258b3bf5835ca8be2afd2da7c4f5f1db288fa1fdf4e5fc0ac00a7e2ec091a2",
+  "mode-a-20261011T113008Z-4ac4efcb\\CPU_PROFILE_SUMMARY.csv": "1bd59c419a7104a97b5d2161c15afaaa5b3889e196c09047bcdc78981432897b",
+  "mode-a-20261011T113008Z-4ac4efcb\\emulator-log.txt": "6f2a0095fe72701bdfa64dd22ec4b50cc55a79cf4a84e7bbc34891e5e0ba711d",
+  "mode-a-20261011T113008Z-4ac4efcb\\GPU_PROFILE_SUMMARY.csv": "cb02bcf7c95ad3e91cd262fc7aef4aa511d10d6963efc2a4b9173478f4951203",
+  "mode-a-20261011T113008Z-4ac4efcb\\manifest.json": "663f79a1863d2fd3346c0d5af91a1ac498fdbcc4909467c510a09cfaa62164e0",
+  "mode-a-20261011T113008Z-4ac4efcb\\MEMORY_RESIDENCY_SUMMARY.csv": "c35c05f1a635e27ea05c928683cf4f32aeff04c77e251a7aac204b4cc93b10ae",
+  "mode-a-20261011T113008Z-4ac4efcb\\monitor-source.py": "26f8d76aab273299aff283338d6a1c7ad3942584e0d517dc48205953c4add1de",
+  "mode-a-20261011T113008Z-4ac4efcb\\NVIDIA_ADAPTER_SUMMARY.csv": "f644a514f040bf2493c593985daa75c4bef5e06633e6f9db048fca1dd5cc34fe",
+  "mode-a-20261011T113008Z-4ac4efcb\\PERFORMANCE_ANOMALIES.csv": "366956e90f5bd8e503918c0c784ffd09cc35b623bb62eb14a4ba816e4cd37555",
+  "mode-a-20261011T113008Z-4ac4efcb\\runtime-evidence.json": "d7bd639e32151f72783068446bee203ab88096a9288977ab6b5855285abed3c4",
+  "mode-a-20261011T113008Z-4ac4efcb\\samples.jsonl": "5fea2550a51bb6fc75ee20d49706f9f83ed1f5567457de15546a4dff8a0d76e4",
+  "mode-a-20261011T113008Z-4ac4efcb\\SESSION_SUMMARY.md": "bda0ccc4db912fdebad088b4b18e33a15cb6bc2c30196f03a97cf463bc03ec18",
+  "mode-a-20261011T113008Z-4ac4efcb\\status.json": "59e749a609712017294c4bf7a8e245dc5d4a5b3062c5398a3461e498eb064db9",
+  "mode-a-20261011T113008Z-4ac4efcb\\summary.json": "1b4c2a31220a4b786abf52cadcb7eb0484a41531cd9b857153881ec78b9ceeae",
+  "mode-a-20261011T113008Z-4ac4efcb\\TELEMETRY_COVERAGE.md": "fa87a1c82e0bfb3b2d7dd77e9b14288d192fdc6d88693d937321906841424bd9"
 }

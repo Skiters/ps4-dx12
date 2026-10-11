@@ -1,0 +1,28 @@
+category,instance,count,mean,min,max,median,p95,p99
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D,1254,93.0446587042023,24.521026553295762,100.0,97.73041269293272,99.62531385514723,100.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy,1254,0.0033157393778035214,0.0,0.18453742253075042,0.0,0.021577973061046057,0.049319384497280135
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0,1254,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_18920_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1,1254,0.0,0.0,0.0,0.0,0.0,0.0

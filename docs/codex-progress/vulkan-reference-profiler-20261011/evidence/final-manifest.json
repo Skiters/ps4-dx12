@@ -1,0 +1,35 @@
+{
+  "mode": "A",
+  "session_id": "2514bb83e5554dadbbff6ffca4bae436",
+  "segment_id": 134361911370682487,
+  "started_utc": "2026-10-11T11:30:09.404946+00:00",
+  "identity": {
+    "pid": 18920,
+    "executable": "C:\\Users\\skei\\AppData\\Roaming\\shadPS4QtLauncher\\versions\\v0.19.0 - The Shadoween special - 2026-10-02\\shadPS4.exe",
+    "process_start_filetime_100ns": 134361911370682487,
+    "executable_sha256": "91eb69a59cb3ea3c35290fbd03a69718d2f6254c202ba86c6acbe1d1fc8b95f1"
+  },
+  "collector_pid": 4004,
+  "counter_errors": {},
+  "monitor_sha256": "26f8d76aab273299aff283338d6a1c7ad3942584e0d517dc48205953c4add1de",
+  "interval_s": 1.0,
+  "clock": "perf_counter (Windows QPC), UTC paired per sample",
+  "frame_id": null,
+  "frame_id_reason": "External counters cannot identify a new guest frame",
+  "dropped_etw_events": null,
+  "dropped_etw_reason": "No ETW event stream captured by this counter collector",
+  "config.json": {
+    "sha256": "490b6c1602c719106fca4eb6dd4eb29fe78f0497aca600f2bd36a03618723627"
+  },
+  "custom_configs/CUSA03173.json": {
+    "sha256": "b501f53bf0b866ab695898a9499b21805715e333a9544350b28d4ec4410a479d"
+  },
+  "shader_cache_identity": {
+    "root": "C:\\Users\\skei\\AppData\\Roaming\\shadPS4\\cache",
+    "method": "path only; mutable contents not hashed during gameplay",
+    "content_hash": null
+  },
+  "revision": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+  "title_id": "CUSA03173",
+  "sensor_test": false
+}

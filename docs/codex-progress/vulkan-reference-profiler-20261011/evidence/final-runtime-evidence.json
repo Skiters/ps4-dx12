@@ -1,0 +1,18 @@
+{
+  "source": "existing emulator log after process exit; no causal per-second event timestamp alignment",
+  "log_sha256": "6f2a0095fe72701bdfa64dd22ec4b50cc55a79cf4a84e7bbc34891e5e0ba711d",
+  "observed_records": {
+    "resident": 2401,
+    "tiling_pipeline": 14,
+    "warnings": 184,
+    "errors": 31,
+    "critical": 0
+  },
+  "preload_records": [
+    "[Render] <Info> (shadPS4:Main) vk_pipeline_serialization.cpp:371 WarmUp: Preloaded 527 pipelines"
+  ],
+  "readback_records": [
+    "[Config] <Info> (shadPS4:Main) emulator.cpp:487 Run: GPU readbacksMode: 1"
+  ],
+  "log_records_are_not_exact_calls": true
+}

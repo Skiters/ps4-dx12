@@ -1,0 +1,478 @@
+{
+  "mode": "A",
+  "session_id": "2514bb83e5554dadbbff6ffca4bae436",
+  "samples": 1254,
+  "malformed_rows": 0,
+  "collector_status": {
+    "status": "stopped",
+    "reason": "process_exited",
+    "samples": 1254,
+    "ended_utc": "2026-10-11T11:51:03.177879+00:00",
+    "skipped_intervals": 0
+  },
+  "first_utc": "2026-10-11T11:30:09.406950+00:00",
+  "last_utc": "2026-10-11T11:51:02.177986+00:00",
+  "metrics": {
+    "cpu_core_equivalents": {
+      "count": 1253,
+      "mean": 2.7904608507034148,
+      "min": 1.4690649675330538,
+      "max": 4.421524373149713,
+      "median": 2.7031487877331193,
+      "p95": 3.7027413959800533,
+      "p99": 3.9531775772594426
+    },
+    "cpu_machine_percent": {
+      "count": 1253,
+      "mean": 8.72019015844817,
+      "min": 4.5908280235407934,
+      "max": 13.817263666092853,
+      "median": 8.447339961665998,
+      "p95": 11.571066862437666,
+      "p99": 12.353679928935758
+    },
+    "working_set_bytes": {
+      "count": 1254,
+      "mean": 9329479281.505583,
+      "min": 8981180416.0,
+      "max": 9828130816.0,
+      "median": 9360060416.0,
+      "p95": 9578631168.0,
+      "p99": 9659744256.0
+    },
+    "private_bytes": {
+      "count": 1254,
+      "mean": 9203728602.845295,
+      "min": 8483274752.0,
+      "max": 10151051264.0,
+      "median": 9282048000.0,
+      "p95": 9729576960.0,
+      "p99": 10021130240.0
+    },
+    "collection_wall_s": {
+      "count": 1254,
+      "mean": 0.049749330542232906,
+      "min": 0.03289279999444261,
+      "max": 0.1257435000006808,
+      "median": 0.03482675000122981,
+      "p95": 0.11140880000311881,
+      "p99": 0.11750620001112111
+    },
+    "sampling_jitter_s": {
+      "count": 1254,
+      "mean": 0.0005979383642198718,
+      "min": 9.720001253299415e-05,
+      "max": 0.22965340000519063,
+      "median": 0.00041095000779023394,
+      "p95": 0.0006499000010080636,
+      "p99": 0.0007148000004235655
+    }
+  },
+  "collector_overhead": {
+    "duration_s": 1252.7708065000043,
+    "collector_cpu_core_equivalents": 0.034747976065644254,
+    "collector_working_set_peak_bytes": 39120896,
+    "collector_io_write_bytes_delta": 108276885,
+    "nvidia_child_cpu_s": 8.125,
+    "child_tool_cpu_available": true,
+    "collection_wall_time_is_not_cpu_time": true
+  },
+  "unavailable_outputs": {
+    "FRAME_TIMELINE.csv": "Guest frame IDs and GPU completion require instrumented Vulkan. PresentMon probe exit 1 with no CSV; no presentation stream available.",
+    "SYNC_STALLS.csv": "Counters do not measure wait durations, lock owners or causal dependencies. ETW ready/context-switch stacks require a separately authorized trace.",
+    "CACHE_OPERATIONS.csv": "Internal cache calls and exact upload/download bytes require Mode B."
+  },
+  "errors": {},
+  "measurement_validation": {},
+  "thread_count": {
+    "count": 1254,
+    "mean": 100.23763955342903,
+    "min": 99.0,
+    "max": 102.0,
+    "median": 100.0,
+    "p95": 102.0,
+    "p99": 102.0
+  },
+  "named_thread_samples": 102828,
+  "nvidia_adapter_samples": 251,
+  "gpu_engine_statistics": [
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+      "count": 1254,
+      "mean": 93.0446587042023,
+      "min": 24.521026553295762,
+      "max": 100.0,
+      "median": 97.73041269293272,
+      "p95": 99.62531385514723,
+      "p99": 100.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0033157393778035214,
+      "min": 0.0,
+      "max": 0.18453742253075042,
+      "median": 0.0,
+      "p95": 0.021577973061046057,
+      "p99": 0.049319384497280135
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+      "count": 1254,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  ],
+  "gpu_memory_statistics": [
+    {
+      "category": "dedicated",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 1254,
+      "mean": 7742890885.511962,
+      "min": 7143878656.0,
+      "max": 8364503040.0,
+      "median": 7675011072.0,
+      "p95": 8137744384.0,
+      "p99": 8246284288.0
+    },
+    {
+      "category": "dedicated",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 1254,
+      "mean": 118784.0,
+      "min": 118784.0,
+      "max": 118784.0,
+      "median": 118784.0,
+      "p95": 118784.0,
+      "p99": 118784.0
+    },
+    {
+      "category": "shared",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 1254,
+      "mean": 117105371.66188198,
+      "min": 58187776.0,
+      "max": 477618176.0,
+      "median": 91742208.0,
+      "p95": 293068800.0,
+      "p99": 326623232.0
+    },
+    {
+      "category": "shared",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 1254,
+      "mean": 794624.0,
+      "min": 794624.0,
+      "max": 794624.0,
+      "median": 794624.0,
+      "p95": 794624.0,
+      "p99": 794624.0
+    },
+    {
+      "category": "committed",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 1254,
+      "mean": 7860061793.173843,
+      "min": 7202131968.0,
+      "max": 8674414592.0,
+      "median": 7934783488.0,
+      "p95": 8246046720.0,
+      "p99": 8418066432.0
+    },
+    {
+      "category": "committed",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 1254,
+      "mean": 913408.0,
+      "min": 913408.0,
+      "max": 913408.0,
+      "median": 913408.0,
+      "p95": 913408.0,
+      "p99": 913408.0
+    }
+  ],
+  "page_faults_delta": 827257,
+  "observed_duration_s": 1252.7708065000043,
+  "io_deltas": {
+    "read_ops": 70357,
+    "write_ops": 6770,
+    "other_ops": 3368574,
+    "read_bytes": 3091647805,
+    "write_bytes": 431568934,
+    "other_bytes": 53613010
+  },
+  "guest_fps": null,
+  "gpu_operation_timing": null,
+  "scenes": "Unlabelled free-play; no screen inspection or controlled input"
+}

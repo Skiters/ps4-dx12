@@ -4,8 +4,8 @@ This delivery includes a functioning passive monitor, an exact-version isolated
 instrumented build, reports, coverage/schema, source parity map and a pending
 controlled comparison protocol. It does **not** claim complete internal gameplay
 profiling: Mode B has not run Bloodborne; causal PM4-to-frame attribution and
-graphics/copy GPU timestamps are still missing. The user's ongoing original game
-remains untouched by the collector.
+graphics/copy GPU timestamps are still missing. The original game exited by
+11:51:03 UTC; its collector finalized normally. The finished automation is deleted.
 
 ## A. Identity
 
@@ -38,37 +38,40 @@ task. Their presence is a comparison condition, not an attributed cost or cause.
 | Initial 1-second capture, PID 14740 | 10:56:58.076–11:08:36.849; 700 rows, 698.77s | CPU/PDH valid; thread descriptions lost and NVIDIA path failed 140 times. Final ~95s overlap compilation from 11:07:03; not a clean performance interval |
 | Failed collector segment | 11:08:38 startup; zero rows | INVALID_MEASUREMENT: shadowed result variable caused AttributeError; excluded |
 | Corrected real capture, PID 18920 snapshot | 11:30:09.407–11:37:14.178; 426 rows, 424.77s | No collector errors or skipped intervals; real named threads and 86 NVIDIA observations. Snapshot is immutable; collector continues after its cutoff |
+| Corrected complete capture, PID 18920 | 11:30:09.407–11:51:02.178; 1254 rows, 1252.77s | Stopped on process_exited at 11:51:03.178; no collector errors/skipped intervals; 251 NVIDIA observations |
 
 There are explicit gaps between recordings; do not describe this as uninterrupted
 monitoring from game start. No screen capture/control or scene/camera labels were
 used. Asset paths in logs are loading evidence, not verified played scenes.
-The corrected snapshot covers free-play, not a stationary benchmark.
+The corrected session covers free-play, not a stationary benchmark. The process
+lifetime from 11:18:57 to observed exit is approximately 32m06s; the collector
+covers the final 20m53s. Do not treat that unobserved initial interval as measured.
 
 ## C. Actual passive metrics
 
-Corrected 426-row snapshot only:
+Final corrected 1254-row capture (the intermediate 426-row snapshot is preserved):
 
 | Metric | Mean | Peak / limit |
 |---|---:|---:|
-| Process CPU core equivalents | 2.8207 | 4.4215; 8.81% mean of 32 logical CPUs |
-| GPU NVIDIA process 3D engine | 88.856% | 100%; not guest FPS or compute-stage time |
-| Process dedicated GPU memory | 6.8826 GiB | 7.1364 GiB |
-| Process shared GPU memory | 0.1249 GiB | 0.3901 GiB |
-| Process GPU total committed | 7.0076 GiB | 7.5072 GiB |
-| Process working set | 8.582 GiB | 8.974 GiB |
-| Process private bytes | 8.233 GiB | 8.756 GiB |
-| Threads accessible to collector | 99.925 | 100; unnamed/inaccessible cases remain |
+| Process CPU core equivalents | 2.7905 | 4.4215; 8.72% mean of 32 logical CPUs |
+| GPU NVIDIA process 3D engine | 93.045% | 100%; not guest FPS or compute-stage time |
+| Process dedicated GPU memory | 7.2111 GiB | 7.7901 GiB |
+| Process shared GPU memory | 0.1091 GiB | 0.4448 GiB |
+| Process GPU total committed | 7.3203 GiB | 8.0787 GiB |
+| Process working set | 8.689 GiB | 9.153 GiB |
+| Process private bytes | 8.572 GiB | 9.454 GiB |
+| Threads accessible to collector | 100.238 | 102; unnamed/inaccessible cases remain |
 
-Process I/O deltas: read 1,183,327,026 bytes, write 161,534,417 bytes, other
-18,240,650 bytes; page faults +315,771 including soft faults. Adapter-specific
+Process I/O deltas: read 3,091,647,805 bytes, write 431,568,934 bytes, other
+53,613,010 bytes; page faults +827,257 including soft faults. Adapter-specific
 NVIDIA power/clocks/temp/utilization/memory samples are in
-`evidence/verified-NVIDIA_ADAPTER_SUMMARY.csv`; these include other processes and
+`evidence/final-NVIDIA_ADAPTER_SUMMARY.csv`; these include other processes and
 must not be substituted for process VRAM or transfer bandwidth.
 
-Collector CPU mean 0.03634 cores plus 2.84375s NVIDIA child CPU over 424.77s
-(combined approximately 0.04304 cores, 0.1345% of 32 logical CPUs). Collector
-working-set peak 35.71 MiB; child peak RAM unavailable. Collection wall mean
-49.73ms, P99 116.21ms; jitter P99 0.836ms, max 229.65ms. No skipped intervals.
+Collector CPU mean 0.03475 cores plus 8.125s NVIDIA child CPU over 1252.77s
+(combined approximately 0.04123 cores, 0.1289% of 32 logical CPUs). Collector
+working-set peak 37.31 MiB; child peak RAM unavailable. Collection wall mean
+49.75ms, P99 117.51ms; jitter P99 0.715ms, max 229.65ms. No skipped intervals.
 These do not establish a zero-impact profiler; instrumented Mode B overhead is
 still unmeasured. Sensor-fixture overhead is separately labeled.
 
@@ -79,16 +82,16 @@ Present/display/guest frame timing remains unavailable; no FPS is inferred.
 
 ## D. CPU/GPU costs that can actually be ranked
 
-Corrected mean thread CPU equivalents, with stable thread start identity:
+Final mean thread CPU equivalents, with stable thread start identity:
 
 | Thread | TID | Mean CPU cores |
 |---|---:|---:|
-| NexusRevolution Socket | 25432 | 0.9990 |
-| shadPS4:GpuCommandProcessor | 5468 | 0.4453 |
-| Game:Main | 20844 | 0.2783 |
-| unnamed | 16912 | 0.2119 |
-| SDLTimer | 41048 | 0.1058 |
-| GXWorker:1 | 9552 | 0.0791 |
+| NexusRevolution Socket | 25432 | 0.9989 |
+| shadPS4:GpuCommandProcessor | 5468 | 0.4555 |
+| Game:Main | 20844 | 0.2827 |
+| unnamed | 16912 | 0.1624 |
+| SDLTimer | 41048 | 0.1088 |
+| GXWorker:1 | 9552 | 0.0805 |
 
 The socket-named thread is the largest measured CPU consumer. No stacks or
 producer/consumer attribution establish what it executes or whether it delays
@@ -139,12 +142,12 @@ GPU argument/count buffers feed indirect commands. Runtime barriers express GPU
 dependencies; Flush submits, Finish submits and waits, CPU readback requires
 visibility. Page ownership and residency are separate invariants.
 
-Current log snapshot records **2337 resident records, 14 tiling pipeline creation
+Final log records **2401 resident records, 14 tiling pipeline creation
 records and 527 preloaded pipelines**. The earlier session had 1803 / 13 / 417.
 These are observed log records, not complete call or dispatch counters: duplicate
 suppression and logging coverage matter. More preload records also show the cache
-conditions differ. Existing errors/warnings are preserved: 30 Error, 184 Warning,
-zero Critical records in this log snapshot; not evidence of device loss or crash.
+conditions differ. Existing errors/warnings are preserved: 31 Error, 184 Warning,
+zero Critical records in the final log; not evidence of device loss or crash.
 No matching Application Event Log 1000/1001 was found in the queried old interval;
 that does not establish a normal shutdown.
 
@@ -195,8 +198,8 @@ It forced 127,232 event drops, retained 32,768, and correctly flagged incomplete
 event rankings. Corrected 7-second sensor test passed named threads, NVIDIA/child
 CPU, report parsing and graceful stop. No GPU/game correctness test is claimed.
 
-The separate real collector PID 4004 monitors current game PID 18920, with a
-checking automation. Its `active-session.json`/advancing `status.json` are the
-authority after this snapshot; it is not dependent on the assistant turn staying
-open. Reports finalize at normal process exit/stop/duration/storage limit.
-No additional Mode B game launch is authorized yet.
+Collector PID 4004 stopped after game PID 18920 exited, with 1254 samples and
+reason `process_exited`. Final reports and raw files are in
+`mode-a-20261011T113008Z-4ac4efcb`; immutable intermediate snapshots remain separate.
+The checking automation was deleted after finalization. No collector/game was
+restarted. No additional Mode B game launch is authorized yet.
