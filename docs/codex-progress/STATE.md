@@ -2,6 +2,10 @@
 
 ## Active — high-memory experiment, 2026-10-11
 
+Intermediate B on 7a550c9 substantially reduces materialization but stays at 0.591 FPS.
+The follow-up bounds full-map overlap checks identified in B; component regression
+passes (10.24M -> 10k visited candidates). Rebenchmark the final core before claiming FPS.
+
 Starting HEAD c31111c, branch fix/mixed-cmask. F1–F3 remain in place.
 SHADPS4_DX12_MEMORY_PERF=1 enables lazy DXGI-budgeted buffer residency;
 SHADPS4_DX12_BUFFER_BUDGET_MB accepts caps up to 8192 MiB (default 4096

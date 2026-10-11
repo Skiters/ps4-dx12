@@ -28,7 +28,7 @@ protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
-    struct MemoryReuseStats {u64 snapshots{},staging{};};
+    struct MemoryReuseStats {u64 snapshots{},staging{},watch_candidates{};};
     MemoryReuseStats MemoryReuse()const {std::lock_guard lock(execution_mutex_);return memory_reuse_;}
     struct TemporaryBuffer {std::vector<u32> words;};
     std::shared_ptr<TemporaryBuffer> AcquireTemporaryBuffer(u64,const void* initial=nullptr);
@@ -68,6 +68,16 @@ private:
     PlacedBufferAllocator buffer_allocator_;
     std::unique_ptr<Descriptors> color_descriptors_,depth_descriptors_;
     std::map<VAddr,Mapping> mappings_;
+    auto FirstOverlapping(VAddr address){
+        auto it=mappings_.lower_bound(address);
+        if(it!=mappings_.begin()&&std::prev(it)->first+std::prev(it)->second.size>address)--it;
+        return it;
+    }
+    bool HasGpuOwnedOverlap(VAddr address,u64 size){
+        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it)
+            if(it->second.gpu_owned)return true;
+        return false;
+    }
     // Short metadata lock, independent of draw/dispatch submission. A fresh
     // CPU-only file destination must not wait for unrelated GPU work.
     std::mutex memory_index_mutex_;
@@ -191,7 +201,7 @@ public:
     // Caller retires GPU writes before modifying the guest bytes.
     void NotifyCpuWrite(VAddr address,u64 size){std::lock_guard lock(execution_mutex_);
         ReleaseCpuBufferWatches(address,size);ResolveGpuBuffers(address,size);
-        for(auto& [base,mapping]:mappings_)if(base<address+size&&address<base+mapping.size)mapping.cpu_snapshot.clear();}
+        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it)it->second.cpu_snapshot.clear();}
     void ExecuteCompute(const ShaderPipeline&,ResourceBindings&,u32 x,u32 y,u32 z,bool wait=true);
     void ValidateDebugMessages();
     struct ColorAttachment {Resource* resource{};D3D12_RENDER_TARGET_VIEW_DESC view{};};

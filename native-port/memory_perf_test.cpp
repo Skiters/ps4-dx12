@@ -16,8 +16,9 @@ struct Guest {
 int main(int argc,char** argv){try{
     const bool lru=argc>1&&std::string_view(argv[1])=="lru";
     const bool copy=argc>1&&std::string_view(argv[1])=="copy";
+    const bool ranges=argc>1&&std::string_view(argv[1])=="ranges";
     _putenv_s("SHADPS4_DX12_MEMORY_PERF","1");
-    _putenv_s("SHADPS4_DX12_BUFFER_BUDGET_MB",copy?"256":lru?"4":"32");
+    _putenv_s("SHADPS4_DX12_BUFFER_BUDGET_MB",(copy||ranges)?"256":lru?"4":"32");
     _putenv_s("SHADPS4_DX12_CPU_POOL_MB","32");
     MemoryPerfConfig config;config.enabled=true;config.requested=8192*MemoryMiB;
     const auto full=config.Budget(16*1024*MemoryMiB,2*1024*MemoryMiB,0);
@@ -31,6 +32,26 @@ int main(int argc,char** argv){try{
         DXGI_ADAPTER_DESC1 desc{};a->GetDesc1(&desc);if(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)continue;
         if(SUCCEEDED(D3D12CreateDevice(a.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;}
     Require(device!=nullptr,"hardware device");
+    if(ranges){
+        Guest guest(4*MemoryMiB);Rasterizer raster(device.Get());raster.MapMemory(guest.Base(),guest.size);
+        std::vector<Rasterizer::ShaderBufferRequest> requests;
+        for(u64 i=0;i<1024;++i)requests.push_back({guest.Base()+i*4096,16});
+        std::vector<VAddr> released;
+        raster.SetBufferOwnership([](VAddr,u64){return false;},[](VAddr,std::span<const std::byte>){return false;},[&](VAddr a,u64){released.push_back(a);});
+        raster.SetBufferWriteWatch([](VAddr,u64){return true;});
+        raster.PrepareShaderBuffers(requests);raster.Finish();
+        const auto candidates=raster.MemoryReuse().watch_candidates;
+        const auto start=std::chrono::steady_clock::now();
+        for(unsigned i=0;i<10000;++i)raster.ReleaseCpuBufferWatches(guest.Base()+512*4096+4,4);
+        const auto visited=raster.MemoryReuse().watch_candidates-candidates;
+        printf("watch_range mappings=1024 calls=10000 visited=%llu ms=%.3f\n",visited,
+            std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
+        Require(released.size()==1&&released[0]==guest.Base()+512*4096,"watch predecessor or unrelated release");
+        Require(visited==10000,"CPU watch invalidation scans unrelated resident mappings");
+        raster.ReleaseCpuBufferWatches(guest.Base()+16,4096-16);
+        Require(released.size()==1,"exclusive edge released neighbors");
+        raster.UnmapMemory(guest.Base(),guest.size);raster.ValidateDebugMessages();return 0;
+    }
     {
         PlacedBufferAllocator arena(device.Get(),256*MemoryMiB,512*MemoryMiB);arena.SetCompactLargePages(true);
         auto a=arena.Allocate(160*MemoryMiB),b=arena.Allocate(160*MemoryMiB),c=arena.Allocate(160*MemoryMiB);

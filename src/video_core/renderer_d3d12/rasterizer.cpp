@@ -328,8 +328,14 @@ void Rasterizer::ResizeSnapshot(Mapping& mapping){
 }
 void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
-    for(auto& [base,mapping]:mappings_)if(mapping.cpu_watched&&base<address+size&&address<base+mapping.size){
-        release_buffer_(base,mapping.size);mapping.cpu_watched=false;
+    if(!size)return;
+    if(address>UINT64_MAX-size)throw std::out_of_range("CPU buffer watch range overflow");
+    // Mappings are disjoint. Include a containing predecessor, then only the
+    // actual intersections; retaining more GPU buffers must not make every
+    // unrelated guest CPU access scan the whole resident cache.
+    for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
+        ++memory_reuse_.watch_candidates;auto& mapping=it->second;
+        if(mapping.cpu_watched){release_buffer_(it->first,mapping.size);mapping.cpu_watched=false;}
     }
 }
 void Rasterizer::InstallCpuWatch(Mapping& mapping){
@@ -500,8 +506,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 request.address<=UINT64_MAX-request.size&&request.address%4==0&&request.size%4==0&&IsMapped(request.address,request.size);
             if(eligible)for(const auto& other:requests)if(other.written&&
                 request.address<other.address+other.size&&other.address<request.address+request.size){eligible=false;break;}
-            if(eligible)for(const auto& [base,mapping]:mappings_)if(mapping.gpu_owned&&
-                base<request.address+request.size&&request.address<base+mapping.size){eligible=false;break;}
+            if(eligible&&HasGpuOwnedOverlap(request.address,request.size))eligible=false;
             streamed[i]=eligible;if(eligible)stream_bytes+=(request.size+255)&~u64(255);else resident.push_back(request);
         }
         if(stream_bytes&&stream_bytes<=1024*1024){
@@ -551,7 +556,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
                 IsMapped(arena_first,arena_last-arena_first)&&CoversSpan(committed_readable_,arena_first,arena_last);
             if(allowed)for(const auto& other:requests)if(other.address<arena_last&&arena_first<other.address+other.size&&
                 (other.written||other.unordered_access!=request.unordered_access)){allowed=false;break;}
-            if(allowed)for(const auto& [base,mapping]:mappings_)if(mapping.gpu_owned&&base<arena_last&&arena_first<base+mapping.size){allowed=false;break;}
+            if(allowed&&HasGpuOwnedOverlap(arena_first,arena_last-arena_first))allowed=false;
             if(allowed){first=arena_first;last=arena_last;}
 
             // A PS4 allocation is frequently rebound through slightly shifted

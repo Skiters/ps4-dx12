@@ -1,5 +1,15 @@
 # Checkpoints
 
+## 2026-10-11 — bounded residency lookups after measured B run
+
+Parent 7a550c9. B reduced materialization ~97% per completed frame but not average
+FPS. Retained mappings made full-map validation scans visible. FirstOverlapping
+now bounds ReleaseCpuBufferWatches, NotifyCpuWrite and GPU-owned overlap queries
+used by streaming/arena validation. Disjoint interval and containing predecessor
+semantics are preserved. Regression fails before (10.24 million candidates), passes
+after (10 thousand); 27.958 -> 0.353 ms in the component sample. Final game comparison
+remains outstanding; index optimization is not included in this package.
+
 ## 2026-10-11 — high-memory implementation checkpoint
 
 - Parent c31111c; single-agent work, dedicated dev profiles and immutable save seed.

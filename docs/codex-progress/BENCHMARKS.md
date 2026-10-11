@@ -1,5 +1,19 @@
 # Benchmarks
 
+## High-memory intermediate B and range-scan attribution
+
+Clean 7a550c9, high-memory 2048 MiB: 54 completed frames / 91.348 s = 0.59115 FPS,
+median 1685.006 ms, P95 1796.985 ms. Materialized bytes fell from A's 21.329 GB
+to 0.673 GB (394.99 -> 12.47 MB/completed frame), misses 63,958 -> 3,641.
+No meaningful average FPS improvement in this first comparison. Retaining the
+cache exposed whole-map scans: validate-ranges CPU stage 0.201 -> 6.614 s/window.
+The bounded lookup regression visited 10,240,000 -> 10,000 entries for 10,000
+interior watch releases (1024 mappings), 27.958 -> 0.353 ms, Debug Layer enabled.
+This component timing is not an FPS claim. New final game comparisons are required
+after replacing full-map GPU-owned/watch/snapshot overlap scans with ordered lookups.
+Evidence: ranges-before.log, ranges-after.log, B/analysis.json. B camera/movement
+responded after capture; existing edge/color artifacts remain.
+
 ## Active — high-memory baseline (comparison pending)
 
 2026-10-11: diagnostic A, c31111c plus archived instrumentation and explicit
