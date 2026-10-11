@@ -9,8 +9,8 @@ passive capture cannot fulfill this benchmark.
    executable SHA, source revision, driver, adapter, clocks/power plan and monitor
    mode. Hash the original save **as a read-only seed**, then create independent
    Vulkan Relaxed, Vulkan Precise and DX12 profile copies from that seed. Never
-   copy a benchmark save back to the original. The prepared seed was copied while
-   a later user session existed and must be re-snapshotted while idle for matched A/B.
+   copy a benchmark save back to the original. A fresh controlled-seed-final copy was created after the user game exited.
+   Re-snapshot while idle again if the source changes before matched A/B.
 2. Choose one reproducible stationary scene/camera plus a separate loading scene.
    Record input timing; do not combine load/death/menu/free-play with steady-state.
    Resolution must be identical (proposed 1280x800 for compatibility with existing
@@ -49,7 +49,7 @@ passive capture cannot fulfill this benchmark.
     regressions plus same-scene A/B. No weakened CPU visibility or removed waits
     without a replacement dependency proof.
 
-Prepared local files: `controlled-seed/user`, `profile-manifest.json`, exact
+Prepared local files: `controlled-seed-final/user`, `profile-manifest.json`, exact
 `mode-b-source`, `mode-b-build/shadps4.exe`, profile/launch scripts under
 `tools/vulkan_reference`. No profile keys, saves, firmware or game assets belong
 in Git. DLC seed is empty and must be matched deliberately if the chosen scene

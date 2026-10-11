@@ -3,10 +3,10 @@
   "game_run_authorized": false,
   "executable": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\mode-b-build\\shadps4.exe",
   "sha256": "d28ae89412307f0297428751f8bd2778c4f0ddcadfdac8fb3fe527a2259df5ff",
-  "portable_profile": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-seed",
+  "portable_profile": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-seed-final",
   "game_path": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\CUSA03173\\eboot.bin",
   "launch_script": "F:\\PS4Dev\\work\\shadps4-dx12-src\\tools\\vulkan_reference\\Start-Controlled-Vulkan.ps1",
   "new_trace_directory_example": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-deep-first-run",
   "gpu_timestamps_optional": true,
-  "validity": "Seed must be recaptured while original game is closed before a matched A/B. No mode B gameplay or full timing validation yet."
+  "validity": "Fresh seed copied after user game exited; verify scene/patch/DLC/cache settings for matched A/B. Mode B gameplay/timestamp validation still pending."
 }
