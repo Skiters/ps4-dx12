@@ -1,0 +1,3 @@
+utc,index,name,driver,utilization_gpu_percent,utilization_memory_percent,memory_used_mib,memory_total_mib,power_w,temperature_c,clock_graphics_mhz,clock_memory_mhz
+2026-10-11T11:27:52.741340+00:00,0,NVIDIA GeForce RTX 5080,616.92,86.0,42.0,8929.0,16303.0,203.63,64.0,2902.0,15001.0
+2026-10-11T11:27:57.511217+00:00,0,NVIDIA GeForce RTX 5080,616.92,86.0,41.0,8929.0,16303.0,206.04,64.0,2902.0,15001.0

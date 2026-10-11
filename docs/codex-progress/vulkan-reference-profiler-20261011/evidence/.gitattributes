@@ -1,0 +1,4 @@
+# Preserve captured bytes so published SHA256 manifests survive checkouts.
+* -text whitespace=cr-at-eol
+# Unified patches contain mandatory single-space blank context lines.
+*.patch -whitespace

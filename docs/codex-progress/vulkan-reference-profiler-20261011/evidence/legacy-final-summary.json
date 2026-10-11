@@ -1,0 +1,386 @@
+{
+  "mode": "legacy_passive_5s",
+  "samples": 437,
+  "first_utc": "2026-10-11T10:11:54.4296204Z",
+  "last_utc": "2026-10-11T10:48:19.4220498Z",
+  "observed_duration_s": 2184.992429,
+  "process_pid": 14740,
+  "cpu_core_equivalents": {
+    "count": 435,
+    "mean": 1.9920451536496155,
+    "min": 0.895160105978569,
+    "max": 2.941134919297911,
+    "median": 1.9975423883854577,
+    "p95": 2.269053944139356,
+    "p99": 2.353968136647446
+  },
+  "working_set_bytes": {
+    "count": 437,
+    "mean": 7475034444.741419,
+    "min": 7121014784.0,
+    "max": 7747600384.0,
+    "median": 7491551232.0,
+    "p95": 7507009536.0,
+    "p99": 7690072064.0
+  },
+  "private_bytes": {
+    "count": 437,
+    "mean": 6388570604.08238,
+    "min": 5621440512.0,
+    "max": 6754013184.0,
+    "median": 6539161600.0,
+    "p95": 6545522688.0,
+    "p99": 6545661952.0
+  },
+  "thread_count": {
+    "count": 437,
+    "mean": 99.36155606407323,
+    "min": 98.0,
+    "max": 104.0,
+    "median": 99.0,
+    "p95": 102.0,
+    "p99": 104.0
+  },
+  "gpu_engines": {
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D": {
+      "count": 437,
+      "mean": 61.07093821510298,
+      "min": 26.0,
+      "max": 67.0,
+      "median": 63.0,
+      "p95": 66.0,
+      "p99": 67.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "pid_14740_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1": {
+      "count": 437,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  },
+  "gpu_memory": [
+    {
+      "instance": "pid_14740_luid_0x00000000_0x00018737_phys_0",
+      "counter": "DedicatedUsage",
+      "statistics": {
+        "count": 437,
+        "mean": 118784.0,
+        "min": 118784.0,
+        "max": 118784.0,
+        "median": 118784.0,
+        "p95": 118784.0,
+        "p99": 118784.0
+      }
+    },
+    {
+      "instance": "pid_14740_luid_0x00000000_0x00018737_phys_0",
+      "counter": "SharedUsage",
+      "statistics": {
+        "count": 437,
+        "mean": 794624.0,
+        "min": 794624.0,
+        "max": 794624.0,
+        "median": 794624.0,
+        "p95": 794624.0,
+        "p99": 794624.0
+      }
+    },
+    {
+      "instance": "pid_14740_luid_0x00000000_0x00018737_phys_0",
+      "counter": "TotalCommitted",
+      "statistics": {
+        "count": 437,
+        "mean": 913408.0,
+        "min": 913408.0,
+        "max": 913408.0,
+        "median": 913408.0,
+        "p95": 913408.0,
+        "p99": 913408.0
+      }
+    },
+    {
+      "instance": "pid_14740_luid_0x00000000_0x000170C8_phys_0",
+      "counter": "DedicatedUsage",
+      "statistics": {
+        "count": 437,
+        "mean": 5031495900.265447,
+        "min": 4331163648.0,
+        "max": 5186322432.0,
+        "median": 5185957888.0,
+        "p95": 5185957888.0,
+        "p99": 5185957888.0
+      }
+    },
+    {
+      "instance": "pid_14740_luid_0x00000000_0x000170C8_phys_0",
+      "counter": "SharedUsage",
+      "statistics": {
+        "count": 437,
+        "mean": 59713849.99542334,
+        "min": 53993472.0,
+        "max": 288874496.0,
+        "median": 53993472.0,
+        "p95": 87547904.0,
+        "p99": 154656768.0
+      }
+    },
+    {
+      "instance": "pid_14740_luid_0x00000000_0x000170C8_phys_0",
+      "counter": "TotalCommitted",
+      "statistics": {
+        "count": 437,
+        "mean": 5091275286.26087,
+        "min": 4385222656.0,
+        "max": 5408153600.0,
+        "median": 5240016896.0,
+        "p95": 5240016896.0,
+        "p99": 5240016896.0
+      }
+    }
+  ],
+  "nvidia_adapter_csv_samples": 437,
+  "io_deltas": {
+    "ReadOperationCount": 54134,
+    "WriteOperationCount": 4587,
+    "OtherOperationCount": 3475088,
+    "ReadTransferCount": 2310597680,
+    "WriteTransferCount": 232390760,
+    "OtherTransferCount": 56194667,
+    "PageFaults": 448550
+  },
+  "thread_sorting_gate": "Exclude top_cpu_threads without collection_session_utc or before that UTC",
+  "valid_sorted_thread_rows": 430,
+  "collector_errors": [],
+  "collector_stop_reason": "Collector no longer exists; stale last status is recording at 10:48:19 UTC. Final stop/error reason unavailable; recording is NOT continuous through next segment.",
+  "guest_fps": null,
+  "scene_labels": null,
+  "comparison": "unmatched free play; not a DX12 benchmark"
+}

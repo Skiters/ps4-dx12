@@ -1,0 +1,43 @@
+{
+  "mode": "A",
+  "session_id": "bf5b182948314570a7242232d27a5e03",
+  "samples": 0,
+  "malformed_rows": 0,
+  "collector_status": {
+    "status": "stopped",
+    "reason": "collector_error: AttributeError(\"'int' object has no attribute 'append'\")",
+    "samples": 0,
+    "ended_utc": "2026-10-11T11:08:38.989032+00:00",
+    "skipped_intervals": 0
+  },
+  "first_utc": null,
+  "last_utc": null,
+  "metrics": {
+    "cpu_core_equivalents": null,
+    "cpu_machine_percent": null,
+    "working_set_bytes": null,
+    "private_bytes": null,
+    "collection_wall_s": null,
+    "sampling_jitter_s": null
+  },
+  "collector_overhead": {},
+  "unavailable_outputs": {
+    "FRAME_TIMELINE.csv": "Guest frame IDs and GPU completion require instrumented Vulkan. PresentMon probe exit 1 with no CSV; no presentation stream available.",
+    "SYNC_STALLS.csv": "Counters do not measure wait durations, lock owners or causal dependencies. ETW ready/context-switch stacks require a separately authorized trace.",
+    "CACHE_OPERATIONS.csv": "Internal cache calls and exact upload/download bytes require Mode B.",
+    "PERFORMANCE_ANOMALIES.csv": "No configured anomaly candidates observed; not proof that no stall occurred."
+  },
+  "errors": {},
+  "measurement_validation": {},
+  "thread_count": null,
+  "named_thread_samples": 0,
+  "nvidia_adapter_samples": 0,
+  "gpu_engine_statistics": [],
+  "gpu_memory_statistics": [],
+  "page_faults_delta": null,
+  "observed_duration_s": null,
+  "io_deltas": {},
+  "guest_fps": null,
+  "gpu_operation_timing": null,
+  "scenes": "Unlabelled free-play; no screen inspection or controlled input"
+}

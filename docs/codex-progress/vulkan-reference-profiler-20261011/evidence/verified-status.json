@@ -1,0 +1,8 @@
+{
+  "status": "recording",
+  "collector_pid": 4004,
+  "target_pid": 18920,
+  "samples": 426,
+  "last_utc": "2026-10-11T11:37:14.178179+00:00",
+  "skipped_intervals": 0
+}

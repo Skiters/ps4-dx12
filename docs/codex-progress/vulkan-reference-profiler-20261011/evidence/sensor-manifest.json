@@ -1,0 +1,35 @@
+{
+  "mode": "A",
+  "session_id": "f2836ca3517a4fd7848b5370b378b5ef",
+  "segment_id": 134361916722034154,
+  "started_utc": "2026-10-11T11:27:52.739341+00:00",
+  "identity": {
+    "pid": 14688,
+    "executable": "F:\\PS4Dev\\toolchain\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+    "process_start_filetime_100ns": 134361916722034154,
+    "executable_sha256": "624b66d8178129ac5611f3cf32adf440ea0b7dc6b1bde60c5677d7ebc62e635d"
+  },
+  "collector_pid": 25596,
+  "counter_errors": {},
+  "monitor_sha256": "26f8d76aab273299aff283338d6a1c7ad3942584e0d517dc48205953c4add1de",
+  "interval_s": 1,
+  "clock": "perf_counter (Windows QPC), UTC paired per sample",
+  "frame_id": null,
+  "frame_id_reason": "External counters cannot identify a new guest frame",
+  "dropped_etw_events": null,
+  "dropped_etw_reason": "No ETW event stream captured by this counter collector",
+  "config.json": {
+    "sha256": "490b6c1602c719106fca4eb6dd4eb29fe78f0497aca600f2bd36a03618723627"
+  },
+  "custom_configs/CUSA03173.json": {
+    "sha256": "b501f53bf0b866ab695898a9499b21805715e333a9544350b28d4ec4410a479d"
+  },
+  "shader_cache_identity": {
+    "root": "C:\\Users\\skei\\AppData\\Roaming\\shadPS4\\cache",
+    "method": "path only; mutable contents not hashed during gameplay",
+    "content_hash": null
+  },
+  "revision": null,
+  "title_id": null,
+  "sensor_test": true
+}

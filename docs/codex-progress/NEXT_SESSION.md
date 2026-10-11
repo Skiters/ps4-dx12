@@ -1,5 +1,19 @@
 # Next session
 
+## Continue the prepared Vulkan reference profiler
+
+Read vulkan-reference-profiler-20261011/REPORT.md, TELEMETRY_COVERAGE.md,
+EVENT_SCHEMA.md, DX12_PERFORMANCE_PARITY_MATRIX.md and CONTROLLED_AB_PROTOCOL.md.
+One agent. Do not rebuild/start games/open UI while the user plays. Existing
+hidden collector and checking automation continue independently; use advancing
+status + actual PID, never stale status alone. Finalize its reports when stopped.
+Mode B exact source/build/isolated profile/launch scripts are prepared in the
+handoff. Ask for explicit game-run authorization before executing that launch.
+Complete causal frame/dependency/graphics timestamp gaps before claiming full
+internal timings. Measure profiler-on/off overhead; keep heavy queries separate
+from performance baseline. Watch-proof cost is historically measured in DX12;
+indices/detile/indirect source gaps need actual new cost/usage, not GPU percentages.
+
 ## Vulkan execution investigation saved — 2026-10-11
 
 Read [the exact-version research](vulkan-session-20261011/RESEARCH.txt) before implementing Vulkan parity.

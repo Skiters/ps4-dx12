@@ -1,0 +1,32 @@
+{
+  "mode": "B",
+  "trace_events": 32768,
+  "trace_status": {
+    "mode": "B",
+    "reference_revision": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+    "dropped_events": 127232,
+    "aggregate_overflow": 0,
+    "written_bytes": 2597566,
+    "clock": "steady_clock nanoseconds; GPU durations are separate",
+    "frame_hint_is_not_causal_attribution": true
+  },
+  "prepared_frames": 0,
+  "limitations": [
+    "Scope wall includes blocking; exclusive subtracts instrumented children only.",
+    "Thread CPU time is coarse; no stack samples.",
+    "frame_hint does not establish causal PM4 attribution.",
+    "GPU query spans include dependencies; GPU-to-CPU clocks not calibrated.",
+    "Completion is observed after an existing timeline tick, not exact GPU timestamp.",
+    "Dropped events invalidate exhaustive per-event rankings; aggregate-counters.csv retains totals when aggregate_overflow=0."
+  ],
+  "reference_revision": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+  "unavailable_outputs": {
+    "GPU_PROFILE_SUMMARY.csv": "No corresponding retained events; does not prove zero calls. Check trace losses, capture configuration and aggregate counters.",
+    "SYNC_STALLS.csv": "No corresponding retained events; does not prove zero calls. Check trace losses, capture configuration and aggregate counters.",
+    "CACHE_OPERATIONS.csv": "No corresponding retained events; does not prove zero calls. Check trace losses, capture configuration and aggregate counters.",
+    "FRAME_TIMELINE.csv": "No corresponding retained events; does not prove zero calls. Check trace losses, capture configuration and aggregate counters.",
+    "MEMORY_RESIDENCY_SUMMARY.csv": "Use paired process-specific Mode A PDH memory and Mode B allocation counters. Instrumentation does not reconstruct complete live heap residency.",
+    "PERFORMANCE_ANOMALIES.csv": "Internal anomaly threshold evaluation is pending; no empty success file generated."
+  },
+  "event_rankings_complete": false
+}

@@ -1,0 +1,5 @@
+name,calls,wall_ns,cpu_ns,exclusive_wall_ns,exclusive_cpu_ns,sum_a
+pm4.opcode,40000,0,0,0,0,1800000
+smoke.bytes,40000,0,0,0,0,2560000
+smoke.parent,40000,57171100,31250000,25653200,0,0
+smoke.child,40000,31517900,31250000,31517900,31250000,0

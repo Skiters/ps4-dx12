@@ -1,5 +1,19 @@
 # Native DX12 state
 
+## Vulkan reference profiler prepared — 2026-10-11
+
+See [actual results and coverage](vulkan-reference-profiler-20261011/REPORT.md).
+Production backend is unchanged. Hidden passive collector monitors the user's
+new original Vulkan PID 18920; verify active-session.json/status.json in
+F:/PS4Dev/handoff/vulkan-reference-profiler-20261011. Immutable verified snapshot:
+426 samples / 424.77s, named threads and NVIDIA available, no collection errors.
+The socket-named thread consumes ~1 CPU core; function/cause/critical path unknown.
+Old PID 14740 segments and collector failures are explicitly separate.
+Exact c7e065d1 instrumented Vulkan Release build compiled with 100 hook sites;
+non-game sensor/trace tests pass. MODE B Bloodborne launch is **not authorized**.
+Full PM4-to-frame causal attribution, graphics/copy GPU timestamps and matched
+Relaxed/Precise/DX12 costs remain pending. No FPS inferred from GPU utilization.
+
 ## Final — high-memory mode measured, 2026-10-11
 
 Supersedes earlier pending sections. Source 9527c901a50256016072c4b67464946f78061ab1, clean tested core.

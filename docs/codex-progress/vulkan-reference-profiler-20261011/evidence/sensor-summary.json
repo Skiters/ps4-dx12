@@ -1,0 +1,114 @@
+{
+  "mode": "A",
+  "session_id": "f2836ca3517a4fd7848b5370b378b5ef",
+  "samples": 7,
+  "malformed_rows": 0,
+  "collector_status": {
+    "status": "stopped",
+    "reason": "duration_limit",
+    "samples": 7,
+    "ended_utc": "2026-10-11T11:27:59.511473+00:00",
+    "skipped_intervals": 0
+  },
+  "first_utc": "2026-10-11T11:27:52.741340+00:00",
+  "last_utc": "2026-10-11T11:27:58.511284+00:00",
+  "metrics": {
+    "cpu_core_equivalents": {
+      "count": 6,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "cpu_machine_percent": {
+      "count": 6,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "working_set_bytes": {
+      "count": 7,
+      "mean": 13156352.0,
+      "min": 13156352.0,
+      "max": 13156352.0,
+      "median": 13156352.0,
+      "p95": 13156352.0,
+      "p99": 13156352.0
+    },
+    "private_bytes": {
+      "count": 7,
+      "mean": 6172672.0,
+      "min": 6172672.0,
+      "max": 6172672.0,
+      "median": 6172672.0,
+      "p95": 6172672.0,
+      "p99": 6172672.0
+    },
+    "collection_wall_s": {
+      "count": 7,
+      "mean": 0.06357999999974188,
+      "min": 0.0415210999926785,
+      "max": 0.11654200000339188,
+      "median": 0.042835400003241375,
+      "p95": 0.11654200000339188,
+      "p99": 0.11654200000339188
+    },
+    "sampling_jitter_s": {
+      "count": 7,
+      "mean": 0.03348317142393041,
+      "min": 0.00037349999183788896,
+      "max": 0.23132179999083746,
+      "median": 0.0005547999899135903,
+      "p95": 0.23132179999083746,
+      "p99": 0.23132179999083746
+    }
+  },
+  "collector_overhead": {
+    "duration_s": 5.769234800012782,
+    "collector_cpu_core_equivalents": 0.05416662882212865,
+    "collector_working_set_peak_bytes": 30937088,
+    "collector_io_write_bytes_delta": 9869,
+    "nvidia_child_cpu_s": 0.0625,
+    "child_tool_cpu_available": true,
+    "collection_wall_time_is_not_cpu_time": true
+  },
+  "unavailable_outputs": {
+    "FRAME_TIMELINE.csv": "Guest frame IDs and GPU completion require instrumented Vulkan. PresentMon probe exit 1 with no CSV; no presentation stream available.",
+    "SYNC_STALLS.csv": "Counters do not measure wait durations, lock owners or causal dependencies. ETW ready/context-switch stacks require a separately authorized trace.",
+    "CACHE_OPERATIONS.csv": "Internal cache calls and exact upload/download bytes require Mode B.",
+    "PERFORMANCE_ANOMALIES.csv": "No configured anomaly candidates observed; not proof that no stall occurred."
+  },
+  "errors": {},
+  "measurement_validation": {},
+  "thread_count": {
+    "count": 7,
+    "mean": 4.0,
+    "min": 4.0,
+    "max": 4.0,
+    "median": 4.0,
+    "p95": 4.0,
+    "p99": 4.0
+  },
+  "named_thread_samples": 7,
+  "nvidia_adapter_samples": 2,
+  "gpu_engine_statistics": [],
+  "gpu_memory_statistics": [],
+  "page_faults_delta": 0,
+  "observed_duration_s": 5.769234800012782,
+  "io_deltas": {
+    "read_ops": 0,
+    "write_ops": 0,
+    "other_ops": 0,
+    "read_bytes": 0,
+    "write_bytes": 0,
+    "other_bytes": 0
+  },
+  "guest_fps": null,
+  "gpu_operation_timing": null,
+  "scenes": "Unlabelled free-play; no screen inspection or controlled input"
+}

@@ -1,0 +1,28 @@
+category,instance,count,mean,min,max,median,p95,p99
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D,700,53.698032279273036,1.7600644852978358,64.59052489523404,54.300596597109134,61.01109543814612,62.523333305981474
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy,700,0.003181463745433174,0.0,0.10238764919496661,0.0,0.018920984078390234,0.04947214532059861
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0,700,0.0,0.0,0.0,0.0,0.0,0.0
+engines,pid_14740_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1,700,0.0,0.0,0.0,0.0,0.0,0.0

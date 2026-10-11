@@ -1,0 +1,3 @@
+name,calls,inclusive_wall_ns,exclusive_wall_ns,inclusive_cpu_ns,exclusive_cpu_ns,p95_wall_ns,causal_frames_affected
+smoke.child,7958,6375000,6375000,15625000,15625000,1400.0,unavailable
+smoke.parent,8069,11806900,5229900,15625000,0,2300.0,unavailable

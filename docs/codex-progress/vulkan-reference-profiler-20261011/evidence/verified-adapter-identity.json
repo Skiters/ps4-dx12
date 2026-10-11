@@ -1,0 +1,42 @@
+[
+  {
+    "index": 0,
+    "description": "NVIDIA GeForce RTX 5080",
+    "vendor_id": 4318,
+    "device_id": 11266,
+    "luid_pdh": "luid_0x00000000_0x000170C8",
+    "dedicated_video_bytes": 16753098752,
+    "shared_system_bytes": 48975527936,
+    "flags": 0
+  },
+  {
+    "index": 1,
+    "description": "AMD Radeon(TM) Graphics",
+    "vendor_id": 4098,
+    "device_id": 5056,
+    "luid_pdh": "luid_0x00000000_0x00018737",
+    "dedicated_video_bytes": 2119970816,
+    "shared_system_bytes": 48975527936,
+    "flags": 0
+  },
+  {
+    "index": 2,
+    "description": "NVIDIA GeForce RTX 5080",
+    "vendor_id": 4318,
+    "device_id": 11266,
+    "luid_pdh": "luid_0x00000000_0x000223E7",
+    "dedicated_video_bytes": 16753098752,
+    "shared_system_bytes": 48975527936,
+    "flags": 0
+  },
+  {
+    "index": 3,
+    "description": "Microsoft Basic Render Driver",
+    "vendor_id": 5140,
+    "device_id": 140,
+    "luid_pdh": "luid_0x00000000_0x000186EF",
+    "dedicated_video_bytes": 0,
+    "shared_system_bytes": 48975527936,
+    "flags": 2
+  }
+]

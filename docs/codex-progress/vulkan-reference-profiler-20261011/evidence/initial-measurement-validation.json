@@ -1,0 +1,6 @@
+{
+  "thread_names": "NOT_MEASURED: initial collector checked HRESULT == 0; successful nonzero HRESULT was rejected; names cannot be recovered from samples.",
+  "nvidia": "NOT_MEASURED: initial collector contained a newline in executable path; repeated WinError 2.",
+  "cpu_pdh": "Available independently of failed NVIDIA/thread description fields; not a matched benchmark.",
+  "build_overlap_utc": "2026-10-11T11:07:03Z; final ~95 seconds overlap isolated source compilation; split before this timestamp for uncontaminated descriptive counters."
+}

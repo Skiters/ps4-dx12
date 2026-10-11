@@ -1,0 +1,53 @@
+# Vulkan / native DX12 mechanism and performance parity
+
+References: exact Vulkan c7e065d1 export and repository DX12 c5d3a878
+(functional checkpoint 9527c901). Vulkan function paths below are relative to
+`src/video_core`; DX12 paths are under `src/video_core/renderer_d3d12`.
+Full source explanation and original runtime log evidence remain in
+`../vulkan-session-20261011/RESEARCH.txt`. **Source differences are not measured
+Vulkan bottlenecks.** No mode-B gameplay trace or matched A/B has been run.
+
+Evidence: M = historical matched DX12 diagnostics; L = Vulkan runtime log;
+S = exact-version source; P = profiling pending. Complexity is implementation
+scope, not a cost ranking. Correctness support labels do not assert whole-game
+pixel equivalence.
+
+| Mechanism / support | Vulkan function and behavior | DX12 function and difference | Bloodborne / cost evidence | Adaptation, risks and regression gates | Complexity / priority |
+|---|---|---|---|---|---|
+| Buffer address identity / PARTIAL | buffer_cache/BufferCache::GetArena, EnsureResident: stable address-based sparse arenas; 4 GiB virtual pages, physical backing only for gaps | rasterizer.cpp PrepareShaderBuffers: cached mapping envelopes and leases; coalescing reduces churn but is not sparse address identity | L: 1803 resident log records; M: B materializations 74831→3704 and 24.45→0.889 GB after existing fixes; Vulkan cost P | Stable segmented GPU backing first; reserved/tiled resources only after capability/alignment audit. Test overlap, PRT holes, retirement, pressure and rebinding | Large; defer broad rewrite until residual cost attribution |
+| CPU/GPU validity / PARTIAL | memory_tracker.h + region_manager.h: independent CPU/GPU dirty bits, 4 KiB pages in 16 MiB regions; mark/unmark and partial ranges | rasterizer.cpp InstallCpuWatch/PrepareShaderBuffers + page_watch.h: ownership/watch/snapshot proof already exists; large fallback comparisons remain | M: B snapshot_compare 29.511 inclusive CPU s / ~92s; snapshot spans 160.091 GB; establish spans 124.645 GB. Not independent totals or hardware traffic | Retain watch proof across safe transitions; record release reasons/changed pages. Preserve snapshots when proof is insufficient. CPU partial writes, GPU-written aliases, pending-fence faults, F1–F3 regressions | Large; first measured investigation priority |
+| Readback policy / UNVERIFIED equivalence | Relaxed=1; Precise=2 installs GPU-modification read protection. Relaxed still tracks/downloads | Native stricter ownership/CPU visibility; no silent PageWatch disable | L: current Vulkan Relaxed; settings differ; API advantage cannot be isolated | Run Relaxed and Precise separately; preserve DX12 guarantees. Validate CPU consumers of GPU-written data | Medium; prerequisite for valid comparison |
+| Partial upload / PARTIAL | SynchronizeMemory enumerates dirty ranges, packs staging copies; small eligible read-only buffers use 128 MiB stream | PrepareShaderBuffers reconciles dirty ranges/snapshots then native copies/stream path | Vulkan uploaded bytes P; existing DX12 B reduction M | Aggregate requested vs dirty vs transferred bytes; avoid broad envelope uploads only with valid ownership. PRT and partial-page tests | Medium; measured-cost gate |
+| Partial CPU readback / PARTIAL | ReadMemory/DownloadMemory: intersect GPU-written ranges in widened 512 KiB window; copy, Finish, write backing | ResolveGpuBuffers/ReadMemory and texture ownership readback use fences/Finish | Frequency, required CPU visibility and Vulkan wait time P | Defer readback only when consumer is GPU; CPU reads require completion. Multi-range/alias/GPU-write/CPU-read fixtures | Large; P, no speculative wait removal |
+| Sparse dependency / UNVERIFIED | SubmitPendingArenaBinds signals memory timeline; submission waits for bind completion | Native allocations/retirement with resource leases; no equivalent sparse storage model established | Bind count/physical bytes P | Map residency transitions to queue/fence dependencies, retain physical backing through all users | Large; after stable backing design |
+| Staging recycling / PARTIAL | StagingBufferPool rings/dedicated cache + StreamBuffer reservation/retirement | memory_allocator.cpp and upload-ring/lease paths | Real allocation churn and pressure P | Measure request vs new backing and lifetime before changing pools. Held resources, wraparound and pressure tests | Medium; P |
+| GPU detile/retile / FALLBACK in DX12 | TextureCache::RefreshImage → TileManager::DetileImage/TileImage → GPU compute and copies | guest_texture_cache.cpp Upload: DecodeGuestSubresource CPU conversion on refreshed planes/mips/layers | L: 13 detiler pipeline creations; dispatch frequency/bytes/timing P | Port exercised layouts to D3D12 compute incrementally. Compare exact bytes/pixels, mip/layer/pitch/BC/depth-stencil, aliases and transitions; retain CPU fallback | Large; measurement candidate, unranked |
+| Texture dirtiness/aliases / PARTIAL | FindImage/RefreshImage/Register/Invalidate and image subresource states | GuestTextureCache dirty snapshots, ownership, view/cache reuse | Exact dirty causes/reconversion cost P | Add per-image identity + dirty reason before optimizing; alias producer/consumer and partial mip tests | Large; correctness prerequisite |
+| Ordinary 16/32-bit indices / FALLBACK conversion | Rasterizer::BindIndexBuffer obtains resident cache/stream range and binds offset | guest_rasterizer.cpp DrawInternal creates CPU logical/converted vectors and upload data | Source gap S; indexed command incidence and exclusive cost P | Direct cached index binding through common state owner; fallback for endian/restart/primitive expansion. Offsets/base vertex/GPU-produced indices/leases | Medium; bounded candidate, no proven gain |
+| Indirect draw/dispatch / PARTIAL | GPU argument/count buffers; draw*Indirect and dispatchIndirect | GuestRasterizer::DrawIndirect/DispatchIndirect: Finish, decode CPU args, iterate/direct dispatch | S only; Bloodborne opcode incidence P | ExecuteIndirect only after PM4 counts, argument layout/SGPR semantics and GPU-producer proof. Count clamp, offsets, barriers, lifetime and self-modifying args tests | Large; conditional on real usage |
+| Guest compute / UNVERIFIED full ISA parity | GetComputePipeline, shared shader translator, BindResources, Vulkan dispatch | GuestCompute + shader frontend share TranslateProgram/EmitSPIRV, then DXIL/native dispatch and selected HLE | No real top-20/hash timing here; old 0.0064 ms metric invalid for this purpose | Obtain hash/dimensions/UAV dependencies and calibrated query validation; instruction/atomic/storage alias result tests | Large; P |
+| Shader/PSO caches / PARTIAL | GetProgram/CompileModule + GetGraphics/ComputePipeline + WarmUp; disk pipeline preload | GuestPipelineCache and guest_shader_cache: caches already exist; equivalent demonstrated startup preload absent | L: 417 preload records, not evidence of zero warm-frame stalls | Separate cold/warm lookup/creation; port prewarm only if real critical stalls. Cache-key/version invalidation, shader patch and interface tests | Medium/large; P |
+| Graphics state / PARTIAL | Pipeline keys/dynamic state/render targets/depth/blend/topology | GuestGraphicsState and native PSOs; existing unsupported combinations explicit | Actual frequent combination census P; no pixel-equivalence capture | Collect compact state census, compare exact surfaces for blend/depth/scissor/culling/sample states | Large; correctness, not a measured bottleneck |
+| CMASK/HTILE/FMASK/fast clear / PARTIAL | FilterDraw + metadata tracking/materialization; upstream FMASK TODOs exist | GuestTextureCache metadata ownership/clear/resolve; mixed-CMASK per-tile implementation already present | Semantic differences S; exercised combination frequency/cost P | Preserve metadata retirement; mixed clear tiles/layers, HTILE/stencil/MSAA/FMASK pixel fixtures. Do not call upstream TODO fully supported | Large; correctness priority |
+| Barriers/queue waits / PARTIAL | Runtime::AccessBuffer/FlushBarriers; Scheduler orders upload before primary, signals timeline | scheduler.cpp direct/copy queues, GPU queue waits, barriers, fences and leases already exist | Actual required dependency edges P | Map producer→range→consumer→visibility→barrier/queue wait. Replace host wait only for GPU-only edges; copy-only completion and open-context retirement tests | Large; P |
+| Flush vs Finish / PARTIAL | Flush submits; Finish submits and waits; Semaphore::Wait can return immediately when tick is free | Native Finish/readback/context reuse/batch limits can wait on host | No Vulkan wait ranking measured; source difference alone insufficient | Record actual waited ticks, parent/reason, CPU-visible consumer. Preserve completion/lifetime semantics | Medium; dependency measurement first |
+| VideoOut/presentation / UNVERIFIED | Guest flip→PrepareFrame→conversion/copy→ready tick→Present; repeats distinct from new game output | GuestPresenter/Presenter paths and existing pacing | No guest FPS/displayed cadence; source hooks prepared | Keep game-output, repeated/non-game present and completion separate; frame identity and blank/reuse fixtures | Medium; full causal frame attribution still pending |
+| Loading/HLE/audio / UNVERIFIED cost | Native guest entry, HLE waits, file loader, shared memory mapping | Shared emulation/HLE code with backend resource preparation differences | Process I/O measured; scenes, decompression and audio costs P | Separate loading/steady gameplay; ready/wait stacks and file/decompression scopes, preserve guest synchronization | Medium; P |
+
+## Next three changes: evidence gates, not a fabricated Vulkan ranking
+
+1. **DX12 watch-proof retention and partial validity.** Historical DX12 counters
+   identify a large cost category. First add release-reason/page/parent attribution;
+   change only transitions with a correctness proof. Inclusive 29.511s does not
+   establish a guaranteed 29.511s critical-path saving.
+2. **Ordinary resident index binding.** A bounded source-level candidate. Implement
+   after the controlled trace confirms indexed path incidence/cost; compare native
+   state/lifetime/pixels and retain required conversion fallbacks.
+3. **GPU detile for observed layouts.** Detiler existence is runtime-supported,
+   dispatch cost is not. Select formats/layouts by measured conversion volume and
+   exclusive CPU/GPU timing, then port one layout at a time.
+
+Items 2/3 are deliberately unranked by measured Vulkan cost. Stable sparse storage,
+ExecuteIndirect, readback deferral and prewarm remain conditional candidates. No
+fixed FPS gain is predicted. The new passive CPU/GPU percentages alone cannot
+select an implementation order.

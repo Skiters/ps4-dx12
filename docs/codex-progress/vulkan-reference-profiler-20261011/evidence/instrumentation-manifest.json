@@ -1,0 +1,610 @@
+{
+  "reference_revision": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+  "mode": "B",
+  "hooks": [
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::ObtainBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::EnsureResident",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::SynchronizeMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::DownloadMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::ReadMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::InvalidateMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::GetArena",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::ObtainBufferForImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::SubmitPendingArenaBinds",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::SynchronizeMemoryFromImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer_cache.cpp",
+      "symbol": "BufferCache::SynchronizeDmaBuffers",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::Draw",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::DrawIndirect",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::DispatchDirect",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::DispatchIndirect",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::BindIndexBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::BindResources",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::PrepareRenderState",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::BeginRendering",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::CopyBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::FillBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::ReadMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "Rasterizer::InvalidateMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::Flush",
+      "definitions": 2,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::Finish",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::Wait",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::SubmitExecution",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::BeginRendering",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::EndRendering",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_scheduler.cpp",
+      "symbol": "Scheduler::PopPendingOperations",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::CopyBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::FillBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::UploadImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::DownloadImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::CopyImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::AccessBuffer",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_runtime.cpp",
+      "symbol": "Runtime::FlushBarriers",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::RefreshImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::FindImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::FindTexture",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::DownloadImageMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::InvalidateMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::InvalidateMemoryFromGPU",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::TickFrame",
+      "definitions": 0,
+      "status": "requires_followup"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::RegisterImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::UnregisterImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/texture_cache.cpp",
+      "symbol": "TextureCache::ProcessDownloadImages",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/tile_manager.cpp",
+      "symbol": "TileManager::DetileImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/tile_manager.cpp",
+      "symbol": "TileManager::TileImage",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::GetGraphicsPipeline",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::GetComputePipeline",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::CreateGraphicsPipeline",
+      "definitions": 0,
+      "status": "requires_followup"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::CreateComputePipeline",
+      "definitions": 0,
+      "status": "requires_followup"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::CompileModule",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp",
+      "symbol": "PipelineCache::GetProgram",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp",
+      "symbol": "PipelineCache::WarmUp",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_presenter.cpp",
+      "symbol": "Presenter::PrepareFrame",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_presenter.cpp",
+      "symbol": "Presenter::GetRenderFrame",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_swapchain.cpp",
+      "symbol": "Swapchain::Present",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/videoout/video_out.cpp",
+      "symbol": "sceVideoOutSubmitFlip",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/mutex.cpp",
+      "symbol": "PthreadMutex::Lock",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/mutex.cpp",
+      "symbol": "PthreadMutex::Unlock",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/condvar.cpp",
+      "symbol": "PthreadCond::Wait",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/condvar.cpp",
+      "symbol": "PthreadCond::Signal",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/semaphore.cpp",
+      "symbol": "sceKernelWaitSema",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/semaphore.cpp",
+      "symbol": "sceKernelSignalSema",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/threads/event_flag.cpp",
+      "symbol": "sceKernelWaitEventFlag",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/memory.cpp",
+      "symbol": "MemoryManager::MapMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/memory.cpp",
+      "symbol": "MemoryManager::UnmapMemory",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/memory.cpp",
+      "symbol": "MemoryManager::Protect",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/videoout/driver.cpp",
+      "symbol": "VideoOutDriver::SubmitFlip",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/videoout/driver.cpp",
+      "symbol": "VideoOutDriver::SubmitFlipInternal",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/page_manager.cpp",
+      "symbol": "PageManager::OnGpuMap",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/page_manager.cpp",
+      "symbol": "PageManager::OnGpuUnmap",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/page_manager.cpp",
+      "symbol": "PageManager::UpdatePageWatchers",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer.cpp",
+      "symbol": "StreamBuffer::PrepareMap",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer.cpp",
+      "symbol": "StreamBuffer::WaitPendingOperations",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/buffer.cpp",
+      "symbol": "StreamBuffer::Commit",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/time.cpp",
+      "symbol": "sceKernelUsleep",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/core/libraries/kernel/time.cpp",
+      "symbol": "sceKernelNanosleep",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/image.cpp",
+      "symbol": "UniqueImage::Create",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/image.cpp",
+      "symbol": "UniqueImage::Destroy",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/image.cpp",
+      "symbol": "Image::GetBarriers",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/memory_tracker.h",
+      "symbol": "MarkRegionAsCpuModified",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/memory_tracker.h",
+      "symbol": "UnmarkRegionAsGpuModified",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/memory_tracker.h",
+      "symbol": "InvalidateRegion",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/memory_tracker.h",
+      "symbol": "ForEachUploadRange",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/buffer_cache/memory_tracker.h",
+      "symbol": "ForEachDownloadRange",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp",
+      "symbol": "StagingBufferPool::Request",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp",
+      "symbol": "StagingBufferPool::RequestLarge",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp",
+      "symbol": "StagingBufferPool::RequestFromRing",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp",
+      "symbol": "StagingBufferPool::FreeDeferred",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp",
+      "symbol": "StagingBufferPool::TickFrame",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_semaphore.cpp",
+      "symbol": "Semaphore::Wait",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_semaphore.cpp",
+      "symbol": "Semaphore::Refresh",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src\\video_core\\amdgpu\\liverpool.cpp",
+      "symbol": "PM4 packet opcode",
+      "definitions": 3,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/texture_cache/tile_manager.cpp",
+      "symbol": "gpu.detile_or_retile",
+      "definitions": 2,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "gpu.guest_compute",
+      "definitions": 1,
+      "status": "hooked"
+    },
+    {
+      "file": "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+      "symbol": "gpu.guest_compute_indirect",
+      "definitions": 1,
+      "status": "hooked"
+    }
+  ],
+  "not_launched": true,
+  "limits": [
+    "CPU scopes are nested wall/thread CPU measurements, not stack samples. Thread CPU clock is coarse for short calls.",
+    "Frame hints are not causal attribution of earlier PM4 work.",
+    "GPU queries cover dispatches only; graphics/copy GPU timing remains pending.",
+    "No calibrated GPU/CPU clock alignment; duration-only GPU timings.",
+    "Guest runs through native x86 entry; no guest JIT cache metric is assumed.",
+    "Direct compute hash linked by parent scope; indirect shader identity remains pending."
+  ],
+  "trace_header_sha256": "604290dbf2c6e1798b836befa756a546a88abad5ff34dd376eafd5541331838a"
+}

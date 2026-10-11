@@ -1,0 +1,1294 @@
+--- /dev/null
++++ b/src/common/reference_gpu.h
+@@ -0,0 +1,41 @@
++#pragma once
++#include "common/reference_trace.h"
++#include "video_core/renderer_vulkan/vk_instance.h"
++#include "video_core/renderer_vulkan/vk_scheduler.h"
++namespace ReferenceTrace {
++// Only bounds one recorded GPU operation. No WAIT query flag or new CPU fence wait.
++class GpuScope {
++    inline static std::atomic<unsigned> pending{};
++    const Vulkan::Instance* instance{};Vulkan::Scheduler* scheduler{};
++    vk::QueryPool pool{};vk::CommandBuffer command{};const char* name{};
++    U64 frame{},tick{},parent_id{};unsigned valid_bits{};double period{};
++public:
++    GpuScope(const Vulkan::Instance& i,Vulkan::Scheduler& s,vk::CommandBuffer cmd,const char* label){
++        if(!Enabled()||!std::getenv("SHADPS4_REF_GPU_TIMING"))return;
++        if(pending.fetch_add(1)>=64){--pending;Emit("gpu.timestamp.skipped_capacity");return;}
++        try{
++            valid_bits=i.GetPhysicalDevice().getQueueFamilyProperties().at(i.GetGraphicsQueueFamilyIndex()).timestampValidBits;
++            if(!valid_bits){--pending;Emit("gpu.timestamp.unsupported");return;}
++            period=i.GetPhysicalDevice().getProperties().limits.timestampPeriod;
++            const vk::QueryPoolCreateInfo info{.queryType=vk::QueryType::eTimestamp,.queryCount=2};
++            const auto created=i.GetDevice().createQueryPool(info);
++            if(created.result!=vk::Result::eSuccess){--pending;Emit("gpu.timestamp.setup_failed");return;}
++            pool=created.value;
++            instance=&i;scheduler=&s;command=cmd;name=label;frame=frame_hint.load();tick=s.CurrentTick();parent_id=active_id;
++            command.resetQueryPool(pool,0,2);command.writeTimestamp(vk::PipelineStageFlagBits::eAllCommands,pool,0);
++        }catch(...){--pending;Emit("gpu.timestamp.setup_failed");}
++    }
++    ~GpuScope(){
++        if(!name)return;command.writeTimestamp(vk::PipelineStageFlagBits::eAllCommands,pool,1);
++        scheduler->DeferOperation([i=instance,q=pool,label=name,f=frame,t=tick,bits=valid_bits,p=period,parent=parent_id]{
++            std::array<U64,2> data{};
++            try{
++                const auto result=i->GetDevice().getQueryPoolResults(q,0,2,sizeof(data),data.data(),sizeof(U64),vk::QueryResultFlagBits::e64);
++                if(result==vk::Result::eSuccess){const U64 mask=bits==64?~U64(0):((U64(1)<<bits)-1);Emit(label,U64(double((data[1]-data[0])&mask)*p),data[0],data[1],t,f,parent);}
++                else Emit("gpu.timestamp.not_ready",U64(result),0,0,t,f);
++            }catch(...){Emit("gpu.timestamp.read_failed",0,0,0,t,f);}
++            i->GetDevice().destroyQueryPool(q);--pending;
++        });
++    }
++};
++}
+--- /dev/null
++++ b/src/common/reference_trace.h
+@@ -0,0 +1,110 @@
++// Bounded, opt-in instrumentation for the isolated Vulkan reference build.
++#pragma once
++#include <array>
++#include <atomic>
++#include <chrono>
++#include <condition_variable>
++#include <cstdlib>
++#include <cstring>
++#include <filesystem>
++#include <fstream>
++#include <mutex>
++#include <thread>
++#include <vector>
++#ifdef _WIN32
++#include <windows.h>
++#endif
++namespace ReferenceTrace {
++using U64 = unsigned long long;
++inline bool Enabled() { static const char* path = std::getenv("SHADPS4_REFERENCE_TRACE"); static const bool on = path && *path; return on; }
++inline U64 Now() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
++inline U64 Cpu() {
++#ifdef _WIN32
++    FILETIME a{},b{},k{},u{}; GetThreadTimes(GetCurrentThread(),&a,&b,&k,&u);
++    return (((U64(k.dwHighDateTime)<<32)|k.dwLowDateTime)+((U64(u.dwHighDateTime)<<32)|u.dwLowDateTime))*100;
++#else
++    return 0;
++#endif
++}
++inline U64 Tid() {
++#ifdef _WIN32
++    return GetCurrentThreadId();
++#else
++    return std::hash<std::thread::id>{}(std::this_thread::get_id());
++#endif
++}
++inline std::atomic<U64> frame_hint{},next_frame{},next_id{};
++inline thread_local U64 active_id{};
++struct Event { const char* name; U64 id,parent,frame,tid,start,end,cpu,exclusive_wall,exclusive_cpu,a,b,c,d; };
++struct Aggregate { std::atomic<const char*> name{};std::atomic<U64> calls{},wall{},cpu{},exclusive_wall{},exclusive_cpu{},sum_a{}; };
++inline std::array<Aggregate,4096> totals{};
++inline std::atomic<U64> aggregate_overflow{};
++inline std::array<std::atomic<U64>,768> packet_counts{};
++inline std::atomic<U64> invalid_packet_categories{};
++inline void AggregateEvent(const Event& e){
++    U64 hash=1469598103934665603ull;for(const char* p=e.name;*p;++p)hash=(hash^static_cast<unsigned char>(*p))*1099511628211ull;
++    for(unsigned probe=0;probe<totals.size();++probe){auto& a=totals[(hash+probe)%totals.size()];const char* name=a.name.load();
++        if(!name){const char* empty=nullptr;a.name.compare_exchange_strong(empty,e.name);name=a.name.load();}
++        if(std::strcmp(name,e.name)==0){++a.calls;a.wall+=e.end-e.start;a.cpu+=e.cpu;a.exclusive_wall+=e.exclusive_wall;a.exclusive_cpu+=e.exclusive_cpu;a.sum_a+=e.a;return;}
++    }++aggregate_overflow;
++}
++class Sink {
++    std::mutex lock; std::vector<Event> events; std::atomic<U64> dropped{};
++    std::ofstream output; std::jthread worker; U64 written{}; const U64 cap=512ull<<20;
++public:
++    Sink() {
++        events.reserve(32768);
++        const char* path=std::getenv("SHADPS4_REFERENCE_TRACE");
++        std::filesystem::create_directories(path);
++        output.open(std::filesystem::path(path)/"internal-events.tsv");
++        const auto monotonic = Now();
++        const auto unix_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
++        std::ofstream manifest(std::filesystem::path(path)/"trace-clock.json");
++        manifest<<"{\"cpu_monotonic_ns\":"<<monotonic<<",\"utc_unix_ns\":"<<unix_ns<<",\"gpu_cpu_calibrated\":false}";
++        output<<"name\tid\tparent\tframe_hint\ttid\tstart_ns\tend_ns\tcpu_ns\texclusive_wall_ns\texclusive_cpu_ns\ta\tb\tc\td\n";
++        worker=std::jthread([this](std::stop_token stop){std::vector<Event> batch;batch.reserve(32768);
++            while(!stop.stop_requested()){std::this_thread::sleep_for(std::chrono::milliseconds(250));Drain(batch);}Drain(batch);});
++    }
++    ~Sink(){worker.request_stop();worker.join();output.flush();}
++    void Drain(std::vector<Event>& batch){
++        {std::lock_guard guard(lock);events.swap(batch);}
++        for(const auto& e:batch){
++            if(written>=cap){++dropped;continue;}
++            output<<e.name<<'\t'<<e.id<<'\t'<<e.parent<<'\t'<<e.frame<<'\t'<<e.tid<<'\t'<<e.start<<'\t'<<e.end<<'\t'<<e.cpu<<'\t'<<e.exclusive_wall<<'\t'<<e.exclusive_cpu<<'\t'<<e.a<<'\t'<<e.b<<'\t'<<e.c<<'\t'<<e.d<<'\n';
++            written=U64(output.tellp());
++        }batch.clear();output.flush();
++        const char* path=std::getenv("SHADPS4_REFERENCE_TRACE");
++        std::ofstream status(std::filesystem::path(path)/"trace-status.json");
++        status<<"{\"mode\":\"B\",\"reference_revision\":\"c7e065d1b415be16c23e260a21f1dd8bbfc4cb57\",\"dropped_events\":"<<dropped<<",\"aggregate_overflow\":"<<aggregate_overflow<<",\"written_bytes\":"<<written<<",\"clock\":\"steady_clock nanoseconds; GPU durations are separate\",\"frame_hint_is_not_causal_attribution\":true}";
++        std::ofstream counters(std::filesystem::path(path)/"aggregate-counters.csv");
++        counters<<"name,calls,wall_ns,cpu_ns,exclusive_wall_ns,exclusive_cpu_ns,sum_a\n";
++        for(const auto& a:totals)if(const char* name=a.name.load())counters<<name<<','<<a.calls<<','<<a.wall<<','<<a.cpu<<','<<a.exclusive_wall<<','<<a.exclusive_cpu<<','<<a.sum_a<<'\n';
++        std::ofstream packets(std::filesystem::path(path)/"pm4-opcode-counts.csv");
++        packets<<"queue_kind,opcode,calls\n";
++        for(unsigned i=0;i<packet_counts.size();++i)if(auto count=packet_counts[i].load())packets<<i/256<<','<<i%256<<','<<count<<'\n';
++    }
++    void Add(Event e){AggregateEvent(e);if(!lock.try_lock()){++dropped;return;}if(events.size()<32768)events.push_back(e);else++dropped;lock.unlock();}
++};
++inline Sink& Output(){static Sink sink;return sink;}
++inline void Emit(const char* name,U64 a=0,U64 b=0,U64 c=0,U64 d=0,U64 frame=0,U64 parent_override=0){
++    if(!Enabled())return;const auto t=Now();Output().Add({name,++next_id,parent_override?parent_override:active_id,frame?frame:frame_hint.load(),Tid(),t,t,0,0,0,a,b,c,d});
++}
++inline void Packet(U64 opcode,unsigned queue_kind){
++    if(!Enabled())return;
++    if(opcode<256 && queue_kind<3)++packet_counts[queue_kind*256+opcode];else++invalid_packet_categories;
++    Emit("pm4.opcode",opcode,queue_kind);
++}
++struct Scope;
++inline thread_local Scope* current{};
++struct Scope {
++    const char* name{};U64 id{},start{},cpu{},child_wall{},child_cpu{},a{},b{},c{},d{},frame{};Scope* parent{};
++    explicit Scope(const char* label,U64 x=0,U64 y=0,U64 z=0,U64 w=0){
++        if(!Enabled())return;Output();name=label;parent=current;id=++next_id;frame=frame_hint.load();a=x;b=y;c=z;d=w;start=Now();cpu=Cpu();current=this;active_id=id;
++    }
++    ~Scope(){if(!name)return;const auto end=Now(),used=Cpu()-cpu,wall=end-start;
++        current=parent;active_id=parent?parent->id:0;if(parent){parent->child_wall+=wall;parent->child_cpu+=used;}
++        Output().Add({name,id,parent?parent->id:0,frame,Tid(),start,end,used,wall>child_wall?wall-child_wall:0,used>child_cpu?used-child_cpu:0,a,b,c,d});
++    }
++};
++inline U64 NewFrame(){if(!Enabled())return 0;const auto id=++next_frame;frame_hint=id;Emit("guest.frame.prepared",0,0,0,0,id);return id;}
++}
+--- a/src/core/libraries/kernel/threads/condvar.cpp
++++ b/src/core/libraries/kernel/threads/condvar.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -98,6 +99,7 @@
+ }
+ 
+ int PthreadCond::Wait(PthreadMutexT* mutex, const OrbisKernelTimespec* abstime, u64 usec) {
++    ReferenceTrace::Scope reference_scope("condvar.cpp:PthreadCond::Wait", reinterpret_cast<uintptr_t>(this), usec);
+     PthreadMutex* mp = *mutex;
+     if (const int error = mp->IsOwned(g_curthread); error != 0) {
+         return error;
+@@ -224,6 +226,7 @@
+ }
+ 
+ int PthreadCond::Signal(Pthread* thread) {
++    ReferenceTrace::Scope reference_scope("condvar.cpp:PthreadCond::Signal", reinterpret_cast<uintptr_t>(this));
+     Pthread* curthread = g_curthread;
+     if (thread) {
+         auto* thread_state = ThrState::Instance();
+--- a/src/core/libraries/kernel/threads/event_flag.cpp
++++ b/src/core/libraries/kernel/threads/event_flag.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -390,6 +391,7 @@
+ }
+ int PS4_SYSV_ABI sceKernelWaitEventFlag(OrbisKernelEventFlag ef, u64 bitPattern, u32 waitMode,
+                                         u64* pResultPat, OrbisKernelUseconds* pTimeout) {
++    ReferenceTrace::Scope reference_scope("event_flag.cpp:sceKernelWaitEventFlag");
+     LOG_DEBUG(Kernel_Event, "called bitPattern = {:#x} waitMode = {:#x}", bitPattern, waitMode);
+     if (ef == nullptr) {
+         return ORBIS_KERNEL_ERROR_ESRCH;
+--- a/src/core/libraries/kernel/threads/mutex.cpp
++++ b/src/core/libraries/kernel/threads/mutex.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -193,6 +194,7 @@
+ }
+ 
+ s32 PthreadMutex::Lock(const OrbisKernelTimespec* abstime, u64 usec) {
++    ReferenceTrace::Scope reference_scope("mutex.cpp:PthreadMutex::Lock", reinterpret_cast<uintptr_t>(this), usec);
+     Pthread* curthread = g_curthread;
+     if (m_owner.load(std::memory_order_acquire) == curthread) {
+         return SelfLock(abstime, usec);
+@@ -277,6 +279,7 @@
+ }
+ 
+ s32 PthreadMutex::Unlock() {
++    ReferenceTrace::Scope reference_scope("mutex.cpp:PthreadMutex::Unlock", reinterpret_cast<uintptr_t>(this));
+     Pthread* curthread = g_curthread;
+     /*
+      * Check if the running thread is not the owner of the mutex.
+--- a/src/core/libraries/kernel/threads/semaphore.cpp
++++ b/src/core/libraries/kernel/threads/semaphore.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -327,6 +328,7 @@
+ }
+ 
+ s32 PS4_SYSV_ABI sceKernelWaitSema(OrbisKernelSema sem, s32 needCount, u32* pTimeout) {
++    ReferenceTrace::Scope reference_scope("semaphore.cpp:sceKernelWaitSema");
+     if (!orbis_sems.IsAllocated(sem)) {
+         return ORBIS_KERNEL_ERROR_ESRCH;
+     }
+@@ -334,6 +336,7 @@
+ }
+ 
+ s32 PS4_SYSV_ABI sceKernelSignalSema(OrbisKernelSema sem, s32 signalCount) {
++    ReferenceTrace::Scope reference_scope("semaphore.cpp:sceKernelSignalSema");
+     if (!orbis_sems.IsAllocated(sem)) {
+         return ORBIS_KERNEL_ERROR_ESRCH;
+     }
+--- a/src/core/libraries/kernel/time.cpp
++++ b/src/core/libraries/kernel/time.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -77,6 +78,7 @@
+ }
+ 
+ s32 PS4_SYSV_ABI sceKernelNanosleep(const OrbisKernelTimespec* rqtp, OrbisKernelTimespec* rmtp) {
++    ReferenceTrace::Scope reference_scope("time.cpp:sceKernelNanosleep");
+     if (const auto ret = posix_nanosleep_impl(rqtp, rmtp, false); ret < 0) {
+         return ErrnoToSceKernelError(*__Error());
+     }
+@@ -92,6 +94,7 @@
+ }
+ 
+ s32 PS4_SYSV_ABI sceKernelUsleep(u32 microseconds) {
++    ReferenceTrace::Scope reference_scope("time.cpp:sceKernelUsleep", microseconds);
+     const OrbisKernelTimespec ts = {
+         .tv_sec = microseconds / 1'000'000,
+         .tv_nsec = (microseconds % 1'000'000) * 1'000,
+--- a/src/core/libraries/videoout/driver.cpp
++++ b/src/core/libraries/videoout/driver.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -291,6 +292,7 @@
+ 
+ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
+                                 bool is_eop /*= false*/) {
++    ReferenceTrace::Scope reference_scope("driver.cpp:VideoOutDriver::SubmitFlip", index, flip_arg, is_eop);
+     {
+         std::unique_lock lock{port->port_mutex};
+         if (index != -1 && port->flip_status.flip_pending_num > 16) {
+@@ -316,6 +318,7 @@
+ }
+ 
+ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
++    ReferenceTrace::Scope reference_scope("driver.cpp:VideoOutDriver::SubmitFlipInternal", index, flip_arg, is_eop);
+     Vulkan::Frame* frame;
+     if (index == -1) {
+         frame = presenter->PrepareBlankFrame(false);
+@@ -324,6 +327,7 @@
+         ASSERT_MSG(buffer.group_index >= 0, "Trying to flip an unregistered buffer!");
+         const auto& group = port->groups[buffer.group_index];
+         frame = presenter->PrepareFrame(group, buffer.address_left);
++        ReferenceTrace::Emit("frame.guest_flip_link", index, flip_arg, is_eop, 0, frame->reference_frame_id);
+     }
+ 
+     std::scoped_lock lock{mutex};
+--- a/src/core/libraries/videoout/video_out.cpp
++++ b/src/core/libraries/videoout/video_out.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -153,6 +154,7 @@
+ }
+ 
+ s32 PS4_SYSV_ABI sceVideoOutSubmitFlip(s32 handle, s32 bufferIndex, s32 flipMode, s64 flipArg) {
++    ReferenceTrace::Scope reference_scope("video_out.cpp:sceVideoOutSubmitFlip", bufferIndex, flipArg);
+     auto* port = driver->GetPort(handle);
+     if (!port) {
+         LOG_ERROR(Lib_VideoOut, "Invalid handle = {}", handle);
+--- a/src/core/memory.cpp
++++ b/src/core/memory.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -513,6 +514,7 @@
+ s32 MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, u64 size, MemoryProt prot,
+                              MemoryMapFlags flags, VMAType type, std::string_view name,
+                              bool validate_dmem, PAddr phys_addr, u64 alignment) {
++    ReferenceTrace::Scope reference_scope("memory.cpp:MemoryManager::MapMemory");
+     // Certain games perform flexible mappings on loop to determine
+     // the available flexible memory size. Questionable but we need to handle this.
+     if (type == VMAType::Flexible && flexible_usage + size > total_flexible_size) {
+@@ -908,6 +910,7 @@
+ }
+ 
+ s32 MemoryManager::UnmapMemory(VAddr virtual_addr, u64 size) {
++    ReferenceTrace::Scope reference_scope("memory.cpp:MemoryManager::UnmapMemory");
+     if (size == 0) {
+         return ORBIS_OK;
+     }
+@@ -1113,6 +1116,7 @@
+ }
+ 
+ s32 MemoryManager::Protect(VAddr addr, u64 size, MemoryProt prot) {
++    ReferenceTrace::Scope reference_scope("memory.cpp:MemoryManager::Protect", addr, size);
+     // If size is zero, then there's nothing to protect
+     if (size == 0) {
+         return ORBIS_OK;
+--- a/src/video_core/amdgpu/liverpool.cpp
++++ b/src/video_core/amdgpu/liverpool.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -166,6 +167,7 @@
+         }
+ 
+         const PM4ItOpcode opcode = header->type3.opcode;
++        ReferenceTrace::Packet(static_cast<unsigned>(opcode), 0);
+         const auto* it_body = reinterpret_cast<const u32*>(header) + 1;
+         switch (opcode) {
+         case PM4ItOpcode::Nop: {
+@@ -255,6 +257,7 @@
+         case 3:
+             const u32 count = header->type3.NumWords();
+             const PM4ItOpcode opcode = header->type3.opcode;
++        ReferenceTrace::Packet(static_cast<unsigned>(opcode), 1);
+             switch (opcode) {
+             case PM4ItOpcode::Nop: {
+                 const auto* nop = reinterpret_cast<const PM4CmdNop*>(header);
+@@ -918,6 +921,7 @@
+         }
+ 
+         const PM4ItOpcode opcode = header->type3.opcode;
++        ReferenceTrace::Packet(static_cast<unsigned>(opcode), 2);
+ 
+         const auto* it_body = reinterpret_cast<const u32*>(header) + 1;
+         switch (opcode) {
+--- a/src/video_core/buffer_cache/buffer.cpp
++++ b/src/video_core/buffer_cache/buffer.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -179,6 +180,7 @@
+ }
+ 
+ bool StreamBuffer::PrepareMap(u64 size, u64 alignment, bool allow_wait) {
++    ReferenceTrace::Scope reference_scope("buffer.cpp:StreamBuffer::PrepareMap", size, alignment, allow_wait);
+     if (!mapped_data.empty() && !is_coherent) {
+         size = Common::AlignUp(size, non_coherent_atom_size);
+         alignment =
+@@ -222,6 +224,7 @@
+ }
+ 
+ void StreamBuffer::Commit() {
++    ReferenceTrace::Scope reference_scope("buffer.cpp:StreamBuffer::Commit");
+     if (mem_type == MemoryType::HostCached) {
+         Invalidate(offset, mapped_size);
+     } else {
+@@ -265,6 +268,7 @@
+ }
+ 
+ bool StreamBuffer::WaitPendingOperations(u64 requested_upper_bound, bool allow_wait) {
++    ReferenceTrace::Scope reference_scope("buffer.cpp:StreamBuffer::WaitPendingOperations");
+     if (!invalidation_mark) {
+         return true;
+     }
+--- a/src/video_core/buffer_cache/buffer_cache.cpp
++++ b/src/video_core/buffer_cache/buffer_cache.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -96,12 +97,14 @@
+ }
+ 
+ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_locks) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::InvalidateMemory", device_addr, size);
+     memory_tracker->InvalidateRegion(device_addr, size, [this, device_addr, size, assume_locks] {
+         ReadMemory(device_addr, size, true, assume_locks);
+     });
+ }
+ 
+ void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write, bool assume_locks) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::ReadMemory", device_addr, size, is_write);
+     const auto flush_request = [this, device_addr, size, is_write] {
+         const u32 first_block = device_addr >> block_shift;
+         const u32 last_block = (device_addr + size - 1) >> block_shift;
+@@ -128,6 +131,7 @@
+ }
+ 
+ void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 size) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::DownloadMemory", device_addr, size);
+     boost::container::small_vector<vk::BufferCopy, 1> copies;
+     u64 total_size_bytes = 0;
+     const VAddr arena_base = arena->cpu_addr;
+@@ -155,6 +159,7 @@
+     for (auto& copy : copies) {
+         copy.dstOffset += download.offset;
+     }
++    ReferenceTrace::Emit("buffer.download.bytes", total_size_bytes, device_addr, size);
+     runtime.CopyBuffer(arena, download.buffer, copies);
+     scheduler.Finish();
+ 
+@@ -169,11 +174,13 @@
+ 
+ std::pair<const Buffer*, u64> BufferCache::ObtainBuffer(VAddr device_addr, u32 size,
+                                                         bool is_written, bool is_texel_buffer) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::ObtainBuffer", device_addr, size, is_written, is_texel_buffer);
+     // For read-only buffers use device local stream buffer to reduce renderpass breaks.
+     if (!is_written && size <= STREAM_THRESHOLD && !IsRegionGpuModified(device_addr, size)) {
+         const auto [data, offset] = stream_buffer.Map(size, instance.UniformMinAlignment());
+         memory->CopySparseMemory(device_addr, data, size);
+         stream_buffer.Commit();
++        ReferenceTrace::Emit("buffer.stream.cpu_copy.bytes", size, device_addr);
+         return {&stream_buffer, offset};
+     }
+     const u64 first_block = device_addr >> block_shift;
+@@ -191,6 +198,7 @@
+ }
+ 
+ std::pair<const Buffer*, u64> BufferCache::ObtainBufferForImage(VAddr device_addr, u32 size) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::ObtainBufferForImage", device_addr, size);
+     if (IsRegionGpuModified(device_addr, size)) {
+         return ObtainBuffer(device_addr, size, false);
+     }
+@@ -210,6 +218,7 @@
+ }
+ 
+ void BufferCache::SynchronizeDmaBuffers() {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::SynchronizeDmaBuffers");
+     fault_process_pending = true;
+     for (const auto& range : resident_ranges) {
+         const u64 page = range.start >> (ARENA_PAGE_BITS - block_shift);
+@@ -220,6 +229,7 @@
+ }
+ 
+ const Buffer* BufferCache::GetArena(u64 first_block, u64 last_block) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::GetArena", first_block, last_block);
+     const u64 first_page = first_block >> blocks_per_arena_page_shift;
+     const u64 last_page = last_block >> blocks_per_arena_page_shift;
+     ASSERT_MSG(last_page - first_page <= 1,
+@@ -274,6 +284,7 @@
+ }
+ 
+ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_block) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::EnsureResident", first_block, last_block);
+     u32 resident_blocks{};
+     IntervalList bind_ranges;
+     resident_ranges.ForEachGap(first_block, last_block + 1, [&](u64 start, u64 end) {
+@@ -282,6 +293,7 @@
+     });
+ 
+     if (bind_ranges.Empty()) {
++        ReferenceTrace::Emit("buffer.resident.hit", (last_block-first_block+1) << block_shift, first_block, last_block);
+         return;
+     }
+ 
+@@ -289,6 +301,7 @@
+         .allocationSize = resident_blocks << block_shift,
+         .memoryTypeIndex = arena_memory_type_index,
+     };
++    ReferenceTrace::Emit("buffer.physical.allocate", alloc_info.allocationSize, resident_blocks);
+     const auto device_memory = Vulkan::Check(instance.GetDevice().allocateMemory(alloc_info));
+ 
+     boost::container::small_vector<vk::BufferCopy, 8> copies;
+@@ -331,12 +344,14 @@
+ 
+ bool BufferCache::SynchronizeMemory(const Buffer* arena, VAddr device_addr, u32 size,
+                                     bool is_written, bool is_texel_buffer) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::SynchronizeMemory", device_addr, size, is_written, is_texel_buffer);
+     boost::container::small_vector<vk::BufferCopy, 4> copies;
+     size_t total_size_bytes{};
+     memory_tracker->ForEachUploadRange(device_addr, size, is_written, [&](u64 addr, u64 size) {
+         copies.emplace_back(total_size_bytes, addr, size);
+         total_size_bytes += size;
+     });
++    ReferenceTrace::Emit("buffer.sync.result", total_size_bytes, size, copies.size());
+     if (!copies.empty()) {
+         const auto staging = staging_pool.Request(total_size_bytes, MemoryType::HostUncached);
+         for (auto& copy : copies) {
+@@ -345,6 +360,7 @@
+             copy.dstOffset -= arena->cpu_addr;
+         }
+         staging.Flush();
++        ReferenceTrace::Emit("buffer.upload.bytes", total_size_bytes, device_addr, size);
+         runtime.CopyBuffer(staging.buffer, arena, copies);
+     }
+     if (is_texel_buffer && !is_written) {
+@@ -354,6 +370,7 @@
+ }
+ 
+ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::SynchronizeMemoryFromImage", device_addr, size);
+     if (auto type = texture_cache.IsMeta(device_addr)) {
+         if (*type == TextureCache::MetaType::HTile) {
+             static constexpr u32 ZmaskUncompressed = 0xf;
+@@ -404,6 +421,7 @@
+ }
+ 
+ void BufferCache::SubmitPendingArenaBinds(Vulkan::SubmitInfo& info) {
++    ReferenceTrace::Scope reference_scope("buffer_cache.cpp:BufferCache::SubmitPendingArenaBinds");
+     if (pending_binds.empty()) {
+         return;
+     }
+@@ -435,6 +453,7 @@
+         .pSignalSemaphores = &signal_sema,
+     };
+ 
++    ReferenceTrace::Emit("buffer.sparse.bind", buffer_binds.size(), signal_tick);
+     info.AddWait(signal_sema, signal_tick);
+     auto submit_result = instance.GetGraphicsQueue().bindSparse(sparse_info);
+     ASSERT_MSG(submit_result != vk::Result::eErrorDeviceLost, "Device lost during submit");
+--- a/src/video_core/buffer_cache/memory_tracker.h
++++ b/src/video_core/buffer_cache/memory_tracker.h
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -39,6 +40,7 @@
+ 
+     /// Unmark region as modified from the host GPU
+     void UnmarkRegionAsGpuModified(VAddr cpu_addr, u64 size, bool is_write) noexcept {
++    ReferenceTrace::Scope reference_scope("memory_tracker.h:UnmarkRegionAsGpuModified", cpu_addr, size);
+         IteratePages(cpu_addr, size, [is_write](RegionManager* manager, u64 offset, u64 size) {
+             if (is_write) {
+                 manager->template ChangeRegionState<StateOp::Set, StateOp::Clear>(offset, size);
+@@ -50,6 +52,7 @@
+ 
+     /// Mark region as modified from the CPU
+     void MarkRegionAsCpuModified(VAddr cpu_addr, u64 size) noexcept {
++    ReferenceTrace::Scope reference_scope("memory_tracker.h:MarkRegionAsCpuModified", cpu_addr, size);
+         IteratePages(cpu_addr, size, [](RegionManager* manager, u64 offset, u64 size) {
+             manager->template ChangeRegionState<StateOp::Set, StateOp::None>(offset, size);
+         });
+@@ -57,6 +60,7 @@
+ 
+     /// Removes all protection from a page and ensures GPU data has been flushed if requested
+     void InvalidateRegion(VAddr cpu_addr, u64 size, auto&& on_flush) noexcept {
++    ReferenceTrace::Scope reference_scope("memory_tracker.h:InvalidateRegion", cpu_addr, size);
+         if (readbacks_mode == GpuReadbacksMode::Disabled) {
+             return MarkRegionAsCpuModified(cpu_addr, size);
+         }
+@@ -79,6 +83,7 @@
+ 
+     /// Call 'func' for each CPU modified range and unmark those pages as CPU modified
+     void ForEachUploadRange(VAddr cpu_addr, u64 size, bool is_written, auto&& func) {
++    ReferenceTrace::Scope reference_scope("memory_tracker.h:ForEachUploadRange", cpu_addr, size);
+         IteratePages<true>(
+             cpu_addr, size, [&func, is_written](RegionManager* manager, u64 offset, u64 size) {
+                 if (is_written) {
+@@ -95,6 +100,7 @@
+     /// Call 'func' for each GPU modified range and unmark those pages as GPU modified
+     template <bool clear>
+     void ForEachDownloadRange(VAddr cpu_addr, u64 size, auto&& func) {
++    ReferenceTrace::Scope reference_scope("memory_tracker.h:ForEachDownloadRange", cpu_addr, size);
+         constexpr auto gpu_op = clear ? StateOp::Clear : StateOp::None;
+         IteratePages(cpu_addr, size, [&func](RegionManager* manager, u64 offset, u64 size) {
+             manager->template ForEachModifiedRange<Type::GPU, StateOp::None, gpu_op>(offset, size,
+--- a/src/video_core/page_manager.cpp
++++ b/src/video_core/page_manager.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -464,14 +465,17 @@
+ PageManager::~PageManager() = default;
+ 
+ void PageManager::OnGpuMap(VAddr address, size_t size) {
++    ReferenceTrace::Scope reference_scope("page_manager.cpp:PageManager::OnGpuMap", address, size);
+     impl->OnMap(address, size);
+ }
+ 
+ void PageManager::OnGpuUnmap(VAddr address, size_t size) {
++    ReferenceTrace::Scope reference_scope("page_manager.cpp:PageManager::OnGpuUnmap", address, size);
+     impl->OnUnmap(address, size);
+ }
+ 
+ void PageManager::UpdatePageWatchers(VAddr addr, u64 size, PageOp write_op) const {
++    ReferenceTrace::Scope reference_scope("page_manager.cpp:PageManager::UpdatePageWatchers", addr, size, static_cast<unsigned>(write_op));
+     impl->UpdatePageWatchers(addr, size, write_op);
+ }
+ 
+--- a/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -335,11 +336,13 @@
+ PipelineCache::~PipelineCache() = default;
+ 
+ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectParams params) {
++    ReferenceTrace::Scope reference_scope("vk_pipeline_cache.cpp:PipelineCache::GetGraphicsPipeline");
+     draw_indirect_params = params;
+     if (!RefreshGraphicsKey()) {
+         return nullptr;
+     }
+     const auto [it, is_new] = graphics_pipelines.try_emplace(graphics_key);
++    ReferenceTrace::Emit("pipeline.graphics.lookup", std::hash<GraphicsPipelineKey>{}(graphics_key), is_new);
+     if (is_new) {
+         const auto pipeline_hash = std::hash<GraphicsPipelineKey>{}(graphics_key);
+         LOG_INFO(Render_Vulkan, "Compiling graphics pipeline {:#x}", pipeline_hash);
+@@ -365,10 +368,12 @@
+ }
+ 
+ const ComputePipeline* PipelineCache::GetComputePipeline() {
++    ReferenceTrace::Scope reference_scope("vk_pipeline_cache.cpp:PipelineCache::GetComputePipeline");
+     if (!RefreshComputeKey()) {
+         return nullptr;
+     }
+     const auto [it, is_new] = compute_pipelines.try_emplace(compute_key);
++    ReferenceTrace::Emit("pipeline.compute.lookup", std::hash<ComputePipelineKey>{}(compute_key), is_new);
+     if (is_new) {
+         const auto pipeline_hash = std::hash<ComputePipelineKey>{}(compute_key);
+         LOG_INFO(Render_Vulkan, "Compiling compute pipeline {:#x}", pipeline_hash);
+@@ -620,12 +625,13 @@
+ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::RuntimeInfo& runtime_info,
+                                               const std::span<const u32>& code, size_t perm_idx,
+                                               Shader::Backend::Bindings& binding) {
++    ReferenceTrace::Scope reference_scope("vk_pipeline_cache.cpp:PipelineCache::CompileModule", info.pgm_hash, perm_idx);
+     LOG_INFO(Render_Vulkan, "Compiling {} shader {:#x} {}", info.hw_stage, info.pgm_hash,
+              perm_idx != 0 ? "(permutation)" : "");
+     DumpShader(code, info.pgm_hash, info.hw_stage, perm_idx, "bin");
+ 
+-    const auto ir_program = Shader::TranslateProgram(code, pools, info, runtime_info, profile);
+-    auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding);
++    const auto ir_program = [&] { ReferenceTrace::Scope phase("shader.GCN_translate", info.pgm_hash); return Shader::TranslateProgram(code, pools, info, runtime_info, profile); }();
++    auto spv = [&] { ReferenceTrace::Scope phase("shader.SPIRV_emit", info.pgm_hash); return Shader::Backend::SPIRV::EmitSPIRV(profile, runtime_info, ir_program, binding); }();
+     DumpShader(spv, info.pgm_hash, info.hw_stage, perm_idx, "spv");
+ 
+     vk::ShaderModule module;
+@@ -653,8 +659,10 @@
+ PipelineCache::Result PipelineCache::GetProgram(HwStage hw_stage, SwStage sw_stage,
+                                                 const Shader::ShaderParams& params,
+                                                 Shader::Backend::Bindings& binding) {
++    ReferenceTrace::Scope reference_scope("vk_pipeline_cache.cpp:PipelineCache::GetProgram");
+     auto runtime_info = BuildRuntimeInfo(hw_stage, sw_stage);
+     auto [it_pgm, new_program] = program_cache.try_emplace(params.hash);
++    ReferenceTrace::Emit("shader.program.lookup", params.hash, new_program);
+     if (new_program) {
+         it_pgm.value() = std::make_unique<Program>(hw_stage, sw_stage, params);
+         auto& program = it_pgm.value();
+--- a/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -302,6 +303,7 @@
+ }
+ 
+ void PipelineCache::WarmUp() {
++    ReferenceTrace::Scope reference_scope("vk_pipeline_serialization.cpp:PipelineCache::WarmUp");
+     if (!EmulatorSettings.IsPipelineCacheEnabled()) {
+         return;
+     }
+--- a/src/video_core/renderer_vulkan/vk_presenter.cpp
++++ b/src/video_core/renderer_vulkan/vk_presenter.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -665,11 +666,13 @@
+ 
+ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& attribute,
+                                VAddr cpu_address) {
++    ReferenceTrace::Scope reference_scope("vk_presenter.cpp:Presenter::PrepareFrame");
+     auto desc = VideoCore::TextureCache::ImageDesc{attribute, cpu_address};
+     const auto image_id = texture_cache.FindImage(desc);
+     texture_cache.UpdateImage(image_id);
+ 
+     Frame* frame = GetRenderFrame();
++    frame->reference_frame_id = ReferenceTrace::NewFrame();
+ 
+     const auto frame_subresources = vk::ImageSubresourceRange{
+         .aspectMask = vk::ImageAspectFlagBits::eColor,
+@@ -763,7 +766,10 @@
+     frame->ready_semaphore = draw_scheduler.GetWorkSemaphore()->Handle();
+     frame->ready_tick = draw_scheduler.CurrentTick();
+     SubmitInfo info{};
++    ReferenceTrace::Emit("frame.ready", frame->ready_tick, frame->width, frame->height, 0, frame->reference_frame_id);
++    draw_scheduler.DeferOperation([id = frame->reference_frame_id, tick = frame->ready_tick] { ReferenceTrace::Emit("frame.gpu_completion_observed", tick, 0, 0, 0, id); });
+     draw_scheduler.Flush(info);
++    ReferenceTrace::Emit("frame.return", frame->ready_tick, 0, 0, 0, frame->reference_frame_id);
+     return frame;
+ }
+ 
+@@ -841,6 +847,7 @@
+ }
+ 
+ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame) {
++    ReferenceTrace::Scope reference_scope("Presenter::Present.frame_identity", frame->reference_frame_id, is_reusing_frame, is_game_frame);
+     // Free the frame for reuse
+     const auto free_frame = [&] {
+         if (!is_reusing_frame) {
+@@ -1087,6 +1094,7 @@
+ }
+ 
+ Frame* Presenter::GetRenderFrame() {
++    ReferenceTrace::Scope reference_scope("vk_presenter.cpp:Presenter::GetRenderFrame");
+     // Wait for free presentation frames
+     Frame* frame;
+     {
+--- a/src/video_core/renderer_vulkan/vk_presenter.h
++++ b/src/video_core/renderer_vulkan/vk_presenter.h
+@@ -26,6 +26,7 @@
+ namespace Vulkan {
+ 
+ struct Frame {
++    uint64_t reference_frame_id{};
+     u32 width;
+     u32 height;
+     VmaAllocation allocation;
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+@@ -1,3 +1,5 @@
++#include "common/reference_gpu.h"
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -102,6 +104,7 @@
+ }
+ 
+ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::PrepareRenderState");
+     // Prefetch render targets to handle overlaps with bound textures (e.g. mipgen)
+     const auto& key = pipeline->GetGraphicsKey();
+     const auto& regs = liverpool->regs;
+@@ -180,6 +183,7 @@
+ }
+ 
+ void Rasterizer::Draw(bool is_indexed, u32 index_offset) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::Draw", is_indexed, index_offset);
+     RENDERER_TRACE;
+ 
+     scheduler.PopPendingOperations();
+@@ -235,6 +239,7 @@
+ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u32 stride,
+                               u32 max_count, VAddr count_address, u16 vertex_sgpr_offset,
+                               u16 instance_sgpr_offset) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::DrawIndirect", is_indexed, arg_address, max_count);
+     RENDERER_TRACE;
+ 
+     scheduler.PopPendingOperations();
+@@ -311,6 +316,7 @@
+ }
+ 
+ void Rasterizer::DispatchDirect() {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::DispatchDirect");
+     RENDERER_TRACE;
+ 
+     scheduler.PopPendingOperations();
+@@ -322,6 +328,7 @@
+     }
+ 
+     const auto& cs = pipeline->GetStage(Shader::SwStage::Compute);
++    ReferenceTrace::Emit("compute.shader", cs.pgm_hash, cs_program.dim_x, cs_program.dim_y, cs_program.dim_z);
+     if (ExecuteShaderHLE(cs, liverpool->regs, cs_program, *this)) {
+         return;
+     }
+@@ -339,13 +346,14 @@
+ 
+     const auto cmdbuf = scheduler.CommandBuffer();
+     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->Handle());
+-    cmdbuf.dispatch(cs_program.dim_x, cs_program.dim_y, cs_program.dim_z);
++    { ReferenceTrace::GpuScope reference_gpu(instance, scheduler, cmdbuf, "gpu.guest_compute"); cmdbuf.dispatch(cs_program.dim_x, cs_program.dim_y, cs_program.dim_z); }
+     DebugState.IncDispatch();
+ 
+     ResetBindings(true);
+ }
+ 
+ void Rasterizer::DispatchIndirect(VAddr address, u32 offset, u32 size) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::DispatchIndirect", address, offset, size);
+     RENDERER_TRACE;
+ 
+     scheduler.PopPendingOperations();
+@@ -372,7 +380,7 @@
+ 
+     const auto cmdbuf = scheduler.CommandBuffer();
+     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->Handle());
+-    cmdbuf.dispatchIndirect(buffer->Handle(), base);
++    { ReferenceTrace::GpuScope reference_gpu(instance, scheduler, cmdbuf, "gpu.guest_compute_indirect"); cmdbuf.dispatchIndirect(buffer->Handle(), base); }
+     DebugState.IncDispatch();
+ 
+     ResetBindings(true);
+@@ -401,6 +409,7 @@
+ }
+ 
+ bool Rasterizer::BindResources(const Pipeline* pipeline) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::BindResources");
+     if (IsComputeImageCopy(pipeline) || IsComputeMetaClear(pipeline) ||
+         IsComputeImageClear(pipeline)) {
+         return false;
+@@ -533,6 +542,7 @@
+ }
+ 
+ void Rasterizer::BindIndexBuffer(u32 index_offset) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::BindIndexBuffer", index_offset);
+     const auto& regs = liverpool->regs;
+ 
+     // Figure out index type and size.
+@@ -546,6 +556,7 @@
+     const u32 index_buffer_size = regs.num_indices * index_size;
+     const auto [buffer, offset] =
+         buffer_cache.ObtainBuffer(index_address, index_buffer_size, false);
++    ReferenceTrace::Emit("index.binding", index_address, index_buffer_size, index_type == vk::IndexType::eUint16, regs.enable_primitive_restart);
+     needs_barrier |= runtime.IsBufferAccessed(buffer, offset, index_buffer_size);
+     const auto cmdbuf = scheduler.CommandBuffer();
+     cmdbuf.bindIndexBuffer(buffer->Handle(), offset, index_type);
+@@ -978,6 +989,7 @@
+ }
+ 
+ RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::BeginRendering");
+     attachment_feedback_loop = false;
+     const auto& regs = liverpool->regs;
+     const auto& key = pipeline->GetGraphicsKey();
+@@ -1156,6 +1168,7 @@
+ }
+ 
+ void Rasterizer::FillBuffer(VAddr address, u32 num_bytes, u32 value, bool is_gds) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::FillBuffer");
+     ASSERT_MSG(address % 4 == 0 && num_bytes % 4 == 0,
+                "FillBuffer address and size must be a multiple of 4 bytes");
+     if (!is_gds) {
+@@ -1176,6 +1189,7 @@
+ }
+ 
+ void Rasterizer::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, bool src_gds) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::CopyBuffer", dst, src, num_bytes);
+     if (!dst_gds && !buffer_cache.IsRegionGpuModified(dst, num_bytes)) {
+         if (!src_gds && !buffer_cache.IsRegionGpuModified(src, num_bytes) &&
+             !texture_cache.FindImageFromRange(src, num_bytes)) {
+@@ -1214,6 +1228,7 @@
+ }
+ 
+ bool Rasterizer::InvalidateMemory(VAddr addr, u64 size, bool assume_locks) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::InvalidateMemory", addr, size);
+     if (!IsMapped(addr, size)) {
+         // Not GPU mapped memory, can skip invalidation logic entirely.
+         return false;
+@@ -1224,6 +1239,7 @@
+ }
+ 
+ bool Rasterizer::ReadMemory(VAddr addr, u64 size, bool assume_locks) {
++    ReferenceTrace::Scope reference_scope("vk_rasterizer.cpp:Rasterizer::ReadMemory", addr, size);
+     if (!IsMapped(addr, size)) {
+         // Not GPU mapped memory, can skip invalidation logic entirely.
+         return false;
+--- a/src/video_core/renderer_vulkan/vk_runtime.cpp
++++ b/src/video_core/renderer_vulkan/vk_runtime.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -109,6 +110,7 @@
+ 
+ void Runtime::CopyBuffer(const VideoCore::Buffer* src, const VideoCore::Buffer* dst,
+                          std::span<const vk::BufferCopy> copies) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::CopyBuffer");
+     scheduler.EndRendering();
+ 
+     bool needs_flush{};
+@@ -132,6 +134,7 @@
+ }
+ 
+ void Runtime::FillBuffer(const VideoCore::Buffer* dst, u64 offset, u64 size, u32 value) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::FillBuffer");
+     scheduler.EndRendering();
+ 
+     if (IsBufferAccessed(dst, offset, size, true)) {
+@@ -169,6 +172,7 @@
+ 
+ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
+                           std::span<const vk::BufferImageCopy> upload_copies) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::UploadImage");
+     SetBackingSamples(dst, dst->info.num_samples, false);
+     scheduler.EndRendering();
+ 
+@@ -198,6 +202,7 @@
+ 
+ void Runtime::DownloadImage(VideoCore::Image* src, const VideoCore::Buffer* dst,
+                             std::span<const vk::BufferImageCopy> download_copies) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::DownloadImage");
+     SetBackingSamples(src, src->info.num_samples);
+     scheduler.EndRendering();
+ 
+@@ -224,6 +229,7 @@
+ }
+ 
+ void Runtime::CopyImage(VideoCore::Image* src, VideoCore::Image* dst) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::CopyImage");
+     const u32 num_mips = std::min(src->info.resources.levels, dst->info.resources.levels);
+ 
+     // Format mismatch warning (safe but useful)
+@@ -689,6 +695,7 @@
+ 
+ void Runtime::AccessBuffer(const VideoCore::Buffer* handle, u64 offset, u64 size,
+                            vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access) {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::AccessBuffer", offset, size);
+     MakeCurrent(handle);
+ 
+     const Interval range = {
+@@ -720,6 +727,7 @@
+ }
+ 
+ void Runtime::FlushBarriers() {
++    ReferenceTrace::Scope reference_scope("vk_runtime.cpp:Runtime::FlushBarriers");
+     vk::DependencyInfo dep_info{};
+ 
+     if (memory_barrier.srcStageMask) {
+--- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
++++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -29,6 +30,7 @@
+ }
+ 
+ void Scheduler::BeginRendering(const RenderState& new_state) {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::BeginRendering");
+     if (is_rendering && render_state == new_state) {
+         return;
+     }
+@@ -84,6 +86,7 @@
+ }
+ 
+ void Scheduler::EndRendering() {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::EndRendering");
+     if (!is_rendering) {
+         return;
+     }
+@@ -105,16 +108,19 @@
+ }
+ 
+ void Scheduler::Flush(SubmitInfo& info) {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::Flush");
+     // When flushing, we only send data to the driver; no waiting is necessary.
+     SubmitExecution(info);
+ }
+ 
+ void Scheduler::Flush() {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::Flush");
+     SubmitInfo info{};
+     Flush(info);
+ }
+ 
+ void Scheduler::Finish() {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::Finish");
+     // When finishing, we need to wait for the submission to have executed on the device.
+     const u64 presubmit_tick = CurrentTick();
+     SubmitInfo info{};
+@@ -123,6 +129,7 @@
+ }
+ 
+ void Scheduler::Wait(u64 tick) {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::Wait", tick);
+     if (tick >= work_semaphore.CurrentTick()) {
+         // Make sure we are not waiting for the current tick without signalling
+         SubmitInfo info{};
+@@ -132,6 +139,7 @@
+ }
+ 
+ void Scheduler::PopPendingOperations() {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::PopPendingOperations");
+     std::unique_lock lk(pending_ops_mutex);
+     work_semaphore.Refresh();
+     while (!pending_ops.empty() && work_semaphore.IsFree(pending_ops.front().gpu_tick)) {
+@@ -183,6 +191,7 @@
+ }
+ 
+ void Scheduler::SubmitExecution(SubmitInfo& info) {
++    ReferenceTrace::Scope reference_scope("vk_scheduler.cpp:Scheduler::SubmitExecution");
+     std::scoped_lock lk{submit_mutex};
+     const u64 signal_value = work_semaphore.NextTick();
+ 
+--- a/src/video_core/renderer_vulkan/vk_semaphore.cpp
++++ b/src/video_core/renderer_vulkan/vk_semaphore.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -9,7 +10,7 @@
+ 
+ namespace Vulkan {
+ 
+-constexpr u64 WAIT_TIMEOUT = std::numeric_limits<u64>::max();
++constexpr u64 REFERENCE_WAIT_TIMEOUT = std::numeric_limits<u64>::max();
+ 
+ Semaphore::Semaphore(const Instance& instance_) : instance{instance_} {
+     const vk::StructureChain semaphore_chain = {
+@@ -29,6 +30,7 @@
+ Semaphore::~Semaphore() = default;
+ 
+ void Semaphore::Refresh() {
++    ReferenceTrace::Scope reference_scope("vk_semaphore.cpp:Semaphore::Refresh");
+     u64 this_tick{};
+     u64 counter{};
+     do {
+@@ -45,6 +47,7 @@
+ }
+ 
+ void Semaphore::Wait(u64 tick) {
++    ReferenceTrace::Scope reference_scope("vk_semaphore.cpp:Semaphore::Wait", tick, reinterpret_cast<uintptr_t>(this));
+     // No need to wait if the GPU is ahead of the tick
+     if (IsFree(tick)) {
+         return;
+@@ -62,7 +65,7 @@
+         .pValues = &tick,
+     };
+ 
+-    while (instance.GetDevice().waitSemaphores(&wait_info, WAIT_TIMEOUT) != vk::Result::eSuccess) {
++    while (instance.GetDevice().waitSemaphores(&wait_info, REFERENCE_WAIT_TIMEOUT) != vk::Result::eSuccess) {
+     }
+     Refresh();
+ }
+--- a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
++++ b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -37,6 +38,7 @@
+ 
+ StagingBufferRef StagingBufferPool::Request(u64 size, MemoryType type, u64 alignment, bool deferred,
+                                             bool unsynchronized) {
++    ReferenceTrace::Scope reference_scope("vk_staging_buffer_pool.cpp:StagingBufferPool::Request", size, static_cast<unsigned>(type), alignment, deferred);
+     Ring& ring = rings[u32(type)];
+     if (deferred || size > BLOCK_SIZE) {
+         return RequestLarge(size, type, deferred, unsynchronized);
+@@ -46,6 +48,7 @@
+ 
+ StagingBufferRef StagingBufferPool::RequestFromRing(Ring& ring, u64 size, u64 alignment,
+                                                     MemoryType type, bool unsynchronized) {
++    ReferenceTrace::Scope reference_scope("vk_staging_buffer_pool.cpp:StagingBufferPool::RequestFromRing", size, alignment, static_cast<unsigned>(type), unsynchronized);
+     Block* best{};
+     u64 best_offset{};
+     for (size_t i = 0; i < ring.blocks.size(); ++i) {
+@@ -91,6 +94,7 @@
+ 
+ StagingBufferRef StagingBufferPool::RequestLarge(u64 size, MemoryType type, bool deferred,
+                                                  bool unsynchronized) {
++    ReferenceTrace::Scope reference_scope("vk_staging_buffer_pool.cpp:StagingBufferPool::RequestLarge", size, static_cast<unsigned>(type), deferred, unsynchronized);
+     auto& cache = large_caches[u32(type)];
+     const u64 max_size = std::max(size + size / 4, RoundAllocationSize(size));
+ 
+@@ -134,6 +138,7 @@
+ }
+ 
+ void StagingBufferPool::FreeDeferred(const StagingBufferRef& ref) {
++    ReferenceTrace::Scope reference_scope("vk_staging_buffer_pool.cpp:StagingBufferPool::FreeDeferred");
+     auto& cache = large_caches[u32(ref.type)];
+     const auto it = std::ranges::find_if(
+         cache, [&](const LargeBuffer& entry) { return entry.buffer.get() == ref.buffer; });
+@@ -144,6 +149,7 @@
+ }
+ 
+ void StagingBufferPool::TickFrame() {
++    ReferenceTrace::Scope reference_scope("vk_staging_buffer_pool.cpp:StagingBufferPool::TickFrame");
+     ++frame;
+     for (Ring& ring : rings) {
+         TrimRing(ring);
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -128,6 +129,7 @@
+ }
+ 
+ bool Swapchain::Present() {
++    ReferenceTrace::Scope reference_scope("vk_swapchain.cpp:Swapchain::Present");
+     const vk::PresentInfoKHR present_info = {
+         .waitSemaphoreCount = 1,
+         .pWaitSemaphores = &present_ready[image_index],
+--- a/src/video_core/texture_cache/image.cpp
++++ b/src/video_core/texture_cache/image.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -88,12 +89,15 @@
+ 
+ UniqueImage::~UniqueImage() {
+     if (image) {
++        ReferenceTrace::Emit("image.physical.free", size_bytes);
+         vmaDestroyImage(allocator, image, allocation);
+     }
+ }
+ 
+ void UniqueImage::Destroy() {
++    ReferenceTrace::Scope reference_scope("image.cpp:UniqueImage::Destroy");
+     if (image) {
++        ReferenceTrace::Emit("image.physical.free", size_bytes);
+         vmaDestroyImage(allocator, image, allocation);
+         image = vk::Image{};
+         allocation = {};
+@@ -101,6 +105,7 @@
+ }
+ 
+ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
++    ReferenceTrace::Scope reference_scope("image.cpp:UniqueImage::Create");
+     this->image_ci = image_ci;
+     ASSERT(!image);
+     const VmaAllocationCreateInfo alloc_ci = {
+@@ -121,6 +126,7 @@
+                vk::to_string(vk::Result{result}));
+     image = vk::Image{unsafe_image};
+     size_bytes = alloc_info.size;
++    ReferenceTrace::Emit("image.physical.allocate", alloc_info.size, alloc_info.memoryType, image_ci.extent.width, image_ci.extent.height);
+ }
+ 
+ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
+@@ -223,6 +229,7 @@
+ void Image::GetBarriers(Barriers& barriers, vk::ImageLayout dst_layout, vk::AccessFlags2 dst_mask,
+                         vk::PipelineStageFlags2 dst_stage,
+                         std::optional<SubresourceRange> subres_range) {
++    ReferenceTrace::Scope reference_scope("image.cpp:Image::GetBarriers");
+     auto& last_state = backing->state;
+     auto& subresource_states = backing->subresource_states;
+ 
+--- a/src/video_core/texture_cache/texture_cache.cpp
++++ b/src/video_core/texture_cache/texture_cache.cpp
+@@ -1,3 +1,4 @@
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -69,6 +70,7 @@
+ TextureCache::~TextureCache() = default;
+ 
+ void TextureCache::ProcessDownloadImages() {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::ProcessDownloadImages");
+     std::unique_lock lk{download_images_mutex};
+     for (const ImageId image_id : download_images) {
+         DownloadImageMemory(image_id, true);
+@@ -77,6 +79,7 @@
+ }
+ 
+ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::DownloadImageMemory");
+     Image& image = slot_images[image_id];
+     if (False(image.flags & ImageFlagBits::GpuModified)) {
+         return;
+@@ -129,6 +132,7 @@
+ }
+ 
+ void TextureCache::InvalidateMemory(VAddr addr, size_t size) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::InvalidateMemory", addr, size);
+     std::scoped_lock lock{mutex};
+     const auto pages_start = PageManager::GetPageAddr(addr);
+     const auto pages_end = PageManager::GetNextPageAddr(addr + size - 1);
+@@ -160,6 +164,7 @@
+ }
+ 
+ void TextureCache::InvalidateMemoryFromGPU(VAddr address, size_t max_size) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::InvalidateMemoryFromGPU", address, max_size);
+     std::scoped_lock lock{mutex};
+     ForEachImageInRegion(address, max_size, [&](ImageId image_id, Image& image) {
+         // Only consider images that match base address.
+@@ -504,6 +509,7 @@
+ }
+ 
+ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::FindImage");
+     const auto& info = desc.info;
+     ASSERT(info.guest_address != 0);
+ 
+@@ -619,6 +625,7 @@
+ }
+ 
+ ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::FindTexture");
+     Image& image = slot_images[image_id];
+     if (desc.type == BindingType::Storage) {
+         image.flags |= ImageFlagBits::GpuModified;
+@@ -702,6 +709,7 @@
+ }
+ 
+ void TextureCache::RefreshImage(Image& image) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::RefreshImage");
+     if (False(image.flags & ImageFlagBits::Dirty) || image.info.num_samples > 1) {
+         return;
+     }
+@@ -805,6 +813,7 @@
+ }
+ 
+ void TextureCache::RegisterImage(ImageId image_id) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::RegisterImage");
+     Image& image = slot_images[image_id];
+     ASSERT_MSG(False(image.flags & ImageFlagBits::Registered),
+                "Trying to register an already registered image");
+@@ -816,6 +825,7 @@
+ }
+ 
+ void TextureCache::UnregisterImage(ImageId image_id) {
++    ReferenceTrace::Scope reference_scope("texture_cache.cpp:TextureCache::UnregisterImage");
+     Image& image = slot_images[image_id];
+     ASSERT_MSG(True(image.flags & ImageFlagBits::Registered),
+                "Trying to unregister an already unregistered image");
+--- a/src/video_core/texture_cache/tile_manager.cpp
++++ b/src/video_core/texture_cache/tile_manager.cpp
+@@ -1,3 +1,5 @@
++#include "common/reference_gpu.h"
++#include "common/reference_trace.h"
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+@@ -195,6 +197,7 @@
+ 
+ std::pair<const Buffer*, u64> TileManager::DetileImage(const VideoCore::Buffer* in_buffer,
+                                                        u64 in_offset, const ImageInfo& info) {
++    ReferenceTrace::Scope reference_scope("tile_manager.cpp:TileManager::DetileImage", info.guest_address, info.guest_size, static_cast<unsigned>(info.tile_mode), info.num_bits);
+     if (!info.props.is_tiled) {
+         return {in_buffer, in_offset};
+     }
+@@ -268,7 +271,7 @@
+     cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *pl_layout, 0, set_writes);
+ 
+     const auto dim_x = (info.guest_size / (info.num_bits / 8)) / 64;
+-    cmdbuf.dispatch(dim_x, 1, 1);
++    { ReferenceTrace::GpuScope reference_gpu(instance, scheduler, cmdbuf, "gpu.detile_or_retile"); cmdbuf.dispatch(dim_x, 1, 1); }
+ 
+     runtime.AccessBuffer(staging.buffer, staging.offset, info.guest_size,
+                          vk::PipelineStageFlagBits2::eComputeShader,
+@@ -279,6 +282,7 @@
+ 
+ void TileManager::TileImage(Image& in_image, std::span<vk::BufferImageCopy> buffer_copies,
+                             const VideoCore::Buffer* out_buffer, u64 out_offset) {
++    ReferenceTrace::Scope reference_scope("tile_manager.cpp:TileManager::TileImage");
+     const auto& info = in_image.info;
+     if (!info.props.is_tiled) {
+         for (auto& copy : buffer_copies) {
+@@ -360,7 +364,7 @@
+     cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *pl_layout, 0, set_writes);
+ 
+     const auto dim_x = (info.guest_size / (info.num_bits / 8)) / 64;
+-    cmdbuf.dispatch(dim_x, 1, 1);
++    { ReferenceTrace::GpuScope reference_gpu(instance, scheduler, cmdbuf, "gpu.detile_or_retile"); cmdbuf.dispatch(dim_x, 1, 1); }
+ 
+     runtime.AccessBuffer(out_buffer, out_offset, info.guest_size,
+                          vk::PipelineStageFlagBits2::eComputeShader,

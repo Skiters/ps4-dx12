@@ -1,0 +1,11 @@
+{
+  "cpu": [
+    {
+      "name": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+      "cores": 16,
+      "logical_processors": 32
+    }
+  ],
+  "recorded_utc": "2026-10-11T11:43:48.2866458Z",
+  "physical_memory_bytes": 66155397120
+}

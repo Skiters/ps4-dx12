@@ -1,0 +1,13 @@
+{
+  "release_build": "PASS",
+  "mode_b_cli_help": "PASS: no game launch",
+  "threaded_trace_aggregate_and_opcode_counts": "PASS",
+  "trace_loss_detection": "PASS",
+  "passive_sensors_named_threads_nvidia_child_cpu": "PASS",
+  "dxgi_luid_identity": "PASS",
+  "gameplay_and_gpu_timestamp_correctness": "PENDING",
+  "mode_a_snapshot_sha_match": "PASS",
+  "matched_benchmark": "PENDING",
+  "original_executable_sha256": "91eb69a59cb3ea3c35290fbd03a69718d2f6254c202ba86c6acbe1d1fc8b95f1",
+  "instrumented_executable_sha256": "d28ae89412307f0297428751f8bd2778c4f0ddcadfdac8fb3fe527a2259df5ff"
+}

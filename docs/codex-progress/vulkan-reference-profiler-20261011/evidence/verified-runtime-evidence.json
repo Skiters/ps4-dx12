@@ -1,0 +1,28 @@
+{
+  "source": "read-only existing log snapshot; timestamps are not aligned to per-second CPU capture",
+  "log_sha256": "b4675493c3e026a09fcab810cdf71d185e48aa80e8bcadd80ab7a6aeba527021",
+  "observed_records": {
+    "resident": 2337,
+    "tiling_pipeline": 14,
+    "warnings": 184,
+    "errors": 30,
+    "critical": 0
+  },
+  "preload_records": [
+    "[Render] <Info> (shadPS4:Main) vk_pipeline_serialization.cpp:371 WarmUp: Preloaded 527 pipelines"
+  ],
+  "readback_records": [
+    "[Config] <Info> (shadPS4:Main) emulator.cpp:487 Run: GPU readbacksMode: 1"
+  ],
+  "log_records_are_not_exact_calls": true,
+  "diagnostic_examples": [
+    "[Loader] <Error> (shadPS4:Main) emulator.cpp:248 ExtractTrophies: Couldn't extract trophy file trophy00.trp",
+    "[Loader] <Warning> (shadPS4:Main) emulator.cpp:664 Run: No dumped system fonts, expect missing text or instability",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_explicit_vertex_parameter unavailable.",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_EXT_shader_stencil_export unavailable.",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_image_load_store_lod unavailable.",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_gcn_shader unavailable.",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_shader_trinary_minmax unavailable.",
+    "[Render_Vulkan] <Warning> (shadPS4:Main) vk_instance.cpp:243 lambda: Extension VK_AMD_mixed_attachment_samples unavailable."
+  ]
+}

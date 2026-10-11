@@ -1,0 +1,7 @@
+{
+  "status": "stopped",
+  "reason": "duration_limit",
+  "samples": 7,
+  "ended_utc": "2026-10-11T11:27:59.511473+00:00",
+  "skipped_intervals": 0
+}

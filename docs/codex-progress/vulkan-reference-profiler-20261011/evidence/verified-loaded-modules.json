@@ -1,0 +1,710 @@
+[
+  {
+    "bytes": 80027648,
+    "name": "shadPS4.exe",
+    "path": "C:\\Users\\skei\\AppData\\Roaming\\shadPS4QtLauncher\\versions\\v0.19.0 - The Shadoween special - 2026-10-02\\shadPS4.exe",
+    "base_address": 123145302310912
+  },
+  {
+    "bytes": 2519040,
+    "name": "ntdll.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
+    "base_address": 140726836396032
+  },
+  {
+    "bytes": 831488,
+    "name": "KERNEL32.DLL",
+    "path": "C:\\WINDOWS\\System32\\KERNEL32.DLL",
+    "base_address": 140726811164672
+  },
+  {
+    "bytes": 4198400,
+    "name": "KERNELBASE.dll",
+    "path": "C:\\WINDOWS\\System32\\KERNELBASE.dll",
+    "base_address": 140726787964928
+  },
+  {
+    "bytes": 1568768,
+    "name": "CRYPT32.dll",
+    "path": "C:\\WINDOWS\\System32\\CRYPT32.dll",
+    "base_address": 140726796615680
+  },
+  {
+    "bytes": 1359872,
+    "name": "ucrtbase.dll",
+    "path": "C:\\WINDOWS\\System32\\ucrtbase.dll",
+    "base_address": 140726793928704
+  },
+  {
+    "bytes": 1146880,
+    "name": "RPCRT4.dll",
+    "path": "C:\\WINDOWS\\System32\\RPCRT4.dll",
+    "base_address": 140726806249472
+  },
+  {
+    "bytes": 528384,
+    "name": "WS2_32.dll",
+    "path": "C:\\WINDOWS\\System32\\WS2_32.dll",
+    "base_address": 140726815031296
+  },
+  {
+    "bytes": 1929216,
+    "name": "USER32.dll",
+    "path": "C:\\WINDOWS\\System32\\USER32.dll",
+    "base_address": 140726824337408
+  },
+  {
+    "bytes": 159744,
+    "name": "win32u.dll",
+    "path": "C:\\WINDOWS\\System32\\win32u.dll",
+    "base_address": 140726792224768
+  },
+  {
+    "bytes": 176128,
+    "name": "GDI32.dll",
+    "path": "C:\\WINDOWS\\System32\\GDI32.dll",
+    "base_address": 140726805266432
+  },
+  {
+    "bytes": 208896,
+    "name": "IPHLPAPI.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\IPHLPAPI.DLL",
+    "base_address": 140726760767488
+  },
+  {
+    "bytes": 1212416,
+    "name": "gdi32full.dll",
+    "path": "C:\\WINDOWS\\System32\\gdi32full.dll",
+    "base_address": 140726795370496
+  },
+  {
+    "bytes": 667648,
+    "name": "msvcp_win.dll",
+    "path": "C:\\WINDOWS\\System32\\msvcp_win.dll",
+    "base_address": 140726793207808
+  },
+  {
+    "bytes": 7979008,
+    "name": "SHELL32.dll",
+    "path": "C:\\WINDOWS\\System32\\SHELL32.dll",
+    "base_address": 140726815621120
+  },
+  {
+    "bytes": 200704,
+    "name": "IMM32.dll",
+    "path": "C:\\WINDOWS\\System32\\IMM32.dll",
+    "base_address": 140726808936448
+  },
+  {
+    "bytes": 888832,
+    "name": "OLEAUT32.dll",
+    "path": "C:\\WINDOWS\\System32\\OLEAUT32.dll",
+    "base_address": 140726810247168
+  },
+  {
+    "bytes": 3710976,
+    "name": "combase.dll",
+    "path": "C:\\WINDOWS\\System32\\combase.dll",
+    "base_address": 140726801530880
+  },
+  {
+    "bytes": 643072,
+    "name": "MSVCP140.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140.dll",
+    "base_address": 140726534995968
+  },
+  {
+    "bytes": 90112,
+    "name": "MSVCP140_ATOMIC_WAIT.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\MSVCP140_ATOMIC_WAIT.dll",
+    "base_address": 140726051340288
+  },
+  {
+    "bytes": 1679360,
+    "name": "ole32.dll",
+    "path": "C:\\WINDOWS\\System32\\ole32.dll",
+    "base_address": 140726812016640
+  },
+  {
+    "bytes": 765952,
+    "name": "ADVAPI32.dll",
+    "path": "C:\\WINDOWS\\System32\\ADVAPI32.dll",
+    "base_address": 140726799761408
+  },
+  {
+    "bytes": 4747264,
+    "name": "SETUPAPI.dll",
+    "path": "C:\\WINDOWS\\System32\\SETUPAPI.dll",
+    "base_address": 140726830563328
+  },
+  {
+    "bytes": 692224,
+    "name": "msvcrt.dll",
+    "path": "C:\\WINDOWS\\System32\\msvcrt.dll",
+    "base_address": 140726809198592
+  },
+  {
+    "bytes": 180224,
+    "name": "VCRUNTIME140.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\VCRUNTIME140.dll",
+    "base_address": 140726541090816
+  },
+  {
+    "bytes": 688128,
+    "name": "sechost.dll",
+    "path": "C:\\WINDOWS\\System32\\sechost.dll",
+    "base_address": 140726805528576
+  },
+  {
+    "bytes": 49152,
+    "name": "VCRUNTIME140_1.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\VCRUNTIME140_1.dll",
+    "base_address": 140726534275072
+  },
+  {
+    "bytes": 225280,
+    "name": "WINMM.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\WINMM.dll",
+    "base_address": 140726544302080
+  },
+  {
+    "bytes": 45056,
+    "name": "AVRT.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\AVRT.dll",
+    "base_address": 140726743990272
+  },
+  {
+    "bytes": 335872,
+    "name": "cfgmgr32.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\cfgmgr32.dll",
+    "base_address": 140726783377408
+  },
+  {
+    "bytes": 45056,
+    "name": "VERSION.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\VERSION.dll",
+    "base_address": 140726662463488
+  },
+  {
+    "bytes": 172032,
+    "name": "bcrypt.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\bcrypt.dll",
+    "base_address": 140726786785280
+  },
+  {
+    "bytes": 61440,
+    "name": "HID.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\HID.DLL",
+    "base_address": 140726757425152
+  },
+  {
+    "bytes": 2408448,
+    "name": "dbghelp.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\dbghelp.dll",
+    "base_address": 140726739927040
+  },
+  {
+    "bytes": 9097216,
+    "name": "windows.storage.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
+    "base_address": 140726748250112
+  },
+  {
+    "bytes": 1019904,
+    "name": "SHCORE.dll",
+    "path": "C:\\WINDOWS\\System32\\SHCORE.dll",
+    "base_address": 140726813982720
+  },
+  {
+    "bytes": 417792,
+    "name": "shlwapi.dll",
+    "path": "C:\\WINDOWS\\System32\\shlwapi.dll",
+    "base_address": 140726829318144
+  },
+  {
+    "bytes": 110592,
+    "name": "kernel.appcore.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
+    "base_address": 140726767386624
+  },
+  {
+    "bytes": 704512,
+    "name": "bcryptPrimitives.dll",
+    "path": "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
+    "base_address": 140726798254080
+  },
+  {
+    "bytes": 684032,
+    "name": "uxtheme.dll",
+    "path": "C:\\WINDOWS\\system32\\uxtheme.dll",
+    "base_address": 140726722232320
+  },
+  {
+    "bytes": 712704,
+    "name": "clbcatq.dll",
+    "path": "C:\\WINDOWS\\System32\\clbcatq.dll",
+    "base_address": 140726829776896
+  },
+  {
+    "bytes": 118784,
+    "name": "amsi.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\amsi.dll",
+    "base_address": 140726440951808
+  },
+  {
+    "bytes": 212992,
+    "name": "USERENV.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\USERENV.dll",
+    "base_address": 140726774005760
+  },
+  {
+    "bytes": 167936,
+    "name": "profapi.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
+    "base_address": 140726786981888
+  },
+  {
+    "bytes": 2281472,
+    "name": "com_antivirus.dll",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky 21.26\\x64\\com_antivirus.dll",
+    "base_address": 140726437281792
+  },
+  {
+    "bytes": 53248,
+    "name": "Secur32.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\Secur32.dll",
+    "base_address": 140726720397312
+  },
+  {
+    "bytes": 40960,
+    "name": "DPAPI.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\DPAPI.DLL",
+    "base_address": 140726784163840
+  },
+  {
+    "bytes": 299008,
+    "name": "SSPICLI.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\SSPICLI.DLL",
+    "base_address": 140726770270208
+  },
+  {
+    "bytes": 344064,
+    "name": "product_info.dll",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky 21.26\\x64\\product_info.dll",
+    "base_address": 140726355296256
+  },
+  {
+    "bytes": 188416,
+    "name": "DWMAPI.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\DWMAPI.DLL",
+    "base_address": 140726723411968
+  },
+  {
+    "bytes": 1290240,
+    "name": "DXGI.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\DXGI.DLL",
+    "base_address": 140726746742784
+  },
+  {
+    "bytes": 385024,
+    "name": "powrprof.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\powrprof.dll",
+    "base_address": 140726784360448
+  },
+  {
+    "bytes": 86016,
+    "name": "UMPDC.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\UMPDC.dll",
+    "base_address": 140726784229376
+  },
+  {
+    "bytes": 278528,
+    "name": "dxcore.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\dxcore.dll",
+    "base_address": 140726728851456
+  },
+  {
+    "bytes": 389120,
+    "name": "directxdatabasehelper.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\directxdatabasehelper.dll",
+    "base_address": 140726487810048
+  },
+  {
+    "bytes": 622592,
+    "name": "Mf.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\Mf.dll",
+    "base_address": 140726669344768
+  },
+  {
+    "bytes": 2252800,
+    "name": "Mfplat.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\Mfplat.dll",
+    "base_address": 140726657089536
+  },
+  {
+    "bytes": 241664,
+    "name": "RTWorkQ.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\RTWorkQ.DLL",
+    "base_address": 140726662529024
+  },
+  {
+    "bytes": 192512,
+    "name": "DEVOBJ.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\DEVOBJ.dll",
+    "base_address": 140726783770624
+  },
+  {
+    "bytes": 872448,
+    "name": "Mfreadwrite.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\Mfreadwrite.dll",
+    "base_address": 140725180694528
+  },
+  {
+    "bytes": 4296704,
+    "name": "MFCORE.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\MFCORE.DLL",
+    "base_address": 140726663380992
+  },
+  {
+    "bytes": 692224,
+    "name": "FrameServerClient.dll",
+    "path": "C:\\Windows\\System32\\FrameServerClient.dll",
+    "base_address": 140725076099072
+  },
+  {
+    "bytes": 638976,
+    "name": "MFSENSORGROUP.dll",
+    "path": "C:\\Windows\\System32\\MFSENSORGROUP.dll",
+    "base_address": 140726670000128
+  },
+  {
+    "bytes": 745472,
+    "name": "policymanager.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\policymanager.dll",
+    "base_address": 140726685401088
+  },
+  {
+    "bytes": 589824,
+    "name": "Windows.Media.MediaControl.dll",
+    "path": "C:\\Windows\\System32\\Windows.Media.MediaControl.dll",
+    "base_address": 140725120335872
+  },
+  {
+    "bytes": 675840,
+    "name": "MMDevAPI.DLL",
+    "path": "C:\\Windows\\System32\\MMDevAPI.DLL",
+    "base_address": 140726652108800
+  },
+  {
+    "bytes": 532480,
+    "name": "WINTRUST.dll",
+    "path": "C:\\WINDOWS\\System32\\WINTRUST.dll",
+    "base_address": 140726799040512
+  },
+  {
+    "bytes": 77824,
+    "name": "MSASN1.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\MSASN1.dll",
+    "base_address": 140726778200064
+  },
+  {
+    "bytes": 1425408,
+    "name": "MSCTF.dll",
+    "path": "C:\\WINDOWS\\System32\\MSCTF.dll",
+    "base_address": 140726807429120
+  },
+  {
+    "bytes": 794624,
+    "name": "mscms.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\mscms.dll",
+    "base_address": 140726166814720
+  },
+  {
+    "bytes": 1335296,
+    "name": "textinputframework.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\textinputframework.dll",
+    "base_address": 140725754068992
+  },
+  {
+    "bytes": 376832,
+    "name": "dataexchange.dll",
+    "path": "C:\\WINDOWS\\system32\\dataexchange.dll",
+    "base_address": 140725894643712
+  },
+  {
+    "bytes": 2428928,
+    "name": "twinapi.appcore.dll",
+    "path": "C:\\WINDOWS\\system32\\twinapi.appcore.dll",
+    "base_address": 140726579363840
+  },
+  {
+    "bytes": 479232,
+    "name": "Oleacc.dll",
+    "path": "C:\\WINDOWS\\system32\\Oleacc.dll",
+    "base_address": 140726293299200
+  },
+  {
+    "bytes": 110592,
+    "name": "XInput1_4.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\XInput1_4.dll",
+    "base_address": 140725416493056
+  },
+  {
+    "bytes": 1974272,
+    "name": "inputhost.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\inputhost.dll",
+    "base_address": 140725962997760
+  },
+  {
+    "bytes": 1224704,
+    "name": "CoreMessaging.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\CoreMessaging.dll",
+    "base_address": 140726716727296
+  },
+  {
+    "bytes": 307200,
+    "name": "dinput8.dll",
+    "path": "C:\\Windows\\System32\\dinput8.dll",
+    "base_address": 140725366030336
+  },
+  {
+    "bytes": 49152,
+    "name": "CRYPTBASE.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\CRYPTBASE.DLL",
+    "base_address": 140726775775232
+  },
+  {
+    "bytes": 221184,
+    "name": "ntmarta.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\ntmarta.dll",
+    "base_address": 140726768631808
+  },
+  {
+    "bytes": 286720,
+    "name": "deviceaccess.dll",
+    "path": "C:\\Windows\\System32\\deviceaccess.dll",
+    "base_address": 140726300704768
+  },
+  {
+    "bytes": 1744896,
+    "name": "vulkan-1.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\vulkan-1.dll",
+    "base_address": 140725246099456
+  },
+  {
+    "bytes": 122880,
+    "name": "windows.staterepositorycore.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\windows.staterepositorycore.dll",
+    "base_address": 140726586179584
+  },
+  {
+    "bytes": 48934912,
+    "name": "nvoglv64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvoglv64.dll",
+    "base_address": 140725129314304
+  },
+  {
+    "bytes": 172032,
+    "name": "WTSAPI32.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\WTSAPI32.dll",
+    "base_address": 140726720528384
+  },
+  {
+    "bytes": 241664,
+    "name": "cryptnet.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\cryptnet.dll",
+    "base_address": 140726618554368
+  },
+  {
+    "bytes": 528384,
+    "name": "wldp.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\wldp.dll",
+    "base_address": 140726776561664
+  },
+  {
+    "bytes": 1548288,
+    "name": "drvstore.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\drvstore.dll",
+    "base_address": 140726616981504
+  },
+  {
+    "bytes": 131072,
+    "name": "imagehlp.dll",
+    "path": "C:\\WINDOWS\\System32\\imagehlp.dll",
+    "base_address": 140726813786112
+  },
+  {
+    "bytes": 110592,
+    "name": "CRYPTSP.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\CRYPTSP.dll",
+    "base_address": 140726777741312
+  },
+  {
+    "bytes": 233472,
+    "name": "rsaenh.dll",
+    "path": "C:\\WINDOWS\\system32\\rsaenh.dll",
+    "base_address": 140726766731264
+  },
+  {
+    "bytes": 110788608,
+    "name": "nvgpucomp64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvgpucomp64.dll",
+    "base_address": 140726170877952
+  },
+  {
+    "bytes": 103735296,
+    "name": "amdvlk64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\u0200157.inf_amd64_71e242c550b2398a\\B025930\\amdvlk64.dll",
+    "base_address": 140724552990720
+  },
+  {
+    "bytes": 1482752,
+    "name": "WinTypes.dll",
+    "path": "C:\\Windows\\System32\\WinTypes.dll",
+    "base_address": 140726676422656
+  },
+  {
+    "bytes": 233472,
+    "name": "rometadata.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\rometadata.dll",
+    "base_address": 140726306603008
+  },
+  {
+    "bytes": 319488,
+    "name": "graphics-hook64.dll",
+    "path": "C:\\ProgramData\\obs-studio-hook\\graphics-hook64.dll",
+    "base_address": 140725543960576
+  },
+  {
+    "bytes": 8577024,
+    "name": "NvPresent64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\NvPresent64.dll",
+    "base_address": 140723179421696
+  },
+  {
+    "bytes": 2486272,
+    "name": "d3d11.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\d3d11.dll",
+    "base_address": 140726744055808
+  },
+  {
+    "bytes": 4788224,
+    "name": "nvcuda.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\nvcuda.dll",
+    "base_address": 140723849986048
+  },
+  {
+    "bytes": 11837440,
+    "name": "nvcuda64.dll",
+    "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvcuda64.dll",
+    "base_address": 140724101513216
+  },
+  {
+    "bytes": 561152,
+    "name": "nvapi64.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\nvapi64.dll",
+    "base_address": 140726541287424
+  },
+  {
+    "bytes": 5840896,
+    "name": "nvapi64_impl.dll",
+    "path": "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvapi64_impl.dll",
+    "base_address": 140726503342080
+  },
+  {
+    "bytes": 868352,
+    "name": "nvdiagclt64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvdiagclt64.dll",
+    "base_address": 140724460978176
+  },
+  {
+    "bytes": 151552,
+    "name": "gpapi.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\gpapi.dll",
+    "base_address": 140726773809152
+  },
+  {
+    "bytes": 1495040,
+    "name": "nvspcap64.dll",
+    "path": "C:\\WINDOWS\\system32\\nvspcap64.dll",
+    "base_address": 140725191770112
+  },
+  {
+    "bytes": 1433600,
+    "name": "amdenc64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\u0200157.inf_amd64_71e242c550b2398a\\B025930\\amdenc64.dll",
+    "base_address": 105843495272448
+  },
+  {
+    "bytes": 245760,
+    "name": "amdihk64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\u0200157.inf_amd64_71e242c550b2398a\\B025930\\amdihk64.dll",
+    "base_address": 140725416951808
+  },
+  {
+    "bytes": 585728,
+    "name": "DispBroker.dll",
+    "path": "C:\\Windows\\System32\\DispBroker.dll",
+    "base_address": 140726303391744
+  },
+  {
+    "bytes": 1097728,
+    "name": "opengl32.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\opengl32.dll",
+    "base_address": 140724063174656
+  },
+  {
+    "bytes": 233472,
+    "name": "GLU32.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\GLU32.dll",
+    "base_address": 140725721759744
+  },
+  {
+    "bytes": 7499776,
+    "name": "nvppex.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvppex.dll",
+    "base_address": 140724496629760
+  },
+  {
+    "bytes": 417792,
+    "name": "WINSTA.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\WINSTA.dll",
+    "base_address": 140726778920960
+  },
+  {
+    "bytes": 4325376,
+    "name": "uiautomationcore.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\uiautomationcore.dll",
+    "base_address": 140725970272256
+  },
+  {
+    "bytes": 90112,
+    "name": "threadpoolwinrt.dll",
+    "path": "C:\\Windows\\System32\\threadpoolwinrt.dll",
+    "base_address": 140725923938304
+  },
+  {
+    "bytes": 1810432,
+    "name": "AUDIOSES.DLL",
+    "path": "C:\\WINDOWS\\SYSTEM32\\AUDIOSES.DLL",
+    "base_address": 140726488268800
+  },
+  {
+    "bytes": 81920,
+    "name": "resourcepolicyclient.dll",
+    "path": "C:\\WINDOWS\\SYSTEM32\\resourcepolicyclient.dll",
+    "base_address": 140726727147520
+  },
+  {
+    "bytes": 442368,
+    "name": "mswsock.dll",
+    "path": "C:\\WINDOWS\\system32\\mswsock.dll",
+    "base_address": 140726773284864
+  },
+  {
+    "bytes": 46346240,
+    "name": "nvrtum64.dll",
+    "path": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_b20cc8aeaed64fc2\\nvrtum64.dll",
+    "base_address": 140723033341952
+  }
+]

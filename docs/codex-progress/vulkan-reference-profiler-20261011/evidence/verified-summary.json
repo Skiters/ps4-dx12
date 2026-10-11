@@ -1,0 +1,479 @@
+{
+  "mode": "A",
+  "session_id": "2514bb83e5554dadbbff6ffca4bae436",
+  "samples": 426,
+  "malformed_rows": 0,
+  "collector_status": {
+    "status": "recording",
+    "collector_pid": 4004,
+    "target_pid": 18920,
+    "samples": 426,
+    "last_utc": "2026-10-11T11:37:14.178179+00:00",
+    "skipped_intervals": 0
+  },
+  "first_utc": "2026-10-11T11:30:09.406950+00:00",
+  "last_utc": "2026-10-11T11:37:14.178179+00:00",
+  "metrics": {
+    "cpu_core_equivalents": {
+      "count": 425,
+      "mean": 2.820684051730233,
+      "min": 1.8123555552700477,
+      "max": 4.421524373149713,
+      "median": 2.6881083189287933,
+      "p95": 3.8113032507623505,
+      "p99": 4.015270451607191
+    },
+    "cpu_machine_percent": {
+      "count": 425,
+      "mean": 8.814637661656977,
+      "min": 5.663611110218899,
+      "max": 13.817263666092853,
+      "median": 8.400338496652479,
+      "p95": 11.910322658632346,
+      "p99": 12.547720161272471
+    },
+    "working_set_bytes": {
+      "count": 426,
+      "mean": 9214353042.629108,
+      "min": 8981180416.0,
+      "max": 9635889152.0,
+      "median": 9135362048.0,
+      "p95": 9532112896.0,
+      "p99": 9623621632.0
+    },
+    "private_bytes": {
+      "count": 426,
+      "mean": 8839586599.661972,
+      "min": 8483274752.0,
+      "max": 9401749504.0,
+      "median": 8653172736.0,
+      "p95": 9298853888.0,
+      "p99": 9390850048.0
+    },
+    "collection_wall_s": {
+      "count": 426,
+      "mean": 0.04973437699520449,
+      "min": 0.03289279999444261,
+      "max": 0.12433639999653678,
+      "median": 0.034767949997331016,
+      "p95": 0.11023439999553375,
+      "p99": 0.11620990000665188
+    },
+    "sampling_jitter_s": {
+      "count": 426,
+      "mean": 0.0009513572840831142,
+      "min": 0.00012419999984558672,
+      "max": 0.22965340000519063,
+      "median": 0.00040445000922773033,
+      "p95": 0.0006474000110756606,
+      "p99": 0.0008356000034837052
+    }
+  },
+  "collector_overhead": {
+    "duration_s": 424.77097300000605,
+    "collector_cpu_core_equivalents": 0.03634311424570855,
+    "collector_working_set_peak_bytes": 37445632,
+    "collector_io_write_bytes_delta": 83958436,
+    "nvidia_child_cpu_s": 2.84375,
+    "child_tool_cpu_available": true,
+    "collection_wall_time_is_not_cpu_time": true
+  },
+  "unavailable_outputs": {
+    "FRAME_TIMELINE.csv": "Guest frame IDs and GPU completion require instrumented Vulkan. PresentMon probe exit 1 with no CSV; no presentation stream available.",
+    "SYNC_STALLS.csv": "Counters do not measure wait durations, lock owners or causal dependencies. ETW ready/context-switch stacks require a separately authorized trace.",
+    "CACHE_OPERATIONS.csv": "Internal cache calls and exact upload/download bytes require Mode B."
+  },
+  "errors": {},
+  "measurement_validation": {},
+  "thread_count": {
+    "count": 426,
+    "mean": 99.92488262910798,
+    "min": 99.0,
+    "max": 100.0,
+    "median": 100.0,
+    "p95": 100.0,
+    "p99": 100.0
+  },
+  "named_thread_samples": 34932,
+  "nvidia_adapter_samples": 86,
+  "gpu_engine_statistics": [
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+      "count": 426,
+      "mean": 88.85631214342251,
+      "min": 24.521026553295762,
+      "max": 100.0,
+      "median": 86.13451249017058,
+      "p95": 99.34307139962361,
+      "p99": 100.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+      "count": 426,
+      "mean": 0.0036989372949114557,
+      "min": 0.0,
+      "max": 0.06974898158694817,
+      "median": 0.0,
+      "p95": 0.024248949486950378,
+      "p99": 0.049319384497280135
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    {
+      "category": "engines",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+      "count": 426,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  ],
+  "gpu_memory_statistics": [
+    {
+      "category": "dedicated",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 426,
+      "mean": 7390179760.676056,
+      "min": 7143878656.0,
+      "max": 7662624768.0,
+      "median": 7255302144.0,
+      "p95": 7661576192.0,
+      "p99": 7662624768.0
+    },
+    {
+      "category": "dedicated",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 426,
+      "mean": 118784.0,
+      "min": 118784.0,
+      "max": 118784.0,
+      "median": 118784.0,
+      "p95": 118784.0,
+      "p99": 118784.0
+    },
+    {
+      "category": "shared",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 426,
+      "mean": 134157845.63380282,
+      "min": 58187776.0,
+      "max": 418897920.0,
+      "median": 91742208.0,
+      "p95": 326623232.0,
+      "p99": 351789056.0
+    },
+    {
+      "category": "shared",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 426,
+      "mean": 794624.0,
+      "min": 794624.0,
+      "max": 794624.0,
+      "median": 794624.0,
+      "p95": 794624.0,
+      "p99": 794624.0
+    },
+    {
+      "category": "committed",
+      "instance": "pid_18920_luid_0x00000000_0x000170C8_phys_0",
+      "count": 426,
+      "mean": 7524403142.309859,
+      "min": 7202131968.0,
+      "max": 8060805120.0,
+      "median": 7345704960.0,
+      "p95": 7968407552.0,
+      "p99": 7993561088.0
+    },
+    {
+      "category": "committed",
+      "instance": "pid_18920_luid_0x00000000_0x00018737_phys_0",
+      "count": 426,
+      "mean": 913408.0,
+      "min": 913408.0,
+      "max": 913408.0,
+      "median": 913408.0,
+      "p95": 913408.0,
+      "p99": 913408.0
+    }
+  ],
+  "page_faults_delta": 315771,
+  "observed_duration_s": 424.77097300000605,
+  "io_deltas": {
+    "read_ops": 25588,
+    "write_ops": 2885,
+    "other_ops": 1151231,
+    "read_bytes": 1183327026,
+    "write_bytes": 161534417,
+    "other_bytes": 18240650
+  },
+  "guest_fps": null,
+  "gpu_operation_timing": null,
+  "scenes": "Unlabelled free-play; no screen inspection or controlled input"
+}
