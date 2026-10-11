@@ -1,0 +1,5866 @@
+{
+  "schema": 1,
+  "created_utc": "2026-10-11T14:23:59.030569+00:00",
+  "purpose": "Installed Vulkan companion and explicit XInput game-control acceptance; renderer unchanged",
+  "installed_core": {
+    "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+    "sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773",
+    "revision": "974f8c211c5c6b277f8da2fadcd30c4d770cb27b-dirty",
+    "source_remote": "https://github.com/eFMann/shadPS4-Bloodborne-DLSS-FSR",
+    "exact_dirty_patch_available": false
+  },
+  "shortcut": {
+    "path": "C:\\Users\\skei\\Desktop\\Bloodborne - DLSS Quality + HDR + FG x4.lnk",
+    "original_backup": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\integration-20261011T132118Z\\original.lnk",
+    "backup_sha256": "f31bfc7f22e510d46dbc68eced4e100ac2033bd6495c168f04e4ae67a72eca97",
+    "original_arguments": "--game \"D:\\Program Files (x86)\\Steam\\steamapps\\common\\CUSA03173\\eboot.bin\"",
+    "original_cwd": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4",
+    "rollback_test": "byte-identical roundtrip on a copy; habitual shortcut remains integrated"
+  },
+  "sessions": [
+    {
+      "session_id": "b8b052294c954a6685699043a079110e",
+      "samples": 198,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "collector_error: PermissionError(13, '\u041e\u0442\u043a\u0430\u0437\u0430\u043d\u043e \u0432 \u0434\u043e\u0441\u0442\u0443\u043f\u0435')",
+        "samples": 198,
+        "ended_utc": "2026-10-11T13:25:44.793205+00:00",
+        "skipped_intervals": 0
+      },
+      "first_utc": "2026-10-11T13:22:27.979969+00:00",
+      "last_utc": "2026-10-11T13:25:44.728183+00:00",
+      "observed_duration_s": 196.7480160999985,
+      "identity": {
+        "pid": 27008,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134361985471436828,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 197,
+          "mean": 2.567904420961468,
+          "min": 0.8147002337626128,
+          "max": 3.780863217718691,
+          "median": 2.7650341122174007,
+          "p95": 2.9996463417097208,
+          "p99": 3.062508881254251
+        },
+        "cpu_machine_percent": {
+          "count": 197,
+          "mean": 8.024701315504586,
+          "min": 2.545938230508165,
+          "max": 11.81519755537091,
+          "median": 8.640731600679377,
+          "p95": 9.373894817842878,
+          "p99": 9.570340253919534
+        },
+        "working_set_bytes": {
+          "count": 198,
+          "mean": 2465046652.121212,
+          "min": 38473728.0,
+          "max": 2615685120.0,
+          "median": 2485790720.0,
+          "p95": 2613784576.0,
+          "p99": 2615685120.0
+        },
+        "private_bytes": {
+          "count": 198,
+          "mean": 2658769289.050505,
+          "min": 93188096.0,
+          "max": 2814185472.0,
+          "median": 2669940736.0,
+          "p95": 2797891584.0,
+          "p99": 2814185472.0
+        },
+        "commit_bytes": null,
+        "collection_wall_s": {
+          "count": 198,
+          "mean": 0.06435122929285328,
+          "min": 0.042478499992284924,
+          "max": 0.14296250000188593,
+          "median": 0.054369400000723545,
+          "p95": 0.1263308999914443,
+          "p99": 0.13732100000197534
+        },
+        "sampling_jitter_s": {
+          "count": 198,
+          "mean": 0.0016980070695445657,
+          "min": 0.00014590000500902534,
+          "max": 0.2525852999970084,
+          "median": 0.00042424999264767393,
+          "p95": 0.000639899997622706,
+          "p99": 0.0006922000029589981
+        }
+      },
+      "thread_count": {
+        "count": 198,
+        "mean": 119.32323232323232,
+        "min": 12.0,
+        "max": 125.0,
+        "median": 121.0,
+        "p95": 124.0,
+        "p99": 125.0
+      },
+      "page_faults_delta": 2318519,
+      "io_deltas": {
+        "read_ops": 14522,
+        "write_ops": 777,
+        "other_ops": 665518,
+        "read_bytes": 552392574,
+        "write_bytes": 438947,
+        "other_bytes": 11272107
+      },
+      "collector_overhead": {
+        "duration_s": 196.7480160999985,
+        "collector_cpu_core_equivalents": 0.05638557490898169,
+        "collector_working_set_peak_bytes": 41689088,
+        "collector_io_write_bytes_delta": 29328956,
+        "nvidia_child_cpu_s": 0.9375,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.011991861705994696,
+        "ram_peak_bytes": 57798656,
+        "refreshes": 193
+      },
+      "exit_code": null,
+      "collector_exit_code": null,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "not observed",
+      "supervisor_exit": null,
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T132227Z-a121d15a",
+      "collector_component_sha256": null,
+      "source_archive_available": false,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "196",
+          "mean": "9.050567391119976",
+          "min": "0.11298774745337305",
+          "max": "10.178476241927402",
+          "median": "9.387385575872592",
+          "p95": "9.960145865890297",
+          "p99": "10.175245947273408"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "196",
+          "mean": "0.0024148164060164663",
+          "min": "0.0",
+          "max": "0.25419520308891397",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.1636549526274581"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "196",
+          "mean": "0.0006573227110520561",
+          "min": "0.0",
+          "max": "0.12261151961664596",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.006223731749557034"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "196",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "197",
+          "mean": "1707436978.0304568",
+          "min": "270336.0",
+          "max": "1763504128.0",
+          "median": "1725689856.0",
+          "p95": "1746755584.0",
+          "p99": "1763504128.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "197",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "197",
+          "mean": "113879715.7360406",
+          "min": "278528.0",
+          "max": "142422016.0",
+          "median": "108867584.0",
+          "p95": "125644800.0",
+          "p99": "142422016.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "197",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "197",
+          "mean": "1821382229.7664974",
+          "min": "614400.0",
+          "max": "1905991680.0",
+          "median": "1834622976.0",
+          "p95": "1872465920.0",
+          "p99": "1905991680.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "197",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "42464",
+          "start_filetime": "134361985521082236",
+          "name": "NexusRevolution Socket",
+          "count": "192",
+          "mean": "0.9993484069031434",
+          "min": "0.9683365202997203",
+          "max": "1.0158902489384427",
+          "median": "1.000003850008661",
+          "p95": "1.000366634368239",
+          "p99": "1.0155121765951907"
+        },
+        {
+          "tid": "20424",
+          "start_filetime": "134361985512641094",
+          "name": "Game:Main",
+          "count": "193",
+          "mean": "0.6714708617224424",
+          "min": "0.0",
+          "max": "1.0158902489384427",
+          "median": "0.9847591545479846",
+          "p95": "1.0003487215703053",
+          "p99": "1.0155121765951907"
+        },
+        {
+          "tid": "32360",
+          "start_filetime": "134361985515953882",
+          "name": "shadPS4:AudioOutputThread:0x5d62e710",
+          "count": "193",
+          "mean": "0.23089342233665336",
+          "min": "0.17184582058004005",
+          "max": "0.2968872317520407",
+          "median": "0.23432743153064026",
+          "p95": "0.26567643495511617",
+          "p99": "0.2968389340670203"
+        },
+        {
+          "tid": "25348",
+          "start_filetime": "134361985515977500",
+          "name": "shadPS4:AudioOutputThread:0x5d62da10",
+          "count": "193",
+          "mean": "0.23024581929171833",
+          "min": "0.17184083804133515",
+          "max": "0.29689913790225037",
+          "median": "0.23432743153064026",
+          "p95": "0.2657170443813071",
+          "p99": "0.28129281276463236"
+        },
+        {
+          "tid": "2912",
+          "start_filetime": "134361986809110246",
+          "name": "shadPS4:AvVideoDecoder",
+          "count": "63",
+          "mean": "0.18080351757972227",
+          "min": "0.07811424366858608",
+          "max": "0.26564521560021287",
+          "median": "0.18751185074915913",
+          "p95": "0.25003265426587795",
+          "p99": "0.26564521560021287"
+        },
+        {
+          "tid": "40984",
+          "start_filetime": "134361985512645206",
+          "name": "SDLTimer",
+          "count": "193",
+          "mean": "0.15106849210858941",
+          "min": "0.06249547532769149",
+          "max": "0.23433708426091196",
+          "median": "0.1562251445811992",
+          "p95": "0.203155574913289",
+          "p99": "0.21880901279114556"
+        },
+        {
+          "tid": "40448",
+          "start_filetime": "134361985511601762",
+          "name": "shadPS4:PresentThread",
+          "count": "193",
+          "mean": "0.0903495987444836",
+          "min": "0.06246943994999396",
+          "max": "0.12504964470846852",
+          "median": "0.09371264613983092",
+          "p95": "0.12502760609640254",
+          "p99": "0.12504878152990279"
+        },
+        {
+          "tid": "24320",
+          "start_filetime": "134361986809098517",
+          "name": "shadPS4:AudioOutputThread:0x5d62dbb0",
+          "count": "63",
+          "mean": "0.05828376893696159",
+          "min": "0.03124384183871206",
+          "max": "0.07815322112809321",
+          "median": "0.06249057017299678",
+          "p95": "0.07814052652258884",
+          "p99": "0.07815322112809321"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 40,
+          "mean": 12.8,
+          "min": 0.0,
+          "max": 20.0,
+          "median": 10.0,
+          "p95": 20.0,
+          "p99": 20.0
+        },
+        "utilization_memory_percent": {
+          "count": 40,
+          "mean": 10.85,
+          "min": 1.0,
+          "max": 19.0,
+          "median": 8.0,
+          "p95": 18.0,
+          "p99": 19.0
+        },
+        "memory_used_mib": {
+          "count": 40,
+          "mean": 4871.9,
+          "min": 3213.0,
+          "max": 4994.0,
+          "median": 4881.0,
+          "p95": 4979.0,
+          "p99": 4994.0
+        },
+        "power_w": {
+          "count": 40,
+          "mean": 57.42325,
+          "min": 52.69,
+          "max": 67.61,
+          "median": 54.17,
+          "p95": 65.23,
+          "p99": 67.61
+        },
+        "temperature_c": {
+          "count": 40,
+          "mean": 44.525,
+          "min": 43.0,
+          "max": 46.0,
+          "median": 44.0,
+          "p95": 46.0,
+          "p99": 46.0
+        },
+        "clock_graphics_mhz": {
+          "count": 40,
+          "mean": 1429.45,
+          "min": 997.0,
+          "max": 2842.0,
+          "median": 1128.5,
+          "p95": 2835.0,
+          "p99": 2842.0
+        },
+        "clock_memory_mhz": {
+          "count": 40,
+          "mean": 7401.0,
+          "min": 7001.0,
+          "max": 15001.0,
+          "median": 7001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 18,
+      "source_hashes": {}
+    },
+    {
+      "session_id": "0ad6bba0face4ac88fff2d0edfedef83",
+      "samples": 430,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "stop_requested",
+        "samples": 430,
+        "ended_utc": "2026-10-11T13:39:35.044958+00:00",
+        "skipped_intervals": 0
+      },
+      "first_utc": "2026-10-11T13:28:18.789033+00:00",
+      "last_utc": "2026-10-11T13:39:34.043818+00:00",
+      "observed_duration_s": 675.2544595999934,
+      "identity": {
+        "pid": 27008,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134361985471436828,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 428,
+          "mean": 4.189781864830582,
+          "min": 1.8283582985127305,
+          "max": 5.344701891421898,
+          "median": 4.296331514574431,
+          "p95": 4.734691750878572,
+          "p99": 5.016810472361874
+        },
+        "cpu_machine_percent": {
+          "count": 428,
+          "mean": 13.093068327595569,
+          "min": 5.713619682852283,
+          "max": 16.70219341069343,
+          "median": 13.426035983045097,
+          "p95": 14.79591172149554,
+          "p99": 15.677532726130854
+        },
+        "working_set_bytes": {
+          "count": 430,
+          "mean": 6758707009.488372,
+          "min": 6686785536.0,
+          "max": 6969511936.0,
+          "median": 6693261312.0,
+          "p95": 6968430592.0,
+          "p99": 6969176064.0
+        },
+        "private_bytes": {
+          "count": 430,
+          "mean": 7420447682.083721,
+          "min": 7369285632.0,
+          "max": 7957139456.0,
+          "median": 7377715200.0,
+          "p95": 7889850368.0,
+          "p99": 7894970368.0
+        },
+        "commit_bytes": null,
+        "collection_wall_s": {
+          "count": 430,
+          "mean": 0.06375511860519616,
+          "min": 0.041781299994909205,
+          "max": 0.17103190001216717,
+          "median": 0.04795115000160877,
+          "p95": 0.1273666999913985,
+          "p99": 0.1450364000047557
+        },
+        "sampling_jitter_s": {
+          "count": 430,
+          "mean": 0.002202070467438018,
+          "min": 0.00015780000831000507,
+          "max": 0.500485899989144,
+          "median": 0.0004298999992897734,
+          "p95": 0.0006932000105734915,
+          "p99": 0.0008781000069575384
+        }
+      },
+      "thread_count": {
+        "count": 430,
+        "mean": 131.3093023255814,
+        "min": 127.0,
+        "max": 138.0,
+        "median": 131.0,
+        "p95": 138.0,
+        "p99": 138.0
+      },
+      "page_faults_delta": 37434,
+      "io_deltas": {
+        "read_ops": 8608,
+        "write_ops": 4443,
+        "other_ops": 1568733,
+        "read_bytes": 67971964,
+        "write_bytes": 5743576,
+        "other_bytes": 25911781
+      },
+      "collector_overhead": {
+        "duration_s": 675.2544595999934,
+        "collector_cpu_core_equivalents": 0.02827637748784471,
+        "collector_working_set_peak_bytes": 43102208,
+        "collector_io_write_bytes_delta": 43947623,
+        "nvidia_child_cpu_s": 2.21875,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.05646019727523821,
+        "ram_peak_bytes": 91963392,
+        "refreshes": 669
+      },
+      "exit_code": null,
+      "collector_exit_code": null,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "not observed",
+      "supervisor_exit": null,
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T132818Z-d13c51d4",
+      "collector_component_sha256": null,
+      "source_archive_available": false,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "430",
+          "mean": "83.82142375353556",
+          "min": "9.568035122641284",
+          "max": "99.76955607612182",
+          "median": "89.8525780324436",
+          "p95": "99.48945571371766",
+          "p99": "99.67911870359639"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "430",
+          "mean": "0.001132116816172322",
+          "min": "0.0",
+          "max": "0.12347387451733143",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.05702036038228964"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "430",
+          "mean": "0.0016268305369997174",
+          "min": "0.0",
+          "max": "0.08158500010486504",
+          "median": "0.0",
+          "p95": "0.014219084584109226",
+          "p99": "0.035881485663560905"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "430",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "430",
+          "mean": "5934992226.827907",
+          "min": "5877317632.0",
+          "max": "6668582912.0",
+          "median": "5877317632.0",
+          "p95": "6668582912.0",
+          "p99": "6668582912.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "430",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "430",
+          "mean": "126779392.0",
+          "min": "126779392.0",
+          "max": "126779392.0",
+          "median": "126779392.0",
+          "p95": "126779392.0",
+          "p99": "126779392.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "430",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "430",
+          "mean": "6061837154.827907",
+          "min": "6004162560.0",
+          "max": "6795427840.0",
+          "median": "6004162560.0",
+          "p95": "6795427840.0",
+          "p99": "6795427840.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "430",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "42464",
+          "start_filetime": "134361985521082236",
+          "name": "NexusRevolution Socket",
+          "count": "428",
+          "mean": "0.9969445483423036",
+          "min": "0.9372781462647352",
+          "max": "1.0159435999143462",
+          "median": "0.9999425532994404",
+          "p95": "1.00046571678504",
+          "p99": "1.0157147891911562"
+        },
+        {
+          "tid": "20424",
+          "start_filetime": "134361985512641094",
+          "name": "Game:Main",
+          "count": "428",
+          "mean": "0.739308664277132",
+          "min": "0.07813497002191157",
+          "max": "1.015792910575443",
+          "median": "0.9528543893629495",
+          "p95": "1.000027200728695",
+          "p99": "1.0003978582297042"
+        },
+        {
+          "tid": "13612",
+          "start_filetime": "134361985511527979",
+          "name": "shadPS4:GpuDrawRecorder",
+          "count": "428",
+          "mean": "0.33394819389992203",
+          "min": "0.046880982013146937",
+          "max": "0.5157334587466927",
+          "median": "0.3436346590260515",
+          "p95": "0.4218733125061787",
+          "p99": "0.46882946659249464"
+        },
+        {
+          "tid": "36948",
+          "start_filetime": "134361985507115715",
+          "name": "shadPS4:GpuCommandProcessor",
+          "count": "428",
+          "mean": "0.33376566340325176",
+          "min": "0.046880982013146937",
+          "max": "0.5157334587466927",
+          "median": "0.33593264371190945",
+          "p95": "0.4219571128531",
+          "p99": "0.4842335553795629"
+        },
+        {
+          "tid": "11960",
+          "start_filetime": "134361985511460163",
+          "name": "shadPS4:GpuCmdRecorder",
+          "count": "428",
+          "mean": "0.3161075192991547",
+          "min": "0.046880982013146937",
+          "max": "0.5156205140973825",
+          "median": "0.31259726464219684",
+          "p95": "0.4062208333407946",
+          "p99": "0.4530656937040219"
+        },
+        {
+          "tid": "32360",
+          "start_filetime": "134361985515953882",
+          "name": "shadPS4:AudioOutputThread:0x5d62e710",
+          "count": "428",
+          "mean": "0.23097332129947162",
+          "min": "0.07809761116832163",
+          "max": "0.29698530033769416",
+          "median": "0.23430988528487656",
+          "p95": "0.2657493972926402",
+          "p99": "0.2813139707969192"
+        },
+        {
+          "tid": "25348",
+          "start_filetime": "134361985515977500",
+          "name": "shadPS4:AudioOutputThread:0x5d62da10",
+          "count": "428",
+          "mean": "0.23009646534063682",
+          "min": "0.15629080753126612",
+          "max": "0.29698530033769416",
+          "median": "0.2343300672091848",
+          "p95": "0.28117489818157043",
+          "p99": "0.2812833883386519"
+        },
+        {
+          "tid": "40984",
+          "start_filetime": "134361985512645206",
+          "name": "SDLTimer",
+          "count": "428",
+          "mean": "0.14409917651923917",
+          "min": "0.031251153167692156",
+          "max": "0.2525190288234623",
+          "median": "0.14064983173396114",
+          "p95": "0.203124695310637",
+          "p99": "0.21880925354808933"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 86,
+          "mean": 83.9186046511628,
+          "min": 65.0,
+          "max": 97.0,
+          "median": 88.0,
+          "p95": 97.0,
+          "p99": 97.0
+        },
+        "utilization_memory_percent": {
+          "count": 86,
+          "mean": 40.96511627906977,
+          "min": 31.0,
+          "max": 51.0,
+          "median": 44.0,
+          "p95": 48.0,
+          "p99": 51.0
+        },
+        "memory_used_mib": {
+          "count": 86,
+          "mean": 8566.755813953489,
+          "min": 8341.0,
+          "max": 9741.0,
+          "median": 8555.0,
+          "p95": 9682.0,
+          "p99": 9741.0
+        },
+        "power_w": {
+          "count": 86,
+          "mean": 246.91651162790697,
+          "min": 207.03,
+          "max": 281.71,
+          "median": 261.74,
+          "p95": 280.47,
+          "p99": 281.71
+        },
+        "temperature_c": {
+          "count": 86,
+          "mean": 67.26744186046511,
+          "min": 62.0,
+          "max": 71.0,
+          "median": 67.0,
+          "p95": 71.0,
+          "p99": 71.0
+        },
+        "clock_graphics_mhz": {
+          "count": 86,
+          "mean": 2878.3488372093025,
+          "min": 2865.0,
+          "max": 2887.0,
+          "median": 2880.0,
+          "p95": 2887.0,
+          "p99": 2887.0
+        },
+        "clock_memory_mhz": {
+          "count": 86,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 12,
+      "source_hashes": {}
+    },
+    {
+      "session_id": "2aba74e2683146f49e4c4c5089cee82f",
+      "samples": 111,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "process_exited",
+        "samples": 111,
+        "ended_utc": "2026-10-11T13:41:45.657517+00:00",
+        "skipped_intervals": 0
+      },
+      "first_utc": "2026-10-11T13:39:54.922491+00:00",
+      "last_utc": "2026-10-11T13:41:44.656991+00:00",
+      "observed_duration_s": 109.73431060000439,
+      "identity": {
+        "pid": 27008,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134361985471436828,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 110,
+          "mean": 3.7643022424824744,
+          "min": 2.9215512921177833,
+          "max": 5.029540961995378,
+          "median": 3.750113083060243,
+          "p95": 4.640859363359007,
+          "p99": 4.906448711186525
+        },
+        "cpu_machine_percent": {
+          "count": 110,
+          "mean": 11.763444507757733,
+          "min": 9.129847787868073,
+          "max": 15.717315506235558,
+          "median": 11.719103384563258,
+          "p95": 14.502685510496896,
+          "p99": 15.33265222245789
+        },
+        "working_set_bytes": {
+          "count": 111,
+          "mean": 6707618271.711712,
+          "min": 6644600832.0,
+          "max": 6724055040.0,
+          "median": 6708084736.0,
+          "p95": 6724050944.0,
+          "p99": 6724055040.0
+        },
+        "private_bytes": {
+          "count": 111,
+          "mean": 7382139876.324325,
+          "min": 6672719872.0,
+          "max": 7405142016.0,
+          "median": 7388401664.0,
+          "p95": 7405142016.0,
+          "p99": 7405142016.0
+        },
+        "commit_bytes": {
+          "count": 111,
+          "mean": 7382139876.324325,
+          "min": 6672719872.0,
+          "max": 7405142016.0,
+          "median": 7388401664.0,
+          "p95": 7405142016.0,
+          "p99": 7405142016.0
+        },
+        "collection_wall_s": {
+          "count": 111,
+          "mean": 0.06492334054122251,
+          "min": 0.043307100000674836,
+          "max": 0.13404720000107773,
+          "median": 0.05011419999937061,
+          "p95": 0.12980019999668002,
+          "p99": 0.1326260999921942
+        },
+        "sampling_jitter_s": {
+          "count": 111,
+          "mean": 0.002840208101531004,
+          "min": 0.00015879998682066798,
+          "max": 0.2659259999927599,
+          "median": 0.00043559999903663993,
+          "p95": 0.000752499996451661,
+          "p99": 0.0010283999872626737
+        }
+      },
+      "thread_count": {
+        "count": 111,
+        "mean": 128.981981981982,
+        "min": 127.0,
+        "max": 129.0,
+        "median": 129.0,
+        "p95": 129.0,
+        "p99": 129.0
+      },
+      "page_faults_delta": 8180,
+      "io_deltas": {
+        "read_ops": 3989,
+        "write_ops": 2155,
+        "other_ops": 358193,
+        "read_bytes": 11006869,
+        "write_bytes": 176895,
+        "other_bytes": 5908771
+      },
+      "collector_overhead": {
+        "duration_s": 109.73431060000439,
+        "collector_cpu_core_equivalents": 0.042859202142741776,
+        "collector_working_set_peak_bytes": 41754624,
+        "collector_io_write_bytes_delta": 9521323,
+        "nvidia_child_cpu_s": 0.71875,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.008685751929259961,
+        "ram_peak_bytes": 81575936,
+        "refreshes": 111
+      },
+      "exit_code": 3221226505,
+      "collector_exit_code": 3221226505,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "nonzero process exit; cause unknown",
+      "supervisor_exit": {
+        "start_utc": "2026-10-11T13:22:27.1436828Z",
+        "pid": 27008,
+        "normal_exit_claim": false,
+        "observed_exit_utc": "2026-10-11T13:41:45.7985550Z",
+        "exit_code": null
+      },
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T133954Z-122d2443",
+      "collector_component_sha256": {
+        "mode_a.py": "fcf316f322412df96aa2c936dba2e0413b2a859b7d6945a14ae781b0062a3fd4",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "report.py": "4350e08b76f4015f01d0634b64414371def1e14d7bd1251e0c978aeb66878d90",
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "snapshot.py": "799366c3e6706e35330ddb4bfcdbe32794cfafd8f216eeed8c7e45920e0992c3"
+      },
+      "source_archive_available": true,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "111",
+          "mean": "89.59266303398037",
+          "min": "80.89924021611158",
+          "max": "93.44710675929039",
+          "median": "89.83341005710955",
+          "p95": "91.2523167057937",
+          "p99": "91.89569914556192"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "111",
+          "mean": "7.695497297093897e-05",
+          "min": "0.0",
+          "max": "0.008542001999774226",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "111",
+          "mean": "0.00011673577067349651",
+          "min": "0.0",
+          "max": "0.002000477714078122",
+          "median": "0.0",
+          "p95": "0.0017876362086413136",
+          "p99": "0.001888186019690883"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "111",
+          "mean": "5879420208.432432",
+          "min": "4991733760.0",
+          "max": "5888655360.0",
+          "median": "5888618496.0",
+          "p95": "5888618496.0",
+          "p99": "5888655360.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "111",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "111",
+          "mean": "127520546.5945946",
+          "min": "125161472.0",
+          "max": "143556608.0",
+          "median": "126779392.0",
+          "p95": "126779392.0",
+          "p99": "143556608.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "111",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x000170C8_phys_0",
+          "count": "111",
+          "mean": "6007006291.027027",
+          "min": "5116960768.0",
+          "max": "6032277504.0",
+          "median": "6015463424.0",
+          "p95": "6015463424.0",
+          "p99": "6032277504.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_27008_luid_0x00000000_0x00018737_phys_0",
+          "count": "111",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "42464",
+          "start_filetime": "134361985521082236",
+          "name": "NexusRevolution Socket",
+          "count": "110",
+          "mean": "0.9964481064660986",
+          "min": "0.9531624592924769",
+          "max": "1.0158410693998703",
+          "median": "0.9999231559093928",
+          "p95": "1.015704834401884",
+          "p99": "1.0157861036758904"
+        },
+        {
+          "tid": "36948",
+          "start_filetime": "134361985507115715",
+          "name": "shadPS4:GpuCommandProcessor",
+          "count": "110",
+          "mean": "0.31908067997399286",
+          "min": "0.14060942047625696",
+          "max": "0.5470493993550147",
+          "median": "0.31246052061457547",
+          "p95": "0.46864052557162744",
+          "p99": "0.5468664141955842"
+        },
+        {
+          "tid": "20424",
+          "start_filetime": "134361985512641094",
+          "name": "Game:Main",
+          "count": "110",
+          "mean": "0.3182281151426078",
+          "min": "0.14060897057806596",
+          "max": "0.562368630685953",
+          "median": "0.3126178767981273",
+          "p95": "0.46867346562682094",
+          "p99": "0.5310695425709405"
+        },
+        {
+          "tid": "13612",
+          "start_filetime": "134361985511527979",
+          "name": "shadPS4:GpuDrawRecorder",
+          "count": "110",
+          "mean": "0.31732473665573396",
+          "min": "0.14060942047625696",
+          "max": "0.5314194165163",
+          "median": "0.31245586565553185",
+          "p95": "0.46859077285671225",
+          "p99": "0.5312416595042818"
+        },
+        {
+          "tid": "11960",
+          "start_filetime": "134361985511460163",
+          "name": "shadPS4:GpuCmdRecorder",
+          "count": "110",
+          "mean": "0.29838074325239883",
+          "min": "0.12501115099407772",
+          "max": "0.5156169048129794",
+          "median": "0.2969550048987133",
+          "p95": "0.4529664164563151",
+          "p99": "0.5001594508388706"
+        },
+        {
+          "tid": "32360",
+          "start_filetime": "134361985515953882",
+          "name": "shadPS4:AudioOutputThread:0x5d62e710",
+          "count": "110",
+          "mean": "0.2320200931089205",
+          "min": "0.1718204813611849",
+          "max": "0.31899330001477594",
+          "median": "0.23436678551771983",
+          "p95": "0.2812440657500454",
+          "p99": "0.2968117790890878"
+        },
+        {
+          "tid": "25348",
+          "start_filetime": "134361985515977500",
+          "name": "shadPS4:AudioOutputThread:0x5d62da10",
+          "count": "110",
+          "mean": "0.22793972810350588",
+          "min": "0.15629543508323535",
+          "max": "0.2813009154645152",
+          "median": "0.22663777485128905",
+          "p95": "0.265679145412314",
+          "p99": "0.2812175756121719"
+        },
+        {
+          "tid": "40984",
+          "start_filetime": "134361985512645206",
+          "name": "SDLTimer",
+          "count": "110",
+          "mean": "0.14227502139959605",
+          "min": "0.0780976580097095",
+          "max": "0.21878469925326868",
+          "median": "0.14063569534425235",
+          "p95": "0.18755007587219968",
+          "p99": "0.21266220000985062"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 23,
+          "mean": 85.8695652173913,
+          "min": 39.0,
+          "max": 96.0,
+          "median": 87.0,
+          "p95": 95.0,
+          "p99": 96.0
+        },
+        "utilization_memory_percent": {
+          "count": 23,
+          "mean": 42.608695652173914,
+          "min": 17.0,
+          "max": 48.0,
+          "median": 43.0,
+          "p95": 48.0,
+          "p99": 48.0
+        },
+        "memory_used_mib": {
+          "count": 23,
+          "mean": 8523.08695652174,
+          "min": 7707.0,
+          "max": 8563.0,
+          "median": 8562.0,
+          "p95": 8563.0,
+          "p99": 8563.0
+        },
+        "power_w": {
+          "count": 23,
+          "mean": 260.73739130434785,
+          "min": 243.61,
+          "max": 269.41,
+          "median": 262.73,
+          "p95": 266.61,
+          "p99": 269.41
+        },
+        "temperature_c": {
+          "count": 23,
+          "mean": 69.3913043478261,
+          "min": 66.0,
+          "max": 73.0,
+          "median": 69.0,
+          "p95": 71.0,
+          "p99": 73.0
+        },
+        "clock_graphics_mhz": {
+          "count": 23,
+          "mean": 2880.0434782608695,
+          "min": 2872.0,
+          "max": 2887.0,
+          "median": 2880.0,
+          "p95": 2887.0,
+          "p99": 2887.0
+        },
+        "clock_memory_mhz": {
+          "count": 23,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 3,
+      "source_hashes": {
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "mode_a.py": "fcf316f322412df96aa2c936dba2e0413b2a859b7d6945a14ae781b0062a3fd4",
+        "report.py": "4350e08b76f4015f01d0634b64414371def1e14d7bd1251e0c978aeb66878d90",
+        "snapshot.py": "799366c3e6706e35330ddb4bfcdbe32794cfafd8f216eeed8c7e45920e0992c3"
+      }
+    },
+    {
+      "session_id": "c26480fc711147e1969b5d8efa8c6206",
+      "samples": 1371,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "process_exited",
+        "samples": 1371,
+        "ended_utc": "2026-10-11T14:05:46.201875+00:00",
+        "skipped_intervals": 0,
+        "exit_code": 0
+      },
+      "first_utc": "2026-10-11T13:42:55.460406+00:00",
+      "last_utc": "2026-10-11T14:05:45.201199+00:00",
+      "observed_duration_s": 1369.7404191999958,
+      "identity": {
+        "pid": 39216,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134361997745676994,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 1370,
+          "mean": 2.1475631807631586,
+          "min": 0.249950009999263,
+          "max": 3.703256465581672,
+          "median": 2.0394427749231587,
+          "p95": 2.921617897623001,
+          "p99": 3.0449475481919754
+        },
+        "cpu_machine_percent": {
+          "count": 1370,
+          "mean": 6.711134939884871,
+          "min": 0.7810937812476969,
+          "max": 11.572676454942725,
+          "median": 6.373258671634871,
+          "p95": 9.13005593007188,
+          "p99": 9.515461088099924
+        },
+        "working_set_bytes": {
+          "count": 1371,
+          "mean": 2544654914.1006565,
+          "min": 38068224.0,
+          "max": 2585739264.0,
+          "median": 2574008320.0,
+          "p95": 2576646144.0,
+          "p99": 2577940480.0
+        },
+        "private_bytes": {
+          "count": 1371,
+          "mean": 2556925672.659373,
+          "min": 92303360.0,
+          "max": 2923868160.0,
+          "median": 2578804736.0,
+          "p95": 2610491392.0,
+          "p99": 2700050432.0
+        },
+        "commit_bytes": {
+          "count": 1371,
+          "mean": 2556925672.659373,
+          "min": 92303360.0,
+          "max": 2923868160.0,
+          "median": 2578804736.0,
+          "p95": 2610491392.0,
+          "p99": 2700050432.0
+        },
+        "collection_wall_s": {
+          "count": 1371,
+          "mean": 0.05966746535361804,
+          "min": 0.03988240000035148,
+          "max": 0.20725880000100005,
+          "median": 0.045404700009385124,
+          "p95": 0.11970239999936894,
+          "p99": 0.12816920000477694
+        },
+        "sampling_jitter_s": {
+          "count": 1371,
+          "mean": 0.0006289373422065311,
+          "min": 0.00012209999840706587,
+          "max": 0.2601758999953745,
+          "median": 0.0004343000036897138,
+          "p95": 0.0007101999945007265,
+          "p99": 0.0009617000032449141
+        }
+      },
+      "thread_count": {
+        "count": 1371,
+        "mean": 118.33479212253829,
+        "min": 12.0,
+        "max": 126.0,
+        "median": 118.0,
+        "p95": 125.0,
+        "p99": 126.0
+      },
+      "page_faults_delta": 12136892,
+      "io_deltas": {
+        "read_ops": 63430,
+        "write_ops": 21965,
+        "other_ops": 5945384,
+        "read_bytes": 967284128,
+        "write_bytes": 2163981,
+        "other_bytes": 98681384
+      },
+      "collector_overhead": {
+        "duration_s": 1369.7404191999958,
+        "collector_cpu_core_equivalents": 0.05211982066039642,
+        "collector_working_set_peak_bytes": 44740608,
+        "collector_io_write_bytes_delta": 203092633,
+        "nvidia_child_cpu_s": 8.328125,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.013186805139728227,
+        "ram_peak_bytes": 93925376,
+        "refreshes": 1357
+      },
+      "exit_code": 0,
+      "collector_exit_code": 0,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "zero process exit",
+      "supervisor_exit": {
+        "start_utc": "2026-10-11T13:42:54.5676994Z",
+        "pid": 39216,
+        "normal_exit_claim": true,
+        "observed_exit_utc": "2026-10-11T14:05:46.8927055Z",
+        "exit_code": 0
+      },
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T134254Z-1dcc9fa0",
+      "collector_component_sha256": {
+        "mode_a.py": "72386b51365c03c1d91b181cef16b47387a2322f5a82e84a3dc6b2c2304fedb7",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      },
+      "source_archive_available": true,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "1369",
+          "mean": "4.582965414572288",
+          "min": "0.0",
+          "max": "8.974733831241062",
+          "median": "6.518103137046592",
+          "p95": "7.657710381379205",
+          "p99": "7.791052650587961"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0004390895196070988",
+          "min": "0.0",
+          "max": "0.20773529308766364",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "1369",
+          "mean": "0.00010332557910444534",
+          "min": "0.0",
+          "max": "0.12721831238690287",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "1369",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0",
+          "count": "1370",
+          "mean": "1330285306.3941605",
+          "min": "270336.0",
+          "max": "1767940096.0",
+          "median": "1329958912.0",
+          "p95": "1346740224.0",
+          "p99": "1367744512.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0",
+          "count": "1370",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0",
+          "count": "1370",
+          "mean": "122295270.58686131",
+          "min": "278528.0",
+          "max": "143863808.0",
+          "median": "127086592.0",
+          "p95": "127086592.0",
+          "p99": "127086592.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0",
+          "count": "1370",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_39216_luid_0x00000000_0x000170C8_phys_0",
+          "count": "1370",
+          "mean": "1452646112.981022",
+          "min": "614400.0",
+          "max": "1876873216.0",
+          "median": "1457111040.0",
+          "p95": "1473892352.0",
+          "p99": "1511673856.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_39216_luid_0x00000000_0x00018737_phys_0",
+          "count": "1370",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "5200",
+          "start_filetime": "134361997793700237",
+          "name": "NexusRevolution Socket",
+          "count": "1365",
+          "mean": "0.9802197282415318",
+          "min": "0.0",
+          "max": "1.0162600609118815",
+          "median": "0.9999742006728953",
+          "p95": "1.000455207120479",
+          "p99": "1.0157396770106653"
+        },
+        {
+          "tid": "18244",
+          "start_filetime": "134361997785486187",
+          "name": "Game:Main",
+          "count": "1366",
+          "mean": "0.28557384474658243",
+          "min": "0.0",
+          "max": "1.0159887239680374",
+          "median": "0.015623825869530808",
+          "p95": "1.0002217491619003",
+          "p99": "1.0152810227853164"
+        },
+        {
+          "tid": "35308",
+          "start_filetime": "134361997788572606",
+          "name": "shadPS4:AudioOutputThread:0x60037a9e7ae0",
+          "count": "1366",
+          "mean": "0.2247437003006385",
+          "min": "0.0",
+          "max": "0.2968936152331688",
+          "median": "0.23430549327666256",
+          "p95": "0.2657253910554055",
+          "p99": "0.28133980366543593"
+        },
+        {
+          "tid": "17116",
+          "start_filetime": "134361997788569355",
+          "name": "shadPS4:AudioOutputThread:0x60037a9e6900",
+          "count": "1366",
+          "mean": "0.22461786361964875",
+          "min": "0.0",
+          "max": "0.2970033054281613",
+          "median": "0.23430783565900093",
+          "p95": "0.26572188220127463",
+          "p99": "0.2813390719488091"
+        },
+        {
+          "tid": "16500",
+          "start_filetime": "134361999082382185",
+          "name": "shadPS4:AvVideoDecoder",
+          "count": "162",
+          "mean": "0.19145437205145624",
+          "min": "0.06247843869119098",
+          "max": "0.2812505062506734",
+          "median": "0.2030728306688086",
+          "p95": "0.249997375029402",
+          "p99": "0.2812153542705386"
+        },
+        {
+          "tid": "22876",
+          "start_filetime": "134362001992543412",
+          "name": "shadPS4:AvVideoDecoder",
+          "count": "162",
+          "mean": "0.1883677262125288",
+          "min": "0.06250226258185285",
+          "max": "0.28121155837780015",
+          "median": "0.20303952045718598",
+          "p95": "0.25002210195474617",
+          "p99": "0.28117585392738187"
+        },
+        {
+          "tid": "40096",
+          "start_filetime": "134362004902646708",
+          "name": "shadPS4:AvVideoDecoder",
+          "count": "162",
+          "mean": "0.187982037543887",
+          "min": "0.062487058929761044",
+          "max": "0.3124865005804238",
+          "median": "0.20305347451552863",
+          "p95": "0.2501868144970107",
+          "p99": "0.2812935161108267"
+        },
+        {
+          "tid": "38248",
+          "start_filetime": "134361997785490120",
+          "name": "SDLTimer",
+          "count": "1366",
+          "mean": "0.13803975231109952",
+          "min": "0.04685040353833763",
+          "max": "0.2344645889192185",
+          "median": "0.1406080848474979",
+          "p95": "0.20311133060681272",
+          "p99": "0.21880754638348393"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 275,
+          "mean": 11.163636363636364,
+          "min": 6.0,
+          "max": 15.0,
+          "median": 13.0,
+          "p95": 14.0,
+          "p99": 15.0
+        },
+        "utilization_memory_percent": {
+          "count": 275,
+          "mean": 5.709090909090909,
+          "min": 4.0,
+          "max": 7.0,
+          "median": 6.0,
+          "p95": 7.0,
+          "p99": 7.0
+        },
+        "memory_used_mib": {
+          "count": 275,
+          "mean": 4056.5781818181817,
+          "min": 2752.0,
+          "max": 4449.0,
+          "median": 4072.0,
+          "p95": 4097.0,
+          "p99": 4100.0
+        },
+        "power_w": {
+          "count": 275,
+          "mean": 58.75552727272727,
+          "min": 47.59,
+          "max": 78.88,
+          "median": 62.94,
+          "p95": 66.52,
+          "p99": 67.86
+        },
+        "temperature_c": {
+          "count": 275,
+          "mean": 40.2,
+          "min": 36.0,
+          "max": 47.0,
+          "median": 40.0,
+          "p95": 44.0,
+          "p99": 47.0
+        },
+        "clock_graphics_mhz": {
+          "count": 275,
+          "mean": 1355.9309090909092,
+          "min": 892.0,
+          "max": 2872.0,
+          "median": 1515.0,
+          "p95": 1642.0,
+          "p99": 1702.0
+        },
+        "clock_memory_mhz": {
+          "count": 275,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 100,
+      "source_hashes": {
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "mode_a.py": "72386b51365c03c1d91b181cef16b47387a2322f5a82e84a3dc6b2c2304fedb7",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      }
+    },
+    {
+      "session_id": "14f0ad67fbf34647ac8b52c5c71a5e21",
+      "samples": 330,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "stop_requested",
+        "samples": 330,
+        "ended_utc": "2026-10-11T14:12:09.628446+00:00",
+        "skipped_intervals": 0,
+        "exit_code": null
+      },
+      "first_utc": "2026-10-11T14:06:39.883687+00:00",
+      "last_utc": "2026-10-11T14:12:08.627796+00:00",
+      "observed_duration_s": 328.7436574000021,
+      "identity": {
+        "pid": 18880,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134362011990702112,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 329,
+          "mean": 3.6624738904781333,
+          "min": 0.8618689017549762,
+          "max": 5.172864568999607,
+          "median": 3.874258466920821,
+          "p95": 4.546518552943868,
+          "p99": 4.810021395930025
+        },
+        "cpu_machine_percent": {
+          "count": 329,
+          "mean": 11.445230907744167,
+          "min": 2.6933403179843007,
+          "max": 16.165201778123773,
+          "median": 12.107057709127565,
+          "p95": 14.207870477949589,
+          "p99": 15.031316862281328
+        },
+        "working_set_bytes": {
+          "count": 330,
+          "mean": 5243100166.20606,
+          "min": 40251392.0,
+          "max": 6914949120.0,
+          "median": 6252943360.0,
+          "p95": 6437842944.0,
+          "p99": 6887469056.0
+        },
+        "private_bytes": {
+          "count": 330,
+          "mean": 5530780678.20606,
+          "min": 99393536.0,
+          "max": 7237332992.0,
+          "median": 6669418496.0,
+          "p95": 6679244800.0,
+          "p99": 7236083712.0
+        },
+        "commit_bytes": {
+          "count": 330,
+          "mean": 5530780678.20606,
+          "min": 99393536.0,
+          "max": 7237332992.0,
+          "median": 6669418496.0,
+          "p95": 6679244800.0,
+          "p99": 7236083712.0
+        },
+        "collection_wall_s": {
+          "count": 330,
+          "mean": 0.06382906242369879,
+          "min": 0.0421792999986792,
+          "max": 0.15074370001093484,
+          "median": 0.04657969999971101,
+          "p95": 0.1288193000073079,
+          "p99": 0.14930520000052638
+        },
+        "sampling_jitter_s": {
+          "count": 330,
+          "mean": 0.001225418480162537,
+          "min": 0.00011169999197591096,
+          "max": 0.25693289999617264,
+          "median": 0.00043629998981487006,
+          "p95": 0.0007015000010142103,
+          "p99": 0.0008424999978160486
+        }
+      },
+      "thread_count": {
+        "count": 330,
+        "mean": 128.45757575757577,
+        "min": 15.0,
+        "max": 136.0,
+        "median": 129.0,
+        "p95": 136.0,
+        "p99": 136.0
+      },
+      "page_faults_delta": 1923829,
+      "io_deltas": {
+        "read_ops": 63637,
+        "write_ops": 14207,
+        "other_ops": 538398,
+        "read_bytes": 1422899964,
+        "write_bytes": 8648305,
+        "other_bytes": 8990092
+      },
+      "collector_overhead": {
+        "duration_s": 328.7436574000021,
+        "collector_cpu_core_equivalents": 0.04738684579713476,
+        "collector_working_set_peak_bytes": 42614784,
+        "collector_io_write_bytes_delta": 30098158,
+        "nvidia_child_cpu_s": 1.796875,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.03612236991556912,
+        "ram_peak_bytes": 90071040,
+        "refreshes": 325
+      },
+      "exit_code": null,
+      "collector_exit_code": null,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "not observed",
+      "supervisor_exit": null,
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T140639Z-af48d99a",
+      "collector_component_sha256": {
+        "mode_a.py": "72386b51365c03c1d91b181cef16b47387a2322f5a82e84a3dc6b2c2304fedb7",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      },
+      "source_archive_available": true,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "328",
+          "mean": "60.46956310619583",
+          "min": "0.06255578298173317",
+          "max": "92.05115248765848",
+          "median": "65.67386221161453",
+          "p95": "90.99599177337757",
+          "p99": "91.59100722747988"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "328",
+          "mean": "0.005452432391837933",
+          "min": "0.0",
+          "max": "0.8971286330716519",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.1596187745009057"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "328",
+          "mean": "0.0005072883523342693",
+          "min": "0.0",
+          "max": "0.12567045617517295",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.003993144601373582"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "328",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "329",
+          "mean": "4228411640.9969606",
+          "min": "270336.0",
+          "max": "5326311424.0",
+          "median": "5326049280.0",
+          "p95": "5326311424.0",
+          "p99": "5326311424.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "329",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "329",
+          "mean": "142760041.8237082",
+          "min": "278528.0",
+          "max": "984514560.0",
+          "median": "128876544.0",
+          "p95": "128876544.0",
+          "p99": "697204736.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "329",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "329",
+          "mean": "4371237218.820668",
+          "min": "614400.0",
+          "max": "6000087040.0",
+          "median": "5454991360.0",
+          "p95": "5455253504.0",
+          "p99": "5997981696.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "329",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "17224",
+          "start_filetime": "134362012036976918",
+          "name": "NexusRevolution Socket",
+          "count": "324",
+          "mean": "0.998552218822574",
+          "min": "0.9532146975063526",
+          "max": "1.0314473158730335",
+          "median": "0.9999527022336309",
+          "p95": "1.0155231430216116",
+          "p99": "1.0158636263645722"
+        },
+        {
+          "tid": "34080",
+          "start_filetime": "134362012028717622",
+          "name": "Game:Main",
+          "count": "325",
+          "mean": "0.694085139992979",
+          "min": "0.09374811566216906",
+          "max": "1.0160504203123248",
+          "median": "0.9527657120455114",
+          "p95": "1.0003052931711114",
+          "p99": "1.015442423451039"
+        },
+        {
+          "tid": "15056",
+          "start_filetime": "134362012027631930",
+          "name": "shadPS4:GpuDrawRecorder",
+          "count": "325",
+          "mean": "0.24841340303446596",
+          "min": "0.0",
+          "max": "0.5468941412894877",
+          "median": "0.31242670469163436",
+          "p95": "0.4531049727593583",
+          "p99": "0.5309763878624053"
+        },
+        {
+          "tid": "33180",
+          "start_filetime": "134362012023422266",
+          "name": "shadPS4:GpuCommandProcessor",
+          "count": "326",
+          "mean": "0.24444027006406896",
+          "min": "0.0",
+          "max": "0.5781452350774583",
+          "median": "0.2969611782578584",
+          "p95": "0.4531363284087483",
+          "p99": "0.5311174861829128"
+        },
+        {
+          "tid": "30760",
+          "start_filetime": "134362012027613546",
+          "name": "shadPS4:GpuCmdRecorder",
+          "count": "325",
+          "mean": "0.23413442875105228",
+          "min": "0.0",
+          "max": "0.5157574981044641",
+          "median": "0.2967887828585442",
+          "p95": "0.43742813055832575",
+          "p99": "0.5000256013092671"
+        },
+        {
+          "tid": "12772",
+          "start_filetime": "134362012031818381",
+          "name": "shadPS4:AudioOutputThread:0x60037a45f990",
+          "count": "325",
+          "mean": "0.23067335280235143",
+          "min": "0.17178386865619913",
+          "max": "0.29684397980548793",
+          "median": "0.23431913831829054",
+          "p95": "0.26568770229963834",
+          "p99": "0.2813038134199182"
+        },
+        {
+          "tid": "30592",
+          "start_filetime": "134362012031814616",
+          "name": "shadPS4:AudioOutputThread:0x60037a45f7f0",
+          "count": "325",
+          "mean": "0.2285098460980724",
+          "min": "0.17178386865619913",
+          "max": "0.2969426138338061",
+          "median": "0.23430470858749466",
+          "p95": "0.26570936272319173",
+          "p99": "0.281337749244833"
+        },
+        {
+          "tid": "28160",
+          "start_filetime": "134362012028722675",
+          "name": "SDLTimer",
+          "count": "325",
+          "mean": "0.13783674717811414",
+          "min": "0.031243963666176683",
+          "max": "0.21879014799221688",
+          "median": "0.14059031636876929",
+          "p95": "0.20311395059971132",
+          "p99": "0.218721106941381"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 66,
+          "mean": 63.84848484848485,
+          "min": 14.0,
+          "max": 97.0,
+          "median": 70.0,
+          "p95": 95.0,
+          "p99": 97.0
+        },
+        "utilization_memory_percent": {
+          "count": 66,
+          "mean": 30.96969696969697,
+          "min": 5.0,
+          "max": 50.0,
+          "median": 35.0,
+          "p95": 46.0,
+          "p99": 50.0
+        },
+        "memory_used_mib": {
+          "count": 66,
+          "mean": 6788.181818181818,
+          "min": 2782.0,
+          "max": 7871.0,
+          "median": 7862.0,
+          "p95": 7871.0,
+          "p99": 7871.0
+        },
+        "power_w": {
+          "count": 66,
+          "mean": 194.59621212121212,
+          "min": 47.38,
+          "max": 272.27,
+          "median": 212.66,
+          "p95": 270.24,
+          "p99": 272.27
+        },
+        "temperature_c": {
+          "count": 66,
+          "mean": 59.878787878787875,
+          "min": 45.0,
+          "max": 69.0,
+          "median": 64.0,
+          "p95": 68.0,
+          "p99": 69.0
+        },
+        "clock_graphics_mhz": {
+          "count": 66,
+          "mean": 2559.6666666666665,
+          "min": 1170.0,
+          "max": 2910.0,
+          "median": 2880.0,
+          "p95": 2887.0,
+          "p99": 2910.0
+        },
+        "clock_memory_mhz": {
+          "count": 66,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 9,
+      "source_hashes": {
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "mode_a.py": "72386b51365c03c1d91b181cef16b47387a2322f5a82e84a3dc6b2c2304fedb7",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      }
+    },
+    {
+      "session_id": "87b002b166b648ab8c2767c5daed6455",
+      "samples": 286,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "process_exited",
+        "samples": 286,
+        "ended_utc": "2026-10-11T14:17:19.462570+00:00",
+        "skipped_intervals": 0,
+        "exit_code": 0
+      },
+      "first_utc": "2026-10-11T14:12:33.738473+00:00",
+      "last_utc": "2026-10-11T14:17:18.460791+00:00",
+      "observed_duration_s": 284.7224397999962,
+      "identity": {
+        "pid": 18880,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134362011990702112,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 285,
+          "mean": 3.669671708050625,
+          "min": 2.531000190257423,
+          "max": 4.937057145978548,
+          "median": 3.6570867414849175,
+          "p95": 4.468836695441732,
+          "p99": 4.751783344315466
+        },
+        "cpu_machine_percent": {
+          "count": 285,
+          "mean": 11.467724087658203,
+          "min": 7.909375594554446,
+          "max": 15.428303581182961,
+          "median": 11.428396067140367,
+          "p95": 13.965114673255414,
+          "p99": 14.84932295098583
+        },
+        "working_set_bytes": {
+          "count": 286,
+          "mean": 6177305621.482517,
+          "min": 6170316800.0,
+          "max": 6180659200.0,
+          "median": 6178273280.0,
+          "p95": 6180458496.0,
+          "p99": 6180474880.0
+        },
+        "private_bytes": {
+          "count": 286,
+          "mean": 6680420437.93007,
+          "min": 6672060416.0,
+          "max": 6688686080.0,
+          "median": 6679281664.0,
+          "p95": 6688055296.0,
+          "p99": 6688686080.0
+        },
+        "commit_bytes": {
+          "count": 286,
+          "mean": 6680420437.93007,
+          "min": 6672060416.0,
+          "max": 6688686080.0,
+          "median": 6679281664.0,
+          "p95": 6688055296.0,
+          "p99": 6688686080.0
+        },
+        "collection_wall_s": {
+          "count": 286,
+          "mean": 0.06448445174841241,
+          "min": 0.043112499988637865,
+          "max": 0.17575049999868497,
+          "median": 0.04835165000258712,
+          "p95": 0.1270790999988094,
+          "p99": 0.1490328999934718
+        },
+        "sampling_jitter_s": {
+          "count": 286,
+          "mean": 0.0014047989555308106,
+          "min": 0.00011449999874457717,
+          "max": 0.2777861000067787,
+          "median": 0.0004356500066933222,
+          "p95": 0.0006833000079495832,
+          "p99": 0.0009845000022323802
+        }
+      },
+      "thread_count": {
+        "count": 286,
+        "mean": 132.13986013986013,
+        "min": 128.0,
+        "max": 136.0,
+        "median": 132.0,
+        "p95": 136.0,
+        "p99": 136.0
+      },
+      "page_faults_delta": 3760,
+      "io_deltas": {
+        "read_ops": 14395,
+        "write_ops": 7788,
+        "other_ops": 483308,
+        "read_bytes": 35003670,
+        "write_bytes": 6416975,
+        "other_bytes": 8217304
+      },
+      "collector_overhead": {
+        "duration_s": 284.7224397999962,
+        "collector_cpu_core_equivalents": 0.050432888289685805,
+        "collector_working_set_peak_bytes": 42848256,
+        "collector_io_write_bytes_delta": 25534599,
+        "nvidia_child_cpu_s": 2.046875,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.01975608246385951,
+        "ram_peak_bytes": 85254144,
+        "refreshes": 283
+      },
+      "exit_code": 3221226505,
+      "collector_exit_code": 0,
+      "exit_evidence_disagrees": true,
+      "exit_classification": "nonzero process exit; cause unknown",
+      "supervisor_exit": {
+        "start_utc": "2026-10-11T14:06:39.0702112Z",
+        "pid": 18880,
+        "normal_exit_claim": false,
+        "observed_exit_utc": "2026-10-11T14:17:20.3461129Z",
+        "exit_code": -1073740791
+      },
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T141233Z-2e95317d",
+      "collector_component_sha256": {
+        "mode_a.py": "516c587205f1c548472b82f36018c04fd1edda0163edb01516a3c8258511c3e9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      },
+      "source_archive_available": true,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "286",
+          "mean": "88.67824180301537",
+          "min": "61.08363078791862",
+          "max": "93.06210483665609",
+          "median": "90.13087038532838",
+          "p95": "92.42198540735103",
+          "p99": "92.78618436274598"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "286",
+          "mean": "1.8050565266489786e-05",
+          "min": "0.0",
+          "max": "0.005162461666216079",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "286",
+          "mean": "0.00040976928337731536",
+          "min": "0.0",
+          "max": "0.02615430320144643",
+          "median": "0.0",
+          "p95": "0.0018871274146494204",
+          "p99": "0.012428585666978749"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "286",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "286",
+          "mean": "5326311424.0",
+          "min": "5326311424.0",
+          "max": "5326311424.0",
+          "median": "5326311424.0",
+          "p95": "5326311424.0",
+          "p99": "5326311424.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "286",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "286",
+          "mean": "128876544.0",
+          "min": "128876544.0",
+          "max": "128876544.0",
+          "median": "128876544.0",
+          "p95": "128876544.0",
+          "p99": "128876544.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "286",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_18880_luid_0x00000000_0x000170C8_phys_0",
+          "count": "286",
+          "mean": "5455253504.0",
+          "min": "5455253504.0",
+          "max": "5455253504.0",
+          "median": "5455253504.0",
+          "p95": "5455253504.0",
+          "p99": "5455253504.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_18880_luid_0x00000000_0x00018737_phys_0",
+          "count": "286",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "17224",
+          "start_filetime": "134362012036976918",
+          "name": "NexusRevolution Socket",
+          "count": "285",
+          "mean": "0.9991257059172456",
+          "min": "0.9686221418762737",
+          "max": "1.0162131928420832",
+          "median": "0.99997780049841",
+          "p95": "1.0004363903570808",
+          "p99": "1.0157801096212966"
+        },
+        {
+          "tid": "34080",
+          "start_filetime": "134362012028717622",
+          "name": "Game:Main",
+          "count": "285",
+          "mean": "0.3275024024572647",
+          "min": "0.06249793756781679",
+          "max": "1.0000194003785694",
+          "median": "0.29691609318911094",
+          "p95": "0.8593247294956847",
+          "p99": "0.9945916355475707"
+        },
+        {
+          "tid": "33180",
+          "start_filetime": "134362012023422266",
+          "name": "shadPS4:GpuCommandProcessor",
+          "count": "285",
+          "mean": "0.3051054424102597",
+          "min": "0.09374690635172518",
+          "max": "0.5467429069103442",
+          "median": "0.31241249325806414",
+          "p95": "0.4375991161967575",
+          "p99": "0.5311607649921897"
+        },
+        {
+          "tid": "15056",
+          "start_filetime": "134362012027631930",
+          "name": "shadPS4:GpuDrawRecorder",
+          "count": "285",
+          "mean": "0.304907215086905",
+          "min": "0.09374690635172518",
+          "max": "0.5623641328220683",
+          "median": "0.3123916625692937",
+          "p95": "0.4375566198311292",
+          "p99": "0.5158185867184552"
+        },
+        {
+          "tid": "30760",
+          "start_filetime": "134362012027613546",
+          "name": "shadPS4:GpuCmdRecorder",
+          "count": "285",
+          "mean": "0.2922129859147139",
+          "min": "0.09374690635172518",
+          "max": "0.5779853587337925",
+          "median": "0.296772079440829",
+          "p95": "0.421953019111708",
+          "p99": "0.515538389551243"
+        },
+        {
+          "tid": "30592",
+          "start_filetime": "134362012031814616",
+          "name": "shadPS4:AudioOutputThread:0x60037a45f7f0",
+          "count": "285",
+          "mean": "0.2275674693286622",
+          "min": "0.1561884305200738",
+          "max": "0.28130657074821885",
+          "median": "0.23431262597796604",
+          "p95": "0.26565499244894325",
+          "p99": "0.2812097588839985"
+        },
+        {
+          "tid": "12772",
+          "start_filetime": "134362012031818381",
+          "name": "shadPS4:AudioOutputThread:0x60037a45f990",
+          "count": "285",
+          "mean": "0.2272174163572441",
+          "min": "0.1561884305200738",
+          "max": "0.2968251333779884",
+          "median": "0.23429730701124143",
+          "p95": "0.2656672410921029",
+          "p99": "0.28130924372345084"
+        },
+        {
+          "tid": "28160",
+          "start_filetime": "134362012028722675",
+          "name": "SDLTimer",
+          "count": "285",
+          "mean": "0.13339221155369776",
+          "min": "0.03125209701576025",
+          "max": "0.2499662295598658",
+          "median": "0.1405748850544117",
+          "p95": "0.1875419531323344",
+          "p99": "0.21874400641315017"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 58,
+          "mean": 89.6896551724138,
+          "min": 59.0,
+          "max": 98.0,
+          "median": 92.0,
+          "p95": 97.0,
+          "p99": 98.0
+        },
+        "utilization_memory_percent": {
+          "count": 58,
+          "mean": 42.39655172413793,
+          "min": 26.0,
+          "max": 50.0,
+          "median": 44.0,
+          "p95": 48.0,
+          "p99": 50.0
+        },
+        "memory_used_mib": {
+          "count": 58,
+          "mean": 7868.931034482759,
+          "min": 7848.0,
+          "max": 7878.0,
+          "median": 7871.0,
+          "p95": 7872.0,
+          "p99": 7878.0
+        },
+        "power_w": {
+          "count": 58,
+          "mean": 258.1737931034483,
+          "min": 200.08,
+          "max": 275.09,
+          "median": 267.9,
+          "p95": 273.3,
+          "p99": 275.09
+        },
+        "temperature_c": {
+          "count": 58,
+          "mean": 68.87931034482759,
+          "min": 61.0,
+          "max": 74.0,
+          "median": 69.5,
+          "p95": 73.0,
+          "p99": 74.0
+        },
+        "clock_graphics_mhz": {
+          "count": 58,
+          "mean": 2877.637931034483,
+          "min": 2865.0,
+          "max": 2902.0,
+          "median": 2872.0,
+          "p95": 2895.0,
+          "p99": 2902.0
+        },
+        "clock_memory_mhz": {
+          "count": 58,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 5,
+      "source_hashes": {
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "mode_a.py": "516c587205f1c548472b82f36018c04fd1edda0163edb01516a3c8258511c3e9",
+        "report.py": "ac224a52ae326f293b1ce7d31f3034a2196138efae0774aa87f01a73f84db158",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      }
+    },
+    {
+      "session_id": "d1591ed380934f2b8d78a637565e2590",
+      "samples": 113,
+      "malformed_rows": 0,
+      "collector_status": {
+        "status": "stopped",
+        "reason": "process_exited",
+        "samples": 113,
+        "ended_utc": "2026-10-11T14:20:43.161501+00:00",
+        "skipped_intervals": 0,
+        "exit_code": 0
+      },
+      "first_utc": "2026-10-11T14:18:50.473629+00:00",
+      "last_utc": "2026-10-11T14:20:42.153122+00:00",
+      "observed_duration_s": 111.67909320000035,
+      "identity": {
+        "pid": 7416,
+        "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+        "process_start_filetime_100ns": 134362019295619169,
+        "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+      },
+      "metrics": {
+        "cpu_core_equivalents": {
+          "count": 112,
+          "mean": 2.7395507471857345,
+          "min": 0.2656502367713725,
+          "max": 3.547805944295502,
+          "median": 2.827220165735309,
+          "p95": 3.016302159855639,
+          "p99": 3.3908952543371718
+        },
+        "cpu_machine_percent": {
+          "count": 112,
+          "mean": 8.561096084955421,
+          "min": 0.8301569899105391,
+          "max": 11.086893575923444,
+          "median": 8.835063017922842,
+          "p95": 9.425944249548872,
+          "p99": 10.596547669803662
+        },
+        "working_set_bytes": {
+          "count": 113,
+          "mean": 2346512057.7699113,
+          "min": 40267776.0,
+          "max": 2546343936.0,
+          "median": 2468331520.0,
+          "p95": 2546323456.0,
+          "p99": 2546339840.0
+        },
+        "private_bytes": {
+          "count": 113,
+          "mean": 2388967134.0176992,
+          "min": 99241984.0,
+          "max": 2548854784.0,
+          "median": 2475991040.0,
+          "p95": 2508808192.0,
+          "p99": 2542993408.0
+        },
+        "commit_bytes": {
+          "count": 113,
+          "mean": 2388967134.0176992,
+          "min": 99241984.0,
+          "max": 2548854784.0,
+          "median": 2475991040.0,
+          "p95": 2508808192.0,
+          "p99": 2542993408.0
+        },
+        "collection_wall_s": {
+          "count": 113,
+          "mean": 0.07211348318635998,
+          "min": 0.04386950000480283,
+          "max": 0.14966840000124648,
+          "median": 0.05842159999883734,
+          "p95": 0.1364222999982303,
+          "p99": 0.14627810000092722
+        },
+        "sampling_jitter_s": {
+          "count": 113,
+          "mean": 0.003285167250984175,
+          "min": 0.00014439999358728528,
+          "max": 0.32135589999961667,
+          "median": 0.00044920000073034316,
+          "p95": 0.0006811999919591472,
+          "p99": 0.0007392999978037551
+        }
+      },
+      "thread_count": {
+        "count": 113,
+        "mean": 120.17699115044248,
+        "min": 15.0,
+        "max": 127.0,
+        "median": 125.0,
+        "p95": 127.0,
+        "p99": 127.0
+      },
+      "page_faults_delta": 824816,
+      "io_deltas": {
+        "read_ops": 16653,
+        "write_ops": 2659,
+        "other_ops": 156817,
+        "read_bytes": 499555894,
+        "write_bytes": 559853,
+        "other_bytes": 2907285
+      },
+      "collector_overhead": {
+        "duration_s": 111.67909320000035,
+        "collector_cpu_core_equivalents": 0.06561769790587785,
+        "collector_working_set_peak_bytes": 39944192,
+        "collector_io_write_bytes_delta": 7468967,
+        "nvidia_child_cpu_s": 0.6875,
+        "child_tool_cpu_available": true,
+        "collection_wall_time_is_not_cpu_time": true
+      },
+      "hud_overhead": {
+        "cpu_core_equivalents": 0.008254678414598706,
+        "ram_peak_bytes": 73805824,
+        "refreshes": 110
+      },
+      "exit_code": 0,
+      "collector_exit_code": 0,
+      "exit_evidence_disagrees": false,
+      "exit_classification": "zero process exit",
+      "supervisor_exit": {
+        "start_utc": "2026-10-11T14:18:49.5619169Z",
+        "pid": 7416,
+        "normal_exit_claim": true,
+        "observed_exit_utc": "2026-10-11T14:20:43.4249227Z",
+        "exit_code": 0
+      },
+      "errors": {},
+      "report_generator_sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1",
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T141849Z-789852e4",
+      "collector_component_sha256": {
+        "mode_a.py": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "report.py": "fcf2744ebaf223325aec2e1a81af839acb4932fbc0627e71857f419d79f023c5",
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      },
+      "source_archive_available": true,
+      "capture_scope": "free play / acceptance phases; no matched stationary benchmark",
+      "gpu_engines": [
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_0_engtype_3D",
+          "count": "111",
+          "mean": "7.005317020153571",
+          "min": "0.06283850353513165",
+          "max": "7.557532283725138",
+          "median": "7.245532339983045",
+          "p95": "7.5167914523088495",
+          "p99": "7.552981492136247"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_10_engtype_VR",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_11_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_12_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_13_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_14_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_15_engtype_Security_1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_1_engtype_VideoDecode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_2_engtype_VideoDecode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_3_engtype_Copy",
+          "count": "111",
+          "mean": "0.004460047379932702",
+          "min": "0.0",
+          "max": "0.25670205454809636",
+          "median": "0.0",
+          "p95": "0.006873746265647514",
+          "p99": "0.1432880583558076"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_4_engtype_Copy",
+          "count": "111",
+          "mean": "0.0011696022106242718",
+          "min": "0.0",
+          "max": "0.11301664500203755",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.009297996331248044"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_5_engtype_Security",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_6_engtype_VideoEncode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_7_engtype_VideoEncode",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_8_engtype_OFA_0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0_eng_9_engtype_JPEG_Decode_1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_0_engtype_3D",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_10_engtype_Video Codec 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_1_engtype_Copy",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_2_engtype_Compute 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_3_engtype_Compute 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_4_engtype_Timer 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_5_engtype_Security 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_6_engtype_High Priority Compute",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_7_engtype_High Priority 3D",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_8_engtype_Video JPEG 0",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        },
+        {
+          "category": "engines",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0_eng_9_engtype_Video Decode 1",
+          "count": "111",
+          "mean": "0.0",
+          "min": "0.0",
+          "max": "0.0",
+          "median": "0.0",
+          "p95": "0.0",
+          "p99": "0.0"
+        }
+      ],
+      "gpu_memory": [
+        {
+          "category": "dedicated",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0",
+          "count": "112",
+          "mean": "1269815259.4285715",
+          "min": "270336.0",
+          "max": "1323601920.0",
+          "median": "1306787840.0",
+          "p95": "1323565056.0",
+          "p99": "1323597824.0"
+        },
+        {
+          "category": "dedicated",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0",
+          "count": "112",
+          "mean": "118784.0",
+          "min": "118784.0",
+          "max": "118784.0",
+          "median": "118784.0",
+          "p95": "118784.0",
+          "p99": "118784.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0",
+          "count": "112",
+          "mean": "107683108.57142857",
+          "min": "278528.0",
+          "max": "126693376.0",
+          "median": "110702592.0",
+          "p95": "110702592.0",
+          "p99": "125644800.0"
+        },
+        {
+          "category": "shared",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0",
+          "count": "112",
+          "mean": "794624.0",
+          "min": "794624.0",
+          "max": "794624.0",
+          "median": "794624.0",
+          "p95": "794624.0",
+          "p99": "794624.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_7416_luid_0x00000000_0x000170C8_phys_0",
+          "count": "112",
+          "mean": "1377563904.0",
+          "min": "614400.0",
+          "max": "1450360832.0",
+          "median": "1417555968.0",
+          "p95": "1434333184.0",
+          "p99": "1449308160.0"
+        },
+        {
+          "category": "committed",
+          "instance": "pid_7416_luid_0x00000000_0x00018737_phys_0",
+          "count": "112",
+          "mean": "913408.0",
+          "min": "913408.0",
+          "max": "913408.0",
+          "median": "913408.0",
+          "p95": "913408.0",
+          "p99": "913408.0"
+        }
+      ],
+      "top_named_threads": [
+        {
+          "tid": "18464",
+          "start_filetime": "134362019360393248",
+          "name": "NexusRevolution Socket",
+          "count": "106",
+          "mean": "0.9991167149239807",
+          "min": "0.9689209176541572",
+          "max": "1.0159773409487596",
+          "median": "0.9999573018183758",
+          "p95": "1.0156027583075813",
+          "p99": "1.015916059949921"
+        },
+        {
+          "tid": "19968",
+          "start_filetime": "134362019352056047",
+          "name": "Game:Main",
+          "count": "106",
+          "mean": "0.993367223433664",
+          "min": "0.8438407128674345",
+          "max": "1.0310396679115592",
+          "median": "0.9998501724732276",
+          "p95": "1.0156027583075813",
+          "p99": "1.015834160249753"
+        },
+        {
+          "tid": "25512",
+          "start_filetime": "134362019355212871",
+          "name": "shadPS4:AudioOutputThread:0x5d2bddb0",
+          "count": "106",
+          "mean": "0.23157485358410873",
+          "min": "0.17188151430897136",
+          "max": "0.2813475713396565",
+          "median": "0.23435152969581158",
+          "p95": "0.2656460391680127",
+          "p99": "0.28133060121690123"
+        },
+        {
+          "tid": "17308",
+          "start_filetime": "134362019355208534",
+          "name": "shadPS4:AudioOutputThread:0x5d2bcbd0",
+          "count": "106",
+          "mean": "0.22921658298848738",
+          "min": "0.17184700612210327",
+          "max": "0.2813350757278623",
+          "median": "0.21880173567648203",
+          "p95": "0.2811220051500648",
+          "p99": "0.28133060121690123"
+        },
+        {
+          "tid": "14192",
+          "start_filetime": "134362019352060322",
+          "name": "SDLTimer",
+          "count": "106",
+          "mean": "0.14121459458045896",
+          "min": "0.046866948258359624",
+          "max": "0.2186819898988022",
+          "median": "0.14063018235459684",
+          "p95": "0.20309008881092852",
+          "p99": "0.20320796981303582"
+        },
+        {
+          "tid": "27480",
+          "start_filetime": "134362019350823364",
+          "name": "shadPS4:PresentThread",
+          "count": "107",
+          "mean": "0.10849870356491004",
+          "min": "0.04687710009438589",
+          "max": "0.12505962843173213",
+          "median": "0.10940140950075644",
+          "p95": "0.12502806880230627",
+          "p99": "0.12504721782869602"
+        },
+        {
+          "tid": "32184",
+          "start_filetime": "134362019295619204",
+          "name": "shadPS4:Main",
+          "count": "112",
+          "mean": "0.03607665594961722",
+          "min": "0.0",
+          "max": "0.7813808812935997",
+          "median": "0.0",
+          "p95": "0.06250671947166181",
+          "p99": "0.7593397128058117"
+        },
+        {
+          "tid": "11084",
+          "start_filetime": "134362019350807652",
+          "name": "shadPS4:GpuDrawRecorder",
+          "count": "107",
+          "mean": "0.023510315336777114",
+          "min": "0.0",
+          "max": "0.06251890571730274",
+          "median": "0.01562543126200335",
+          "p95": "0.06251287139998479",
+          "p99": "0.06251609164170488"
+        }
+      ],
+      "nvidia_scope": "whole adapter; includes other applications",
+      "nvidia_statistics": {
+        "utilization_gpu_percent": {
+          "count": 23,
+          "mean": 13.304347826086957,
+          "min": 6.0,
+          "max": 14.0,
+          "median": 14.0,
+          "p95": 14.0,
+          "p99": 14.0
+        },
+        "utilization_memory_percent": {
+          "count": 23,
+          "mean": 5.826086956521739,
+          "min": 4.0,
+          "max": 6.0,
+          "median": 6.0,
+          "p95": 6.0,
+          "p99": 6.0
+        },
+        "memory_used_mib": {
+          "count": 23,
+          "mean": 3972.7391304347825,
+          "min": 2773.0,
+          "max": 4058.0,
+          "median": 4042.0,
+          "p95": 4042.0,
+          "p99": 4058.0
+        },
+        "power_w": {
+          "count": 23,
+          "mean": 66.27695652173914,
+          "min": 52.18,
+          "max": 78.9,
+          "median": 66.32,
+          "p95": 67.22,
+          "p99": 78.9
+        },
+        "temperature_c": {
+          "count": 23,
+          "mean": 43.47826086956522,
+          "min": 42.0,
+          "max": 45.0,
+          "median": 43.0,
+          "p95": 45.0,
+          "p99": 45.0
+        },
+        "clock_graphics_mhz": {
+          "count": 23,
+          "mean": 1719.304347826087,
+          "min": 1140.0,
+          "max": 2857.0,
+          "median": 1635.0,
+          "p95": 2835.0,
+          "p99": 2857.0
+        },
+        "clock_memory_mhz": {
+          "count": 23,
+          "mean": 15001.0,
+          "min": 15001.0,
+          "max": 15001.0,
+          "median": 15001.0,
+          "p95": 15001.0,
+          "p99": 15001.0
+        }
+      },
+      "anomaly_windows": 2,
+      "source_hashes": {
+        "adapter_identity.py": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9",
+        "live_metrics.py": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286",
+        "mode_a.py": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29",
+        "report.py": "fcf2744ebaf223325aec2e1a81af839acb4932fbc0627e71857f419d79f023c5",
+        "snapshot.py": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+      }
+    }
+  ],
+  "xinput_runs": [
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-test-20261011T1356",
+      "manifest": {
+        "session_id": "0ad676e95bce42e4ba6d4bcb8d141758",
+        "identity": {
+          "pid": 39216,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134361997745676994,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T13:57:55.206314+00:00",
+        "feeder_pid": 7276,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "xinput_index": 1,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "ready",
+        "utc": "2026-10-11T13:58:07.008667+00:00",
+        "pid": 7276,
+        "target_pid": 39216,
+        "xinput_index": 1
+      },
+      "actions": []
+    },
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-test-2",
+      "manifest": {
+        "session_id": "24522db094c44b2b9edb4eb0dd1ec899",
+        "identity": {
+          "pid": 39216,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134361997745676994,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T13:58:42.675801+00:00",
+        "feeder_pid": 40780,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "xinput_index": 1,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "stopped",
+        "utc": "2026-10-11T14:05:46.140909+00:00",
+        "reason": "game_exited",
+        "xinput_index": 1
+      },
+      "actions": [
+        {
+          "command": {
+            "buttons": [
+              "start"
+            ],
+            "hold_ms": 500,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T13:58:55.597504+00:00"
+          },
+          "utc": "2026-10-11T13:58:55.641786+00:00",
+          "qpc_s": 124181.5342096,
+          "identity": {
+            "pid": 39216,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134361997745676994,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 1,
+          "session_id": "24522db094c44b2b9edb4eb0dd1ec899",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 2,
+            "buttons": 16,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "released_utc": "2026-10-11T13:58:56.133130+00:00",
+          "released_qpc_s": 124182.0252412
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 300,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T13:59:20.441848+00:00"
+          },
+          "utc": "2026-10-11T13:59:20.474833+00:00",
+          "qpc_s": 124206.36716,
+          "identity": {
+            "pid": 39216,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134361997745676994,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 1,
+          "session_id": "24522db094c44b2b9edb4eb0dd1ec899",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 4,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "released_utc": "2026-10-11T13:59:20.803165+00:00",
+          "released_qpc_s": 124206.695274
+        }
+      ]
+    },
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-gameplay",
+      "manifest": {
+        "session_id": "21ea463696a8470cab884d26c0875c26",
+        "identity": {
+          "pid": 18880,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362011990702112,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T14:07:00.387438+00:00",
+        "feeder_pid": 8516,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "xinput_index": 0,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "stopped",
+        "utc": "2026-10-11T14:10:40.420503+00:00",
+        "reason": "stop_requested",
+        "xinput_index": 0
+      },
+      "actions": [
+        {
+          "command": {
+            "buttons": [
+              "down"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:07:09.730742+00:00"
+          },
+          "utc": "2026-10-11T14:07:09.752936+00:00",
+          "qpc_s": 124675.6452128,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 2,
+            "buttons": 2,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 3,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:07:09.896878+00:00",
+          "released_qpc_s": 124675.7890314
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 180,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:07:18.948965+00:00"
+          },
+          "utc": "2026-10-11T14:07:18.955981+00:00",
+          "qpc_s": 124684.8481189,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 4,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 5,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:07:19.140753+00:00",
+          "released_qpc_s": 124685.0329461
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:07:34.253592+00:00"
+          },
+          "utc": "2026-10-11T14:07:34.266136+00:00",
+          "qpc_s": 124700.1586556,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 6,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 7,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:07:34.410165+00:00",
+          "released_qpc_s": 124700.302322
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:07:46.370501+00:00"
+          },
+          "utc": "2026-10-11T14:07:46.405066+00:00",
+          "qpc_s": 124712.2972024,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 8,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 9,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:07:46.569689+00:00",
+          "released_qpc_s": 124712.4618351
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:08:07.422214+00:00"
+          },
+          "utc": "2026-10-11T14:08:07.471561+00:00",
+          "qpc_s": 124733.3640117,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 10,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 11,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:08:07.636432+00:00",
+          "released_qpc_s": 124733.5285598
+        },
+        {
+          "command": {
+            "buttons": [],
+            "hold_ms": 1200,
+            "lx": 0,
+            "ly": 22000,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:08:37.248140+00:00"
+          },
+          "utc": "2026-10-11T14:08:37.291341+00:00",
+          "qpc_s": 124763.1841423,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 12,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 22000,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 13,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:08:38.495582+00:00",
+          "released_qpc_s": 124764.3878012
+        },
+        {
+          "command": {
+            "buttons": [],
+            "hold_ms": 900,
+            "lx": 0,
+            "ly": 0,
+            "rx": 18000,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:08:46.199799+00:00"
+          },
+          "utc": "2026-10-11T14:08:46.237877+00:00",
+          "qpc_s": 124772.1299573,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 14,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 18000,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 15,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:08:47.158021+00:00",
+          "released_qpc_s": 124773.0501569
+        },
+        {
+          "command": {
+            "buttons": [
+              "rb"
+            ],
+            "hold_ms": 300,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:09:01.134468+00:00"
+          },
+          "utc": "2026-10-11T14:09:01.166462+00:00",
+          "qpc_s": 124787.0588231,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 16,
+            "buttons": 512,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 17,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:09:01.474203+00:00",
+          "released_qpc_s": 124787.3663493
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 100,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:09:24.917928+00:00"
+          },
+          "utc": "2026-10-11T14:09:24.955459+00:00",
+          "qpc_s": 124810.8482163,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 18,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 19,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:09:25.078973+00:00",
+          "released_qpc_s": 124810.9710976
+        },
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 100,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:10:27.260702+00:00"
+          },
+          "utc": "2026-10-11T14:10:27.265740+00:00",
+          "qpc_s": 124873.1581022,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "21ea463696a8470cab884d26c0875c26",
+          "error": "RuntimeError('Game is not foreground; input refused')",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 19,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:10:27.265740+00:00",
+          "released_qpc_s": 124873.1582323
+        }
+      ]
+    },
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-final",
+      "manifest": {
+        "session_id": "778db6654f6d4520a3b6e0e46fca4d33",
+        "identity": {
+          "pid": 18880,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362011990702112,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T14:12:47.900343+00:00",
+        "feeder_pid": 21212,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "feeder_source_sha256": "98331928a55d45edac0adf3e0dbf200de2f78b2ee577573f10fbfd3eae23e5f9",
+        "telemetry_segment": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T141233Z-2e95317d",
+        "xinput_index": 0,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "stopped",
+        "utc": "2026-10-11T14:16:41.135523+00:00",
+        "reason": "stop_requested",
+        "xinput_index": 0
+      },
+      "actions": [
+        {
+          "command": {
+            "buttons": [
+              "start"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:13:04.924759+00:00"
+          },
+          "utc": "2026-10-11T14:13:04.960885+00:00",
+          "qpc_s": 125030.8531705,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "778db6654f6d4520a3b6e0e46fca4d33",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 2,
+            "buttons": 16,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 3,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:13:05.124827+00:00",
+          "released_qpc_s": 125031.0170325
+        },
+        {
+          "command": {
+            "buttons": [
+              "b"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:13:53.412915+00:00"
+          },
+          "utc": "2026-10-11T14:13:53.465587+00:00",
+          "qpc_s": 125079.3576826,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "778db6654f6d4520a3b6e0e46fca4d33",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 4,
+            "buttons": 8192,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 5,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:13:53.629394+00:00",
+          "released_qpc_s": 125079.5215481
+        }
+      ]
+    },
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-cleanup-verified",
+      "manifest": {
+        "session_id": "8cab3112a02a4d69a77662d4bbdc9a76",
+        "identity": {
+          "pid": 18880,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362011990702112,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T14:16:57.140742+00:00",
+        "feeder_pid": 15412,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "feeder_source_sha256": "42e7f5fc6d1c0db6172031acb1cc56e08c9b13533e57e8a0a0223c6de898e256",
+        "telemetry_segment": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T141233Z-2e95317d",
+        "xinput_index": 0,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "stopped",
+        "utc": "2026-10-11T14:17:19.421011+00:00",
+        "reason": "game_exited",
+        "xinput_index": 0,
+        "virtual_device_remove_result": 536870912,
+        "virtual_device_removed": true
+      },
+      "actions": [
+        {
+          "command": {
+            "buttons": [],
+            "hold_ms": 300,
+            "lx": 0,
+            "ly": 0,
+            "rx": -12000,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:17:09.480736+00:00"
+          },
+          "utc": "2026-10-11T14:17:09.497304+00:00",
+          "qpc_s": 125275.3902849,
+          "identity": {
+            "pid": 18880,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362011990702112,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "8cab3112a02a4d69a77662d4bbdc9a76",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 2,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": -12000,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 3,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:17:09.805620+00:00",
+          "released_qpc_s": 125275.6977418
+        }
+      ]
+    },
+    {
+      "local_directory": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\xinput-signaled-exit",
+      "manifest": {
+        "session_id": "906a4c8cd8cf4949a0fa039866595a18",
+        "identity": {
+          "pid": 7416,
+          "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+          "process_start_filetime_100ns": 134362019295619169,
+          "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+        },
+        "client_dll": "C:\\Program Files\\Flydigi Space Station\\driver\\flydigimapclient.dll",
+        "client_sha256": "b4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a",
+        "started_utc": "2026-10-11T14:19:43.073707+00:00",
+        "feeder_pid": 20012,
+        "driver_install": false,
+        "injection": false,
+        "automatic_gameplay": false,
+        "feeder_source_sha256": "2aad9e20e17898b1fb5df814a53047daef4eec56ef06f72d152402b9e3f0076e",
+        "telemetry_segment": "F:\\PS4Dev\\handoff\\vulkan-live-monitor\\session-20261011T141849Z-789852e4",
+        "xinput_index": 0,
+        "initial_packet": 1
+      },
+      "status": {
+        "status": "stopped",
+        "utc": "2026-10-11T14:20:42.939296+00:00",
+        "reason": "game_exited",
+        "xinput_index": 0,
+        "virtual_device_remove_result": 536870912,
+        "virtual_device_removed": true
+      },
+      "actions": [
+        {
+          "command": {
+            "buttons": [
+              "a"
+            ],
+            "hold_ms": 150,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0,
+            "lt": 0,
+            "rt": 0,
+            "utc": "2026-10-11T14:19:55.367366+00:00"
+          },
+          "utc": "2026-10-11T14:19:55.391547+00:00",
+          "qpc_s": 125441.2838359,
+          "identity": {
+            "pid": 7416,
+            "executable": "F:\\Apps\\shadPS4-DLSS-DLAA-1.8.4\\shadPS4.exe",
+            "process_start_filetime_100ns": 134362019295619169,
+            "executable_sha256": "7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773"
+          },
+          "xinput_index": 0,
+          "session_id": "906a4c8cd8cf4949a0fa039866595a18",
+          "xinput_readback": {
+            "result": 0,
+            "packet": 2,
+            "buttons": 4096,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "result": "sent; game reaction must be observed separately",
+          "neutral_readback": {
+            "result": 0,
+            "packet": 3,
+            "buttons": 0,
+            "lt": 0,
+            "rt": 0,
+            "lx": 0,
+            "ly": 0,
+            "rx": 0,
+            "ry": 0
+          },
+          "released_utc": "2026-10-11T14:19:55.535470+00:00",
+          "released_qpc_s": 125441.4276313
+        }
+      ]
+    }
+  ],
+  "program_components": [
+    {
+      "name": "adapter_identity.py",
+      "sha256": "f16ef16d75eedfdb49b6e6bac656506d0d6c6504e0ec7b512ea05507f4db1de9"
+    },
+    {
+      "name": "Capture-CPU-Stacks.ps1",
+      "sha256": "f747a48454d9a3ce6377848536d59e4d2853c0d0eb4c2ce9d28c1aa8ba5f8fa4"
+    },
+    {
+      "name": "Launch-LiveMonitor.ps1",
+      "sha256": "52f7927751c1d82329606c7a257c8d6967a2a32816d6399af78559497c9161bb"
+    },
+    {
+      "name": "Launch.vbs",
+      "sha256": "9352b263ae53ab2ac1f2a90544f3527cbbade396e1ce2d975f8350eda3f34337"
+    },
+    {
+      "name": "live_metrics.py",
+      "sha256": "0fdc02a098107060c57f3f6a4a8cf7bb392c38cfaa7acb6a44ef20643aca8286"
+    },
+    {
+      "name": "LiveHud.cs",
+      "sha256": "cd4c42424d0e22a020e7f57b2714ef2f45e4f7dfb6aaf141b4d9111cdd24c97c"
+    },
+    {
+      "name": "LiveHud.dpi.exe",
+      "sha256": "858cc90c832ba25e4147bb3a2c9ac57f25b7dc073d517aa3672e2bbbd5f4905f"
+    },
+    {
+      "name": "LiveHud.exe",
+      "sha256": "e90a624a64e6a4b2cc543f8835b9e8242aab119bd765127cb0baf840dfbfa311"
+    },
+    {
+      "name": "LiveHud.hotkey.exe",
+      "sha256": "a83e09b2db44394ee9a58e15cca1a3bf232d142928375b57302090671033135a"
+    },
+    {
+      "name": "LiveHud.initial.exe",
+      "sha256": "7c45aebb0430aa8e727fad96a9ed946ff903c989d031bcbdf2b846fad2cf800b"
+    },
+    {
+      "name": "LiveHud.readfix.exe",
+      "sha256": "86da7ca1c5775c27c038e725e0b7364e54a6107f3eb3603e3ee46a8d1c42cf1c"
+    },
+    {
+      "name": "mode_a.py",
+      "sha256": "c3ec7342e235a7d2f98e542586f210bd3dec75f8c52067810f4c75751f73be29"
+    },
+    {
+      "name": "report.py",
+      "sha256": "0800a28aa45bd136f696b73222fe2fcbfe23308ad57f89526d1b4c0c6ed993e1"
+    },
+    {
+      "name": "Restore-LiveShortcut.ps1",
+      "sha256": "a9801ef7673c72991af9459d1b1a8602907329dec975c847685deacd097e1aea"
+    },
+    {
+      "name": "snapshot.py",
+      "sha256": "51208926317fed23920f229af4350402288821464cd1d2afeb069aac67ae55ab"
+    },
+    {
+      "name": "xinput_control.py",
+      "sha256": "2aad9e20e17898b1fb5df814a53047daef4eec56ef06f72d152402b9e3f0076e"
+    }
+  ],
+  "unavailable": {
+    "guest_fps": null,
+    "display_fps": null,
+    "host_present_fps": null,
+    "trace_loss": null,
+    "gpu_stage_duration": null,
+    "cpu_stacks": null,
+    "pm4_and_cache_costs": null
+  },
+  "limitations": [
+    "PresentMon exit 6 / non-elevated ETW access denied",
+    "Sampled app FRAME-GEN values do not establish unique guest frames",
+    "Mixed session phases are not stationary DX12 benchmarks",
+    "Initial global config migrated by original core; later lifecycle baseline preserved",
+    "Normal gameplay may write autosaves/cache/logs; those private files are not published",
+    "Two observed nonzero game exits 0xC0000409; reason unknown",
+    "Final wait-signaled collector/supervisor exit validation PID 7416: both zero, no disagreement"
+  ],
+  "preservation": [
+    {
+      "name": "amd_fidelityfx_vk.dll",
+      "match": true
+    },
+    {
+      "name": "avcodec-61.dll",
+      "match": true
+    },
+    {
+      "name": "avformat-61.dll",
+      "match": true
+    },
+    {
+      "name": "avutil-59.dll",
+      "match": true
+    },
+    {
+      "name": "icuuc.dll",
+      "match": true
+    },
+    {
+      "name": "nvngx_dlss.dll",
+      "match": true
+    },
+    {
+      "name": "nvngx_dlssg.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Concurrent.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Core.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Gui.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Multimedia.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Network.dll",
+      "match": true
+    },
+    {
+      "name": "Qt6Widgets.dll",
+      "match": true
+    },
+    {
+      "name": "shadps4_dlss.dll",
+      "match": true
+    },
+    {
+      "name": "shadPS4.exe",
+      "match": true
+    },
+    {
+      "name": "sl.common.dll",
+      "match": true
+    },
+    {
+      "name": "sl.dlss_g.dll",
+      "match": true
+    },
+    {
+      "name": "sl.interposer.dll",
+      "match": true
+    },
+    {
+      "name": "sl.pcl.dll",
+      "match": true
+    },
+    {
+      "name": "sl.reflex.dll",
+      "match": true
+    },
+    {
+      "name": "swresample-5.dll",
+      "match": true
+    },
+    {
+      "name": "swscale-8.dll",
+      "match": true
+    },
+    {
+      "name": "config.json",
+      "match": false
+    },
+    {
+      "name": "CUSA03173.json",
+      "match": true
+    },
+    {
+      "name": "dlss.ini",
+      "match": true
+    }
+  ],
+  "primary_sources": [
+    "https://learn.microsoft.com/windows/win32/xinput/getting-started-with-xinput",
+    "https://github.com/nefarius/ViGEmClient/blob/master/include/ViGEm/Client.h",
+    "https://github.com/sunlighthell/shadPS4-Bloodborne-DLSS-FSR/releases/tag/test"
+  ]
+}

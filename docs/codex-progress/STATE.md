@@ -1,5 +1,19 @@
 # Native DX12 state
 
+## Installed Vulkan HUD and XInput validation — 2026-10-11
+
+See [live companion report](vulkan-live-monitor-20261011/VULKAN_LIVE_MONITOR_REPORT.md)
+and its session manifest. Existing Bloodborne shortcut launches the original
+974f8c21-dirty DLSS core with a real external HUD/collector. Virtual Xbox input
+entered Central Yharnam and verified walking, camera and menus after the user
+switched the physical pad off; ordinary launches do not start the feeder.
+Seven local recording segments, failures and exit-code disagreement are retained.
+Final wait-signaled lifecycle check: collector/supervisor both code 0; virtual
+device removed, all owned session processes finished. Two earlier game exits
+0xC0000409 remain unexplained. Guest/display FPS, stacks and internal GPU/PM4/
+cache costs are unavailable; exact dirty source is missing. Production renderer
+unchanged. Resource-cost observations are not DX12 FPS/latency improvements.
+
 ## Vulkan reference profiler prepared — 2026-10-11
 
 See [actual results and coverage](vulkan-reference-profiler-20261011/REPORT.md).

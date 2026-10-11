@@ -1,6 +1,7 @@
 """Passive Windows Vulkan monitor. Standard library only; never controls the game."""
 import argparse, collections, ctypes as C, datetime as D, hashlib, json, os
-import pathlib, statistics, subprocess, time, uuid
+import pathlib, statistics, subprocess, time, uuid, traceback
+from live_metrics import LiveMetrics, system_memory
 from ctypes import wintypes as W
 
 K = C.WinDLL('kernel32', use_last_error=True)
@@ -28,6 +29,7 @@ class ThreadEntry(C.Structure):
 K.Thread32First.argtypes = [W.HANDLE,C.POINTER(ThreadEntry)]
 K.Thread32Next.argtypes = K.Thread32First.argtypes
 K.GetExitCodeProcess.argtypes = [W.HANDLE,C.POINTER(W.DWORD)]
+K.WaitForSingleObject.argtypes = [W.HANDLE,W.DWORD];K.WaitForSingleObject.restype=W.DWORD
 class ValueUnion(C.Union):
     _fields_ = [('long',C.c_long),('double',C.c_double),('large',C.c_longlong),('str',W.LPWSTR)]
 class Value(C.Structure):
@@ -50,14 +52,19 @@ def times(handle, thread=False):
     if not fn(handle,C.byref(a),C.byref(b),C.byref(c),C.byref(d)): raise C.WinError(C.get_last_error())
     return ft(a),ft(c)/1e7,ft(d)/1e7
 def write_json(path, data):
-    tmp=path.with_suffix('.tmp'); tmp.write_text(json.dumps(data,indent=2),encoding='utf-8');tmp.replace(path)
+    tmp=path.with_suffix('.tmp'); tmp.write_text(json.dumps(data,indent=2),encoding='utf-8')
+    for attempt in range(10):
+        try:tmp.replace(path);return
+        except PermissionError:
+            if attempt==9:raise
+            time.sleep(.02)
 def sha(path):
     h=hashlib.sha256()
     with open(path,'rb') as f:
         for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
     return h.hexdigest()
 def identity(pid):
-    h=K.OpenProcess(0x1000|0x10,False,pid)
+    h=K.OpenProcess(0x1000|0x10|0x100000,False,pid)
     if not h: raise C.WinError(C.get_last_error())
     try:
         buf=C.create_unicode_buffer(32768);size=W.DWORD(len(buf))
@@ -65,11 +72,18 @@ def identity(pid):
         start,_,_=times(h)
         return h,{'pid':pid,'executable':buf.value,'process_start_filetime_100ns':start,'executable_sha256':sha(buf.value)}
     except: K.CloseHandle(h);raise
+def exited(handle):
+    result=K.WaitForSingleObject(handle,0)
+    if result==258:return None
+    if result!=0:raise C.WinError(C.get_last_error())
+    code=W.DWORD()
+    if not K.GetExitCodeProcess(handle,C.byref(code)):raise C.WinError(C.get_last_error())
+    return code.value
 def snapshot(handle):
     m=Memory();m.cb=C.sizeof(m)
     if not P.GetProcessMemoryInfo(handle,C.byref(m),m.cb):raise C.WinError(C.get_last_error())
     io=IO();K.GetProcessIoCounters(handle,C.byref(io));_,kernel,user=times(handle)
-    return {'working_set_bytes':m.ws,'private_bytes':m.private,'page_faults':m.faults,
+    return {'working_set_bytes':m.ws,'private_bytes':m.private,'commit_bytes':m.pagefile,'page_faults':m.faults,
             'cpu_kernel_s':kernel,'cpu_user_s':user,'io':{n:getattr(io,n) for n,_ in IO._fields_}}
 def threads(pid, previous, dt):
     result=[];now={};s=K.CreateToolhelp32Snapshot(4,0)
@@ -126,6 +140,11 @@ def main():
     ap.add_argument('--interval',type=float,default=1);ap.add_argument('--max-mb',type=int,default=1024)
     ap.add_argument('--private-growth-mb',type=float,default=512);ap.add_argument('--fault-rate',type=float,default=10000)
     ap.add_argument('--sensor-test',action='store_true')
+    ap.add_argument('--profile-root',type=pathlib.Path)
+    ap.add_argument('--revision',default=None)
+    ap.add_argument('--build-label',default='Vulkan (source unverified)')
+    ap.add_argument('--presentmon',default=None)
+    ap.add_argument('--hud-health',type=pathlib.Path)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=False)
     if args.interval<=0 or args.seconds<=0 or args.max_mb<=0:raise ValueError('Positive interval, duration and storage cap required')
     root=args.output;handle,ident=identity(args.pid)
@@ -136,30 +155,48 @@ def main():
         'interval_s':args.interval,'clock':'perf_counter (Windows QPC), UTC paired per sample',
         'frame_id':None,'frame_id_reason':'External counters cannot identify a new guest frame',
         'dropped_etw_events':None,'dropped_etw_reason':'No ETW event stream captured by this counter collector'}
-    for name in ['config.json','custom_configs/CUSA03173.json']:
-        path=pathlib.Path(os.environ['APPDATA'])/'shadPS4'/name
+    profile=args.profile_root or pathlib.Path(os.environ['APPDATA'])/'shadPS4'
+    meta['profile_root']=str(profile);meta['build_label']=args.build_label
+    for name in ['config.json','custom_configs/CUSA03173.json','dlss.ini']:
+        path=profile/name
         if path.exists():meta[name]={'sha256':sha(path)}
-    cache=pathlib.Path(os.environ['APPDATA'])/'shadPS4/cache'
+    cache=profile/'cache'
     # Directory identity metadata is deliberately not a content checksum of mutable cache files.
     meta['shader_cache_identity']={'root':str(cache),'method':'path only; mutable contents not hashed during gameplay','content_hash':None}
     try:
         from adapter_identity import adapters
         meta['dxgi_adapters']=adapters()
     except Exception as e:meta['dxgi_adapter_error']=repr(e)
-    meta['revision']=None if args.sensor_test else 'c7e065d1b415be16c23e260a21f1dd8bbfc4cb57';meta['title_id']=None if args.sensor_test else 'CUSA03173';meta['sensor_test']=args.sensor_test
+    meta['revision']=args.revision;meta['title_id']=None if args.sensor_test else 'CUSA03173';meta['sensor_test']=args.sensor_test
+    live=LiveMetrics(root,args.pid,profile,args.presentmon)
+    meta['frame_sources']=live.sources
+    meta['coverage_definition']=live.coverage_definition
+    meta['component_sha256']={}
+    source_dir=root/'collector-source';source_dir.mkdir()
+    for name in ['mode_a.py','live_metrics.py','report.py','adapter_identity.py','snapshot.py']:
+        source=pathlib.Path(__file__).parent/name
+        if source.is_file():
+            meta['component_sha256'][name]=sha(source)
+            (source_dir/name).write_bytes(source.read_bytes())
     write_json(root/'manifest.json',meta)
     (root/'monitor-source.py').write_bytes(pathlib.Path(__file__).read_bytes())
     previous=None;thread_previous={};ring=collections.deque(maxlen=150);pending=[];events=0;count=0;reason='duration_limit';skipped=0;slow_samples=0;interval=args.interval
-    logpath=pathlib.Path(os.environ['APPDATA'])/'shadPS4/log/shad_log.txt';logoffset=logpath.stat().st_size if logpath.exists() else 0
+    last_window=-float('inf');last_anomaly=None
+    logpath=profile/'log/shad_log.txt';logoffset=logpath.stat().st_size if logpath.exists() else 0
     try:
         with (root/'samples.jsonl').open('w',encoding='utf-8',buffering=1) as writer,(root/'anomalies.jsonl').open('w',encoding='utf-8',buffering=1) as anomalies:
             next_tick=start
             while time.perf_counter()-start<args.seconds:
                 if (root/'STOP').exists():reason='stop_requested';break
+                if (root/'PAUSE').exists():
+                    code=exited(handle)
+                    if code is not None:reason='process_exited';meta['exit_code']=code;break
+                    write_json(root/'status.json',{'status':'paused','samples':count,'last_utc':utc(),'collector_pid':os.getpid(),'target_pid':args.pid})
+                    previous=None;thread_previous={};next_tick=time.perf_counter();time.sleep(.5);continue
                 tick=time.perf_counter();r={'utc':utc(),'qpc_s':tick,'elapsed_s':tick-start,'session_id':session,'pid':args.pid,'errors':[]}
                 try:
-                    code=W.DWORD();K.GetExitCodeProcess(handle,C.byref(code))
-                    if code.value!=259:reason='process_exited';break
+                    code=exited(handle)
+                    if code is not None:reason='process_exited';meta['exit_code']=code;break
                     if times(handle)[0]!=ident['process_start_filetime_100ns']:reason='pid_reused';break
                     r.update(snapshot(handle))
                 except OSError:reason='process_exited_or_unreadable';break
@@ -168,6 +205,7 @@ def main():
                 r['cpu_machine_percent']=100*r['cpu_core_equivalents']/os.cpu_count() if dt else None
                 r['threads'],thread_previous=threads(args.pid,thread_previous,dt)
                 r['gpu']=counters.read(args.pid);r['collector']=snapshot(self_handle)
+                r['system_memory']=system_memory()
                 r['sampling_jitter_s']=max(0,tick-next_tick)
                 if count%5==0:
                     try:
@@ -185,7 +223,8 @@ def main():
                     with logpath.open('rb') as f:
                         size=logpath.stat().st_size
                         if size<logoffset:r['errors'].append('emulator log rotated');logoffset=0
-                        f.seek(logoffset);data=f.read(65536);logoffset=f.tell()
+                        f.seek(logoffset);data=f.read(1024*1024);logoffset=f.tell()
+                        live.log(data.decode('utf-8',errors='replace'),r['utc'],tick)
                         r['log_tail']=data.decode('utf-8',errors='replace').splitlines()[-30:]
                 labels=[]
                 if previous and dt:
@@ -193,6 +232,20 @@ def main():
                     if (r['page_faults']-previous['page_faults'])/dt>args.fault_rate:labels.append('page_fault_spike_not_necessarily_hard_faults')
                     if r['cpu_kernel_s']-previous['cpu_kernel_s']>dt:labels.append('kernel_cpu_over_one_core')
                 if any('device lost' in l.lower() or 'unhandled exception' in l.lower() for l in r.get('log_tail',[])):labels.append('emulator_log_error_candidate')
+                r['frames']=live.read(tick)
+                labels.extend(live.anomalies(r,previous,dt))
+                r['coverage']=live.coverage(r)
+                r['selected_gpu']=live.selected_gpu(r.get('gpu',{}),meta.get('dxgi_adapters',[]))
+                if args.hud_health:
+                    try:
+                        health=json.loads(args.hud_health.read_text(encoding='utf-8'))
+                        r['hud']=health
+                        health_age=(D.datetime.now(D.timezone.utc)-D.datetime.fromisoformat(health['utc'].replace('Z','+00:00'))).total_seconds()
+                        if health_age>5:labels.append('hud_stale_candidate')
+                    except (OSError,ValueError):
+                        if tick-start>10:labels.append('hud_health_unavailable')
+                if labels:last_anomaly={'labels':labels,'utc':r['utc'],'qpc_s':tick}
+                r['last_anomaly']=last_anomaly
                 r['anomaly_candidates']=labels;r['collection_wall_s']=time.perf_counter()-tick;r['effective_interval_s']=interval
                 writer.write(json.dumps(r,separators=(',',':'))+'\n');ring.append(r)
                 while ring and ring[0]['qpc_s']<tick-30:ring.popleft()
@@ -200,10 +253,13 @@ def main():
                     event['after'].append(r)
                     if tick>=event['end_qpc']:
                         anomalies.write(json.dumps(event,separators=(',',':'))+'\n');pending.remove(event)
-                if labels and events<100 and len(pending)<4:
+                if labels and events<100 and len(pending)<4 and tick-last_window>=30:
                     pending.append({'event_id':events,'classification':'candidate; cause not established','labels':labels,
-                                    'before':list(ring),'after':[],'end_qpc':tick+15});events+=1
+                                    'session_id':session,'identity':ident,'utc':r['utc'],
+                                    'before':list(ring),'after':[],'end_qpc':tick+15});events+=1;last_window=tick
                 count+=1;previous=r
+                r['sample_count']=count;r['skipped_intervals']=skipped;r['build_label']=args.build_label
+                write_json(root/'live.json',r)
                 write_json(root/'status.json',{'status':'recording','collector_pid':os.getpid(),'target_pid':args.pid,'samples':count,'last_utc':r['utc'],'skipped_intervals':skipped})
                 if writer.tell()>args.max_mb*2**20:reason='storage_cap';break
                 slow_samples=slow_samples+1 if r['collection_wall_s']>interval*.5 else 0
@@ -214,10 +270,20 @@ def main():
                     missed=int((time.perf_counter()-next_tick)/interval);skipped+=missed;next_tick+=missed*interval
                 time.sleep(max(0,next_tick-time.perf_counter()))
             for event in pending:event['post_window_complete']=False;anomalies.write(json.dumps(event,separators=(',',':'))+'\n')
-    except Exception as e:reason='collector_error: '+repr(e)
+    except Exception as e:
+        reason='collector_error: '+repr(e)
+        (root/'collector-error.txt').write_text(traceback.format_exc(),encoding='utf-8')
     finally:
+        if meta.get('exit_code') not in (None,0):
+            with (root/'anomalies.jsonl').open('a',encoding='utf-8') as f:
+                f.write(json.dumps({'session_id':session,'identity':ident,'utc':utc(),
+                    'classification':'observed nonzero process exit; cause unknown','labels':['nonzero_process_exit'],
+                    'exit_code':meta['exit_code'],'before':list(ring),'after':[],
+                    'post_window_complete':False},separators=(',',':'))+'\n')
+        live.close(reason)
+        write_json(root/'manifest.json',meta)
         counters.close();K.CloseHandle(handle);K.CloseHandle(self_handle)
-        write_json(root/'status.json',{'status':'stopped','reason':reason,'samples':count,'ended_utc':utc(),'skipped_intervals':skipped})
+        write_json(root/'status.json',{'status':'stopped','reason':reason,'samples':count,'ended_utc':utc(),'skipped_intervals':skipped,'exit_code':meta.get('exit_code')})
         from report import generate
         generate(root)
 

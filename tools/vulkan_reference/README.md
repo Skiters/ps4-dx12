@@ -1,5 +1,34 @@
 # Vulkan reference profiler
 
+## Installed DLSS live companion (2026-10-11)
+
+The habitual Bloodborne shortcut now launches an external HUD and this Mode A
+collector alongside the unchanged installed executable. See the actual lifecycle
+tests, source provenance, controls and limits in
+`docs/codex-progress/vulkan-live-monitor-20261011/VULKAN_LIVE_MONITOR_REPORT.md`.
+The installed test release is 974f8c21-dirty, **not** the old c7e065d1 build below.
+Do not run the old instrumenter against it or replace the installed executable.
+
+`Install-LiveMonitor.ps1` verifies the target SHA, backs up the original shortcut
+byte-for-byte, compiles `LiveHud.cs`, and preserves original ShellExecute launch
+semantics through the backup. `Restore-LiveShortcut.ps1` verifies and restores
+that backup. The wrapper uses one mutex, distinct capture segments and PID/start
+identity; panel Start/Stop/Pause do not close the game. Ctrl+Shift+Home opens controls,
+Insert with the same modifiers hides/shows HUD, PageUp marks a performance issue.
+The standalone supervisor/collector/HUD work after Codex closes. Current live mode
+attempts one uniquely named, non-elevated PresentMon session per capture segment;
+access denied is retained and FPS remains NOT MEASURED. No automatic elevation,
+injection, debugger, screenshot capture or API tracing is part of the monitor.
+Source copies and hashes are saved in each new session for reproducibility.
+
+Explicit game control is available separately through `xinput_control.py`, using
+an installed compatible virtual Xbox bus/client and verified XInput readbacks.
+See [real controller validation and usage](XINPUT_CONTROL.md). It does not start
+with monitoring, install drivers or change the physical controller. The feeder
+refuses stale/background input and releases each bounded command to neutral.
+
+## Earlier reference tools
+
 This is measurement tooling, not a DX12 performance change. See
 `docs/codex-progress/vulkan-reference-profiler-20261011/REPORT.md` and its coverage
 and parity matrices. Only the exact exported Vulkan c7e065d1 is instrumented.
@@ -25,7 +54,7 @@ storage limit and page-fault/private-growth thresholds. Three expensive samples
 reduce frequency, up to five seconds (or the configured larger interval).
 Skipped intervals and effective interval remain visible. A 30-second ring and
 15-second post-window retain anomaly candidates, capped at 100 windows and four
-pending windows. Windows have their own bounded storage in addition to the
+pending windows, with a 30-second window cooldown. Windows have their own bounded storage in addition to the
 sample-file cap. Causes remain unverified. Frame-stall rules cannot run without
 an actual frame/presentation stream.
 

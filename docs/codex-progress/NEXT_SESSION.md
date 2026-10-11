@@ -1,5 +1,21 @@
 # Next session
 
+## Continue the installed DLSS companion
+
+Read vulkan-live-monitor-20261011/VULKAN_LIVE_MONITOR_REPORT.md, HUD_VALIDATION.md,
+SESSION_MANIFEST.json and tools/vulkan_reference/XINPUT_CONTROL.md first. The
+habitual shortcut is integrated; do not install over the wrapped shortcut or
+transplant c7 hooks into the installed 974f8c21-dirty binary. User authorized
+autonomous game/control acceptance here; that is distinct from replacing the
+core or running incompatible Mode B instrumentation. Explicit virtual-pad runs
+must use current verified PID/start, new directory, trusted client SHA and bounded
+commands. Do not assume XInput index implies the guest player slot; verify game
+reaction. Ordinary monitoring remains passive. Two game exit failures are recorded;
+matching internal diagnostics need the exact producer's dirty source/build
+manifest and an isolated profile. Base FPS/latency and internal cost are still
+unmeasured. Commits for completed verified work are pushed to configured upstream
+by the user's standing preference; no force-push or history rewrite.
+
 ## Continue the prepared Vulkan reference profiler
 
 Read vulkan-reference-profiler-20261011/REPORT.md, TELEMETRY_COVERAGE.md,
