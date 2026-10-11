@@ -805,10 +805,17 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             if((*victim)->cpu_watched&&release_immutable_)release_immutable_(**victim);
             total-=resident(**victim);entries_.erase(victim);RebuildIndex();
         }
-        new_entry->texture=texture_allocator_.Allocate(r,D3D12_RESOURCE_STATE_COPY_DEST);
+        // Copy queues require COMMON on entry and decay back to COMMON at
+        // submission completion. Depth/stencil cannot use implicit promotion,
+        // so keep its upload and explicit barriers on the direct list.
+        new_entry->texture=texture_allocator_.Allocate(r,submit_copy_&&!d.depth_target?
+            D3D12_RESOURCE_STATE_COMMON:D3D12_RESOURCE_STATE_COPY_DEST);
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}
     entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();
-    entry->pending=true;entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);auto resource_desc=DX12_API_CALL(entry->texture.handle->GetDesc());
+    const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target;
+    entry->pending=true;
+    if(!copy_upload)entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+    auto resource_desc=DX12_API_CALL(entry->texture.handle->GetDesc());
     struct PendingTextureCopy {D3D12_TEXTURE_COPY_LOCATION destination,source;};
     std::vector<PendingTextureCopy> copy_batch;
     size_t upload_index{};
@@ -834,7 +841,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             for(UINT row=0;row<rows;++row)memcpy(static_cast<std::byte*>(mapped)+fp.Offset+(UINT64(z)*rows+row)*fp.Footprint.RowPitch,linear.data()+UINT64(row)*row_bytes,size_t(row_bytes));
         }DX12_API_CALL(upload.handle->Unmap(0,nullptr));
         D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=upload.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;src.PlacedFootprint=fp;D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=entry->texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dst.SubresourceIndex=sub;
-        if(new_resource&&submit_copy_)copy_batch.push_back({dst,src});
+        if(copy_upload)copy_batch.push_back({dst,src});
         else DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
         entry->uploads.push_back(std::move(upload));}
     if(!copy_batch.empty())submit_copy_([copies=std::move(copy_batch)](ID3D12GraphicsCommandList* copy_list){

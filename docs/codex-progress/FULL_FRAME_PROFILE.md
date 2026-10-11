@@ -1,5 +1,14 @@
 # Bloodborne loading / freeze checkpoint — 2026-10-11
 
+## Superseding GXWorker checkpoint
+
+Read GXWORKER_PAGEWATCH.md first. Original-context capture proved the queued-fault
+retired-interval lookup defect; it is fixed with a real failing-before GPU regression.
+208/208 pass. Latest complete-fix run stopped on a separate guest mutex loading wait.
+No full-frame/FPS gain is established. Existing SCM generation now correctly records
+Git revision/dirty status; GITDIR-NOTFOUND below describes the historical binary.
+Final exact-revision dev deployment is recorded in the new report and external manifest.
+
 Source baseline: `ee765f40925fbe7c32aa3ede718161202e6a2a78`, branch
 `fix/mixed-cmask`. Mixed CMASK support is preserved. This checkpoint fixes a
 reproduced native reconciliation recursion. It does **not** establish the cause

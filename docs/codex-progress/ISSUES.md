@@ -1,5 +1,20 @@
 # Open issues
 
+## Current priority — loading wait after PageWatch correction
+
+- Fixed: original guest write fault at `eboot+0x26b2b0b`, caused by a shorter
+  retired watch hiding earlier coverage for a queued exception. Coalesced history
+  and generation-aware handling preserve ownership, permissions and GPU bytes.
+- Fixed: Debug Layer error 1334 on new COPY queue texture uploads (COMMON state).
+- Latest remaining observation: Game:Main mutex wait owned by MOMainThread while
+  the GPU command processor waits for work. Guest condition/lock lifetime unknown;
+  WCT reports no cycle. This is not yet classified as a renderer/HLE deadlock.
+- World correctness, sustained control and full-frame performance remain open.
+  Separate CMASK 1/2 and setup audio issues are not closed by this checkpoint.
+
+See GXWORKER_PAGEWATCH.md and final external verification; older priorities below
+are historical. Do not bypass locks, assertions, fences or unsupported CMASK.
+
 ## Current priority — 2026-10-11 saved-character profile
 
 - Fixed: native ResolveGpuBuffers -> Finish -> CheckBacking recursion, confirmed

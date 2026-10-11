@@ -1,5 +1,16 @@
 # Native DX12 state
 
+## Current checkpoint — 2026-10-11 GXWorker retirement race
+
+Supersedes the previous priority below. Original `eboot+0x26b2b0b` is confirmed
+class C: a shorter retired watch hid an earlier covering interval while a real CPU
+write exception was pending. Coalesced retirement history, generation-aware rearming,
+and COPY queue texture state correction are implemented. Before/after GPU regressions
+and 208/208 native suite pass. Complete-fix game run instead remained in loading,
+with Game:Main waiting for a MOMainThread-owned mutex; no playable-world claim.
+See GXWORKER_PAGEWATCH.md for evidence, limits and final dev-launch recipe.
+Only local commits are authorized; do not push. Original installation/saves untouched.
+
 ## Current checkpoint — 2026-10-11 saved-world loading
 
 From `ee765f4`: rebuilt core and tested copies of the original DX12 saved-character

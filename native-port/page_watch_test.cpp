@@ -6,6 +6,14 @@
 #include <cstdio>
 using namespace NativeDX12;
 static void Require(bool value){if(!value)throw std::runtime_error("Native ownership/cache assertion failed");}
+// Explicit exception injection makes rejected faults observable without an
+// invalid store or dependence on the compiler's asynchronous SEH support.
+// The GPU ownership test below this suite uses genuine CPU page faults.
+__declspec(noinline) static bool DispatchWriteFault(volatile unsigned char* address){
+    const ULONG_PTR parameters[]{1,reinterpret_cast<ULONG_PTR>(address)};
+    __try{RaiseException(EXCEPTION_ACCESS_VIOLATION,0,2,parameters);return true;}
+    __except(GetExceptionCode()==EXCEPTION_ACCESS_VIOLATION?EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH){return false;}
+}
 int main(){try{
     constexpr size_t bytes=1024*1024;
     HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,bytes,nullptr);Require(section!=nullptr);
@@ -32,7 +40,45 @@ int main(){try{
         Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
         watch.Untrack(reinterpret_cast<uint64_t>(guest)+4096,4096);Require(!watch.Contains(reinterpret_cast<uint64_t>(guest)));
     }
+    {
+        unsigned callbacks{};
+        PageWatch watch([&](uint64_t){++callbacks;});
+        Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
+        Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==1);
+        MEMORY_BASIC_INFORMATION region{};
+        Require(VirtualQuery(guest,&region,sizeof(region))&&region.Protect==PAGE_NOACCESS);
+        Require(watch.Contains(reinterpret_cast<uint64_t>(guest)));
+        watch.Untrack(reinterpret_cast<uint64_t>(guest),bytes);
+        DWORD previous{};Require(VirtualProtect(guest,bytes,PAGE_READONLY,&previous));
+        Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==1);
+        Require(VirtualProtect(guest,bytes,PAGE_READWRITE,&previous));
+        Require(!DispatchWriteFault(nullptr)&&callbacks==1);
+    }
+    {
+        unsigned callbacks{};PageWatch* active{};
+        PageWatch watch([&](uint64_t){
+            ++callbacks;active->Untrack(reinterpret_cast<uint64_t>(guest),bytes);
+            Require(active->Track(reinterpret_cast<uint64_t>(guest),bytes));
+        });active=&watch;
+        Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
+        Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==64);
+        Require(watch.Contains(reinterpret_cast<uint64_t>(guest)));
+    }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
+    {
+        constexpr uint64_t pages=4097,stride=8192;
+        auto* memory=static_cast<unsigned char*>(VirtualAlloc(nullptr,pages*stride,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+        Require(memory!=nullptr);
+        {
+            PageWatch watch([](uint64_t){throw std::runtime_error("retired page called resolver");});
+            const auto base=reinterpret_cast<uint64_t>(memory);
+            for(uint64_t i=0;i<pages;++i){Require(watch.Track(base+i*stride,4096,true));watch.Untrack(base+i*stride,4096);}
+            Require(watch.WasTracked(base)&&watch.WasTracked(base+(pages-1)*stride));
+            Require(!watch.WasTracked(base+4096)); // do not fill unwatched holes
+            Require(DispatchWriteFault(memory)); // delayed fault on a restored valid page
+        }
+        Require(VirtualFree(memory,0,MEM_RELEASE));
+    }
     auto directory=std::filesystem::temp_directory_path()/("native-cache-test-"+std::to_string(GetCurrentProcessId()));
     PersistentCache cache(directory);CacheKey key;key.Text("shader inputs");const std::byte payload[]{std::byte{1},std::byte{2},std::byte{3}};
     cache.Store(key.bytes,payload);std::vector<std::byte> result;Require(cache.Load(key.bytes,result)&&result==std::vector<std::byte>(std::begin(payload),std::end(payload)));

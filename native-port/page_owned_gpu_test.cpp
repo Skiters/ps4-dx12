@@ -9,8 +9,19 @@
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstdio>
 #include <source_location>
+#include <thread>
 using namespace NativeDX12;
 static void Require(bool value,std::source_location location=std::source_location::current()){if(!value)throw std::runtime_error("GPU page ownership assertion failed at line "+std::to_string(location.line()));}
+static std::atomic<uint64_t> delayed_address{};
+static HANDLE fault_entered{},deliver_fault{};
+static LONG CALLBACK DelayWriteFault(EXCEPTION_POINTERS* context){
+    const auto& record=*context->ExceptionRecord;
+    if(record.ExceptionCode==EXCEPTION_ACCESS_VIOLATION&&record.NumberParameters>=2&&
+       record.ExceptionInformation[0]==1&&record.ExceptionInformation[1]==delayed_address.load()){
+        SetEvent(fault_entered);WaitForSingleObject(deliver_fault,5000);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 struct OwnershipRenderer:Rasterizer {
     using Rasterizer::Rasterizer;
     std::function<void(VAddr,u64)> resolve;
@@ -35,6 +46,7 @@ int main(int argc,char**){try{
     auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));
     auto* alias=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));Require(guest&&alias);
     auto device=CreateHardwareDevice();OwnershipRenderer renderer(device.Get());GuestTextureCache cache(device.Get());
+    cache.SetCopySubmission([&](const auto& record){renderer.SubmitCopyCommands(record);});
     const auto address=reinterpret_cast<VAddr>(guest);renderer.MapMemory(address,bytes);renderer.NotifyHostMapping(address,bytes,true,true);
     desc.address=address;
     auto& image=cache.Upload(desc,{guest,bytes},renderer.RecordingList(),renderer.CompletedFence());
@@ -254,14 +266,29 @@ int main(int argc,char**){try{
         cache.Invalidate(dst.desc.address,dst.layout.guest_bytes,renderer.CompletedFence());
     }
     {
-        constexpr size_t buffer_bytes=8192;
+        constexpr size_t buffer_bytes=16384;
         HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,buffer_bytes,nullptr);Require(section!=nullptr);
         auto* memory=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,buffer_bytes));
         auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,buffer_bytes));Require(memory&&physical);
         const auto base=reinterpret_cast<VAddr>(memory);
         OwnershipRenderer buffers(device.Get());buffers.MapMemory(base,buffer_bytes);
         std::atomic<unsigned> commits{},faults{};
-        PageWatch watch([&](uint64_t at){++faults;buffers.ResolveGpuBuffers(at,1);buffers.ReleaseCpuBufferWatches(at,1);});
+        bool rearm_after_resolve=false;
+        PageWatch watch([&](uint64_t at){
+            ++faults;
+            buffers.ResolveGpuBuffers(at,1);
+            buffers.ReleaseCpuBufferWatches(at,1);
+            if(rearm_after_resolve){
+                rearm_after_resolve=false;
+                // Reproduce the legal schedule where the GPU worker acquires
+                // the execution mutex after resolution and rearms this page
+                // before the fault handler examines the host permissions.
+                const Rasterizer::ShaderBufferRequest request[]{{base,buffer_bytes,false,false}};
+                buffers.PrepareShaderBuffers(request);
+                MEMORY_BASIC_INFORMATION region{};
+                Require(VirtualQuery(memory,&region,sizeof(region))&&region.Protect==PAGE_READONLY);
+            }
+        });
         buffers.SetBufferOwnership([&](VAddr at,u64 size){return watch.Track(at,size);},
             [&](VAddr at,std::span<const std::byte> data){++commits;memcpy(physical+(at-base),data.data(),data.size());return true;},
             [&](VAddr at,u64 size){watch.Untrack(at,size);});
@@ -290,7 +317,29 @@ int main(int argc,char**){try{
         Require(commits==1&&faults==1&&!watch.Contains(base));
         auto watched=buffers.PrepareShaderBuffers(readonly);buffers.Finish();Require(watch.Contains(base));
         Require(*reinterpret_cast<volatile unsigned char*>(memory)==0x5a&&faults==1);
-        *reinterpret_cast<volatile unsigned char*>(memory+4096)=0x77;Require(faults==2);
+        rearm_after_resolve=true;
+        *reinterpret_cast<volatile unsigned char*>(memory+4096)=0x77;Require(faults==3);
+        Require(!watch.Contains(base)&&commits==1);
+        MEMORY_BASIC_INFORMATION restored{};
+        Require(VirtualQuery(memory,&restored,sizeof(restored))&&restored.Protect==PAGE_READWRITE);
+        // Deliver a real CPU write fault after the renderer has already retired
+        // its large watch, then retired a shorter interior watch. The
+        // predecessor's end must not hide the earlier range covering the fault.
+        buffers.PrepareShaderBuffers(readonly);buffers.Finish();Require(watch.Contains(base));
+        fault_entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        deliver_fault=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        Require(fault_entered&&deliver_fault);
+        delayed_address=base+8193;
+        auto* gate=AddVectoredExceptionHandler(1,DelayWriteFault);Require(gate!=nullptr);
+        std::thread writer([&]{*reinterpret_cast<volatile unsigned char*>(memory+8193)=0x88;});
+        const auto arrived=WaitForSingleObject(fault_entered,3000);
+        if(arrived==WAIT_OBJECT_0){
+            buffers.ReleaseCpuBufferWatches(base,buffer_bytes);
+            Require(watch.Track(base+4096,4096,true));watch.Untrack(base+4096,4096);
+        }
+        SetEvent(deliver_fault);writer.join();RemoveVectoredExceptionHandler(gate);
+        CloseHandle(fault_entered);CloseHandle(deliver_fault);delayed_address=0;
+        Require(arrived==WAIT_OBJECT_0&&physical[8193]==std::byte{0x88});
         Require(buffers.InvalidateMemory(base+4096,1));
         auto edited=buffers.PrepareShaderBuffers(readonly);Require(edited[0].resource.Get()==watched[0].resource.Get());
         target.state=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -298,8 +347,10 @@ int main(int argc,char**){try{
         buffers.RecordingList()->CopyBufferRegion(output.handle.Get(),0,target.handle.Get(),edited[0].offset,buffer_bytes);
         target.Transition(buffers.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         buffers.Finish();Check(output.handle->Map(0,&all,&mapped));
-        for(size_t i=0;i<buffer_bytes;++i)Require(static_cast<std::byte*>(mapped)[i]==static_cast<std::byte>(i==4096?0x77:0x5a));
+        for(size_t i=0;i<buffer_bytes;++i)Require(static_cast<std::byte*>(mapped)[i]==static_cast<std::byte>(i==4096?0x77:i==8193?0x88:0x5a));
         output.handle->Unmap(0,&none);buffers.UnmapMemory(base,buffer_bytes);
+        Require(!watch.Contains(base)&&buffers.CompletedFence()>=buffers.SubmittedFence());
+        buffers.ValidateDebugMessages();
         UnmapViewOfFile(memory);UnmapViewOfFile(physical);CloseHandle(section);
     }
     puts("PASS: GPU buffer ownership and deferred CPU fault commit, write watchers, persistent CPU invalidation, depth/stencil ownership, padded GPU copies and exact pixels");return 0;

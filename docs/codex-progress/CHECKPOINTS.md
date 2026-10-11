@@ -89,3 +89,18 @@ Commit identity is this entry's containing commit (git log); no push performed.
 - Changes: `GuestColorClearPending`/`MaterializeGuestColorClear` now build a per-layer mixed CMASK plan; zero tiles use a GCN AddrLib-derived pipe-interleaved address, F tiles remain untouched, materialized nibbles become F. `GuestRasterizer::MaterializeColorClear` preserves the original exception and adds only opt-in bounded capture diagnostics.
 - Regression: `native_guest_cmask_fast_clear` exact changed/unchanged tile checks, idempotence, untouched layer and actual D3D12 readback; full native suite passes 208/208.
 - Core build passes. Bloodborne was tested from cloned/rebased profiles; the audio guest assertion recurred before an additional CMASK-stage proof. No PASS game claim.
+## GXWORKER-P01 — 2026-10-11
+
+- Input `40a8e683def56160ea110a2d5df1a48a8532c4ce`, branch fix/mixed-cmask.
+- Original first-chance game context proves class C retired-range coverage loss;
+  short predecessor hides large interval covering a pending valid guest write.
+- PageWatch coalesces retirement history and handles newly rearmed generations;
+  protection, physical backing reconciliation, fences and recursion guard stay enabled.
+- COPY queue texture initial state is corrected after real Debug Layer error 1334.
+- Real delayed CPU-fault GPU regression fails before, passes after with exact bytes;
+  negative/lifetime/bounded-retry checks pass. Full native suite 208/208, 55.52 s.
+- Partial fix reached world/input then crashed; complete fix precommit run reached
+  a separate loading mutex wait. LEVEL 1 established; playable performance not claimed.
+- GXWORKER_PAGEWATCH.md documents evidence and the final committed-build dev launcher.
+  External release/verification manifests capture exact binary hash and launch result.
+- Local commit only; no push. Original application and saves unchanged.

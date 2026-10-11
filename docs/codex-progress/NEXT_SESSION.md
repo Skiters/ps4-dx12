@@ -1,5 +1,29 @@
 # Next session
 
+## Current priority — loading wait after confirmed PageWatch fix
+
+This overrides all older plans and push instructions below. **Do not push.**
+
+1. Read GXWORKER_PAGEWATCH.md and external
+   `F:/PS4Dev/handoff/gxworker-20261011/final-verification.json` for the final
+   committed-build result. Use `dev-release/Launch-Bloodborne.cmd`, exact SHA
+   and matching map/PDB. Preserve originals, partial render 0 and removed assertion NOP.
+2. Original GXWorker failure is a proven retired-range lookup defect; preserve
+   coalesced history, generation handling, recursion guard and mixed 0/F CMASK.
+   Targeted real-fault regression fails before and passes after; 208/208 passed.
+3. If the loading wait repeats, examine the saved Game:Main -> MOMainThread mutex
+   ownership chain, raw thread contexts and guest call sites. Owner is sleeping via
+   sceKernelUsleep; GPU worker waits for commands. Identify the guest condition and
+   lock lifecycle before modifying HLE; never force unlock or bypass the wait.
+4. Once the world updates, correlate real guest flip IDs across SubmitFlipInternal,
+   Liverpool PM4, resource preparation, GPU submission/fences and presentation.
+   Attribute snapshot comparisons/materialization to complete frames before optimizing.
+   Present counts and nested stage totals are not FPS. Correct world pixels remain open.
+
+The earlier generation-only world/control run crashed at t~357 s. It must not be
+reported as successful validation of the complete fix. Exact final-build observations
+are in the external verification report; no LEVEL 5–7 is inferred from tests.
+
 ## Current priority — saved-character loading after recursion fix
 
 This supersedes every older plan below. Do not repeat the setup-profile/audio audit.

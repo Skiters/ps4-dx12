@@ -1,5 +1,15 @@
 # Bloodborne integration baseline — 2026-10-11
 
+## Latest — GXWorker PageWatch checkpoint
+
+See GXWORKER_PAGEWATCH.md. Generation-only run reached world/control then crashed
+at the original instruction (~357 s). Diagnostic capture proved lost retired-range
+coverage; the complete fix and exact before/after CPU/GPU regression now pass.
+Complete-fix precommit run stayed on loading, with Game:Main waiting on MOMainThread's
+mutex. Do not equate absence of a crash with working gameplay. Original full profile
+is copied, General paths rewritten, only assertion NOP removed, partial render 0.
+Final committed-build result/hash/path live in the external verification manifest.
+
 ## Latest baseline — saved-character profile and rebuilt core
 
 Source `ee765f4`; both decisive runs used independent copies of the original installed

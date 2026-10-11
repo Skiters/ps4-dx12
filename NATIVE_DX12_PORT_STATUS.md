@@ -1,5 +1,19 @@
 # Native DirectX 12 port — 2026-10-09
 
+## Latest checkpoint — 2026-10-11 GXWorker PageWatch
+
+See [GXWORKER_PAGEWATCH.md](docs/codex-progress/GXWORKER_PAGEWATCH.md).
+The original guest write fault is a confirmed queued-fault/retired-range lookup
+defect. PageWatch now preserves coalesced retirement history and handles rearming
+without weakening protection or skipping reconciliation. Real failing-before GPU
+regressions pass; 208/208 native tests pass. COPY queue texture initialization also
+now satisfies the Debug Layer. Complete-fix game run encountered a separate
+loading wait: Game:Main waits on a MOMainThread-owned mutex. Playable world execution
+is not yet established. Final committed-build dev launcher and evidence are under
+`F:/PS4Dev/handoff/gxworker-20261011/dev-release`; exact hash/path are recorded in
+the external release manifest. Installed desktop and original profiles stay unchanged.
+Older deployment/timing entries below are historical, not this build's identity.
+
 ## October 10 buffer-cache cycle
 
 The resident buffer cache no longer alternates allocations indefinitely when

@@ -1,5 +1,14 @@
 # Bloodborne milestones
 
+## Latest — confirmed fault fix, world acceptance still open
+
+GXWORKER_PAGEWATCH.md records LEVEL 1 with original game context and a real
+failing-before/passing-after regression. A partial fix reached the world and
+responded to input but later crashed. The complete-fix precommit run remained
+in a guest mutex loading wait. This does not establish LEVEL 3–7, correct pixels,
+continuous 30-second updates or 60-second controlled gameplay. Consult external
+`gxworker-20261011/final-verification.json` for the final exact-revision launch.
+
 ## Latest verification — 2026-10-11 saved-character loading
 
 Forced baseline and fixed core both visually reached saved-world loading using copies
