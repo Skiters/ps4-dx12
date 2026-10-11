@@ -1,15 +1,23 @@
 # Next session
 
-## Active — finish F1–F3 game verification
 
-Supersedes older priorities below. Do not redo the original GXWorker investigation.
-The full native suite passed 211/211 (67.40 s). Commit the package locally, rebuild a clean Release,
-and compare Hunter's Dream at rest against the archived instrumented baseline.
-Do not push, alter installed cores/saves, or expand into F4/F5.
-Baseline-1: 60 completed new guest frames / 98.844 s, 0.607 FPS,
-median interval 1610.690 ms, P95 1703.886 ms; no dropped trace events.
-Baseline-2 crashed before measurement: c0000096 at eboot+0x1196254.
-Evidence/profiles/launchers are under F:/PS4Dev/handoff/coherence-20261011.
+## Active — remaining frame cost after verified F1–F3
+
+The requested F1–F3 package is complete in `67d0ddc`; do not repeat its implementation
+or treat the historical GXWorker fault as the active blocker unless it recurs.
+Read the current BENCHMARKS.md tables and external coherence-20261011/final-verification.json.
+One next investigation: attribute the remaining ~81k buffer materializations / ~26 GB
+per 95–99 s world window to changing request envelopes and cache eviction in
+PrepareShaderBuffers/Find/DropCached. Record a bounded sample of allocation/range
+changes per completed frame before proposing any F5 DMA/descriptor-bank redesign.
+Snapshot work (including safe watch establishment) remains large. F4 resident indices
+and F5 redesign are not part of this completed change; do not reduce BankCount or drop pages.
+Current world remains ~0.65 FPS, with color/edge artifacts. Modest observed speedup
+does not establish playability or pixel correctness. Preserve the clean tested core:
+F:/PS4Dev/handoff/coherence-20261011/after-2/Launch-Bloodborne.cmd.
+Baseline-2 loading c0000096 is a separate intermittent observation; other two baseline
+and both fixed runs reached the world. No unrelated exception-suppression workaround.
+No push or installation replacement is authorized. Original saves remain untouched.
 
 ## Final-run priority — slow world updates after ab1bf1a
 

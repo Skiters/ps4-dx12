@@ -1,20 +1,25 @@
 # Native DX12 state
 
-## Active — 2026-10-11 memory coherence F1–F3
 
-This supersedes the next-priority statements in historical sections below.
-The complete F1–F3 package is implemented: separate exact copy write footprints,
-protected PageWatch mode transfer, and GPU legality checks separated from CPU
-reconciliation. GuestRasterizer uses the same GuestBufferAccess implementation as
-the new native integration fixture; image aliases retain conversion/readback.
-Targeted fail-before/pass-after evidence is in
-`F:/PS4Dev/handoff/coherence-20261011/`: F1 12288 vs 64 committed bytes;
-F2 4096 vs 0 snapshot-check bytes; F3 1 vs 0 commits before CPU access.
-Native suite: 211/211 passed in 67.40 s (suite-verified.log).
-Clean committed Release/world verification is the remaining gate.
-No playable-performance claim yet. No push is authorized for this task.
-Original installations and saves remain separate from all test profiles.
-The supplied audit ZIP was not available; implementation follows the request and source review.
+## Active — F1–F3 implemented and measured, 2026-10-11
+
+Supersedes historical next-priority sections below. Code commit `67d0ddc2df0294c9839f769821e7414681d43661`,
+clean Release rebuilt and run twice. Native suite 211/211 in 67.40 s.
+F1 exact copy footprints, F2 protected watch transfer and F3 GPU backing validation
+are implemented and have failing-before/passing-after production regressions.
+Two same-scene baseline runs: 0.6070/0.6415 completed FPS; fixed: 0.6444/0.6652.
+Pooled observed increase 4.93%; readback per completed frame reduced
+77.45%. This is a small observed gain with two runs per version,
+not a statistical guarantee, and still far below playable performance.
+World, camera and movement work; original color/edge artifacts remain. No new visible
+regression identified, but correct pixels and input latency are not proven.
+Baseline-2 failed during loading (c0000096, eboot+0x1196254); fixed runs had no native
+exception markers. Debug Layer was used in native tests, not performance game runs.
+Use `F:/PS4Dev/handoff/coherence-20261011/after-2/Launch-Bloodborne.cmd`.
+Core SHA256 `c921b7e819a9c0d557ee23dae5a7f99075776f9a8b7e4f881c0d7e4705b1ccc5`.
+See BENCHMARKS.md and external final-verification.json for evidence and limits.
+Original core and all 20 save files unchanged. No push. F4/F5 not redesigned.
+The audit ZIP was unavailable; no candidate files are claimed to have been read.
 
 ## Final verification — world and control in committed ab1bf1a
 

@@ -1,23 +1,36 @@
 # Checkpoints
 
-## 2026-10-11 — complete coherence package, game verification pending
 
-- Base: 3d14e008aa4313abce0e1bf006d06089d02d2964, fix/mixed-cmask.
-- F1: explicit BufferWrite spans, conservative default shader writes, persistent dirty union.
-- F2: READONLY/NOACCESS transfer under PageWatch lock, fresh generation, no writable gap;
-  protected downgrade after successful commit; actual upload-version snapshots and safe watch establishment.
-- F3: ValidateGpuBacking checks mapped/committed/right coverage, then separate image preparation;
-  CPU control records, new uploads, unsupported aliases and actual faults remain coherent.
-- Production GuestBufferAccess fixture covers unchanged watch, CPU stores, 16 concurrent
-  transfers, GPU chains/scratch/partial aliases, prior dirty writes, unrelated CPU-visible
-  dirty storage, failed commit/retry, rights rejection, PRT hole, unmap/remap.
-- Existing GPU PageWatch fixture now supplies Core's committed mapping notification;
-  all original assertions, rearm and queued-fault checks remain.
-- 5 targeted tests pass (package.log); full native suite 211/211 in 67.40 s
-  (suite-verified.log). Core compile/link also succeeded; rebuild from commit follows.
-- Frame instrumentation is opt-in and bounded, arms after world loading, separates new
-  guest flip creation, copy-fence completion and Present queueing. Poll resolution 2 ms;
-  Present queueing is not physical scanout. No repeated/blank frames are counted.
+## 2026-10-11 — F1–F3 complete, Release world comparison
+
+- Parent 3d14e008aa4313abce0e1bf006d06089d02d2964; implementation 67d0ddc2df0294c9839f769821e7414681d43661.
+- F1: CopyBufferBatch passes BufferWrite footprints separately from shader resource envelopes;
+  default unknown shader writes remain conservative. Previous dirty union is retained.
+- F2: PageWatch::ChangeMode transfers READONLY/NOACCESS under its lock, advances generation,
+  preserves retired intervals and never introduces a writable gap. Commit downgrade is
+  also protected. Upload snapshots use the exact staged version in cached CPU memory;
+  watch establishment validates after protection is installed. Failed commit keeps ownership.
+- F3: ValidateGpuBacking checks mapping, committed backing and guest access rights independently
+  of CPU reconciliation. GuestBufferAccess is shared production code, not a copied fixture override.
+  GuestRasterizer prepares image aliases separately; real CPU reads/uploads/control records
+  and unsupported buffer/image conversions retain reconciliation and fences.
+- Before -> after: disjoint F1 12288 -> 64 bytes, overlapping union 48 bytes;
+  unknown prior writable envelope remains 12288. F2 compared span 4096 -> 0;
+  resident A->B commits before CPU 1 -> 0. Logs: f1-before.log, f23-before.log, package.log.
+- Production fixture: real CPU stores, 16 concurrent watch transfers, GPU chain/scratch,
+  partial/page-edge aliases, unrelated CPU-visible dirty buffer, failed commit/retry,
+  rights rejection, PRT hole and unmap/remap. Existing queued faults/rearm/retired-history
+  tests remain. Old physical-alias fixture now sends Core's committed mapping notification.
+- Native suite 211/211 in 67.40 s; suite-verified.log. D3D12 Debug Layer targeted tests pass.
+- Bounded opt-in frame trace excludes blank/repeated frames and observes completion of
+  each immutable frame's copy fence (including guest queue dependencies), with 2 ms polling.
+  Created / PM4-ready / fence-complete / Present-queued are separate. Queueing is not scanout.
+- Same-scene baseline and fixed Release each have two measured world runs; see BENCHMARKS.md.
+  The baseline's extra failed loading attempt is retained, not silently discarded.
+- Verified launcher: F:/PS4Dev/handoff/coherence-20261011/after-2/Launch-Bloodborne.cmd;
+  actual child core in its core/ directory, implementation 67d0ddc, clean at build,
+  SHA256 c921b7e819a9c0d557ee23dae5a7f99075776f9a8b7e4f881c0d7e4705b1ccc5.
+- Only local commits. Original installed executable and 20 save files verified unchanged.
 
 ## 2026-10-11 — recursive buffer reconciliation
 

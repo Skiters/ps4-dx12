@@ -1,29 +1,91 @@
 # Benchmarks
 
-## Active 2026-10-11 F1–F3 baseline
 
-RTX 5080; Release /O2; separate full copies of one seed profile/save/shader cache;
-Bloodborne CUSA03173 1.09, Hunter's Dream, stationary original camera, 1280x800 patch,
-partial render 0. No Debug Layer/API trace; bounded diagnostics and frame capture
-enabled only for the measured world interval. No builds/tests during game measurements.
-Original ab1bf1a executable archived (SHA256 4d5c6944e6fd0594ace84a45abe37ade9365510edc37f5caad46321c0f8d8097).
-Instrumented baseline: 3d14e00 plus instrumentation-only diff/header archived in baseline-1;
-exe SHA256 a0e9a6f92bcd5f3e5cb9cc7c7f489b132c0967a48b6a19902ff5d45b0f2e44db.
+## Active — final F1–F3 comparison, 2026-10-11
 
-| Run | Seconds | Completed frames | FPS | Median / P95 interval ms |
-|---|---:|---:|---:|---:|
-| baseline-1 | 98.844 | 60 | 0.6070 | 1610.690 / 1703.886 |
-| baseline-2 | — | — | — | crash during loading, c0000096, eboot+0x1196254 |
+RTX 5080, driver 32.0.16.1692; Release /O2; Bloodborne CUSA03173 1.09, Hunter's Dream.
+Four successful measured runs use fresh copies of the same full profile, original
+saved character and shader cache seed; internal 1280x800, same patches, stationary
+original camera, partial render 0. Only the assertion NOP at 024B56D2 was removed
+from test copies. General.home_dir points into each isolated copy.
+SHADPS4_NATIVE_D3D12_VALIDATION and SHADPS4_API_TRACE are absent in child environments;
+startup/page-fault traces are absent too. Bounded diagnostics/frame capture arm after
+visible world loading and warm-up. No build/suite overlapped any game benchmark.
+There was no experimental marker in the isolated run roots; installed roots were untouched.
 
-Baseline-1 aggregate counters: snapshot validation spans 220,238,045,228 bytes,
-buffer readback 7,453,798,204; upload 26,403,089,712; materialized 26,391,368,000.
-`buffer-snapshot.bytes` is the existing checked-span counter (including a missing
-snapshot), not an exact count of bytes loaded by libc memcmp. Stage CPU wall totals
-are inclusive/nested; do not sum them into frame time. Marker sampling and 2-second
-summary windows do not have identical boundaries to frame capture.
-Camera response is visible; original color/edge artifacts are present. No FPS
-claim from Present repetition, menu, microtests or the theoretical F1 ratio.
-Corrected-build and repeated-baseline measurements remain pending.
+| Run | Seconds | New completed frames | FPS | Median ms | P95 ms |
+|---|---:|---:|---:|---:|---:|
+| baseline-1 | 98.844 | 60 | 0.6070 | 1610.690 | 1703.886 |
+| baseline-3 | 93.528 | 60 | 0.6415 | 1584.199 | 1650.093 |
+| after-1 | 99.318 | 64 | 0.6444 | 1522.374 | 1589.832 |
+| after-2 | 94.715 | 63 | 0.6652 | 1491.489 | 1580.313 |
+
+
+Pooled completed-frame rate: 0.6238 -> 0.6545 FPS (+4.93%).
+This is a modest observed improvement in two runs per version, with no statistical
+significance claim. Neither build is playable. No 1% low claim from these small samples.
+An additional baseline-2 attempt crashed before measurement (c0000096,
+eboot+0x1196254); all successful windows and both fixed runs had no native exception
+markers. Zero dropped trace events. Created/Present-queued counts are recorded separately
+in each measurement.json and are not substituted for completed FPS.
+
+| Run | Snapshot spans GB | Watch establishment GB | Readback GB | Upload GB | Materialized GB |
+|---|---:|---:|---:|---:|---:|
+| baseline-1 | 220.238 | 0.000 | 7.454 | 26.403 | 26.391 |
+| baseline-3 | 210.789 | 0.000 | 7.043 | 26.636 | 26.621 |
+| after-1 | 106.981 | 75.509 | 1.727 | 26.722 | 26.699 |
+| after-2 | 107.824 | 79.147 | 1.732 | 26.415 | 26.395 |
+
+
+Readback per completed frame: 120.808 -> 27.238 MB
+(-77.45%). Fixed commit bytes equal fixed readback bytes in each window.
+The original snapshot counter records validation spans, including absent snapshots;
+it is not a hardware count of bytes touched by libc memcmp. Include the new watch
+establishment column when assessing total comparison work; do not call the first
+column alone a 50% reduction. Fresh uploads now retain their exact staged version,
+so the old/new changed-vs-unchanged call counts also have different meanings.
+New fixed counters: requested copy 75.238/75.134 MB, destination union same in these
+world windows; new total dirty union 1713.877/1732.287 MB includes conservative shader writes.
+Watch upgrades 1159/1205, watch hits 26812/26714; establish-changed fallbacks 9/10.
+GPU validations 1747736/1751272 are distinct from CPU validation/reconcile calls
+344761/346824. Zero A/B commits before CPU access is proved by the production fixture,
+not by claiming zero commits for the entire game. Unsupported image aliases still reconcile.
+Finish reasons include batch-limit 186/189 and CPU-visible dirty 143/143; other actual
+CPU consumers retain their existing waits. Full counters are in measurement.json.
+
+| Run | Snapshot compare s | Materialization s | Overlap retirement s | CPU writeback s | Fence wait s |
+|---|---:|---:|---:|---:|---:|
+| baseline-1 | 29.949 | 10.289 | 5.457 | 8.989 | 4.019 |
+| baseline-3 | 27.882 | 10.210 | 5.238 | 8.622 | 3.832 |
+| after-1 | 19.042 | 21.090 | 6.610 | 7.675 | 3.622 |
+| after-2 | 19.246 | 20.894 | 6.874 | 7.702 | 3.694 |
+
+
+CPU wall stage totals are inclusive/nested; do not sum them into sequential frame time.
+Snapshot capture now occurs during materialization, so that stage is not directly
+comparable in isolation. Diagnostics use 2-second windows; their start/stop boundaries
+differ slightly from the frame marker (sampled ~500 ms). Logs are selected by the
+actual child PID, not historical logs copied with the profile; capture remained below
+the 8192-record budget. Fence polling timestamps have approximately 2 ms granularity.
+
+Camera and movement response observed outside the measurement windows; input-to-photon
+latency was not measured. Same geometry retained, original color/edge artifacts remain.
+No new visible regression identified; no pixel-correctness guarantee. The remaining
+~26 GB materialized/uploaded per window and snapshot/watch work warrant bounded
+attribution of request-range churn, not an automatic F4/F5 redesign.
+
+Evidence: F:/PS4Dev/handoff/coherence-20261011 (CSV, PID/process paths, per-run JSON,
+screenshots, test/build logs, seed manifest, originals-verification.json, final-verification.json).
+Original ab1bf1a exe archived: 4d5c6944e6fd0594ace84a45abe37ade9365510edc37f5caad46321c0f8d8097.
+Instrumented baseline: 3d14e00 plus archived instrumentation-only diff/header;
+exe a0e9a6f92bcd5f3e5cb9cc7c7f489b132c0967a48b6a19902ff5d45b0f2e44db.
+Fixed clean source 67d0ddc2df0294c9839f769821e7414681d43661;
+exe c921b7e819a9c0d557ee23dae5a7f99075776f9a8b7e4f881c0d7e4705b1ccc5.
+Tested launcher: F:/PS4Dev/handoff/coherence-20261011/after-2/Launch-Bloodborne.cmd;
+core: F:/PS4Dev/handoff/coherence-20261011/after-2/core/shadPS4-DX12-Core.exe.
+Diagnostics=1 with capture marker absent on normal launch; flags are set only in
+the launcher child process. The final game was closed deliberately after control checks.
+Native suite 211/211, 67.40 s. No push; original installed core and 20 saves unchanged.
 
 ## 2026-10-11 reconciliation recursion checkpoint
 
