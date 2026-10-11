@@ -203,3 +203,10 @@ reason `process_exited`. Final reports and raw files are in
 `mode-a-20261011T113008Z-4ac4efcb`; immutable intermediate snapshots remain separate.
 The checking automation was deleted after finalization. No collector/game was
 restarted. No additional Mode B game launch is authorized yet.
+
+Post-finalization identity check: the user started a different executable,
+`F:/Apps/shadPS4-DLSS-DLAA-1.8.4/shadPS4.exe`, PID 21648 at 11:53:22 UTC.
+It is outside the SHA-locked c7 reference capture. No collector was attached to
+that build and no statistics were mixed. The idle seed preparation guard refused
+while that core runs; only the initial controlled-seed exists. Matched A/B seed
+refresh is pending after cores close.

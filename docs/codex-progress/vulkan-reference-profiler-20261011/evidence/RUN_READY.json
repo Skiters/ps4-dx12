@@ -3,10 +3,11 @@
   "game_run_authorized": false,
   "executable": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\mode-b-build\\shadps4.exe",
   "sha256": "d28ae89412307f0297428751f8bd2778c4f0ddcadfdac8fb3fe527a2259df5ff",
-  "portable_profile": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-seed-final",
+  "portable_profile": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-seed",
   "game_path": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\CUSA03173\\eboot.bin",
   "launch_script": "F:\\PS4Dev\\work\\shadps4-dx12-src\\tools\\vulkan_reference\\Start-Controlled-Vulkan.ps1",
   "new_trace_directory_example": "F:\\PS4Dev\\handoff\\vulkan-reference-profiler-20261011\\controlled-deep-first-run",
   "gpu_timestamps_optional": true,
-  "validity": "Fresh seed copied after user game exited; verify scene/patch/DLC/cache settings for matched A/B. Mode B gameplay/timestamp validation still pending."
+  "validity": "Only initial isolated profile exists. Idle resnapshot was deferred because user started a different DLSS build PID 21648; no controlled-seed-final directory was created. Re-snapshot after all game cores close for matched A/B. Mode B gameplay/timestamps pending.",
+  "matched_profile_ready": false
 }
