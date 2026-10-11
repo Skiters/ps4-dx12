@@ -1,7 +1,9 @@
 # Bloodborne GXWorker PageWatch checkpoint — 2026-10-11
 
 Input: `40a8e683def56160ea110a2d5df1a48a8532c4ce`, `fix/mixed-cmask`.
-Implementation revision: the commit containing this file. No push authorized.
+Implementation revision: `ab1bf1a47e0ce2a0a3cd8fa528285dcd8a58b066`.
+The later verification-only documentation commit does not change executable code.
+No push authorized.
 Evidence root: `F:/PS4Dev/handoff/gxworker-20261011` (binaries, symbols,
 profiles, debugger captures and logs are outside Git).
 
@@ -91,17 +93,46 @@ continues context switching. Its guest condition/lock lifetime is not establishe
 The current run's diagnostic output files stayed empty despite the diagnostic
 worker being present, so they do not establish command progress or frame timing.
 
-Conservative milestone at this checkpoint: **LEVEL 1** (fault mechanism fixed
-and failing-before/passing-after regression), pending the final committed-build
-launch recorded externally. No LEVEL 3–7 claim: correct world pixels, sustained
-image updates, stable control and playable performance remain unverified for
-the complete fix. The final exact-revision launch is required before delivery.
+The final committed build **did reach the saved world**, PID 38800, started
+through `dev-release/Launch-Bloodborne.cmd` at 11:54:17. Continue was selected
+at 11:54:59; a fully visible world was captured by 11:57:02. Movement and camera
+input change the character position and viewpoint in successive saved screenshots.
+The earlier loading wait did not reproduce in this launch; it remains an
+intermittent, unclassified observation rather than a proven fixed HLE defect.
+
+Ten seconds of first-chance debugger observation in the world captured **18**
+write exceptions on `eboot+0x26b2b0b`, including **3 on GXWorker:1**. The final
+eboot base is `0x5930000`, RIP `0x7fe2b0b`; the code bytes remain `89 58 f8`.
+PageWatch handles these expected protection faults. No second-chance exception
+occurred; the debugger explicitly detached successfully and the game continued
+responding afterward. See `dev-release/observe-faults.txt` and raw fault contexts.
+
+The final process was observed for **395.2 seconds**, including **230.2 seconds
+of world observation** with multiple movement/camera inputs, through 12:00:52.
+It remained responsive and was closed deliberately through its window. No D3D12
+severity 0/1 message or unhandled original fault was logged during observation.
+Clear-value performance warnings 820/821 remain; they are not validation errors.
+
+Conservative milestone: **LEVEL 2**, with additional direct evidence of world
+rendering and control. Exact duration, screenshots and log checks are in
+`final-verification.json`. No LEVEL 3–7 claim: color/edge
+artifacts remain, visual correctness is not established, and updates are slow.
+This is a real fault correction and usable experimental launcher, not a claim
+that the user's playable-performance goal has been completed.
 
 ## C. Performance limits
 
 No correlated guest CPU/PM4/GPU/flip frame time or reliable FPS has been measured.
 No full-frame improvement over baseline is claimed. Present/PrepareFrame counts
 and nested stage totals must not be converted into gameplay FPS.
+
+The final committed-build sample at t=160.115 s, around the first visible world,
+has 551.351 ms snapshot comparison / 4,286,822,532 compared bytes, 230.111 ms
+materialization / 623,739,984 bytes, 251.821 ms snapshot upload, and 83.110 ms
+fence waits (788 calls) in a two-second window. Resource-upload-and-draw totals
+922.306 ms and nests other stages. `world-stages.json` retains these observations.
+They support focusing on buffer coherence rather than speculative PSO tuning;
+they do not identify a complete frame's exclusive cost or establish an FPS gain.
 
 The preceding `fixed` run's two-second loading/world-transition sample at about
 t=162 s reports 603.931 ms snapshot comparison (4,364,641,332 compared bytes),
@@ -129,11 +160,16 @@ prints full revision, branch and dirty description. Verified precommit core:
 Its startup accurately says input HEAD plus `40a8e68-dirty`; the source patch is
 retained separately. Do not label this precommit binary a clean release revision.
 
-After the commit, regenerate SCM and relink the exact committed revision into
-`F:/PS4Dev/handoff/gxworker-20261011/dev-release`. User entry point:
-`Launch-Bloodborne.cmd`. `release-manifest.json`, `process.json`, startup logs and
-`final-verification.json` record the actual committed executable, SHA256, process
-path and final launch evidence. Matching PDB/map travel with the executable.
+After the implementation commit, SCM was regenerated and the core relinked into
+`F:/PS4Dev/handoff/gxworker-20261011/dev-release`. The actual PID 38800 process
+path is `dev-release/core/shadPS4-DX12-Core.exe`, SHA256
+`4D5C6944E6FD0594ACE84A45ABE37ADE9365510EDC37F5CAAD46321C0F8D8097`.
+Startup prints full `ab1bf1a47e0ce2a0a3cd8fa528285dcd8a58b066`, branch
+`fix/mixed-cmask`, description `ab1bf1a` (clean). User entry point
+`Launch-Bloodborne.cmd` was the entry point actually tested. `release-manifest.json`,
+`process.json`, startup logs and `final-verification.json` record the binary and
+launch evidence. Matching PDB/map travel with the executable. All original save
+hashes matched the initial manifest and the installed core hash remained unchanged.
 
 Each profile is a full independent copy of
 `C:/Users/skei/AppData/Local/PS4Desktop/native-profile/user`, with General paths
@@ -167,7 +203,11 @@ no original save/profile or installed application is modified.
 
 ## F. Next focused step
 
-First resolve the outstanding loading wait if it repeats in the final launch:
+The main remaining blocker is the very low rate of completed world updates.
+Do not infer an improvement from the fault fix alone. First correlate complete
+frames and attribute the expensive buffer-coherence work described below.
+
+If the intermittent loading wait repeats in a future launch:
 inspect `MOMainThread`'s guest condition while it owns the mutex awaited by
 `Game:Main`; retain `verified/loading-stacks*.txt`, `main-wait-chain.txt`,
 `owner-wait-chain.txt` and raw thread dumps. Identify the mutex and its guest

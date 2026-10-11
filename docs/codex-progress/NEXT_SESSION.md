@@ -1,5 +1,16 @@
 # Next session
 
+## Final-run priority — slow world updates after ab1bf1a
+
+The final committed build now reaches the world, responds to control beyond 120 s,
+and handles original-instruction protection faults without crashing. Read the final
+sections of GXWORKER_PAGEWATCH.md and final-verification.json first. Do not repeat
+the original fault investigation unless it recurs. The next single priority is
+full guest CPU/PM4/GPU/flip correlation, then attribution of buffer snapshot comparison
+and materialization to identical world frames. No performance improvement is claimed.
+The precommit mutex wait below is an intermittent fallback investigation, not the
+final launch result. Preserve the isolated dev launcher and original saves. No push.
+
 ## Current priority — loading wait after confirmed PageWatch fix
 
 This overrides all older plans and push instructions below. **Do not push.**

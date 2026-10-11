@@ -1,5 +1,12 @@
 # Bloodborne loading / freeze checkpoint — 2026-10-11
 
+Final update: committed `ab1bf1a` reaches the saved world with camera/movement response
+for over 120 s and handles `eboot+0x26b2b0b` protection faults on GXWorker:1. LEVEL 2;
+no full-frame timing/FPS or correct-pixel claim. World-transition sample: 551.351 ms
+snapshot comparison / 4.29 GB per two-second report, nested with resource preparation.
+See GXWORKER_PAGEWATCH.md for the exact final binary and evidence. The precommit
+loading wait below did not reproduce in the final run; historical profiles follow.
+
 ## Superseding GXWorker checkpoint
 
 Read GXWORKER_PAGEWATCH.md first. Original-context capture proved the queued-fault

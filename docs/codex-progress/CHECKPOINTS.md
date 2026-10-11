@@ -91,6 +91,13 @@ Commit identity is this entry's containing commit (git log); no push performed.
 - Core build passes. Bloodborne was tested from cloned/rebased profiles; the audio guest assertion recurred before an additional CMASK-stage proof. No PASS game claim.
 ## GXWORKER-P01 — 2026-10-11
 
+Final verification addendum: committed code `ab1bf1a47e0ce2a0a3cd8fa528285dcd8a58b066`
+reaches world/control beyond 120 s using the delivered dev launcher. The debugger
+observes 18 handled original-instruction faults (3 on GXWorker:1), then detaches.
+LEVEL 2 established. Pixel correctness and playable performance remain open.
+See GXWORKER_PAGEWATCH.md and the external final-verification.json for exact final
+duration and executable SHA256. This addendum changes documentation only.
+
 - Input `40a8e683def56160ea110a2d5df1a48a8532c4ce`, branch fix/mixed-cmask.
 - Original first-chance game context proves class C retired-range coverage loss;
   short predecessor hides large interval covering a pending valid guest write.

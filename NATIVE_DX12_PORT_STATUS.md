@@ -1,5 +1,14 @@
 # Native DirectX 12 port — 2026-10-09
 
+## Final dev verification — ab1bf1a, 2026-10-11
+
+The committed dev launcher reaches the saved world and responds to movement/camera
+input for over two minutes. The original instruction is observed handling 18 page
+faults, including GXWorker:1, without an unhandled exception. LEVEL 2 is confirmed;
+correct pixels/playable speed are not. Low world-update rate and color/edge artifacts
+remain. See GXWORKER_PAGEWATCH.md for exact executable identity and external final
+duration/evidence. The loading wait below occurred in the prior run, not this final run.
+
 ## Latest checkpoint — 2026-10-11 GXWorker PageWatch
 
 See [GXWORKER_PAGEWATCH.md](docs/codex-progress/GXWORKER_PAGEWATCH.md).

@@ -1,5 +1,14 @@
 # Native DX12 state
 
+## Final verification — world and control in committed ab1bf1a
+
+Supersedes the precommit outcome below: the dev launcher reaches the saved world,
+responds to camera/movement for over two minutes, and handles the original instruction's
+faults (18 observed, 3 on GXWorker:1). LEVEL 2 confirmed; pixel correctness and playable
+performance are not. Focus next on complete-frame attribution of buffer coherence.
+The intermittent loading mutex wait did not recur; its cause remains unknown.
+See GXWORKER_PAGEWATCH.md and external final-verification.json. No push performed.
+
 ## Current checkpoint — 2026-10-11 GXWorker retirement race
 
 Supersedes the previous priority below. Original `eboot+0x26b2b0b` is confirmed

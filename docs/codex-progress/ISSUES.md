@@ -1,5 +1,14 @@
 # Open issues
 
+## Final-run priority — pathological world-frame cost
+
+Committed ab1bf1a reaches world/control beyond 120 s and handles the original guest
+write faults without an unhandled exception. Main remaining blocker: slow completed
+world updates, with expensive buffer-coherence stages requiring full-frame correlation.
+Color/edge artifacts remain, so correct-pixel and playable-state acceptance stay open.
+The earlier Game:Main/MOMainThread loading wait did not recur; retain its captures
+without assuming a fixed cause. See GXWORKER_PAGEWATCH.md and final-verification.json.
+
 ## Current priority — loading wait after PageWatch correction
 
 - Fixed: original guest write fault at `eboot+0x26b2b0b`, caused by a shorter

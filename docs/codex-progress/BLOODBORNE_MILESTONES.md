@@ -1,5 +1,14 @@
 # Bloodborne milestones
 
+## Final committed-build verification — LEVEL 2
+
+`ab1bf1a` reaches the saved world and responds to movement/camera for over 120 s.
+Original instruction executes under real page protection: 18 handled faults, including
+3 on GXWorker:1; debugger detached and execution continued. Correct world pixels and
+playable performance remain unverified, so LEVEL 3–7 are not claimed despite the
+observed world/control progress. Exact final duration/screenshots are in external
+final-verification.json; see GXWORKER_PAGEWATCH.md. Precommit observations follow.
+
 ## Latest — confirmed fault fix, world acceptance still open
 
 GXWORKER_PAGEWATCH.md records LEVEL 1 with original game context and a real

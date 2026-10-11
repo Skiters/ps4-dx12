@@ -1,5 +1,12 @@
 # Bloodborne integration baseline — 2026-10-11
 
+Final verification supersedes the precommit outcome below: `ab1bf1a`, PID 38800,
+launched through dev-release/Launch-Bloodborne.cmd, reaches the saved world and
+responds to movement/camera beyond 120 s. Original instruction observed with 18
+handled faults (3 on GXWorker:1), no second chance. LEVEL 2 confirmed. Artifacts and
+slow updates remain; no frame-time/FPS gain or playable-state claim. Exact duration
+and captures: external final-verification.json; full record: GXWORKER_PAGEWATCH.md.
+
 ## Latest — GXWorker PageWatch checkpoint
 
 See GXWORKER_PAGEWATCH.md. Generation-only run reached world/control then crashed
