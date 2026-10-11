@@ -1,5 +1,24 @@
 # Native DX12 state
 
+## Latest — covered envelopes and selectable cores, 2026-10-12
+
+`ba3892f` retains an already covering, successfully initialized mapping before
+optional 64-KiB arena rounding in `PrepareShaderBuffers`. Validation, batch-wide
+SRV/UAV separation, ownership and failed-upload retry remain mandatory. The new
+content regression fails before and passes after; the native suite passes 221/221
+(61.58 s). Incremental Release core and desktop publish pass. Version catalogue,
+runtime hashes, persistent UI choice, missing/corrupt-package rejection and rollback
+are implemented and installed. Prior default core is retained.
+
+The current request explicitly restored isolated XInput/focus/gameplay authorization,
+superseding the old restriction below. Three game runs used one immutable seed:
+A/A2 on exact 0c340b4 both fail during world loading with SRV/UAV alias exception;
+B on ba3892f-dirty loads Hunter's Dream, completes 124 new GPU frames / 90.015605 s
+(1.377539 FPS), and closes normally (0). Movement, camera, menu, attack and short
+B backstep are observed; all owned devices removed. No matched baseline or speedup
+is established. Remaining envelope churn is substantial; see BENCHMARKS/NEXT_SESSION.
+Evidence: F:/PS4Dev/handoff/covered-envelopes-20261012.
+
 ## Latest — Vulkan model adapted to native core, 2026-10-12
 
 Read [CORE_CONTRACT.md](vulkan-emulation-20261011/CORE_CONTRACT.md) before core

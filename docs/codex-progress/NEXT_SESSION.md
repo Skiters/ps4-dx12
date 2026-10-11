@@ -1,5 +1,28 @@
 # Next session
 
+## Current boundary — selectable cores; matched FPS blocked by baseline failure
+
+Latest task authorizes isolated XInput, window focus and gameplay; it supersedes
+the older restriction below. No game or owned pad remains active. ba3892f keeps
+covered mappings before optional arena rounding; 221/221 regressions and the
+final game/controls pass. Installed desktop version selection and runtime hash
+checks work; baseline and tested final packages are preserved, old default restored.
+See BENCHMARKS and F:/PS4Dev/handoff/covered-envelopes-20261012. Three allowed
+game launches are exhausted. A/A2 baseline load exceptions prevent matched FPS;
+do not claim speedup or transfer old passive results to the new executable.
+
+Remaining work: attribute actual role/envelope transitions at 0x2d1ce3000
+(B sample still 7.115 GB materialized) with a bounded capture of requests and
+ownership, then test stable GPU-owned backing/views with correct SRV/UAV states.
+RetireBuffer still requires all recorded users complete; a future asynchronous
+retirement change needs explicit resource + allocation leases/fence-domain tests,
+including pool-cap exhaustion and failure retry. Do not remove waits mechanically.
+Image Upload already checks coherent owned/watched/pending snapshots; B contains
+4096x2048 BC1 (data format 35), tile 13, pow2 layouts. A next detile change must
+prove actual invalidation/contents and repeated work for those layouts, rather
+than skipping aliases or importing general Vulkan detile. No such new GPU detile
+or write-footprint narrowing is accepted in this checkpoint.
+
 ## Current boundary: verified native changes; restricted gameplay acceptance
 
 Latest user instruction (2026-10-12): tests limited to game launches. Do not use

@@ -1,5 +1,56 @@
 # Benchmarks
 
+## Covered envelopes and version catalogue — 2026-10-12
+
+Production `ba3892f0c93b5f6fe29fa0c363000b398bb234d6`; the core was built with
+desktop-only dirty changes in the checkout, which is recorded in its manifest.
+Core SHA256 `866e800e5f7f97fb7c3613697869883178091888ca82290d1aeec4567a26aa77`.
+Baseline SHA256 `9438103c6eca8b5453971a55fc20159ce19091a75fc3784120d6cee50ad4c1c0`.
+All three launches use the application's validated version launch path, isolated
+copies of the immutable coherence seed, normalized config SHA256
+`c897ac3e9cf8cc3212d4ff0b89bdc6e72de83b7e2ec5592c3d9933294dac7d55`, identical
+game/patch/cache policy, 1280x800, partial render 0, 2048 MiB, no FG. B input is
+neutral during 30-s explicit warmup and 90-s capture; no concurrent builds/tests.
+A failed in loading; A2 is the one allowed failure retry and fails identically.
+Both exit 0x80000003 with the pre-existing SRV/UAV overlap exception. There is no
+valid matched before measurement; historical passive 1.587158 FPS is not its substitute.
+
+| Run | Completed | Duration s | FPS | Median ms | P95 ms | Dropped |
+|---|---:|---:|---:|---:|---:|---:|
+| A/A2 (0c340b4) | N/A: loading failure | N/A | N/A | N/A | N/A | N/A |
+| B (ba3892f-dirty), PID 107616 | 124 | 90.015605 | 1.377539 | 727.008 | 765.871 | 0 |
+
+B materialized/upload/readback bytes per completed frame:
+266,769,064 / 278,011,416 / 14,048,893 (decimal bytes, rounded).
+Capture diagnostics: 48,740 envelope and 122 overlap evictions; 52,650 direct
+submissions; finish reasons batch-limit 363 and CPU-visible dirty 162. Inclusive
+submit/wait 11.924 s, overlap retirement 8.102 s, materialization 11.572 s,
+image lookup 7.954 s. These nested scopes and counters have slightly different
+window boundaries; do not sum them or call lower raw work totals a speedup.
+The bounded churn sample still reports 7.115 GB at 0x2d1ce3000. One small
+coverage fix does not solve GPU-owned/role-related envelope churn.
+
+Deterministic regression: an exact writable 128-KiB envelope at base+4 KiB is
+rebound through two disjoint read-only UAV views. Before, arena rounding replaces
+it with a 192-KiB allocation/upload at the first transition; after, six read/write
+cycles preserve its identity and exact view offsets. Full GPU readback equals
+CPU contents after each cycle including CPU updates. Existing alias, dirty-owner,
+in-flight index/descriptor, PRT/remap and failure/retry regressions remain green.
+Native suite 221/221, 61.58 s; desktop catalogue tests and selected/rollback hardware
+probes pass. No new Finish-to-Flush substitution was made: actual dirty writeback,
+fault, image alias and guest ordering waits remain necessary in the existing model.
+
+B confirms movement, camera, menu open/close, visible attack and short B backstep;
+combat, hit accuracy, full roll, death/respawn and long-run stability are not claimed.
+Existing rendering artifacts remain and native speed is unplayable. B exits 0;
+all three feeders plus the short backstep feeder remove their owned device.
+Both saved cores are visible in the installed application's «Версии ядра»;
+selection survives app restart and rollback verifies the exact original package.
+The old configured default remains. Packages with all runtime hashes are under
+%LOCALAPPDATA%/PS4Desktop/cores/dx12-20261012-{0c340b4-baseline,ba3892f-covered}.
+Only B is marked «Проверено в игре»; its notes explicitly deny a speedup claim.
+Evidence and exact manifests: F:/PS4Dev/handoff/covered-envelopes-20261012.
+
 ## Vulkan mechanisms adapted to DX12 — 2026-10-12
 
 Same immutable coherence seed, CUSA03173 1.09 game SHA256
