@@ -1,5 +1,22 @@
 # Next session
 
+## Start here — emergency checkpoint 2026-10-13
+
+[SESSION_HANDOFF.md](SESSION_HANDOFF.md) is the main recovery source and overrides
+the historical priorities below. Verify actual HEAD against
+`F:/PS4Dev/handoff/full-port-emergency-20261013/CHECKPOINT_FINAL.json`; retain
+remaining dirty changes. Source WIP c0aa3e4 preserves the known point/capture work;
+patch/archive/manifest recovery is documented externally. Do not reapply patches
+to the existing tree or restart the old envelope/performance investigations.
+
+Next: compile-only gcn_winding fixture against core237, verify captured fragment
+typed R32_UINT SRV t0/space33 with 152-word addressing, update its old raw-buffer
+proof, then implement generated replay VS/GS and runtime allocation/clear/
+barriers/lifetimes. Core237/checks190 already compile/link; typed-reader shader
+signing and replay runtime are pending. No game/GPU run before the full-port gate.
+Exact command, evidence paths, build identities, known failures and ready prompt
+are in SESSION_HANDOFF. Emergency preservation started no new tests or builds.
+
 ## Current boundary — selectable cores; matched FPS blocked by baseline failure
 
 Latest task authorizes isolated XInput, window focus and gameplay; it supersedes

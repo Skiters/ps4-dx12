@@ -1,5 +1,25 @@
 # Checkpoints
 
+## 2026-10-13 — emergency full-port session handoff
+
+Authoritative recovery: [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
+Base e84e31133320830db6268f3beefe9ddda1fb08cc; source WIP
+c0aa3e4a6fb2de072b29ffa4d0682d5accd9c292,
+`wip(dx12): preserve current performance development state` (19 known files).
+The following documentation commit is named
+`chore(dx12): checkpoint development state for next Codex session`;
+its actual SHA/status/upstream outcome are external in CHECKPOINT_FINAL.json.
+
+Full before-state: 253 tracked-change paths/155 new paths, staged+unstaged binary
+patches, original index and SHA256 source ZIP at
+`F:/PS4Dev/handoff/full-port-emergency-20261013`. Other changes are deliberately
+left outside the WIP because broad pre-existing ownership was not re-established.
+Final residual patches/manifests and RESTORE.md preserve their exact restoration.
+Latest core237/PDB/MAP/dependencies are copied there; preview18/default/older cores,
+installed Vulkan and original saves remain. Group126 typed SRV reader C++ links;
+shader proof/replay runtime are pending. No completion/FPS improvement claim.
+No emergency build, game launch or profiling; unknown PresentMon processes retained.
+
 ## Final high-memory verification — 2026-10-11
 
 Initial c31111c -> 7a550c9 residency/pools -> 9527c90 bounded overlap lookups.

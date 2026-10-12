@@ -1,5 +1,878 @@
 # Native DX12 state
 
+## Emergency handoff — 2026-10-13 (authoritative current boundary)
+
+Read [SESSION_HANDOFF.md](SESSION_HANDOFF.md) first; older current-state sections
+below retain history. Development stopped at the user's emergency checkpoint.
+Source WIP `c0aa3e4a6fb2de072b29ffa4d0682d5accd9c292` preserves 19 known point/capture
+files. Remaining broader changes, original index and all new files are retained
+in the tree and externally at `F:/PS4Dev/handoff/full-port-emergency-20261013`.
+Source group126: typed captured-FS SRV reader, Stage21/pipeline4/metadata30;
+core237/checks190 compile/link passed. Fresh typed-reader signing/reflection and
+runtime replay remain unverified/unimplemented. Production capture flag stays
+false; 126 partial groups, last audit 1,501 associations/13 mappings/zero closures.
+Latest installed preview18 includes only through124/core232. No current game,
+GPU or FPS acceptance; no new tests/builds were started for emergency handoff.
+Final checkpoint SHA/status/push result are in external CHECKPOINT_FINAL.json.
+
+## Current task — full original e0a46675 port, implementation in progress
+
+See [full-port status](full-port-e0a46675/STATUS.md) for the new reference,
+common-core and GPU tiling integration, pinned-dependency Release build and open
+contracts. No tests or game launches have run in this task; prior acceptance
+below belongs to the previous core. The full implementation boundary is open.
+The user-requested current snapshot is available in the existing installed
+desktop catalogue as `dx12-20261013-full-port-preview-519d8356217d`, named
+`DX12 — перенос №18 — 13.10.2026`, experimental,
+with a separate copy of saves. Static package hashes/imports passed; game readiness
+is unverified. The previous selected default is preserved and migration continues.
+Preview ten includes groups through 100/core 201: in-flight physical backing
+cancellation, nonblocking linear/exact-expanded pressure source residency,
+queued color targets, CPU/GPU image source selection, physical channel clears
+and R32 float/uint/sint/raw-float MSAA clears. All ten full-core fixtures compile
+and link only; 100 groups, 1,483 associations and zero semantic closures.
+Current source additionally includes groups 101–109: exported VS/actual GS
+point size, native/emulated clip/cull, layer/viewport transport, safe geometry
+metadata, late per-viewport homogeneous Mesa conversion and viewport-edge point
+footprints. Core 215/checks 169 and all ten full-core fixtures compile/link;
+thirteen shader chains compile and sign offline before device creation. The
+109-group audit has 1,492 associations/13 mappings/zero semantic closures.
+Prepared GPU/runtime oracles remain unexecuted. This later code is included
+in immutable preview eleven. Its 76 manifested files/imports were checked
+statically; 20 saves were copied from the still-selected first preview profile.
+Installed application/settings and previous packages were preserved. No game
+launch or hardware acceptance was performed; full migration continues.
+Current source additionally includes group 110, ordinary-point VS interface
+liveness, safe sparse clip output mapping and stage v8/metadata v14. Core
+216/checks 170 and all ten full-core fixtures compile/link. Winding preparation
+now binds color before frontend translation; sixteen offline chains sign with
+actual MRT0 outputs, including all-32-export/live-parameter/VS-atomic modes.
+The audit has 1,493 associations/13 mappings/zero semantic closures; GPU oracles
+remain unexecuted. These later changes are excluded from immutable preview eleven.
+Source group 111 extends liveness to actual guest point GS and its output budget,
+including 32 float4 copy exports with two real GS point emissions. Stage v9 /
+metadata v15, core 217/checks 171, all ten full-core compile/link fixtures and
+eighteen offline signed chains pass. Static ES/GS atomics/emits/live interfaces
+are inspected; hardware oracles remain unexecuted. The 111-group audit has
+1,493 associations/13 mappings/zero closures. Immutable preview twelve includes
+these groups through 111/core 217, with 76 manifested files checked and 20 saves
+copied from the selected first preview profile. Previous packages/application/
+settings/default remain intact; no GPU/game acceptance. Genuinely high live GS
+output budgets/capture fallback remain open; full migration continues.
+Source group 112 adds a conservative acyclic EmitVertex bound for expanded
+point GS while preserving original bounds for any loop and original copy
+strides. Metadata v16, core 218/checks 172, all ten compile/link fixtures and
+21 offline signed MRT chains pass. Static artifacts show eight declared corner
+vertices for the two acyclic large-declaration modes, versus 256 with a real
+loop. The corrected new-fixture S_MOV_B32 encoding and earlier failed compiler
+attempt are recorded in full-port status. The 112-group audit has 1,494
+associations/13 mappings/zero closures; runtime/GPU acceptance remains unrun.
+These changes are excluded from immutable preview twelve. Full migration
+continues, including capture fallback for genuinely high live GS budgets.
+Immutable preview thirteen includes group 112/core 218. Its 76 manifested
+files/imports and exact source/compiler provenance were checked statically;
+20 saves were copied from the still-selected first preview into a separate
+profile. Previous packages/application/settings/default are preserved. No
+runtime or hardware acceptance; full migration continues.
+Source group 113 emits hardware unit points for actual point GS with no size
+export, retaining native point liveness/clip conversion, output state and real
+viewports/Mesa flips. The inherited operandless OutputVertices topology typo
+is corrected to OutputPoints. Metadata v17, core 220/checks 173, all ten final
+compile/link fixtures and 24 offline signed MRT chains pass. Static SPIR-V and
+DXC disassembly confirm real point topology and loop maximum 256; ES/GS atomic
+instructions are retained. Audit 113 has 1,495 associations/13 mappings/zero
+closures. No runtime/GPU oracle ran. These changes are excluded from immutable
+preview thirteen; large variable-size GS budgets/capture remain open.
+Source group 114 narrows actual point GS/point fragment parameter prefixes
+through the highest consumed component, preserving logical indices, guest
+computations and side effects. Stage v10/metadata v18, core 221/checks 174,
+all ten final compile/link fixtures and 27 offline signed chains pass. Three
+real-loop x/z/w cases show GS/PS widths 1/3/4 and native component budgets
+960/1008/1024; DXC instructions retain PS columns 0/2/3. Audit 114 has 1,496
+associations/13 mappings/zero closures. No GPU/runtime oracle ran. These
+changes are excluded from immutable preview thirteen; sparse packing/full
+live interfaces/genuinely excessive output capture and acceptance remain open.
+Source group 115 compacts sparse actual point GS channels with matching GS
+store/PS read index maps, preserving guest values and effects. Stage v11 /
+metadata v19, core 222/checks 175, all ten final compile/link fixtures and 28
+offline signed chains pass. Static x/z/w/x+w widths are 1/1/1/2 with budgets
+960/720/960/1008; DXC retains original values and compact PS load columns.
+Audit 115 has 1,499 associations/13 mappings/zero semantic closures. Runtime
+and GPU oracles remain unrun; aliased consumers/full interfaces/genuinely
+excessive output capture and acceptance remain open. These later changes are
+excluded from immutable preview thirteen; full migration continues.
+Immutable preview fourteen includes groups through 115/core 222. Its 76
+manifested files/imports and exact source/compiler provenance were checked
+statically; 20 saves were copied from the selected first preview into a
+separate profile. Previous packages/application/settings/default preserved.
+No runtime or hardware acceptance; full migration continues.
+Source group 116 reuses identical-interpolation fragment declarations for
+multiple inputs from one actual point GS parameter. Metadata v20/stage v11,
+core 223/checks 176, all ten final compile/link fixtures and 30 offline signed
+chains pass. Initial duplicate Location declarations produced an unmatched
+TEXCOORD1; final GS/PS signatures match and retain compact x/w reads. The
+default-input fixture is corrected from unsupported original MOV/default
+handling to the original P2 default path. Audit 116 has 1,499 associations /
+13 mappings/zero semantic closures. No GPU/runtime oracle ran. These later
+changes are excluded from immutable preview fourteen; mixed-interpolation
+aliases/full interfaces/genuinely excessive output capture remain open.
+Source group 117 derives matched qualified point GS/PS transport plans:
+equal interpolators share masks; other qualifiers use free proxy locations
+without replaying guest code. Stage v12/metadata v21, core 224/checks 177,
+all ten final compile/link fixtures and 31 offline signed chains pass. Static
+SPIR-V/DXIL confirms matched scalar flat/perspective locations and values,
+budget 1008 and unchanged GS/ES atomic instructions. Audit 117 has 1,499
+associations/13 mappings/zero closures. GPU/runtime/cache acceptance remains
+unrun; host-slot order/reservation and full capture/signature limits stay open.
+These changes are excluded from immutable preview fourteen; migration continues.
+Source group 118 provides selected original signed viewport transforms for
+native clip-disabled VS/point GS conversion. Runtime adds 16 float4 records
+at byte 560 (816 bytes/1024 CBV), retaining Mesa's prefix and point fields;
+stage v13/metadata v22, pipeline v4. Core 225/checks 178, all ten final fixtures
+compile/link, and 35 chains compile/sign offline. Static DXIL uses the actual
+raw viewport input at byte 20 and original transform arithmetic; a fixture
+counter overwrite of v9 was corrected to v10. The reserved-slot mixed case
+also has matched flat/smooth channels and .125/.5/.75 values with budget 1008.
+Audit 118 passes with 1,500 associations/13 mappings/zero closures; 68 final
+commands, 323 existing deprecated checks warnings, no unexpected diagnostics,
+clean whitespace. All runtime/game/cache/W/depth/window-offset and full-port
+acceptance remains unrun/open. Snapshot fifteen is installed with all changes
+through group 118/core 225, SHA256
+`499eb21d6c50132c80368002c706d5987226a46fab792b29f8c46c3f2c5ecbea`.
+All 76 manifested files/imports/dependencies pass static verification and 20
+save files were copied/hash-checked in its isolated profile; the selected
+default and other packages remain intact. Packaging passed
+(`command-20261013-012912-43340.log`, 36.460 s). The first packaging attempt
+stopped before staging because a summary log matched the offline JSON glob;
+summary logs are now excluded. No runtime/game acceptance; migration continues.
+Source group 119 keeps sized actual GS clip/cull distances private for point
+center checks, reducing its corner output budget to actual raster outputs.
+Four new GCN loop modes (384 prepared cases) compile/sign with 256 sized
+corner vertices/budget 1024 or unchanged 64 unit points/ClipDistance. Raw
+loads, all eight combined comparisons, one loop and GS/ES atomics remain.
+Stage v14/metadata v23, core 227/checks 180, all ten final fixtures and 39
+offline chains pass. Audit 119: 1,500 associations/13 mappings/zero closures;
+72 final commands without diagnostics, initial checks only 45 existing
+deprecated warnings, whitespace clean. Auxiliary outputs were retained;
+static review found an existing VS ClipDistance / GS CullDistance input
+mismatch because linked Mesa leaves input_clip_size unset. The next compiler
+fix will supply the producer clip length. Full signatures/capture and all
+hardware/runtime acceptance remain open; immutable preview fifteen excludes
+119 and migration continues.
+Source group 120 fixes linked Mesa input_clip_size using the actual preceding
+graphics stage's clip length, captured before compilation. Pinned b628375f
+patch SHA256 `d4d16e7054beb94acdf45beeb7e68b5380ac391f2aa189f01970d2ebeaf18b2b`
+(48,144 bytes), generated source restored, linked header/ABI unchanged.
+Stage v15/metadata v24, core 228/checks 181, all ten final compile/link fixtures
+and 40 signed offline chains pass. Static VS/GS ClipDistance0/1 and
+CullDistance0/1 signatures match exactly; new cull mode prepares 96 cases.
+Audit 120: 1,500 associations/13 mappings/zero closures. Seventy-three final
+commands retain 20 reviewed Meson CMake/configuration warnings and two
+capability probes; no C++/link errors, whitespace clean. Runtime/cache/game,
+combined clipping/tessellation and full acceptance stay open. Changes through
+120 are excluded from immutable preview fifteen; migration continues.
+Source group 121 compacts active sized-VS point clip/cull values in original
+component order with matched auxiliary GS inputs. The GS still checks all
+original center distances and now omits redundant distance outputs; emulated
+generic clipping, units/nonpoints and actual-GS private arrays are unchanged.
+Two new modes prepare Clip4/Cull4 or sparse Clip0/2,Cull5/7 (192 cases).
+Static signatures match 4+4/2+2 values; sparse loads 20/28/40/48 and all four
+comparisons remain, with shared xy/zw physical row and no GS distance output.
+Stage v16/metadata v25, core 229/checks 182, all ten final compile/link fixtures
+and 42 signed chains pass. Audit 121: 1,500 associations/13 mappings/zero
+closures; 75 final commands, 45 existing deprecated warnings, zero unexpected,
+whitespace clean. Runtime/game/cache/MSAA/NaN/boundary and full capture
+acceptance stay open. Snapshot sixteen is installed with all changes through
+121/core 229, SHA256
+`b423844202bf4b5fd77e0826f3282290763480dfb19d4342e0180e15d765ff15`.
+All 76 manifested files/imports/dependencies pass static checks and 20 save
+files are copied/hash-checked in its isolated profile; the default and prior
+packages remain intact. Packaging passed
+(`command-20261013-015112-75952.log`, 34.845 s); no tests/game launches, migration
+continues.
+Source group 122 densely emits active unit-point GS native clip/cull outputs,
+with matched declarations/store indices/snapshots/restoration and budget;
+hardware clipping and point topology remain. Two new GCN loop modes prepare
+Clip4/Cull4 or sparse Clip0/2,Cull5/7 (192 cases), 64 declared points/budgets
+768/512; clip-only budget is now 512. Static native output signatures, original
+20/28/40/48 loads, one loop/point emit and ES/GS atomics remain. Stage v17 /
+metadata v26, core 230/checks 183, all ten final compile/link fixtures and 44
+offline chains pass. Audit 122: 1,500 associations/13 mappings/zero closures;
+77 final commands with no diagnostics, whitespace clean. All hardware/runtime/
+cache/MSAA/NaN/boundary and large capture acceptance stay open. Immutable
+preview sixteen excludes 122; migration continues.
+Source group 123 shares qualified point transport with ordinary sized/unit VS
+points. Actual host component masks drive VS declarations/stores, auxiliary
+GS forwarding and private misc allocation; flat aliased x/w use one vec2,
+flat-x/linear-w use separate scalars. Synthetic clip inputs keep original
+indexing. Three new modes prepare 288 cases, preserving .125/.75 and one VS
+atomic. Static VS/GS/PS interfaces match, sized GS emits four corners, native
+unit VS needs no GS, and emulated clip retains all four input columns.
+Stage v18/metadata v27, core 231/checks 184, all ten final compile/link fixtures
+and 47 signed chains pass. Audit 123: 1,501 associations/13 mappings/zero
+closures; 89 final commands retain 294 existing deprecated warnings and zero
+unexpected diagnostics, whitespace clean. Full varying packing/capture,
+qualifiers, runtime/cache/MSAA/precision and game acceptance stay open.
+Preview seventeen is being packaged; full migration continues.
+Snapshot seventeen is installed with all changes through 123/core 231 as
+`dx12-20261013-full-port-preview-95d73764dd3d`, SHA256
+`95d73764dd3d3e277539a8a11376457f78a775a242584d386e2a68abe071da93`.
+All 76 manifested files/imports/dependencies pass static checks; 20 saves are
+copied/hash-checked in an isolated profile, retaining default/older packages.
+Packaging passes (`command-20261013-021204-56080.log`, 35.117 s); no tests/game
+launches, zero closures, full migration continues.
+Source group 124 packs different point sources with identical primary/auxiliary
+qualifiers into shared float4 rows, retaining source mask/offset mapping and
+matched VS/GS/PS declarations, stores, snapshots and auxiliary forwarding.
+Initial 32-scalar sized / 31-scalar-plus-clip modes fail free-slot allocation;
+unit signing terminates with 0xc0000409. Three new modes prepare 288 cases,
+using distinct source/channel values. All 32/31 source stores and 32/35 PS
+reads match in eight rows; clip columns and four auxiliary forwards per value
+remain, one VS atomic, green 64/62. Actual GS reserved/mixed packs two flat
+sources into vec2, retains separate smooth and one GS atomic. Stage v19 /
+metadata v28, core 232/checks 185, all ten compile/link fixtures and 50 signed
+chains pass. Audit 124: 1,501 associations/13 mappings/zero closures; 94 final
+commands retain 294 existing deprecated warnings/zero unexpected diagnostics,
+whitespace clean. Full signature/large-GS capture and qualifiers/runtime/cache/
+MSAA/precision/game acceptance remain open; immutable preview seventeen
+excludes 124, full migration continues.
+Supplemental 124 adds three 32-source packed modes with flat alternating with
+smooth center/centroid/sample (288 more cases; 576 packed cases total).
+Distinct values, all 32 PS reads, eight host rows and four auxiliary forwards
+match; one VS atomic and original front face remain. DXIL qualifier rows
+match; only sample enables SampleFrequency=1. All 53 chains compile/sign
+offline; latest winding compiles/links. Combined final evidence has 109
+successful commands, 294 existing deprecated warnings/zero unexpected.
+Preview eighteen is being packaged; full migration continues.
+Snapshot eighteen is installed through 124/core 232 as
+`dx12-20261013-full-port-preview-519d8356217d`, SHA256
+`519d8356217d04c9b8c12251bbd1efc014ac4f86d8325e08d3eca7614a180f87`.
+All 76 manifested files/imports/dependencies pass static checks; 20 saves
+are copied/hash-checked in an isolated profile; default/older versions remain.
+Fresh audit 124: 1,501 associations/13 mappings/zero closures. Packaging
+passes (`command-20261013-022324-38672.log`, 34.982 s); no tests/game launches,
+full migration continues.
+Source group 125 adds opt-in point-GS capture, production off. Private outputs
+write fixed primitive/invocation/emission slots to raw u0 space33; shared
+152-word/608-byte records retain raw center/size/layer/viewport, original eight
+clip/cull indices and all 32 source float4 records. Ordinal saturates; no append/
+guest replay/hardware emits. CPU planning caps DXIL byte addressing; valid
+bits require producer completion/barrier because Mesa merges payload stores.
+Wide fixture ring stores use literal scalar offsets instead of overflowing
+12-bit offsets. Five producer chains sign, including 256-declared loops, full
+32 sources and two GS invocations. Static proof preserves ES/GS atomics,
+loops/addressing and zero raster outputs/emits. Stage v20/metadata v29, final
+core 235/checks 188, all ten compile/link fixtures, 53 ordinary + five producer
+chains pass; 104 final commands have zero diagnostics, whitespace clean.
+Audit 125: 1,501 associations/13 mappings/zero closures. Replay, allocation/
+clear/barriers/fences/pressure, instances/indirect/tessellation/streams and all
+runtime/game equivalence remain open. Next: flat record id to replay PS, raw
+attribute fetch avoids full 128-component signatures. Immutable preview
+eighteen excludes 125; full migration continues.
+The previous second snapshot `7e7092ff4b78` includes coherent packed10 numeric views, integer
+nearest sampling, R32/RGBA8 shader reinterpretation and the removed scene depth
+bypass. Core/checks and all ten full-core fixtures compiled only; metadata v6 /
+stage-pipeline record v4, unit PointList, anisotropy-one filtering and DRED UTF-8.
+Its 76 manifested files and 15 PE import tables were checked statically. Twenty
+save files were copied from the selected previous preview's isolated profile;
+installed settings, the installed desktop executable and the old packages stayed
+unchanged. The first snapshot `95d72e06d1ac` remains available.
+After publishing snapshot two, production additionally gained separate prewrite
+buffer/image read views for either single writer. Sampled-image captures precede
+writable buffer preparation; image writers retain prepared read-only buffer leases.
+Two writers and writable buffer/attachment overlaps still fail explicitly. Core,
+checks and all ten full-core fixtures compiled only. Five new GPU cases are
+prepared but unexecuted. Registry now has 44 groups, zero semantic closures;
+the later buffer/image work is not included in the immutable second snapshot.
+Production then gained manual AnisoPoint/AnisoLinear ratios 2/4/8/16 with
+major/minor gradient footprints, centered multi-tap filtering and existing
+mip/address/reduction behavior. Explicit LOD/LZ now includes sampler LOD bias.
+The core and checks compile; 24 additional GCN content/cache cases and their
+independent CPU oracle compile only. No tests were run. Hardware differential
+semantics, extreme gradients and inactive-tap cost remain open. Shared native
+bias bounds are now asserted against the SDK; read-only point/mip anisotropy
+uses manual filtering, and shader specialization tracks hardware/manual changes.
+Cube coordinates now retain the original 2D-array face lowering, including
+multiple cubes. The prepared GCN set has grown to 36 cases; compilation only.
+This later source work is also absent from immutable preview two. Continue the
+main migration; a requested experimental package does not end this task.
+The later single-writer image snapshot now also has a GPU path: resident buffer
+copy before current writes, followed by direct GPU detile from an immutable
+default-heap input. Source allocations and transfer resources remain leased.
+Aligned supported layouts use at most 64 MiB of unique transient captures per
+batch; decoded/odd-byte/stencil/MSAA/larger cases keep coherent CPU capture.
+Transfer-pool growth is reserved without evicting the current entry, and switching
+back to CPU capture replaces default heaps before mapping. Core and checks
+compile only; the two alias fixtures now prepare GPU/CPU/GPU transition contents.
+Registry has 46 groups, zero semantic closures. These changes also postdate
+preview two; continue all remaining implementation before runtime acceptance.
+The current user-requested immutable snapshot is now preview three,
+`dx12-20261012-full-port-preview-8797e98ab807`, named
+`DX12 — перенос №3 — 12.10.2026`, SHA256
+`8797e98ab8074a07b1675a06a0ed22a0fef06800e530a7511f592ccc951426c2`.
+It includes the later anisotropy/cube and CPU/GPU single-writer snapshots.
+Its 76 manifested files and 15 PE import/delay tables passed static verification;
+20 save files were copied from the selected first preview's isolated profile.
+Settings, selected core, installed desktop and previous selected package remain
+unchanged. Instructions are in `outputs/DX12-preview-3-20261012` of the task.
+No runtime verification occurred. Continue the full port after this package.
+Production after preview three accepts shader buffer writers overlapping
+read-only depth/stencil planes, including a nonoverlapping writable other plane.
+It captures complete prewrite contents, preserves consumed HTILE masks and
+rejects actual competing plane writes/clears. Mixed DSVs use per-plane barriers;
+partial readbacks commit only the written plane and remove whole-image equality
+proofs. Shader UAV draws use the existing OM path. Core/checks and all ten
+full-core fixtures compile/link only. Four new attachment fixture modes prepare
+read-only/mixed planes with eager and GPU-owned backing. Registry has 47 groups,
+1,446 associated functions and zero semantic closures; no runtime checks ran.
+These latest changes are absent from the immutable third preview. Continue the
+remaining full implementation; packaging a requested snapshot does not end it.
+The subsequent production extends prewrite depth/stencil versions to image UAV
+writers. Snapshot uploads keep current image owners acquired after capture and
+allocate separately from GPU-owned or bound cache candidates. Cache binding pins
+now protect identities/pools independently of fence retirement; bindings retain
+actual placed texture/sample allocations, and early depth feedback holds a pin.
+Pin counters outlive cache destruction safely instead of dereferencing old entries.
+Four image/depth GCN modes and a shared-lease post-fence invalidation fixture are
+prepared, compiled only. Core/checks and all ten full-core fixtures compile/link;
+registry has 49 groups, 1,447 associated functions, zero semantic closures.
+Subsequent production distinguishes depth and stencil SRVs on an attached
+resource. A shader may read one read-only plane while the other plane writes;
+the sampled writable-plane guard remains. DSV flags follow actual draw writes,
+and beginning clears of read-only planes record before shader/depth read states
+using a separate writable view. Ownership still covers cleared planes. Render
+passes require Options18 RenderPassesValid and matching read-only flags; absent
+stencil uses NO_ACCESS. Twelve HLSL content/clear/rejection cases compile only.
+Core/checks compile (`command-20261012-142645-17052.log`, 7.274 s;
+`command-20261012-142645-22304.log`, 4.066 s). All ten full-core fixtures were
+refreshed after the ResourceBindings layout change in compile-only mode; a later
+attachment relink includes clear handling. Registry has 50 groups and zero
+semantic closures. The immutable third preview excludes this subsequent work.
+Depth/stencil access now also tracks actual SRV mip/layer/plane ranges and the
+selected DSV mip/layers. A writable attachment can coexist with a disjoint
+sampled range of the same resource; guards and barriers leave unrelated native
+subresources intact. Replacing a descriptor removes its previous range while
+COM lifetime retention stays independent. Twelve additional complete-content,
+padding, sampled-value, state and overlap-rejection cases compile only.
+Core/checks passed (`command-20261012-143912-14692.log`, 9.642 s;
+`command-20261012-143912-41276.log`, 13.565 s). All ten full-core fixtures were
+refreshed in compile-only mode: task `work/depth-range-final-<fixture>-compile.log`.
+Registry group 51 remains partial/review pending; the current inventory has
+1,447 associated functions, 13 explicit mappings and zero semantic closures.
+No games/tests ran. Continue the complete migration; preview three is immutable.
+Original root remains clean; preview-three executable still matches its hash.
+Continue mixed-plane shader feedback and simultaneous writers; no tests or games
+have run, and this later source is not included in preview three.
+
+Independent raw-buffer/R32 image versions now preserve the original separate
+post-write domains for exact, fully protected single-subresource allocations.
+CPU reads reconcile the buffer and keep the image; actual CPU write faults and
+exact-base GPU buffer writes invalidate the image version. PageWatch forwards
+the read/write fault kind. The real GCN `separate-buffer-image-owned` fixture
+prepares three warm full-allocation/padding oracles using physical guest aliases,
+CPU read/write faults and later image loads. Compile/link only. Core/checks
+passed (`command-20261012-151334-55980.log`, 13.753 s;
+`command-20261012-151334-56208.log`, 19.876 s). All ten full-core fixtures were
+refreshed in `work/independent-r32-final-<fixture>-compile.log`.
+Registry group 52 is partial/review pending. Formatted buffer reads, pressure
+eviction/incompatible views, legacy linear readback and other alias geometries
+remain open or explicitly rejected. No tests or GPU execution.
+Latest immutable user snapshot is preview four, `dx12-20261012-full-port-preview-c5683c4914ea`,
+SHA256 `c5683c4914eaf1ec9a3c2848a7337fd4b678b0a54341a0b7a4313e2e13632157`.
+It includes groups 47–52 and is installed in the existing desktop catalogue with
+20 independently copied save files. Seventy-six file hashes and static PE imports
+passed; no runtime execution. Task `outputs/DX12-preview-4-20261012` contains the
+instructions/provenance. Desktop/settings/current selection are unchanged.
+Continue formatted synchronization and domain-preserving pressure retirement;
+preview four remains immutable.
+Subsequent production now handles exact R32 formatted GPU arena synchronization
+versus original <=16-KiB clean CPU streaming, including actual GPU retile/padding,
+original sharp size/base and fence/accounted device allocations. Active tiled
+independent versions are excluded from GC victims. Group 53 compiled and ten
+full-core fixtures refreshed (`work/formatted-pressure-final-<fixture>-compile.log`).
+Audit `command-20261012-154214-102576.log`, 21.896 s: 1,457 associated functions,
+13 explicit mappings, zero semantic closures. Linear pressure download, broader
+formats/geometries and simultaneous formatted writers remain open/guarded.
+HTILE/CMASK formatted metadata now uses exact native arena-only UAV fills with
+original sample patterns and CPU-stream condition. Group 54 prepares real GCN
+HTILE registration, GPU writer/formatted loads, protected CPU read, CPU write and
+full-allocation/padding/color/depth expectations. Core/checks compile in
+`command-20261012-154953-58364.log` / `command-20261012-154953-105784.log`
+(13.045/18.018 s); full-core attachment fixture links, not executed.
+Preview four excludes this work. No tests/games ran; continue all implementation.
+Registry audit 54 passed (`command-20261012-155504-65040.log`, 22.54 s), with
+1,458 associated functions and zero semantic closures. Ten fresh production-linked
+fixtures compiled in `work/formatted-metadata-final-<fixture>-compile.log`.
+Actual `formatted-cmask-owned` GCN mode additionally prepares twelve complete
+physical/padding/per-sample cases for 1/2/4/8 samples, actual metadata registration,
+large synthetic arena versus small CPU stream. Compiled/linked, not executed.
+R32 independent versions now also permit SINT. Twelve FLOAT/UINT/SINT GCN cases
+cover four warm bit patterns including negative values, independent export alpha,
+formatted synchronization and CPU/GPU domains. Core/checks compile in
+`command-20261012-160225-68744.log` / `command-20261012-160225-11436.log`
+(6.841/3.833 s). Preview four is immutable and excludes these changes.
+Independent R32 versions now also retain valid full mip chains (one layer/sample)
+and formatted GPU retile covers every mip while preserving physical padding.
+Twenty-four GCN cases cover one/two mips, three numeric views and four warm values;
+twelve additional cases diverge both image mips from the buffer before complete
+retile and protected CPU visibility. Shader byte offsets and distinct hashes
+preserve original sharp view selection. Core/checks compile in
+`command-20261012-161142-43208.log` / `command-20261012-161142-64312.log`
+(7.446/4.74 s); attachment fixture links in
+`command-20261012-161521-87616.log` (0.441 s), compile-only. Group 55 is partial.
+Arrays/cubes/volume/MSAA, broader aliases, partial/concurrent formatted writes,
+linear pressure download and final contents/ordering/lifetime acceptance remain
+open. No tests or games ran. Continue the same complete migration.
+The 55-group inventory passed (`command-20261012-161913-111540.log`, 22.429 s),
+with 1,458 associations, 13 explicit mappings, zero semantic closures; all ten
+fixtures refreshed in `work/r32-mips-final-<fixture>-compile.log`.
+Independent R32 physical array layers now retain the same full-range ownership
+and formatted mip/layer retile. Forty-eight basic actual GCN cases and thirty-six
+divergent first/selected mip/layer cases are prepared, with explicit DA/layer
+coordinates, actual physical offsets and full 64-KiB padding oracles. Core/checks
+compile (`command-20261012-162758-57872.log`, 6.819 s;
+`command-20261012-162758-68220.log`, 3.823 s); attachment links
+(`command-20261012-162822-27516.log`, 0.438 s), compile-only. Group 56 is partial.
+Cube shader acceptance, volume/MSAA, broader aliases/writers, linear pressure
+and final actual contents/protection/fence acceptance remain open. Preview four
+is unchanged and excludes these following sources. Continue the complete port.
+All ten fixtures refreshed in `work/r32-arrays-final-<fixture>-compile.log`.
+The 56-group inventory passed (`command-20261012-162930-42984.log`, 21.844 s),
+retaining 1,458 associations, 13 mappings and zero semantic closures. Following
+fixture preparation adds actual six-face Cube sharp/integer DA coordinates,
+different face-zero/face-five values and untouched-face/padding expectations:
+sixty basic and forty-eight divergent mip/layer/face cases, all unexecuted.
+Independent R32G32/R32G32B32A32 FLOAT/UINT/SINT now use actual 8/16-byte texels
+in the formatted footprint/tiler transfer, retaining the same domain rules.
+The GCN fixture prepares 180 basic/144 divergent cases, all-channel warm data,
+distinct buffer-DWORD versus absent IMAGE_STORE channel expectations and
+separate operation hash namespaces. Core/checks compile in
+`command-20261012-163437-50260.log` / `command-20261012-163437-3052.log`
+(7.502/4.797 s), zero non-deprecation diagnostics. The final rectangular RG32
+geometry fixture relink and group-57 audit follow. No runtime acceptance.
+All ten vector fixtures refreshed in `work/r32-vectors-final-<fixture>-compile.log`;
+57-group audit passed (`command-20261012-163633-5092.log`, 21.792 s), 1,459
+associations, 13 mappings, zero semantic closures. Following volume support
+retains complete 3D footprints/tiler Z depth and actual XYZ (no DA) coordinates.
+GCN cases total 252 basic/216 divergent after adding two-slice and four-to-two
+mip volume shapes, every Z/channel warm data and full physical/padding oracles.
+Core/checks compile (`command-20261012-163930-50596.log`, 6.902 s;
+`command-20261012-163930-109056.log`, 3.846 s); volume fixture links
+(`command-20261012-164006-111036.log`, 0.44 s), compile-only. Group 58 partial;
+actual GPU/fault/fence acceptance, MSAA/formats/partial/pressure stay open.
+All ten volume fixtures refreshed in `work/r32-volumes-final-<fixture>-compile.log`.
+58-group audit passed (`command-20261012-164102-68524.log`, 21.859 s), 1,460
+associations/13 mappings/zero closures. RGB32 now permits independent domains:
+native sixteen-byte footprint, existing twelve-byte guest retile/alpha skip.
+GCN totals 288 basic/240 divergent after RGB32 arrays/two-slice volume cases,
+all RGB channels and full physical/padding expectations. Core/checks compile
+(`command-20261012-164245-40860.log`, 6.866 s;
+`command-20261012-164245-42988.log`, 3.805 s); RGB fixture links
+(`command-20261012-164432-97228.log`, 0.439 s), compile-only. Group 59 partial.
+All ten RGB fixtures refreshed in `work/rgb32-final-<fixture>-compile.log`;
+59-group audit passed (`command-20261012-164517-45828.log`, 21.736 s), retaining
+1,460 associations/13 mappings/zero closures. Independent RGBA8 UNORM/SNORM
+adds native normalized encodings and matching formatted views: 344 basic/288
+divergent GCN cases, negative SNORM, exact image/arena/CPU bytes and padding.
+Core/checks compile (`command-20261012-164726-10864.log`, 6.853 s;
+`command-20261012-164726-96812.log`, 3.801 s); attachment links
+(`command-20261012-164812-61620.log`, 0.445 s), compile-only. Group 60 partial;
+numeric/capability/GPU/fault/fence and full migration acceptance remain open.
+All ten normalized fixtures refreshed in
+`work/rgba8-normalized-final-<fixture>-compile.log`; 60-group audit passed
+(`command-20261012-164959-57644.log`, 21.69 s), 1,460 associations/13 mappings/
+zero closures. RG16/RGBA16 UNORM/SNORM/FLOAT versions now retain actual half/
+normalized physical data and matching formatted sharp stride/record count.
+512 basic/432 divergent GCN cases cover exact half/negative normalized channels,
+full mip/layer/face/Z and physical/padding visibility. Core/checks compile
+(`command-20261012-165209-62792.log`, 6.845 s;
+`command-20261012-165209-102156.log`, 3.82 s); fixture links
+(`command-20261012-165250-105424.log`, 0.442 s), compile-only. Group 61 partial.
+All ten half fixtures refreshed in `work/half-versions-final-<fixture>-compile.log`;
+61-group audit passed (`command-20261012-165548-58280.log`, 21.707 s), 1,460
+associations/13 mappings/zero closures. Larger readonly formatted sharp extents
+at the exact image base now choose unique/exact-original-size candidates,
+capture/retile/copy only complete image bytes and preserve the prepared buffer
+tail. Every 512 basic GCN case adds large-clean/GPU-owned extended sharp
+observations, at least twenty KiB and four KiB beyond image, full physical tail
+oracles and protected CPU visibility. Core/checks compile
+(`command-20261012-165905-80156.log`, 7.045 s;
+`command-20261012-165905-107136.log`, 5.372 s); fixture links
+(`command-20261012-170009-59700.log`, 0.444 s), compile-only. Group 62 partial;
+short/non-base/ambiguous/concurrent/pressure and final runtime acceptance open.
+All ten extended fixtures refreshed in
+`work/formatted-extended-final-<fixture>-compile.log`; 62-group inventory passed
+(`command-20261012-170150-66528.log`, 21.749 s), 1,460 associations/13 mappings/
+zero closures. Short formatted views now use deduplicated readonly full-image
+residency helpers appended after ordinary/DMA/auxiliary requests, preserving
+original shader bounds and access class. Each 512 basic GCN case adds clean/
+GPU-modified short-sharp observations; full physical/padding oracle includes
+bytes beyond view. Core/checks compile
+(`command-20261012-170611-76348.log`, 6.801 s;
+`command-20261012-170611-61248.log`, 5.3 s); fixture links
+(`command-20261012-170749-62816.log`, 0.452 s), compile-only. Group 63 partial;
+real bounds/residency/streaming/dirty/GPU/CPU/fault/fence/auxiliary acceptance open.
+All ten short fixtures refreshed in `work/formatted-short-final-<fixture>-compile.log`;
+63-group audit passed (`command-20261012-170950-55584.log`, 21.802 s), 1,460
+associations/13 mappings/zero closures. RGBA8/RG16/RGBA16 integer versions now
+add UINT/SINT retention, actual literal stores and real CVT/MUL-scaled GCN reads.
+680 basic/576 divergent cases include negative integer warm data and full/short/
+long views. Metadata hashes now include numeric view; R-only image-load color
+exports explicitly zero G/B, correcting earlier multi-channel warm expectations
+while full physical checks still cover every channel. Core/checks compile
+(`command-20261012-171538-49380.log`, 6.86 s;
+`command-20261012-171538-35628.log`, 3.844 s); fixture links
+(`command-20261012-172136-48624.log`, 0.45 s), compile-only. Group 64 partial.
+All ten integer fixtures refreshed in `work/small-integer-final-<fixture>-compile.log`;
+64-group audit passed (`command-20261012-172408-46264.log`, 22.506 s), 1,463
+associations/13 mappings/zero closures. R8/RG8 normalized/integer and R16
+normalized/integer/FLOAT now retain independent one/two-byte image versions.
+Linear footprint buffers/accounting round to DWORDs; existing CAS retile and
+actual-byte warm/first-subresource oracles preserve neighboring texels/padding.
+GCN totals 1044 basic/888 divergent with full/short/long observations. Core/checks
+compile (`command-20261012-172741-15388.log`, 7.602 s;
+`command-20261012-172741-39372.log`, 4.893 s); attachment links
+(`command-20261012-173035-82012.log`, 0.438 s), compile-only. Group 65 partial;
+actual bounds/CAS/neighbor/capability/GPU/CPU/fault/fence acceptance stays open.
+
+All ten sub-DWORD fixtures refreshed in `work/subdword-image-final-<fixture>-compile.log`.
+The 65-group inventory passed (`command-20261012-173155-30232.log`, 21.942 s),
+1,463 associations/13 mappings/zero closures. RGBA8 SRGB independent versions
+now retain UNORM storage bytes with separately sampled SRGB decoding; formatted
+buffers use their actual three-bit UNORM numeric field. GCN totals are 1072
+basic/912 divergent. The independent oracle expects encoded quarter/half bytes
+64/128 and sampled red 13/55, complete physical bytes/padding and piecewise
+warm decoding. Core/checks compile (`command-20261012-173935-102820.log`, 7.175 s;
+`command-20261012-173935-20456.log`, 3.988 s); attachment links
+(`command-20261012-174141-99240.log`, 0.442 s), compile-only. Group 66 is partial;
+runtime and cross-stage storage-read classification remain open. Preview four
+is immutable and excludes all production work after group 52.
+All ten SRGB fixtures refreshed in `work/srgb-image-final-<fixture>-compile.log`.
+The 66-group audit passed (`command-20261012-174654-24764.log`, 21.758 s),
+1,467 associations/13 mappings/zero closures. No runtime acceptance is implied.
+Packed 2:10:10:10 UNORM/SNORM/UINT/SINT now retain independent versions. Expanded
+signed sampled images keep exact raw backing/masks; formatted synchronization
+merges written bytes into the buffer snapshot, preserving padding and SNORM
+negative-minimum bits without requantization. Dispatch is bounded to 256 X groups
+and <=1024 rows for the existing 64-MiB scope. GCN totals 1191 basic/1014 divergent
+include RGB -512/alpha -2 warm encodings. Core/checks compile
+(`command-20261012-175343-72452.log`, 13.99 s;
+`command-20261012-175343-21884.log`, 17.01 s); attachment links
+(`command-20261012-175447-30884.log`, 0.455 s). Exact SM5.1 host shader compile
+passes (`command-20261012-175407-67284.log`, 2.641 s), generated source includes
+the merge. No execution. Group 67 is partial; actual GPU/fault/fence/casts and
+other packed/MSAA/partial/pressure/complete acceptance remain open.
+All ten packed fixtures refreshed in `work/packed10-image-final-<fixture>-compile.log`.
+The 67-group audit passed (`command-20261012-175557-41584.log`, 21.718 s),
+1,467 associations/13 mappings/zero semantic closures.
+Packed16 UNORM versions now support 2D/mip/array/cube storage/sample conversion;
+volume stays guarded. The fixture uses supported R16_UINT formatted reads and
+real GCN shift/mask/CVT/MUL, preserving the original unsupported packed16-buffer
+format contract. Quantized quarter red is 66/68, half 132/136, with exact
+two-byte physical component/remapping and neighbor/padding expectations.
+Core/checks compile (`command-20261012-180122-111508.log`, 7.109 s;
+`command-20261012-180122-107672.log`, 3.945 s); fixture links
+(`command-20261012-180136-104324.log`, 0.456 s), compile-only. Group 68 partial.
+Canonical R11G11B10 float retention also accepts both original descriptor orders;
+typed load/store capability checks and original remapping remain mandatory.
+Independent unsigned-float exponent warm/store oracles bring actual GCN totals
+to 1327 basic/1126 divergent. Core/checks compile
+(`command-20261012-180328-56916.log`, 7.007 s;
+`command-20261012-180328-112488.log`, 3.896 s); fixture links
+(`command-20261012-180341-107100.log`, 0.449 s), no execution. Group 69 partial;
+actual capability/quantization/casts/retile/shader/GPU/CPU/fault/fence, R9/MSAA/
+volume/partial/pressure and full acceptance remain open.
+All ten current fixtures refreshed in `work/packed-formats-final-<fixture>-compile.log`.
+The 69-group audit passed (`command-20261012-180530-40752.log`, 21.89 s):
+982 files, 13,358 functions, 12,186 dispatch entries, 1,470 associations, 13
+explicit mappings, zero semantic closures. Remaining review counts are 765
+mapping/adaptation functions, 210 changed functions and 567 dispatch entries;
+unchanged source is still semantically unverified. No tests/games ran.
+User-requested current core snapshot five is installed as
+`dx12-20261012-full-port-preview-8849f997245d`, named
+`DX12 — перенос №5 — 12.10.2026`, SHA256
+`8849f997245d940de270fafe4a81265bd07c59207671464bbae99a1fea6590c2`.
+It includes groups 53–69 and all earlier source through core154. Packaging passed
+(`command-20261012-180651-36908.log`, 36.509 s): 76 manifested files, static PE
+imports/dependency checks, matching PDB/MAP and exact dirty/untracked source patch.
+Twenty save files were copied from still-selected preview one, hashes verified.
+Installed desktop/settings/default selection and older packages are unchanged.
+User deliverables: `outputs/DX12-preview-5-20261012`. No runtime was launched;
+snapshot five is immutable and full migration continues.
+After preview five, original-address GPU buffer/copy notifications now invalidate
+independent image identities even when protected native buffer preparation is
+skipped. Native aligned/page envelopes cannot choose the invalidation base.
+Exact-base simultaneous writers allow short/long extents with complete prewrite
+snapshots; DWORD-shifted buffer-only writers retain preceding image contents.
+Stale image read-only watches retire with logical identities, other active image
+watches rearm, and retained-image buffer writes require actual deferred ownership
+before guest execution. All prepared GCN cases repeat full/short/extended writer
+sharps: 3981 basic/3378 divergent, each with an additional shifted-write/CPU read
+and image-preservation observation before exact-base invalidation. Core/checks
+compile (`command-20261012-181459-99576.log`, 12.806 s;
+`command-20261012-181459-49036.log`, 19.485 s); attachment links
+(`command-20261012-181520-52856.log`, 0.454 s), zero non-deprecation diagnostics
+and whitespace passes. No execution. Group 70 partial; sub-DWORD/non-base
+concurrent/formatted writers, broader ownership/DMA/watch/pressure and complete
+acceptance remain open. This source is absent from immutable preview five.
+All ten logical partial-write fixtures refreshed in
+`work/logical-partial-final-<fixture>-compile.log`, compile-only. The 70-group
+audit passed (`command-20261012-181739-86832.log`, 21.549 s), 1,470 associations,
+13 mappings and zero semantic closures.
+Mixed buffer ownership now uses PageWatch::TrackOwned. Exact fast paths remain;
+crossing image RO watches split while outside protection/generations remain.
+Writable gaps and old watched OS modes validate before preallocated replacement
+nodes are published. All owner pages become NOACCESS without releasing existing
+protection; failure rolls back preceding watched modes. Prepared page-watch
+cases cover interior/outside boundaries, RO conversion, holes/reacquisition,
+original rights restoration and unchanged rejection after lost/readonly rights.
+Core/checks compile (`command-20261012-182151-62812.log`, 7.697 s;
+`command-20261012-182151-79908.log`, 4.345 s), including page-watch executable;
+attachment links (`command-20261012-182205-78304.log`, 0.451 s), no non-deprecation
+diagnostics/whitespace errors. No execution. Group 71 partial; actual Windows
+rollback/races/owner lifetimes/remaps/GPU/CPU/fault/fence/pressure/full acceptance
+remain open. Immutable preview five excludes this later source.
+All ten mixed-page fixtures refreshed in `work/mixed-page-final-<fixture>-compile.log`,
+compile-only. The 71-group audit passed (`command-20261012-182449-88864.log`,
+21.674 s), 1,470 associations/13 mappings/zero semantic closures.
+Original sub-DWORD shader write ranges now remain distinct from aligned native
+resource/descriptor envelopes. ShaderBufferRequest::WriteRange validates bounds/
+overflow and drives logical invalidation plus preparation/bind-time dirty marking.
+Byte-aligned buffer-only writes can retain independent images; exact-base
+concurrent image legality uses the original base. Pinned DownloadMemory intersects
+page-tracker ranges with exact gpu_modified_ranges, so physical commits must not
+widen to pages/envelopes. All 3981 basic/3378 divergent GCN cases now add actual
+STORE_BYTE at +1/size1 and STORE_SHORT at +2/size2 after formatted synchronization
+makes GPU quarter bytes differ from clean physical CPU zeros. Exact CPU 0x35/
+0x7a35, unchanged unused DWORD bytes, sampled quarter and full padding expectations
+are prepared. Core/checks compile (`command-20261012-182936-44456.log`, 12.542 s;
+`command-20261012-182936-30488.log`, 19.239 s); final attachment links
+(`command-20261012-183301-104996.log`, 0.449 s), no non-deprecation diagnostics/
+whitespace errors. No execution. Group 72 partial; actual lowering/dirty/fault/
+fence and broader CPU-upload granularity, ownership/pressure/full acceptance stay
+open. Immutable preview five excludes this source.
+
+All ten exact-subDWORD fixtures refreshed in `work/exact-subdword-final-<fixture>-compile.log`,
+compile-only. The 72-group inventory passed (`command-20261012-183432-21896.log`,
+21.824 s), 1,471 associations/13 mappings/zero semantic closures.
+
+Actual CPU dirty pages now have separate upload markers when readonly image/
+metadata synthesis has changed a resident GPU arena independently of CPU bytes.
+Markers survive image-watch retirement and loss of snapshot proofs. Preparation
+uploads touched 4-KiB CPU pages even for same-value stores; untouched GPU-only
+pages remain resident and exact GPU physical dirty spans are unchanged. Divergence
+is conservatively retained for each mapping's lifetime. Byte-component GCN cases
+prepare a volatile zero store over an unchanged physical zero after formatted
+quarter synthesis. A large actual raw GCN DWORD load, byte mask and UINT conversion
+first witness quarter, then require zero immediately after the store before any
+image refresh. The image is subsequently refreshed before formatted zero checks.
+Core/checks compile (`command-20261012-184626-111628.log`, 12.922 s;
+`command-20261012-184626-97696.log`, 19.41 s), zero non-deprecation diagnostics.
+Group 73 partial; final fixture compilation pending, no execution.
+Generic GuestBufferAccess read faults no longer create CPU-store markers. Its
+prepared production fixture synthesizes a 16-KiB GPU arena, reads/reconciles only
+four GPU-written bytes without upload, then stores the unchanged byte in page
+two. Full GPU readback requires exactly that CPU page and three untouched GPU
+pages; diagnostic forced upload count is exactly 4096. Latest compile pending.
+Upload generation changes cause another pass over actual-store markers before
+publishing the prepared view. A physical-alias callback prepares a same-value
+third-page notification during second-page upload; the readback requires both
+CPU pages while first/last GPU-only pages persist. Current production/checks
+compile (`command-20261012-185347-79404.log`, 12.688 s;
+`command-20261012-185347-84384.log`, 19.5 s). Final all-ten refresh/audit pending.
+All ten final full-core fixtures compiled/linked in
+`work/actual-cpu-store-final-160-<fixture>-compile.log`; attachment link
+`command-20261012-185539-72572.log`, 0.452 s. Current builds have zero non-
+deprecation diagnostics; whitespace validation passed. The 73-group inventory
+passed (`command-20261012-185451-44760.log`, 21.904 s), 1,473 associations,
+13 mappings/zero semantic closures. No execution; preview five excludes group 73.
+Removed the legacy 0x8b355b5a all-zero CPU-fill special case. Pinned
+IsComputeImageClear clears a compatible cached image before ordinary buffer
+binding; absent/incompatible image candidates fall back to actual shader
+dispatch. Zero values now use the same native candidate/format/ownership checks
+and GPU image clear as nonzero values, preserving independent buffer domains
+and image-clear padding semantics. Group 74 partial, compile pending.
+Zero clears can additionally target canonical writable UAV images with a whole
+single-sample allocation and all mips/layers selected. Both clear descriptor
+heaps and the image resource are retained; typed integer/raw versus float clears
+match native storage. Exact positive-zero bit patterns are required (negative
+float zero is not silently rewritten). Twelve prepared real GCN clear-shape
+cases use the old hash and a preceding separate R32 FLOAT image/buffer version,
+require whole sampled image zero while physical warm/padding bytes persist,
+then recreate the ordinary quarter scenario. Latest compile pending.
+Current core/checks compile (`command-20261012-190806-68764.log`, 7.23 s;
+`command-20261012-190806-82856.log`, 4.117 s), no non-deprecation diagnostics.
+All ten full-core fixtures refreshed in `work/zero-clear-storage-final-<fixture>-compile.log`,
+compile/link only. Whitespace validation passed; current inventory pending.
+The 74-group inventory passed (`command-20261012-191046-84596.log`, 20.269 s),
+1,474 associations/13 mappings/zero semantic closures. Current attachment link
+`command-20261012-190948-113212.log`, 0.447 s. No execution. Preparing a new
+immutable sixth snapshot from core162/groups 70–74 plus all prior changes.
+Sixth immutable package installed as `dx12-20261012-full-port-preview-0e76d14b1685`,
+`DX12 — перенос №6 — 12.10.2026`, SHA256
+`0e76d14b1685ad3afd1af17ab7b8e65064f167035be85ffb80a2e8b2277c414e`.
+Packaging/static manifest/import checks passed (`command-20261012-191301-38156.log`,
+36.232 s), 76 files with dirty/untracked source patch and matching PDB/MAP/pinned
+runtime/licenses. Twenty save files copied from still-selected `95d72e06d1ac`
+into the isolated sixth profile; all hashes verified. Existing desktop, selection,
+settings and older packages stay unchanged. Outputs README/launcher/provenance
+are in `outputs/DX12-preview-6-20261012`. No runtime launch. Full port continues.
+After preview six, image-clear compatibility no longer requires padding-free
+guest storage. Temporary clear views select all resource mips/layers regardless
+of the view which populated the cache, matching pinned IsComputeImageClear.
+Zero UAV clears additionally keep complete native 1D/3D extents. Prepared padded
+RGBA8 clear uses width17/pitch32/height9, two mips/three layers and a cached
+mip1/layer1 view; full readback requires yellow texels and unchanged 0xa6 padding.
+R32 FLOAT GCN zero-clear shapes expand to 84 warm/extent/mip/layer/cube/volume
+cases with separate physical buffer oracles. Group 75 partial; compile pending.
+Immutable sixth preview excludes this later implementation.
+Core compiles (`command-20261012-191708-29380.log`, 7.3 s). Checks initially
+exposed the existing fixture Require(bool,source_location) signature, corrected
+without production changes; final checks compile
+(`command-20261012-191734-43504.log`, 3.115 s). Attachment fixture links
+(`command-20261012-191744-45036.log`, 0.456 s), compile-only; final all-ten/audit pending.
+All ten complete-image-clear fixtures refreshed compile/link only. The 75-group
+inventory passed (`command-20261012-191833-27700.log`, 21.68 s), 1,475 associations/
+13 mappings/zero semantic closures; no non-deprecation diagnostics or whitespace
+errors. Runtime remains unverified.
+Wide R32/RG32/RGBA32 writable image clears now accept nonzero vectors through
+the same complete resource views. Integer/raw views use exact input union bits;
+typed float views use FLOAT clear. Narrow/packed storage keeps its positive-zero
+restriction. All 84 R32 FLOAT prepared GCN clear shapes additionally clear to
+half, require first/next sampled red128, retain physical buffer zero/warm bytes,
+then restore quarter. Group 76 partial; compile pending; preview six excludes it.
+Large actual raw DWORD-to-float GCN reads additionally require the resident GPU
+buffer's zero after both zero/half image clears, before any formatted sync.
+Core/checks compile (`command-20261012-192225-73596.log`, 7.287 s;
+`command-20261012-192225-8012.log`, 4.141 s). Final fixture/all-ten/audit pending.
+Prepared API fixture covers 27 R32/RG32/RGBA32 × UINT/SINT/FLOAT × array/1D/volume
+cases, three mips/restricted cached views, exact finite/negative-zero union bits
+and full 0xa6 padding. Nine warm R32 clears additionally require 0x80000000 on
+all texels. Final checks/refresh/audit pending; no execution.
+Final checks compile (`command-20261012-192650-71056.log`, 3.186 s), attachment
+links (`command-20261012-192405-102084.log`, 0.476 s), all ten refreshed compile/
+link only. The 76-group inventory passed (`command-20261012-192728-73288.log`,
+22.386 s), 1,475 associations/13 mappings/zero semantic closures. Whitespace and
+non-deprecation diagnostics clean. No execution.
+Typed writable narrow images now accept nonzero native numeric clears; integer
+views keep input union bits, normalized/half-float views use FLOAT clear. Raw
+RGBA8/packed16/signed packed10 and sRGB nonzero paths remain guarded. Prepared
+81 R8/RG8/RGBA8/R16/RG16/RGBA16 numeric/array/1D/volume cases cover exact norm,
+integer/sign and half-float/negative-zero texels, three mips/full views and 0xa6
+padding. Group 77 partial; compile pending; preview six excludes this source.
+Core/checks compile (`command-20261012-193324-68732.log`, 7.079 s;
+`command-20261012-193324-22944.log`, 4.034 s); no execution.
+Raw RGBA8 nonzero clears now use temporary typed native numeric clear followed
+by GPU retile/detile into the existing R32 image. Its descriptor/resource identity,
+CPU snapshot and independent buffer version remain unchanged. Actual dimensional
+UAV store support and texture/scratch memory budget are checked before commands;
+all heaps/textures/transfers are retained before recording and retired by fence.
+Twelve extra API cases prepare exact full RGBA8 texels/padding/identity/accounting;
+336 extra actual GCN HLE shapes prepare separate image/resident/physical buffer
+observations (420 total with R32 FLOAT). Group 78 partial; no execution.
+Core/checks compile (`command-20261012-194730-10376.log`, 7.500 s;
+`command-20261012-194808-92876.log`, 13.893 s). Final refresh/audit pending.
+All ten full-core fixtures refreshed in compile/link-only mode. The 78-group
+inventory passed (`command-20261012-194919-32020.log`, 21.846 s): 1,475 function
+associations, 13 explicit mappings, zero semantic closures. Whitespace and
+non-deprecation diagnostics clean. No test, game or application execution.
+Snapshot seven includes production through group 78/core166. Installed as
+`dx12-20261012-full-port-preview-92043d412a67`; SHA256
+`92043d412a672e720e225bf3da9234e211d2d2365a584ea9f3eedb6cb2185049`.
+Packaging/static hashes/imports passed (`command-20261012-195040-12232.log`,
+34.882 s): 76 files, 20 save files copied into a separate profile from selected
+preview `95d72e06d1ac`. Old cores/settings/installed desktop remain unchanged.
+Task outputs: `outputs/DX12-preview-7-20261012`. Full migration continues;
+no tests/games/apps executed, no commits or pushes.
+Post-snapshot-seven: packed16 UNORM sampled volumes now expand to RGBA32 FLOAT
+on GPU. Physical two-byte texels and written masks remain exact retained backing;
+inverse writable/raw conversion and formatted resident-buffer synthesis reuse it
+without quantization. GPU decode covers native packed channel ordering, all mip
+depths and the existing layout. Added eight direct API round-trip cases with
+poisoned CPU sources/exact padding and 96 actual GCN volume combinations in each
+basic/divergent category (4,077/3,474 total). Group 79 partial; no execution.
+Core/checks compile (`command-20261012-200005-36300.log`, 8.103 s;
+`command-20261012-200005-33112.log`, 15.014 s). Strict SM5.1 FXC compilation passed
+(`command-20261012-200051-66460.log`, 2.699 s). Final fixtures/audit pending.
+All ten full-core fixtures refresh compile/link only. The 79-group inventory
+passed (`command-20261012-200152-104300.log`, 21.123 s), 1,476 associations,
+13 mappings and zero semantic closures. Whitespace/build diagnostics clean.
+Packed16 nonzero image clears now use temporary GPU RGBA32 clear, then GPU
+UNORM clamp/nearest-even packing and native/guest field conversion into the same
+R32 image. Existing buffer version, resource identity/descriptor and padding stay
+independent. Twelve API array/1D/volume exact packed-color/accounting cases and
+336 actual GCN HLE combinations are prepared (756 clear shapes total), using a
+16-bit destination buffer sharp so the pinned physical-bits check is exercised.
+Core/checks compile (`command-20261012-200418-79748.log`, 11.175 s;
+`command-20261012-200418-13836.log`, 5.535 s). Strict SM5.1 FXC /Ges /WX passed
+(`command-20261012-200506-29112.log`, 3.069 s); saved assembly has `round_ne`.
+Group 80 partial; final refresh/audit pending, no execution. Preview seven
+predates groups 79/80 and remains immutable.
+All ten full-core fixtures refreshed compile/link only. The 80-group inventory
+passed (`command-20261012-200557-103228.log`, 21.146 s), 1,476 associations,
+13 mappings, zero semantic closures. Build/fixture diagnostics and whitespace
+passed. No execution.
+Raw packed10 nonzero clears use native GPU RGBA32 FLOAT/UINT/SINT clear followed
+by packed image writer clamp/nearest-even GPU packing into the same R32 image.
+Ordinary expanded sampled inverse conversions still reuse exact inherited bits.
+Twelve API numeric/array/1D/volume cases, twelve warm normalized/integer/alpha
+endpoint cases and 420 actual GCN clear combinations are prepared (1,176 HLE
+clear combinations total), preserving raw resident/physical buffer observations.
+Core/checks compile (`command-20261012-200830-92084.log`, 10.733 s;
+`command-20261012-200830-25020.log`, 5.285 s). Strict SM5.1 FXC passed
+(`command-20261012-200916-110500.log`, 3.654 s). Group 81 partial; final endpoint
+fixture/checks/refresh/audit pending; no execution. Preview seven predates it.
+Final checks compile (`command-20261012-201006-62920.log`, 3.112 s), all ten
+fixtures refreshed compile/link only. The 81-group inventory passed
+(`command-20261012-201019-103304.log`, 21.034 s), 1,476 associations/13 mappings/
+zero semantic closures. Final diagnostics/whitespace verification pending.
+SRGB nonzero clears now use temporary native SRGB RTV conversion then GPU byte
+transfer into the existing typed/raw image. Direct SRGB attachment clears are
+enabled. Complete RTV descriptors are prepared/retained before commands; 1D,
+arrays and volumes use corresponding native RTV ranges. Temporary SRGB clear
+does not change ordinary guest attachment geometry restrictions. Six API
+typed/raw/dimension cases plus six warm curve-boundary/linear-alpha cases and
+84 actual GCN HLE SRGB shapes prepare numeric/padding/identity/accounting and
+independent raw buffer observations (1,260 HLE clear shapes total).
+Initial core/checks compile (`command-20261012-201329-97060.log`, 7.387 s;
+`command-20261012-201329-28592.log`, 4.897 s). Group 82 partial; final build/
+fixtures/audit pending, no execution. Preview seven predates groups 79–82.
+Final core/checks compile (`command-20261012-201443-106308.log`, 4.564 s;
+`command-20261012-201443-66256.log`, 3.355 s), all ten fixtures refresh compile/
+link only. The 82-group inventory passed (`command-20261012-201640-48540.log`,
+21.278 s), 1,476 associations/13 mappings/zero semantic closures. Final core/
+checks/fixture non-deprecation diagnostics and whitespace clean; no execution.
+Read-only typed cached images without UAV now clear through a temporary native
+typed image then GPU transfer into the existing resource/descriptor. HLE clear
+obtains independent image ownership before buffer binding; an image equality
+witness ends without dropping CPU buffer proofs. Existing no-access image watch
+converts directly to read-only with ChangeMode, preserving protection against
+stores. Copy HLE ownership stays unchanged; compatible direct RTV clears remain
+direct. The existing retention/legacy readback/geometry envelope still applies.
+84 new read-only API cases plus three SRGB warm endpoints are prepared (234 API
+cases total), and 504 actual cold read-only GCN HLE cases preserve original CPU/
+raw resident buffer values after image clear. Post-writer HLE count stays 1,260.
+Corrected first zero-clear color oracle: compute retains preceding quarter color.
+Core/checks compile (`command-20261012-202134-103036.log`, 7.488 s;
+`command-20261012-202134-51156.log`, 4.388 s); final ownership core compile
+(`command-20261012-202340-76568.log`, 6.791 s). Final fixture/checks compile
+(`command-20261012-202536-26676.log`, 1.446 s;
+`command-20261012-202536-52676.log`, 3.898 s). Group 83 partial; final all-ten/
+audit/diagnostics pending, no execution. Preview seven predates groups 79–83.
+All ten full-core fixtures refreshed compile/link only; attachment link
+`command-20261012-202759-96980.log`, 0.447 s. The 83-group inventory passed
+(`command-20261012-202723-49364.log`, 20.986 s), 1,476 associations/13 mappings/
+zero semantic closures. Core/checks/fixture diagnostics and whitespace clean.
+No test/game/application execution, no commits or pushes. Full migration continues.
+Snapshot eight includes production through group 83/core175. Installed as
+`dx12-20261012-full-port-preview-ae5276ef6874`; SHA256
+`ae5276ef687461d96ee2a99e70654e5a06a8648406c95bddcc0b5b2a3b6aac47`.
+Packaging/static hashes/imports passed (`command-20261012-202956-64540.log`,
+34.258 s): 76 files, 20 save files copied into a separate profile from selected
+preview `95d72e06d1ac`. Old cores/settings/installed desktop remain unchanged.
+Task outputs: `outputs/DX12-preview-8-20261012`. Main port continues; runtime
+tests/games/apps unexecuted, no commits/pushes.
+
 ## Latest — covered envelopes and selectable cores, 2026-10-12
 
 `ba3892f` retains an already covering, successfully initialized mapping before

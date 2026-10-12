@@ -1,5 +1,24 @@
 # Benchmarks
 
+## Emergency provenance checkpoint — 2026-10-13
+
+See [SESSION_HANDOFF.md](SESSION_HANDOFF.md) for the current unfinished full-port
+boundary. This checkpoint adds no measurements. Source core237/checks190 compile/
+link only; typed-reader signed proof and replay/game/GPU acceptance remain pending.
+Historical FPS and suites below do not validate the current executable.
+
+`F:/PS4Dev/handoff/full-port-emergency-20261013/DIAGNOSTIC_PROVENANCE.json`
+catalogues 25 existing diagnostic sets with absolute paths, session/run IDs,
+source/executable identities, dates/scenarios/results/limits; missing metadata is
+explicitly unknown. `evidence-files.json` indexes the existing local data, and
+`important-evidence-index.json` lists crash/XInput/monitor/run metadata.
+Current saved experimental core237 SHA256:
+`a639d91da0561b213cbfa7075fbbf6959b1ba560c15c12e67e92cfcfbc4b6d4a`.
+Latest installed preview18 SHA256:
+`519d8356217d04c9b8c12251bbd1efc014ac4f86d8325e08d3eca7614a180f87`.
+It includes through124; current source additionally125/126. No fresh baseline.
+Preserve A/A2 failures, all old traces/dumps and limits; do not rerun for the report.
+
 ## Covered envelopes and version catalogue — 2026-10-12
 
 Production `ba3892f0c93b5f6fe29fa0c363000b398bb234d6`; the core was built with
