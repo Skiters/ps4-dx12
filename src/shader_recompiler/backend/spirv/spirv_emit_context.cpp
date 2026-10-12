@@ -4,16 +4,21 @@
 #include "common/assert.h"
 #include "common/div_ceil.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point_capture.h"
+#include "video_core/renderer_d3d12/guest_point_shader.h"
 #include "shader_recompiler/frontend/fetch_shader.h"
 #include "shader_recompiler/ir/attribute.h"
 #include "shader_recompiler/ir/microinstruction.h"
 #include "shader_recompiler/runtime_info.h"
+#include "shader_recompiler/native_point_capture.h"
 
 #include <boost/container/static_vector.hpp>
 #include <fmt/format.h>
 #include <spirv/unified1/spirv.hpp11>
 
 #include <numbers>
+#include <bit>
 #include <string_view>
 
 namespace Shader::Backend::SPIRV {
@@ -446,18 +451,48 @@ void EmitContext::DefineInputs() {
         const bool has_clip_distance_inputs = runtime_info.hw.fs.clip_distance_emulation;
         // Clip distances attribute vector is the last in inputs array
         const auto num_inputs = runtime_info.hw.fs.num_inputs - (has_clip_distance_inputs ? 1 : 0);
+        if(runtime_info.hw.fs.native_point_capture){
+            native_point_capture_index=DefineInput(U32[1],0u);
+            Decorate(native_point_capture_index,spv::Decoration::Flat);
+            const auto reader=DefineNativePointCaptureReader(*this);
+            native_point_capture_buffer=reader[0];native_point_capture_image_type=reader[1];
+            interfaces.push_back(native_point_capture_buffer);
+            native_point_capture_pointer=TypePointer(spv::StorageClass::StorageBuffer,U32[1]);
+        }
 
         for (s32 i = 0; i < num_inputs; i++) {
+            if(runtime_info.hw.fs.native_point_capture)continue;
             const auto& input = runtime_info.hw.fs.inputs[i];
             if (input.IsDefault()) {
                 continue;
             }
             const IR::Attribute param = IR::Attribute::Param0 + i;
-            const u32 num_components = info.loads.NumComponents(param);
             const auto [primary, auxiliary] = info.fs_interpolation[i];
+            if(runtime_info.hw.fs.native_point_input_liveness&&!info.loads.GetAny(param))continue;
+            u32 num_components = runtime_info.hw.fs.native_point_input_liveness&&primary!=Qualifier::PerVertex?
+                std::bit_width(u32(info.loads.flags[Info::AttributeFlags::Index(param)])):info.loads.NumComponents(param);
+            if(runtime_info.hw.fs.native_point_input_compaction){
+                const auto mask=runtime_info.hw.fs.native_point_input_masks[i];
+                native_point_input_component_masks[i]=mask;
+                num_components=runtime_info.hw.fs.native_point_input_widths[i];
+                // Two guest interpolators can address one GS parameter. Mesa
+                // assigns separate DXIL semantics to duplicate input variables,
+                // so share one declaration when its interpolation is identical.
+                bool shared{};
+                for(s32 previous=0;previous<i;++previous){
+                    if(!input_params[previous].num_components||
+                       runtime_info.hw.fs.native_point_input_locations[previous]!=runtime_info.hw.fs.native_point_input_locations[i]||
+                       info.fs_interpolation[previous].primary!=primary||
+                       info.fs_interpolation[previous].auxiliary!=auxiliary)continue;
+                    input_params[i]=input_params[previous];shared=true;break;
+                }
+                if(shared)continue;
+            }
             const Id type = F32[num_components];
             const Id attr_id = [&] {
-                const auto bind_location = input.param_index + (has_clip_distance_inputs ? 1 : 0);
+                const auto location=runtime_info.hw.fs.native_point_input_compaction?
+                    runtime_info.hw.fs.native_point_input_locations[i]:input.param_index;
+                const auto bind_location = location + (has_clip_distance_inputs ? 1 : 0);
                 if (primary == Qualifier::PerVertex &&
                     profile.supports_fragment_shader_barycentric) {
                     return Name(DefineInput(TypeArray(type, ConstU32(3U)), bind_location),
@@ -481,7 +516,7 @@ void EmitContext::DefineInputs() {
                                                false, false, primary == Qualifier::PerVertex);
         }
 
-        if (has_clip_distance_inputs) {
+        if (has_clip_distance_inputs&&!runtime_info.hw.fs.native_point_capture) {
             const auto type = F32[MaxEmulatedClipDistances];
             const auto attr_id = Name(DefineInput(type, 0), fmt::format("cldist_attr{}", 0));
             input_params[num_inputs] = GetAttributeInfo(AmdGpu::NumberFormat::Float, attr_id,
@@ -510,6 +545,8 @@ void EmitContext::DefineInputs() {
         break;
     case SwStage::Geometry: {
         primitive_id = DefineVariable(U32[1], spv::BuiltIn::PrimitiveId, spv::StorageClass::Input);
+        if(runtime_info.hw.gs.native_point_capture||info.loads.GetAny(IR::Attribute::InvocationId))
+            invocation_id=DefineVariable(U32[1],spv::BuiltIn::InvocationId,spv::StorageClass::Input);
         const auto gl_per_vertex =
             Name(TypeStruct(F32[4], F32[1], TypeArray(F32[1], ConstU32(1u))), "gl_PerVertex");
         MemberName(gl_per_vertex, 0, "gl_Position");
@@ -589,32 +626,68 @@ void EmitContext::DefineInputs() {
 void EmitContext::DefineVertexBlock() {
     const std::array<Id, 8> zero{f32_zero_value, f32_zero_value, f32_zero_value, f32_zero_value,
                                  f32_zero_value, f32_zero_value, f32_zero_value, f32_zero_value};
-    output_position = DefineVariable(F32[4], spv::BuiltIn::Position, spv::StorageClass::Output);
+    const bool capture=sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_capture;
+    output_position = capture?DefineVariable(F32[4],std::nullopt,spv::StorageClass::Private):
+        DefineVariable(F32[4], spv::BuiltIn::Position, spv::StorageClass::Output);
+    if(profile.native_viewport_clip_conversion&&
+       ((hw_stage==HwStage::Vertex&&runtime_info.hw.vs.clip_disable)||
+        (sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_expansion&&runtime_info.hw.gs.native_point_clip_disable))){
+        native_point_runtime=DefinePointRuntime(*this);interfaces.push_back(native_point_runtime);
+    }
     const bool needs_clip_distance_emulation = sw_stage == SwStage::Vertex &&
                                                hw_stage == HwStage::Vertex &&
                                                profile.needs_clip_distance_emulation;
     const auto has_clip_distance_outputs = info.stores.GetAny(IR::Attribute::ClipDistance);
+    // A point is rejected using its center distances before corner emission.
+    // These guest values need no hardware clipping signature on its square.
+    native_point_private_distances=sw_stage==SwStage::Geometry&&
+        runtime_info.hw.gs.native_point_expansion&&(info.stores.GetAny(IR::Attribute::PointSize)||capture);
+    const bool compact_point_distances=(sw_stage==SwStage::Vertex&&hw_stage==HwStage::Vertex&&
+        runtime_info.sw.vs.native_point_expansion&&info.stores.GetAny(IR::Attribute::PointSize))||
+        (sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_expansion&&
+         !info.stores.GetAny(IR::Attribute::PointSize)&&!capture);
+    if(compact_point_distances){
+        if(!needs_clip_distance_emulation)
+            native_point_distance_component_masks[0]=info.stores.flags[Info::AttributeFlags::Index(IR::Attribute::ClipDistance)];
+        native_point_distance_component_masks[1]=info.stores.flags[Info::AttributeFlags::Index(IR::Attribute::CullDistance)];
+    }
+    const auto distance_storage=native_point_private_distances?spv::StorageClass::Private:spv::StorageClass::Output;
     if (has_clip_distance_outputs && !needs_clip_distance_emulation) {
-        const Id type{TypeArray(F32[1], ConstU32(8U))};
-        const Id initializer{ConstantComposite(type, zero)};
-        clip_distances = DefineVariable(type, spv::BuiltIn::ClipDistance, spv::StorageClass::Output,
+        const u32 count=native_point_distance_component_masks[0]?
+            std::popcount(u32(native_point_distance_component_masks[0])):8;
+        const Id type{TypeArray(F32[1], ConstU32(count))};
+        const Id initializer{ConstantComposite(type, std::span{zero}.first(count))};
+        const std::optional<spv::BuiltIn> builtin=native_point_private_distances?std::nullopt:
+            std::optional{spv::BuiltIn::ClipDistance};
+        clip_distances = DefineVariable(type, builtin, distance_storage,
                                         initializer);
     }
     if (info.stores.GetAny(IR::Attribute::CullDistance)) {
-        const Id type{TypeArray(F32[1], ConstU32(8U))};
-        const Id initializer{ConstantComposite(type, zero)};
-        cull_distances = DefineVariable(type, spv::BuiltIn::CullDistance, spv::StorageClass::Output,
+        const u32 count=native_point_distance_component_masks[1]?
+            std::popcount(u32(native_point_distance_component_masks[1])):8;
+        const Id type{TypeArray(F32[1], ConstU32(count))};
+        const Id initializer{ConstantComposite(type, std::span{zero}.first(count))};
+        const std::optional<spv::BuiltIn> builtin=native_point_private_distances?std::nullopt:
+            std::optional{spv::BuiltIn::CullDistance};
+        cull_distances = DefineVariable(type, builtin, distance_storage,
                                         initializer);
     }
-    if (info.stores.GetAny(IR::Attribute::PointSize)) {
-        output_point_size =
+    const bool native_vs_points=sw_stage==SwStage::Vertex&&runtime_info.sw.vs.native_point_expansion&&
+        info.stores.GetAny(IR::Attribute::PointSize);
+    if(native_vs_points)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePointMiscLocation(info,
+        profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
+        runtime_info.sw.vs.native_point_live_parameters,runtime_info.sw.vs.native_point_outputs));
+    if (info.stores.GetAny(IR::Attribute::PointSize)&&!native_vs_points) {
+        output_point_size = sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_expansion?
+            DefineVariable(F32[1],std::nullopt,spv::StorageClass::Private):
             DefineVariable(F32[1], spv::BuiltIn::PointSize, spv::StorageClass::Output);
     }
-    if (info.stores.GetAny(IR::Attribute::RenderTargetIndex)) {
-        output_layer = DefineVariable(U32[1], spv::BuiltIn::Layer, spv::StorageClass::Output);
+    if (info.stores.GetAny(IR::Attribute::RenderTargetIndex)&&!native_vs_points) {
+        output_layer = capture?DefineVariable(U32[1],std::nullopt,spv::StorageClass::Private):
+            DefineVariable(U32[1], spv::BuiltIn::Layer, spv::StorageClass::Output);
     }
-    if (info.stores.GetAny(IR::Attribute::ViewportIndex)) {
-        output_viewport_index =
+    if (info.stores.GetAny(IR::Attribute::ViewportIndex)&&!native_vs_points) {
+        output_viewport_index = capture?DefineVariable(U32[1],std::nullopt,spv::StorageClass::Private):
             DefineVariable(U32[1], spv::BuiltIn::ViewportIndex, spv::StorageClass::Output);
     }
 }
@@ -637,10 +710,12 @@ void EmitContext::DefineOutputs() {
             u32 num_attrs = 0u;
             for (u32 i = 0; i < IR::NumParams; i++) {
                 const IR::Attribute param{IR::Attribute::Param0 + i};
-                if (!info.stores.GetAny(param)) {
+                const bool compact_points=hw_stage==HwStage::Vertex&&runtime_info.sw.vs.native_point_expansion;
+                const auto width=NativePointOutputWidth(runtime_info.sw.vs.native_point_outputs,i);
+                if (compact_points?!width:!info.stores.GetAny(param)) {
                     continue;
                 }
-                const u32 num_components = info.stores.NumComponents(param);
+                const u32 num_components = compact_points?width:info.stores.NumComponents(param);
                 const Id id{
                     DefineOutput(F32[num_components], i + (needs_clip_distance_emulation ? 1 : 0))};
                 Name(id, fmt::format("out_attr{}", i));
@@ -651,8 +726,11 @@ void EmitContext::DefineOutputs() {
 
             if (needs_clip_distance_emulation) {
                 clip_distances = Id{DefineOutput(F32[MaxEmulatedClipDistances], 0)};
-                output_params[num_attrs] = GetAttributeInfo(
-                    AmdGpu::NumberFormat::Float, clip_distances, MaxEmulatedClipDistances, true);
+                // Point liveness can leave sparse parameters. The separate
+                // clip vector must not overwrite a live parameter at num_attrs.
+                if(!runtime_info.sw.vs.native_point_expansion)
+                    output_params[num_attrs] = GetAttributeInfo(
+                        AmdGpu::NumberFormat::Float, clip_distances, MaxEmulatedClipDistances, true);
                 Name(clip_distances, fmt::format("cldist_attr{}", 0));
             }
         }
@@ -729,7 +807,11 @@ void EmitContext::DefineOutputs() {
                 continue;
             }
             const u32 num_components = info.stores.NumComponents(mrt);
-            const AmdGpu::NumberFormat num_format{runtime_info.hw.fs.color_buffers[i].num_format};
+            auto num_format=runtime_info.hw.fs.color_buffers[i].num_format;
+            if(profile.native_coherent_images&&
+               runtime_info.hw.fs.color_buffers[i].data_format==AmdGpu::DataFormat::Format2_10_10_10&&
+               num_format==AmdGpu::NumberFormat::Sint)
+                num_format=AmdGpu::NumberFormat::Uint;
             const Id type{GetAttributeType(*this, num_format)[num_components]};
             Id id;
             if (runtime_info.hw.fs.dual_source_blending) {
@@ -751,10 +833,43 @@ void EmitContext::DefineOutputs() {
     }
     case SwStage::Geometry: {
         DefineVertexBlock();
-        for (u32 attr_id = 0; attr_id < info.gs_copy_data.num_attrs; attr_id++) {
-            const Id id{DefineOutput(F32[4], attr_id)};
+        if(runtime_info.hw.gs.native_point_capture){
+            if(!runtime_info.hw.gs.native_point_expansion||!runtime_info.hw.gs.output_vertices||
+               info.gs_copy_data.num_attrs>IR::NumParams)
+                throw std::runtime_error("Invalid native point capture stage");
+            for(u32 source=0;source<info.gs_copy_data.num_attrs;++source){
+                const auto variable=DefineVariable(F32[4],std::nullopt,spv::StorageClass::Private);
+                output_params[source]=GetAttributeInfo(AmdGpu::NumberFormat::Float,variable,4,true);
+                output_params[source].pointer_type=TypePointer(spv::StorageClass::Private,F32[1]);
+            }
+            native_point_capture_buffer=DefineNativePointCaptureBuffer(*this,true);
+            interfaces.push_back(native_point_capture_buffer);
+            native_point_capture_pointer=TypePointer(spv::StorageClass::StorageBuffer,U32[1]);
+            native_point_capture_counter=DefineVariable(U32[1],std::nullopt,spv::StorageClass::Private,u32_zero_value);
+            break;
+        }
+        if(runtime_info.hw.gs.native_point_expansion){
+            if(!ValidId(native_point_runtime)){
+                native_point_runtime=DefinePointRuntime(*this);interfaces.push_back(native_point_runtime);
+            }
+            if(info.gs_copy_data.num_attrs>IR::NumParams)
+                throw std::runtime_error("Invalid native point geometry parameter count");
+        }
+        const u32 output_count=runtime_info.hw.gs.native_point_expansion?IR::NumParams:info.gs_copy_data.num_attrs;
+        for (u32 attr_id = 0; attr_id < output_count; attr_id++) {
+            const auto width=NativePointOutputWidth(runtime_info.hw.gs.native_point_outputs,attr_id);
+            if(runtime_info.hw.gs.native_point_expansion){
+                if(!width)continue;
+                if(std::ranges::any_of(runtime_info.hw.gs.native_point_outputs,[&](const auto& output){
+                    return output.mask&&output.location==attr_id&&output.source>=info.gs_copy_data.num_attrs;}))
+                    throw std::runtime_error("Native point fragment source exceeds copy outputs");
+            }
+            const u32 components=runtime_info.hw.gs.native_point_expansion?
+                width:4;
+            if(!components||components>4)throw std::runtime_error("Invalid native point geometry component count");
+            const Id id{DefineOutput(F32[components], attr_id)};
             Name(id, fmt::format("out_attr{}", attr_id));
-            output_params[attr_id] = GetAttributeInfo(AmdGpu::NumberFormat::Float, id, 4, true);
+            output_params[attr_id] = GetAttributeInfo(AmdGpu::NumberFormat::Float, id, components, true);
         }
         break;
     }
@@ -994,7 +1109,7 @@ spv::ImageFormat GetFormat(const AmdGpu::Image& image) {
 
 Id ImageType(EmitContext& ctx, const ImageResource& desc, Id sampled_type) {
     const auto image = desc.GetSharp(ctx.info);
-    const auto format = desc.is_atomic ? GetFormat(image) : spv::ImageFormat::Unknown;
+    const auto format = desc.is_atomic ? (desc.native_raw32 ? spv::ImageFormat::R32ui : GetFormat(image)) : spv::ImageFormat::Unknown;
     const auto type = image.GetViewType(desc.is_array ||
         (ctx.profile.native_coherent_images && desc.NeedsNativeSliceView(ctx.info)));
     const u32 sampled = desc.is_written ? 2 : 1;
@@ -1007,7 +1122,9 @@ Id ImageType(EmitContext& ctx, const ImageResource& desc, Id sampled_type) {
     case AmdGpu::ImageType::Cube:
         return ctx.TypeImage(sampled_type, spv::Dim::Dim2D, false, true, false, sampled, format);
     case AmdGpu::ImageType::Color2DMsaa:
-        return ctx.TypeImage(sampled_type, spv::Dim::Dim2D, false, false, true, sampled, format);
+        return ctx.TypeImage(sampled_type, spv::Dim::Dim2D, false, false, !desc.native_msaa_storage, sampled, format);
+    case AmdGpu::ImageType::Color2DMsaaArray:
+        return ctx.TypeImage(sampled_type, spv::Dim::Dim2D, false, true, !desc.native_msaa_storage, sampled, format);
     case AmdGpu::ImageType::Color3D:
         return ctx.TypeImage(sampled_type, spv::Dim::Dim3D, false, false, false, sampled, format);
     default:
@@ -1023,13 +1140,19 @@ void EmitContext::DefineImagesAndSamplers() {
         const bool is_integer = AmdGpu::IsInteger(nfmt);
         const bool is_storage = image_desc.is_written;
         const MipStorageFallbackMode mip_fallback_mode = image_desc.mip_fallback_mode;
-        const VectorIds& data_types = GetAttributeType(*this, nfmt);
+        const u32 data_format = u32(sharp.GetDataFmt());
+        const bool signed_packed10 = data_format == 9 &&
+            (nfmt == AmdGpu::NumberFormat::Snorm || nfmt == AmdGpu::NumberFormat::Sint);
+        const u32 packed_format = profile.native_coherent_images && is_storage &&
+            (signed_packed10 || image_desc.native_packed10_raw || image_desc.native_raw32 ||
+             (data_format >= 16 && data_format <= 19)) ? data_format : 0U;
+        const VectorIds& data_types = packed_format ? U32 : GetAttributeType(*this, nfmt);
         const Id sampled_type = data_types[1];
         const Id image_type{ImageType(*this, image_desc, sampled_type)};
 
         const u32 num_bindings = image_desc.NumBindings(info);
         Id pointee_type = image_type;
-        if (mip_fallback_mode == MipStorageFallbackMode::DynamicIndex) {
+        if (mip_fallback_mode == MipStorageFallbackMode::DynamicIndex || image_desc.native_msaa_storage) {
             if (profile.native_coherent_images) {
                 AddCapability(spv::Capability::ShaderNonUniform);
                 AddCapability(spv::Capability::StorageImageArrayNonUniformIndexing);
@@ -1055,6 +1178,9 @@ void EmitContext::DefineImagesAndSamplers() {
             .is_integer = is_integer,
             .is_storage = is_storage,
             .native_slice_view = profile.native_coherent_images && image_desc.NeedsNativeSliceView(info),
+            .native_msaa_storage = image_desc.native_msaa_storage,
+            .native_packed_format = packed_format,
+            .native_packed_number_format = nfmt,
             .mip_fallback_mode = mip_fallback_mode,
         });
         interfaces.push_back(id);
@@ -1255,8 +1381,10 @@ Id EmitContext::DefineGetBdaPointer() {
     if(profile.native_dma_buffers){
         const auto partial=OpINotEqual(U1[1],OpBitwiseAnd(U64,bda,Constant(U64,NativeDma::PartialFlag)),u64_zero_value);
         const auto encoded_slot=OpBitwiseAnd(U64,bda,Constant(U64,~NativeDma::PartialFlag));
+        const auto partial_capacity=OpLoad(U64,OpAccessChain(bda_pointer_type,bda_buffer_id,u32_zero_value,ConstU32(NativeDma::PartialCapacityEntry)));
         const auto valid_slot=OpLogicalAnd(U1[1],OpINotEqual(U1[1],encoded_slot,u64_zero_value),
-            OpULessThanEqual(U1[1],encoded_slot,Constant(U64,u64(NativeDma::PartialPageCount))));
+            OpLogicalAnd(U1[1],OpULessThanEqual(U1[1],partial_capacity,Constant(U64,u64(NativeDma::PageCount))),
+                OpULessThanEqual(U1[1],encoded_slot,partial_capacity)));
         const auto slot=OpUConvert(U32[1],OpSelect(U64,valid_slot,OpISub(U64,encoded_slot,u64_one_value),u64_zero_value));
         const auto subpage=OpBitwiseAnd(U32[1],OpShiftRightLogical(U32[1],OpUConvert(U32[1],address),ConstU32(NativeDma::SubpageShift)),ConstU32(NativeDma::SubpagesPerPage-1));
         const auto secondary=OpIAdd(U32[1],ConstU32(NativeDma::SecondaryBase),

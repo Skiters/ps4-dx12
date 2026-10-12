@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <span>
 #include "common/types.h"
 #include "shader_recompiler/frontend/tessellation.h"
@@ -68,12 +69,26 @@ enum class Output : u8 {
 };
 using OutputMap = std::array<Output, 4>;
 
+struct NativePointOutput {
+    u8 source{},mask{},location{},component{};
+    bool operator==(const NativePointOutput&) const = default;
+};
+inline u32 NativePointOutputWidth(std::span<const NativePointOutput> outputs,u32 location){
+    u32 width{};
+    for(const auto& output:outputs)if(output.mask&&output.location==location)
+        width=std::max(width,u32(output.component)+u32(std::popcount(u32(output.mask))));
+    return width;
+}
 struct SwVertexRuntimeInfo {
     u32 step_rate_0;
     u32 step_rate_1;
     u16 vertex_sgpr_offset{};
     u16 instance_sgpr_offset{};
+    bool is_indirect{};
     bool tess_emulated_primitive{};
+    bool native_point_expansion{};
+    u32 native_point_live_parameters{};
+    std::array<NativePointOutput,32> native_point_outputs{};
 
     bool operator==(const SwVertexRuntimeInfo& other) const noexcept = default;
 };
@@ -150,9 +165,24 @@ struct HwGeometryRuntimeInfo {
     AmdGpu::GsScenario mode;
     std::span<const u32> vs_copy;
     u64 vs_copy_hash;
+    bool native_point_expansion{},native_point_clip_depth{},native_point_clip_disable{},native_point_negative_one_to_one{};
+    bool native_point_capture{};
+    u32 native_point_live_parameters{};
+    std::array<u8,32> native_point_live_components{};
+    std::array<u8,32> native_point_component_masks{};
+    std::array<NativePointOutput,32> native_point_outputs{};
 
     bool operator==(const HwGeometryRuntimeInfo& other) const {
-        return num_outputs == other.num_outputs && outputs == other.outputs &&
+        return native_point_expansion==other.native_point_expansion&&
+               native_point_capture==other.native_point_capture&&
+               native_point_live_parameters==other.native_point_live_parameters&&
+               native_point_live_components==other.native_point_live_components&&
+               native_point_component_masks==other.native_point_component_masks&&
+               native_point_outputs==other.native_point_outputs&&
+               native_point_clip_depth==other.native_point_clip_depth&&
+               native_point_clip_disable==other.native_point_clip_disable&&
+               native_point_negative_one_to_one==other.native_point_negative_one_to_one&&
+               num_outputs == other.num_outputs && outputs == other.outputs &&
                num_invocations == other.num_invocations &&
                output_vertices == other.output_vertices && in_primitive == other.in_primitive &&
                std::ranges::equal(out_primitive, other.out_primitive) &&
@@ -210,6 +240,11 @@ struct HwFragmentRuntimeInfo {
     bool front_face_all_bits{false};
     bool dual_source_blending{false};
     bool clip_distance_emulation{false};
+    bool native_point_input_liveness{false};
+    bool native_point_input_compaction{false};
+    bool native_point_capture{false};
+    std::array<u8,32> native_point_input_locations{},native_point_input_masks{},
+        native_point_input_offsets{},native_point_input_widths{};
 
     bool operator==(const HwFragmentRuntimeInfo& other) const noexcept {
         return std::ranges::equal(color_buffers, other.color_buffers) &&
@@ -219,6 +254,13 @@ struct HwFragmentRuntimeInfo {
                front_face_all_bits == other.front_face_all_bits &&
                dual_source_blending == other.dual_source_blending &&
                clip_distance_emulation == other.clip_distance_emulation &&
+               native_point_input_liveness == other.native_point_input_liveness &&
+               native_point_input_compaction == other.native_point_input_compaction &&
+               native_point_capture == other.native_point_capture &&
+               native_point_input_locations == other.native_point_input_locations &&
+               native_point_input_masks == other.native_point_input_masks &&
+               native_point_input_offsets == other.native_point_input_offsets &&
+               native_point_input_widths == other.native_point_input_widths &&
                std::ranges::equal(inputs.begin(), inputs.begin() + num_inputs, other.inputs.begin(),
                                   other.inputs.begin() + num_inputs);
     }

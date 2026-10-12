@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <mutex>
+#include <bit>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -44,7 +45,7 @@ static constexpr spv::ExecutionMode GetInputPrimitiveType(AmdGpu::PrimitiveType 
 static constexpr spv::ExecutionMode GetOutputPrimitiveType(AmdGpu::GsOutputPrimitiveType type) {
     switch (type) {
     case AmdGpu::GsOutputPrimitiveType::PointList:
-        return spv::ExecutionMode::OutputVertices;
+        return spv::ExecutionMode::OutputPoints;
     case AmdGpu::GsOutputPrimitiveType::LineStrip:
         return spv::ExecutionMode::OutputLineStrip;
     case AmdGpu::GsOutputPrimitiveType::TriangleStrip:
@@ -388,7 +389,7 @@ void SetupCapabilities(const Info& info, const Profile& profile, const RuntimeIn
     }
 }
 
-void DefineEntryPoint(const Info& info, EmitContext& ctx, Id main) {
+void DefineEntryPoint(const Info& info, EmitContext& ctx, Id main,const IR::Program& program) {
     const std::span interfaces(ctx.interfaces.data(), ctx.interfaces.size());
     spv::ExecutionModel execution_model{};
     switch (info.sw_stage) {
@@ -432,15 +433,49 @@ void DefineEntryPoint(const Info& info, EmitContext& ctx, Id main) {
             ctx.AddExecutionMode(main, spv::ExecutionMode::DepthReplacing);
         }
         break;
-    case SwStage::Geometry:
+    case SwStage::Geometry: {
         execution_model = spv::ExecutionModel::Geometry;
         ctx.AddExecutionMode(main, GetInputPrimitiveType(ctx.runtime_info.hw.gs.in_primitive));
-        ctx.AddExecutionMode(main, GetOutputPrimitiveType(ctx.runtime_info.hw.gs.out_primitive[0]));
-        ctx.AddExecutionMode(main, spv::ExecutionMode::OutputVertices,
-                             ctx.runtime_info.hw.gs.output_vertices);
+        const auto& geometry=ctx.runtime_info.hw.gs;
+        u32 vertices=geometry.output_vertices;
+        const bool expanded_points=geometry.native_point_expansion&&info.stores.GetAny(IR::Attribute::PointSize)&&!geometry.native_point_capture;
+        if(geometry.native_point_capture)vertices=1;
+        else if(geometry.native_point_expansion){
+            // An acyclic guest shader cannot emit more vertices than its
+            // reachable syntax contains. Retain the guest declaration for
+            // loops; never replay guest code to split an oversized stream.
+            const bool loops=std::ranges::any_of(program.syntax_list,[](const auto& node){
+                return node.type==IR::AbstractSyntaxNode::Type::Loop||node.type==IR::AbstractSyntaxNode::Type::Repeat;
+            });
+            if(!loops){
+                u64 emissions{};
+                for(const auto& node:program.syntax_list)if(node.type==IR::AbstractSyntaxNode::Type::Block)
+                    for(const auto& instruction:node.data.block->Instructions())
+                        emissions+=instruction.GetOpcode()==IR::Opcode::EmitVertex;
+                vertices=u32(std::min<u64>(vertices,std::max<u64>(1,emissions)));
+            }
+            u32 live_components{};
+            for(const auto& output:geometry.native_point_outputs)
+                live_components+=std::popcount(u32(output.mask));
+            const auto distance_components=[&](u32 slot){const auto mask=ctx.native_point_distance_component_masks[slot];
+                return mask?std::popcount(u32(mask)):8;};
+            const u32 components=4+live_components+
+                u32(info.stores.GetAny(IR::Attribute::RenderTargetIndex))+
+                u32(info.stores.GetAny(IR::Attribute::ViewportIndex))+
+                distance_components(0)*u32(!expanded_points&&info.stores.GetAny(IR::Attribute::ClipDistance))+
+                distance_components(1)*u32(!expanded_points&&info.stores.GetAny(IR::Attribute::CullDistance));
+            const u32 expansion=expanded_points?4:1;
+            if(!vertices||vertices>256||u64(vertices)*expansion*components>1024)
+                throw std::runtime_error("Native point geometry exceeds the GS output component budget");
+            vertices*=expansion;
+        }
+        ctx.AddExecutionMode(main, expanded_points?spv::ExecutionMode::OutputTriangleStrip:
+            GetOutputPrimitiveType(geometry.out_primitive[0]));
+        ctx.AddExecutionMode(main, spv::ExecutionMode::OutputVertices,vertices);
         ctx.AddExecutionMode(main, spv::ExecutionMode::Invocations,
                              ctx.runtime_info.hw.gs.num_invocations);
         break;
+    }
     default:
         UNREACHABLE_MSG("Stage {}", u32(info.hw_stage));
     }
@@ -659,7 +694,7 @@ std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_in
                            const IR::Program& program, Bindings& binding) {
     EmitContext ctx{profile, runtime_info, program.info, binding};
     const Id main{DefineMain(ctx, program)};
-    DefineEntryPoint(program.info, ctx, main);
+    DefineEntryPoint(program.info, ctx, main,program);
     SetupCapabilities(program.info, profile, runtime_info, ctx);
     SetupFloatMode(ctx, profile, runtime_info, main);
     PatchPhiNodes(program, ctx);

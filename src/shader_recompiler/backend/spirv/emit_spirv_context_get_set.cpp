@@ -5,12 +5,14 @@
 #include "core/emulator_settings.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
+#include "shader_recompiler/native_point_capture.h"
 #include "shader_recompiler/ir/attribute.h"
 #include "shader_recompiler/ir/microinstruction.h"
 #include "shader_recompiler/ir/patch.h"
 #include "shader_recompiler/runtime_info.h"
 
 #include <magic_enum/magic_enum.hpp>
+#include <bit>
 
 namespace Shader::Backend::SPIRV {
 
@@ -78,6 +80,28 @@ Id EmitReadConstBuffer(EmitContext& ctx, u32 handle, Id index) {
 Id EmitGetAttribute(EmitContext& ctx, IR::Attribute attr, u32 comp, u32 index) {
     if (IR::IsParam(attr)) {
         const u32 param_index{u32(attr) - u32(IR::Attribute::Param0)};
+        if(ctx.sw_stage==SwStage::Fragment&&ctx.runtime_info.hw.fs.native_point_capture){
+            const auto& fragment=ctx.runtime_info.hw.fs;
+            const u32 inputs=fragment.num_inputs-u32(fragment.clip_distance_emulation);
+            const u32 word=param_index<inputs?
+                NativePointCapture::ParameterWord+fragment.inputs[param_index].param_index*4+comp:
+                NativePointCapture::ClipWord+comp;
+            if(comp>=4||param_index>=fragment.num_inputs||
+               (param_index<inputs&&fragment.inputs[param_index].param_index>=IR::NumParams))
+                throw std::runtime_error("Invalid captured point fragment parameter");
+            const auto record=ctx.OpLoad(ctx.U32[1],ctx.native_point_capture_index);
+            const auto offset=ctx.OpIAdd(ctx.U32[1],ctx.OpIMul(ctx.U32[1],record,
+                ctx.ConstU32(NativePointCapture::RecordWords)),ctx.ConstU32(word));
+            const auto image=ctx.OpLoad(ctx.native_point_capture_image_type,ctx.native_point_capture_buffer);
+            const auto value=ctx.OpImageFetch(ctx.U32[4],image,offset,spv::ImageOperandsMask::MaskNone,{});
+            return ctx.OpBitcast(ctx.F32[1],ctx.OpCompositeExtract(ctx.U32[1],value,0u));
+        }
+        if(ctx.sw_stage==SwStage::Fragment&&ctx.runtime_info.hw.fs.native_point_input_compaction&&
+           param_index<ctx.runtime_info.hw.fs.num_inputs-u32(ctx.runtime_info.hw.fs.clip_distance_emulation)){
+            const auto mask=ctx.native_point_input_component_masks[param_index];
+            comp=ctx.runtime_info.hw.fs.native_point_input_offsets[param_index]+
+                std::popcount(u32(mask)&((1u<<comp)-1));
+        }
         const auto& param{ctx.input_params.at(param_index)};
         const Id value = [&] {
             if (param.is_array) {
@@ -255,6 +279,14 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
 }
 
 void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 element) {
+    if(ctx.sw_stage==SwStage::Vertex&&ctx.runtime_info.sw.vs.native_point_expansion&&
+       ctx.info.stores.GetAny(IR::Attribute::PointSize)&&
+       (attr==IR::Attribute::PointSize||attr==IR::Attribute::RenderTargetIndex||attr==IR::Attribute::ViewportIndex)){
+        const u32 component=attr==IR::Attribute::PointSize?0u:attr==IR::Attribute::RenderTargetIndex?1u:2u;
+        ctx.OpStore(ctx.OpAccessChain(ctx.output_u32,ctx.native_point_misc,ctx.ConstU32(component)),
+            ctx.OpBitcast(ctx.U32[1],value));
+        return;
+    }
     const auto op_store = [&](Id pointer) {
         const auto [component_type, is_integer] = OutputAttrComponentType(ctx, attr);
         if (is_integer) {
@@ -265,6 +297,24 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
     };
     if (IR::IsParam(attr)) {
         const u32 attr_index{u32(attr) - u32(IR::Attribute::Param0)};
+        if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture){
+            const auto& output=ctx.output_params[attr_index];
+            if(output.num_components)op_store(ctx.OpAccessChain(output.pointer_type,output.id,ctx.ConstU32(element)));
+            return;
+        }
+        const bool vertex_points=ctx.sw_stage==SwStage::Vertex&&ctx.hw_stage==HwStage::Vertex&&
+            ctx.runtime_info.sw.vs.native_point_expansion;
+        if(vertex_points||(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_expansion)){
+            const auto& transports=vertex_points?ctx.runtime_info.sw.vs.native_point_outputs:ctx.runtime_info.hw.gs.native_point_outputs;
+            for(const auto& transport:transports){
+                if(transport.source!=attr_index||!(transport.mask&(1u<<element)))continue;
+                const auto& output=ctx.output_params[transport.location];
+                const u32 component=transport.component+std::popcount(u32(transport.mask)&((1u<<element)-1));
+                op_store(output.num_components==1?output.id:
+                    ctx.OpAccessChain(output.pointer_type,output.id,ctx.ConstU32(component)));
+            }
+            return;
+        }
         if (ctx.hw_stage == HwStage::Local) {
             const auto component_ptr = ctx.TypePointer(spv::StorageClass::Output, ctx.F32[1]);
             return op_store(ctx.OpAccessChain(component_ptr, ctx.output_attr_array,
@@ -283,6 +333,15 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
     if (IR::IsMrt(attr)) {
         const u32 index{u32(attr) - u32(IR::Attribute::RenderTarget0)};
         const auto& info{ctx.frag_outputs.at(index)};
+        const auto& target=ctx.runtime_info.hw.fs.color_buffers[index];
+        if(ctx.profile.native_coherent_images&&target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
+           target.num_format==AmdGpu::NumberFormat::Sint){
+            const u32 bits=element==3?2:10;
+            const auto clamped=ctx.OpSClamp(ctx.S32[1],ctx.OpBitcast(ctx.S32[1],value),
+                ctx.ConstS32(-s32(1u<<(bits-1))),ctx.ConstS32(s32((1u<<(bits-1))-1)));
+            value=ctx.OpBitcast(ctx.F32[1],ctx.OpBitwiseAnd(ctx.U32[1],ctx.OpBitcast(ctx.U32[1],clamped),
+                ctx.ConstU32((1u<<bits)-1)));
+        }
         if (element < 3 && ctx.runtime_info.hw.fs.color_buffers[index].blend_self_scale) {
             // Emulates GCN's factor-scaled min/max blend: min/max(src*src, dst*dst).
             value = ctx.OpFMul(ctx.F32[1], value, value);
@@ -296,13 +355,21 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
     switch (attr) {
     case IR::Attribute::Position0:
         return op_store(
-            ctx.OpAccessChain(ctx.output_f32, ctx.output_position, ctx.ConstU32(element)));
+            ctx.OpAccessChain(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture?
+                ctx.TypePointer(spv::StorageClass::Private,ctx.F32[1]):ctx.output_f32,
+                ctx.output_position, ctx.ConstU32(element)));
     case IR::Attribute::ClipDistance:
+        if(const auto mask=ctx.native_point_distance_component_masks[0])
+            element=std::popcount(u32(mask)&((1u<<element)-1));
         return op_store(
-            ctx.OpAccessChain(ctx.output_f32, ctx.clip_distances, ctx.ConstU32(element)));
+            ctx.OpAccessChain(ctx.native_point_private_distances?ctx.TypePointer(spv::StorageClass::Private,ctx.F32[1]):
+                ctx.output_f32, ctx.clip_distances, ctx.ConstU32(element)));
     case IR::Attribute::CullDistance:
+        if(const auto mask=ctx.native_point_distance_component_masks[1])
+            element=std::popcount(u32(mask)&((1u<<element)-1));
         return op_store(
-            ctx.OpAccessChain(ctx.output_f32, ctx.cull_distances, ctx.ConstU32(element)));
+            ctx.OpAccessChain(ctx.native_point_private_distances?ctx.TypePointer(spv::StorageClass::Private,ctx.F32[1]):
+                ctx.output_f32, ctx.cull_distances, ctx.ConstU32(element)));
     case IR::Attribute::PointSize:
         return op_store(ctx.output_point_size);
     case IR::Attribute::RenderTargetIndex:

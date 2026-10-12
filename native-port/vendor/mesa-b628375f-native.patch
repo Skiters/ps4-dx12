@@ -1,0 +1,1051 @@
+diff --git a/meson.build b/meson.build
+index df0241e1af07f6f660330fc78dc755f406755f2a..35c1cb32bdde1179fc4b0eeb4c1fd204330cafb0 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1076,6 +1076,7 @@ if with_gallium_rusticl or with_microsoft_clc
+ endif
+ 
+ with_gfx_compute = [
++  with_spirv_to_dxil,
+   with_any_opengl,
+   with_any_vk,
+   with_clc,
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index c80a232f3c3a14da9ceced2e34e5e7da56cc79af..7149fd6256dff0404516dc03e6c02749319234f7 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -554,6 +554,10 @@ intrinsic("barrier",
+ # feasible with NIR.
+ intrinsic("shader_clock", dest_comp=2, bit_sizes=[32], flags=[CAN_ELIMINATE],
+           indices=[MEMORY_SCOPE])
++intrinsic("load_dxil_nv_special", dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE],
++          indices=[BASE])
++intrinsic("load_dxil_ags_clock", dest_comp=2, bit_sizes=[32], flags=[CAN_ELIMINATE],
++          indices=[MEMORY_SCOPE])
+ 
+ # Shader ballot intrinsics with semantics analogous to the
+ #
+diff --git a/src/microsoft/compiler/dxil_function.c b/src/microsoft/compiler/dxil_function.c
+index f5296a789972324d94e6f46056f332b01a15e674..3f30da3b42f558b48a2e17421ab2a8000a949157 100644
+--- a/src/microsoft/compiler/dxil_function.c
++++ b/src/microsoft/compiler/dxil_function.c
+@@ -34,7 +34,7 @@ struct predefined_func_descr {
+ };
+ 
+ static struct  predefined_func_descr predefined_funcs[] = {
+-{"dx.op.atomicBinOp", "O", "i@iiiii", DXIL_ATTR_KIND_READ_NONE},
++{"dx.op.atomicBinOp", "O", "i@iiiiO", DXIL_ATTR_KIND_READ_NONE},
+ {"dx.op.cbufferLoad", "O", "i@ii", DXIL_ATTR_KIND_READ_ONLY},
+ {"dx.op.cbufferLoadLegacy", "B", "i@i", DXIL_ATTR_KIND_READ_ONLY},
+ {"dx.op.createHandle", "@", "iciib", DXIL_ATTR_KIND_READ_ONLY},
+@@ -51,6 +51,7 @@ static struct  predefined_func_descr predefined_funcs[] = {
+ {"dx.op.isSpecialFloat", "b", "iO", DXIL_ATTR_KIND_READ_NONE},
+ {"dx.op.binary", "O", "iOO", DXIL_ATTR_KIND_READ_NONE},
+ {"dx.op.bufferStore", "v", "i@iiOOOOc", DXIL_ATTR_KIND_NONE},
++{"dx.op.bufferUpdateCounter", "i", "i@c", DXIL_ATTR_KIND_NONE},
+ {"dx.op.rawBufferStore", "v", "i@iiOOOOci", DXIL_ATTR_KIND_NONE},
+ {"dx.op.bufferLoad", "R", "i@ii", DXIL_ATTR_KIND_READ_ONLY},
+ {"dx.op.rawBufferLoad", "R", "i@iici", DXIL_ATTR_KIND_READ_ONLY},
+@@ -74,7 +75,7 @@ static struct  predefined_func_descr predefined_funcs[] = {
+ {"dx.op.getDimensions", "D", "i@i", DXIL_ATTR_KIND_READ_ONLY},
+ {"dx.op.calculateLOD", "f", "i@@fffb", DXIL_ATTR_KIND_READ_ONLY},
+ {"dx.op.barrier", "v", "ii", DXIL_ATTR_KIND_NO_DUPLICATE},
+-{"dx.op.atomicCompareExchange", "O", "i@iiiii", DXIL_ATTR_KIND_READ_NONE},
++{"dx.op.atomicCompareExchange", "O", "i@iiiOO", DXIL_ATTR_KIND_READ_NONE},
+ {"dx.op.textureStore", "v", "i@iiiOOOOc", DXIL_ATTR_KIND_NONE},
+ {"dx.op.primitiveID", "i", "i", DXIL_ATTR_KIND_READ_NONE},
+ {"dx.op.outputControlPointID", "i", "i", DXIL_ATTR_KIND_READ_NONE},
+diff --git a/src/microsoft/compiler/dxil_module.c b/src/microsoft/compiler/dxil_module.c
+index c70c67c42109a175f181a1af80f78eb2e425f6be..0d4eff11826f72c4679dd68d497d654a95bba381 100644
+--- a/src/microsoft/compiler/dxil_module.c
++++ b/src/microsoft/compiler/dxil_module.c
+@@ -1932,6 +1932,7 @@ get_basic_srv_uav_res_props_dword(bool uav,
+    } basic;
+    basic.raw = 0;
+    basic.kind = kind;
++   basic.base_align_log2 = kind == DXIL_RESOURCE_KIND_STRUCTURED_BUFFER ? 2 : 0;
+    basic.uav = uav;
+    basic.rov = rov;
+    basic.globally_coherent = globally_coherent;
+@@ -2020,6 +2021,8 @@ fill_res_props_dwords(uint32_t dwords[2],
+ 
+    switch (kind) {
+    case DXIL_RESOURCE_KIND_STRUCTURED_BUFFER:
++      dwords[1] = get_int_from_mdnode(mdnode->node.subnodes[10], 1);
++      break;
+    case DXIL_RESOURCE_KIND_INVALID:
+       UNREACHABLE("Unimplemented");
+    case DXIL_RESOURCE_KIND_RAW_BUFFER:
+diff --git a/src/microsoft/compiler/dxil_nir.c b/src/microsoft/compiler/dxil_nir.c
+index 3bad5a48d3d3f109b201284d1c99cce6220460c9..38898c4d2bb6c1a780a6e8faa91ff3cf0427cf5d 100644
+--- a/src/microsoft/compiler/dxil_nir.c
++++ b/src/microsoft/compiler/dxil_nir.c
+@@ -1355,6 +1355,15 @@ lower_sysval_to_load_input_impl(nir_builder *b, nir_intrinsic_instr *intr,
+    case nir_intrinsic_load_vertex_id_zero_base:
+       sysval = SYSTEM_VALUE_VERTEX_ID_ZERO_BASE;
+       break;
++   case nir_intrinsic_load_barycentric_coord_pixel:
++      if (nir_intrinsic_interp_mode(intr) == INTERP_MODE_SMOOTH ||
++          nir_intrinsic_interp_mode(intr) == INTERP_MODE_NONE)
++         sysval = SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD;
++      else if (nir_intrinsic_interp_mode(intr) == INTERP_MODE_NOPERSPECTIVE)
++         sysval = SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD;
++      else
++         return false;
++      break;
+    default:
+       return false;
+    }
+diff --git a/src/microsoft/compiler/dxil_signature.c b/src/microsoft/compiler/dxil_signature.c
+index 0219e54513355a807c12becaf4489947bd38d343..d21a04ba362465fa80fc386cfc139d4278d4180a 100644
+--- a/src/microsoft/compiler/dxil_signature.c
++++ b/src/microsoft/compiler/dxil_signature.c
+@@ -58,6 +58,10 @@ is_depth_output(enum dxil_semantic_kind kind)
+ static uint8_t
+ get_interpolation(nir_variable *var)
+ {
++   /* attributeAtVertex reads uninterpolated values of a selected primitive
++    * vertex. The signature must match that DXIL operation's contract. */
++   if (var->data.per_vertex)
++      return DXIL_INTERP_CONSTANT;
+    if (var->data.patch)
+       return DXIL_INTERP_UNDEFINED;
+ 
+@@ -139,6 +143,10 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
+    if (info->kind == DXIL_SEM_TARGET) {
+       info->start_row = info->index;
+       info->cols = 4;
++   } else if (info->kind == DXIL_SEM_BARYCENTRICS) {
++      /* SV_Barycentrics is a float3 system input with no packed input rows. */
++      info->start_row = -1;
++      info->cols = 3;
+    } else if (is_depth ||
+               (info->kind == DXIL_SEM_PRIMITIVE_ID && is_gs_input) ||
+               info->kind == DXIL_SEM_COVERAGE ||
+@@ -210,6 +218,14 @@ get_semantic_sv_name(nir_variable *var, struct semantic_info *info, mesa_shader_
+    case SYSTEM_VALUE_SAMPLE_ID:
+       info->kind = DXIL_SEM_SAMPLE_INDEX;
+       break;
++   case SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD:
++      info->kind = DXIL_SEM_BARYCENTRICS;
++      info->index = 0;
++      break;
++   case SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD:
++      info->kind = DXIL_SEM_BARYCENTRICS;
++      info->index = 1;
++      break;
+    default:
+       UNREACHABLE("unsupported system value");
+    }
+diff --git a/src/microsoft/compiler/nir_to_dxil.c b/src/microsoft/compiler/nir_to_dxil.c
+index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13bc3ee9eb4 100644
+--- a/src/microsoft/compiler/nir_to_dxil.c
++++ b/src/microsoft/compiler/nir_to_dxil.c
+@@ -310,6 +310,7 @@ enum dxil_intr {
+ 
+    DXIL_INTR_BUFFER_LOAD = 68,
+    DXIL_INTR_BUFFER_STORE = 69,
++   DXIL_INTR_BUFFER_UPDATE_COUNTER = 70,
+ 
+    DXIL_INTR_TEXTURE_SIZE = 72,
+    DXIL_INTR_TEXTURE_GATHER = 73,
+@@ -575,6 +576,8 @@ struct ntd_context {
+    const struct dxil_value *ssbo_handles[MAX_UAVS];
+    const struct dxil_value *image_handles[MAX_UAVS];
+    uint32_t num_uavs;
++   uint32_t nv_special_uav_id;
++   uint32_t ags_clock_uav_id;
+ 
+    struct util_dynarray cbv_metadata_nodes;
+    const struct dxil_value *cbv_handles[MAX_CBVS];
+@@ -953,7 +956,8 @@ emit_atomic_binop(struct ntd_context *ctx,
+                   const struct dxil_value *coord[3],
+                   const struct dxil_value *value)
+ {
+-   const struct dxil_func *func = dxil_get_function(&ctx->mod, "dx.op.atomicBinOp", DXIL_I32);
++   const bool wide = dxil_value_get_type(value) == dxil_module_get_int_type(&ctx->mod, 64);
++   const struct dxil_func *func = dxil_get_function(&ctx->mod, "dx.op.atomicBinOp", wide ? DXIL_I64 : DXIL_I32);
+ 
+    if (!func)
+       return NULL;
+@@ -977,8 +981,9 @@ emit_atomic_cmpxchg(struct ntd_context *ctx,
+                     const struct dxil_value *cmpval,
+                     const struct dxil_value *newval)
+ {
++   const bool wide = dxil_value_get_type(newval) == dxil_module_get_int_type(&ctx->mod, 64);
+    const struct dxil_func *func =
+-      dxil_get_function(&ctx->mod, "dx.op.atomicCompareExchange", DXIL_I32);
++      dxil_get_function(&ctx->mod, "dx.op.atomicCompareExchange", wide ? DXIL_I64 : DXIL_I32);
+ 
+    if (!func)
+       return NULL;
+@@ -1211,7 +1216,8 @@ add_resource(struct ntd_context *ctx, enum dxil_resource_type type,
+       resource_v0->upper_bound = layout->binding + layout->size - 1;
+    if (type == DXIL_RES_UAV_TYPED ||
+        type == DXIL_RES_UAV_RAW ||
+-       type == DXIL_RES_UAV_STRUCTURED) {
++       type == DXIL_RES_UAV_STRUCTURED ||
++       type == DXIL_RES_UAV_STRUCTURED_WITH_COUNTER) {
+       uint32_t new_uav_count = ctx->num_uavs + layout->size;
+       if (layout->size == 0 || new_uav_count < ctx->num_uavs)
+          ctx->num_uavs = UINT_MAX;
+@@ -1366,6 +1372,43 @@ emit_globals(struct ntd_context *ctx, unsigned size)
+    return true;
+ }
+ 
++static bool
++emit_nv_special_uav(struct ntd_context *ctx)
++{
++   ctx->nv_special_uav_id = util_dynarray_num_elements(&ctx->uav_metadata_nodes,
++                                                     const struct dxil_mdnode *);
++   resource_array_layout layout = { ctx->nv_special_uav_id, 1, 1, 29 };
++   const struct dxil_type *members[] = {
++      dxil_module_get_array_type(&ctx->mod, dxil_module_get_int_type(&ctx->mod, 32), 64),
++   };
++   const struct dxil_type *type = dxil_module_get_struct_type(&ctx->mod,
++                                                            "RWStructuredBuffer.NvShaderExtnStruct",
++                                                            members, ARRAY_SIZE(members));
++   if (!type)
++      return false;
++   const struct dxil_mdnode *fields[11];
++   fill_resource_metadata(&ctx->mod, fields, type, "__nv_shader_extensions", &layout);
++   fields[6] = dxil_get_metadata_int32(&ctx->mod, DXIL_RESOURCE_KIND_STRUCTURED_BUFFER);
++   fields[7] = dxil_get_metadata_int1(&ctx->mod, false);
++   fields[8] = dxil_get_metadata_int1(&ctx->mod, true);
++   fields[9] = dxil_get_metadata_int1(&ctx->mod, false);
++   const struct dxil_mdnode *stride[] = {
++      dxil_get_metadata_int32(&ctx->mod, 1), dxil_get_metadata_int32(&ctx->mod, 256),
++   };
++   fields[10] = dxil_get_metadata_node(&ctx->mod, stride, ARRAY_SIZE(stride));
++   const struct dxil_mdnode *metadata = dxil_get_metadata_node(&ctx->mod, fields,
++                                                            ARRAY_SIZE(fields));
++   if (!metadata)
++      return false;
++   util_dynarray_append(&ctx->uav_metadata_nodes, metadata);
++   add_resource(ctx, DXIL_RES_UAV_STRUCTURED_WITH_COUNTER,
++                DXIL_RESOURCE_KIND_STRUCTURED_BUFFER, &layout);
++   ctx->mod.raw_and_structured_buffers = true;
++   if (ctx->mod.shader_kind != DXIL_PIXEL_SHADER && ctx->mod.shader_kind != DXIL_COMPUTE_SHADER)
++      ctx->mod.feats.uavs_at_every_stage = true;
++   return true;
++}
++
+ static bool
+ emit_uav_var(struct ntd_context *ctx, nir_variable *var, unsigned count)
+ {
+@@ -3660,6 +3703,12 @@ static bool
+ emit_load_input_via_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+ {
+    bool attr_at_vertex = false;
++   /* Pixel per-vertex inputs are attributeAtVertex, not loadInput (whose
++    * vertex operand is undefined for pixel shaders). Preserve the vertex
++    * selection from the guest intermediate and advertise barycentrics. */
++   if (ctx->mod.shader_kind == DXIL_PIXEL_SHADER &&
++       intr->intrinsic == nir_intrinsic_load_per_vertex_input)
++      attr_at_vertex = true;
+    if (ctx->mod.shader_kind == DXIL_PIXEL_SHADER &&
+       ctx->opts->interpolate_at_vertex &&
+       ctx->opts->provoking_vertex != 0 &&
+@@ -3714,6 +3763,13 @@ emit_load_input_via_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr
+    if (!is_patch_constant) {
+       if (is_per_vertex) {
+          vertex_id = get_src(ctx, &intr->src[0], 0, nir_type_int);
++         if (attr_at_vertex) {
++            if (nir_src_is_const(intr->src[0]))
++               vertex_id = dxil_module_get_int8_const(&ctx->mod, nir_src_as_uint(intr->src[0]));
++            else
++               vertex_id = dxil_emit_cast(&ctx->mod, DXIL_CAST_TRUNC,
++                                         dxil_module_get_int_type(&ctx->mod, 8), vertex_id);
++         }
+       } else if (attr_at_vertex) {
+          vertex_id = dxil_module_get_int8_const(&ctx->mod, ctx->opts->provoking_vertex);
+       } else {
+@@ -4372,9 +4428,33 @@ emit_get_ssbo_size(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+    return true;
+ }
+ 
++static bool
++mark_ssbo_atomic64(struct ntd_context *ctx, nir_intrinsic_instr *intr)
++{
++   if (intr->def.bit_size != 64 || ctx->mod.minor_validator < 6)
++      return true;
++   nir_binding binding = nir_chase_binding(intr->src[0]);
++   if (!binding.success)
++      return false;
++   unsigned space = binding.var ? binding.var->data.descriptor_set : binding.desc_set;
++   unsigned reg = binding.var ? binding.var->data.binding : binding.binding;
++   util_dynarray_foreach(&ctx->resources, struct dxil_resource_v1, resource) {
++      if (resource->v0.resource_type == DXIL_RES_UAV_RAW &&
++          resource->v0.space == space && reg >= resource->v0.lower_bound &&
++          reg <= resource->v0.upper_bound) {
++         /* PSVResourceFlag::UsedByAtomic64, required by DXIL validation. */
++         resource->resource_flags |= 1;
++         return true;
++      }
++   }
++   return false;
++}
++
+ static bool
+ emit_ssbo_atomic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+ {
++   if (!mark_ssbo_atomic64(ctx, intr))
++      return false;
+    nir_atomic_op nir_op = nir_intrinsic_atomic_op(intr);
+    enum dxil_atomic_op dxil_op = nir_atomic_to_dxil_atomic(nir_op);
+    nir_alu_type type = nir_atomic_op_type(nir_op);
+@@ -4408,6 +4488,8 @@ emit_ssbo_atomic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+ static bool
+ emit_ssbo_atomic_comp_swap(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+ {
++   if (!mark_ssbo_atomic64(ctx, intr))
++      return false;
+    const struct dxil_value* handle = get_resource_handle(ctx, &intr->src[0], DXIL_RESOURCE_CLASS_UAV, DXIL_RESOURCE_KIND_RAW_BUFFER);
+    const struct dxil_value *offset =
+       get_src(ctx, &intr->src[1], 0, nir_type_uint);
+@@ -4781,10 +4863,77 @@ emit_reduce(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+    return true;
+ }
+ 
++static bool
++emit_nv_special(struct ntd_context *ctx, nir_intrinsic_instr *intr)
++{
++   const struct dxil_value *handle = emit_createhandle_call_const_index(ctx,
++      DXIL_RESOURCE_CLASS_UAV, 1, 1, 29, ctx->nv_special_uav_id, 1, false);
++   const struct dxil_func *update_counter = dxil_get_function(&ctx->mod,
++                                                             "dx.op.bufferUpdateCounter",
++                                                             DXIL_NONE);
++   if (!handle || !update_counter)
++      return false;
++   const struct dxil_value *args[] = {
++      dxil_module_get_int32_const(&ctx->mod, DXIL_INTR_BUFFER_UPDATE_COUNTER),
++      handle, dxil_module_get_int8_const(&ctx->mod, 1),
++   };
++   const struct dxil_value *index = dxil_emit_call(&ctx->mod, update_counter, args,
++                                                ARRAY_SIZE(args));
++   if (!index)
++      return false;
++   const struct dxil_value *undef = dxil_module_get_undef(&ctx->mod,
++                                                       dxil_module_get_int_type(&ctx->mod, 32));
++   const struct dxil_value *coords[] = { index, dxil_module_get_int32_const(&ctx->mod, 0) };
++   const struct dxil_value *values[] = {
++      dxil_module_get_int32_const(&ctx->mod, 19), undef, undef, undef,
++   };
++   const struct dxil_value *mask = dxil_module_get_int8_const(&ctx->mod, 1);
++   if (!emit_raw_bufferstore_call(ctx, handle, coords, values, mask, DXIL_I32, 4))
++      return false;
++   coords[1] = dxil_module_get_int32_const(&ctx->mod, 76);
++   values[0] = dxil_module_get_int32_const(&ctx->mod, nir_intrinsic_base(intr));
++   if (!emit_raw_bufferstore_call(ctx, handle, coords, values, mask, DXIL_I32, 4))
++      return false;
++   const struct dxil_value *value = dxil_emit_call(&ctx->mod, update_counter, args,
++                                                ARRAY_SIZE(args));
++   if (!value)
++      return false;
++   store_def(ctx, &intr->def, 0, value);
++   return true;
++}
++
++static bool
++emit_ags_clock(struct ntd_context *ctx, nir_intrinsic_instr *intr)
++{
++   const struct dxil_value *handle = emit_createhandle_call_const_index(ctx,
++      DXIL_RESOURCE_CLASS_UAV, 0, 0, 0x7fff0ade, ctx->ags_clock_uav_id, 0, false);
++   if (!handle)
++      return false;
++   const struct dxil_value *zero = dxil_module_get_int32_const(&ctx->mod, 0);
++   const struct dxil_value *undef = dxil_module_get_undef(&ctx->mod,
++                                                       dxil_module_get_int_type(&ctx->mod, 32));
++   unsigned operation = nir_intrinsic_memory_scope(intr) == SCOPE_SUBGROUP ? 0x1f : 0x20;
++   for (unsigned phase = 0; phase < 2; ++phase) {
++      const struct dxil_value *coords[] = {
++         dxil_module_get_int32_const(&ctx->mod, 0x50000000 | (phase << 24) | operation),
++         undef, undef,
++      };
++      const struct dxil_value *value = emit_atomic_cmpxchg(ctx, handle, coords, zero, zero);
++      if (!value)
++         return false;
++      store_def(ctx, &intr->def, phase, value);
++   }
++   return true;
++}
++
+ static bool
+ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+ {
+    switch (intr->intrinsic) {
++   case nir_intrinsic_load_dxil_nv_special:
++      return emit_nv_special(ctx, intr);
++   case nir_intrinsic_load_dxil_ags_clock:
++      return emit_ags_clock(ctx, intr);
+    case nir_intrinsic_load_global_invocation_id:
+       return emit_load_global_invocation_id(ctx, intr);
+    case nir_intrinsic_load_local_invocation_id:
+@@ -6106,6 +6255,29 @@ emit_module(struct ntd_context *ctx, const struct nir_to_dxil_options *opts)
+          return false;
+    }
+ 
++   bool needs_nv_special = false, needs_ags_clock = false;
++   nir_foreach_function_with_impl(func, impl, ctx->shader) {
++      nir_foreach_block(block, impl) {
++         nir_foreach_instr(instr, block) {
++            if (instr->type == nir_instr_type_intrinsic &&
++                nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_dxil_nv_special)
++               needs_nv_special = true;
++            if (instr->type == nir_instr_type_intrinsic &&
++                nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_dxil_ags_clock)
++               needs_ags_clock = true;
++         }
++      }
++   }
++   if (needs_nv_special && !emit_nv_special_uav(ctx))
++      return false;
++   if (needs_ags_clock) {
++      ctx->ags_clock_uav_id = util_dynarray_num_elements(&ctx->uav_metadata_nodes,
++                                                       const struct dxil_mdnode *);
++      if (!emit_uav(ctx, 0, 0x7fff0ade, 1, DXIL_COMP_TYPE_INVALID, 1,
++                    DXIL_RESOURCE_KIND_RAW_BUFFER, 0, "__ags_shader_clock"))
++         return false;
++   }
++
+    ctx->mod.info.has_per_sample_input =
+       BITSET_TEST(ctx->shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
+       ctx->shader->info.fs.uses_sample_shading ||
+@@ -6449,6 +6621,13 @@ add_sysvalue(struct ntd_context *ctx,
+    var->name = name;
+    var->data.mode = nir_var_system_value;
+    var->data.interpolation = INTERP_MODE_FLAT;
++   if (value == SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD ||
++       value == SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD) {
++      var->type = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
++      var->data.interpolation = value == SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD ?
++         INTERP_MODE_SMOOTH : INTERP_MODE_NOPERSPECTIVE;
++      ctx->mod.feats.barycentrics = 1;
++   }
+    return var;
+ }
+ 
+@@ -6487,6 +6666,8 @@ struct sysvalue_name {
+    {SYSTEM_VALUE_FRONT_FACE, VARYING_SLOT_FACE, "SV_IsFrontFace", MESA_SHADER_NONE},
+    {SYSTEM_VALUE_PRIMITIVE_ID, VARYING_SLOT_PRIMITIVE_ID, "SV_PrimitiveID", MESA_SHADER_GEOMETRY},
+    {SYSTEM_VALUE_SAMPLE_ID, -1, "SV_SampleIndex", MESA_SHADER_NONE},
++   {SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD, -1, "SV_Barycentrics", MESA_SHADER_FRAGMENT},
++   {SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD, -1, "SV_Barycentrics", MESA_SHADER_FRAGMENT},
+ };
+ 
+ static bool
+@@ -6547,6 +6728,34 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
+    return glsl_count_attribute_slots(type, false);
+ }
+ 
++static bool
++lower_nv_clock(nir_builder *b, nir_intrinsic_instr *intr, void *data)
++{
++   if (intr->intrinsic != nir_intrinsic_shader_clock)
++      return false;
++   unsigned backend = *(unsigned *)data;
++   if (backend == 0)
++      return false;
++   b->cursor = nir_before_instr(&intr->instr);
++   if (backend == 2) {
++      nir_def_rewrite_uses(&intr->def, nir_load_dxil_ags_clock(b,
++                           .memory_scope = nir_intrinsic_memory_scope(intr)));
++      nir_instr_remove(&intr->instr);
++      return true;
++   }
++   nir_variable *result = nir_local_variable_create(b->impl, glsl_uvec2_type(), "nv_clock");
++   nir_loop *loop = nir_push_loop(b);
++   nir_def *high_before = nir_load_dxil_nv_special(b, .base = 10);
++   nir_def *low = nir_load_dxil_nv_special(b, .base = 9);
++   nir_def *high_after = nir_load_dxil_nv_special(b, .base = 10);
++   nir_store_var(b, result, nir_vec2(b, low, high_after), 3);
++   nir_break_if(b, nir_ieq(b, high_before, high_after));
++   nir_pop_loop(b, loop);
++   nir_def_rewrite_uses(&intr->def, nir_load_var(b, result));
++   nir_instr_remove(&intr->instr);
++   return true;
++}
++
+ static const unsigned dxil_validator_min_capable_version = DXIL_VALIDATOR_1_4;
+ static const unsigned dxil_validator_max_capable_version = DXIL_VALIDATOR_1_8;
+ static const unsigned dxil_min_shader_model = SHADER_MODEL_6_0;
+@@ -6632,6 +6841,8 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
+    }
+ 
+    NIR_PASS(_, s, dxil_nir_lower_fquantize2f16);
++   unsigned native_clock_backend = opts->native_clock_backend;
++   NIR_PASS(_, s, nir_shader_intrinsics_pass, lower_nv_clock, nir_metadata_none, &native_clock_backend);
+    NIR_PASS(_, s, nir_lower_frexp);
+    NIR_PASS(_, s, nir_lower_flrp, 16 | 32 | 64, true);
+    NIR_PASS(_, s, nir_lower_io, nir_var_shader_in | nir_var_shader_out, type_size_vec4, nir_lower_io_lower_64bit_to_32);
+diff --git a/src/microsoft/compiler/nir_to_dxil.h b/src/microsoft/compiler/nir_to_dxil.h
+index 98901150b64b1ddbec4dfba75c086b7424b7be69..96f55c83c77b117ce7c34240262fbd9bcf3b8605 100644
+--- a/src/microsoft/compiler/nir_to_dxil.h
++++ b/src/microsoft/compiler/nir_to_dxil.h
+@@ -87,6 +87,7 @@ struct nir_to_dxil_options {
+    enum dxil_environment environment;
+    enum dxil_shader_model shader_model_max;
+    enum dxil_validator_version validator_version_max;
++   unsigned native_clock_backend;
+ };
+ 
+ typedef void (*dxil_msg_callback)(void *priv, const char *msg);
+diff --git a/src/microsoft/spirv_to_dxil/dxil_spirv_nir.c b/src/microsoft/spirv_to_dxil/dxil_spirv_nir.c
+index 4763c346a5812013289a2314b08d90cef9c0a56a..1dbd4244a84701872375340a350252b627f4a4c3 100644
+--- a/src/microsoft/spirv_to_dxil/dxil_spirv_nir.c
++++ b/src/microsoft/spirv_to_dxil/dxil_spirv_nir.c
+@@ -38,7 +38,10 @@
+ static const struct spirv_capabilities
+ spirv_caps = {
+    .Shader = true,
++   .ShaderClockKHR = true,
+    .Geometry = true,
++   .ShaderLayer = true,
++   .ShaderViewportIndex = true,
+    .DrawParameters = true,
+    .MultiView = true,
+    .GroupNonUniform = true,
+@@ -421,119 +424,99 @@ dxil_spirv_nir_lower_load_push_constant(nir_shader *shader,
+ struct lower_yz_flip_data {
+    bool *reads_sysval_ubo;
+    const struct dxil_spirv_runtime_conf *rt_conf;
++   nir_variable *position;
++   nir_variable *viewport;
+ };
+ 
+-static bool
+-lower_yz_flip(struct nir_builder *builder, nir_instr *instr,
+-              void *cb_data)
++static void
++emit_yz_flip(nir_builder *builder, struct lower_yz_flip_data *data)
+ {
+-   struct lower_yz_flip_data *data =
+-      (struct lower_yz_flip_data *)cb_data;
+-
+-   if (instr->type != nir_instr_type_intrinsic)
+-      return false;
+-
+-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+-
+-   if (intrin->intrinsic != nir_intrinsic_store_deref)
+-      return false;
+-
+-   nir_variable *var = nir_intrinsic_get_var(intrin, 0);
+-   if (var->data.mode != nir_var_shader_out ||
+-       var->data.location != VARYING_SLOT_POS)
+-      return false;
+-
+-   builder->cursor = nir_before_instr(instr);
+-
+    const struct dxil_spirv_runtime_conf *rt_conf = data->rt_conf;
+-
+-   nir_def *pos = intrin->src[1].ssa;
++   nir_def *pos = nir_load_var(builder, data->position);
++   nir_def *viewport = data->viewport ? nir_load_var(builder, data->viewport) :
++                                      nir_imm_int(builder, 0);
++   viewport = nir_umin(builder, viewport, nir_imm_int(builder, 15));
+    nir_def *y_pos = nir_channel(builder, pos, 1);
+    nir_def *z_pos = nir_channel(builder, pos, 2);
+    nir_def *y_flip_mask = NULL, *z_flip_mask = NULL, *dyn_yz_flip_mask = NULL;
+-
+    if (rt_conf->yz_flip.mode & DXIL_SPIRV_YZ_FLIP_CONDITIONAL) {
+-      // conditional YZ-flip. The flip bitmask is passed through the vertex
+-      // runtime data UBO.
+-      unsigned offset =
+-         offsetof(struct dxil_spirv_vertex_runtime_data, yz_flip_mask);
+-      nir_address_format ubo_format = nir_address_format_32bit_index_offset;
+-
+-      nir_def *index = nir_vulkan_resource_index(
+-         builder, nir_address_format_num_components(ubo_format),
+-         nir_address_format_bit_size(ubo_format),
++      unsigned offset = offsetof(struct dxil_spirv_vertex_runtime_data, yz_flip_mask);
++      nir_address_format format = nir_address_format_32bit_index_offset;
++      nir_def *index = nir_vulkan_resource_index(builder,
++         nir_address_format_num_components(format), nir_address_format_bit_size(format),
+          nir_imm_int(builder, 0),
+          .desc_set = rt_conf->runtime_data_cbv.register_space,
+          .binding = rt_conf->runtime_data_cbv.base_shader_register,
+          .desc_type = nir_descriptor_type_uniform_buffer);
+-
+-      nir_def *load_desc = nir_load_vulkan_descriptor(
+-         builder, nir_address_format_num_components(ubo_format),
+-         nir_address_format_bit_size(ubo_format),
++      nir_def *desc = nir_load_vulkan_descriptor(builder,
++         nir_address_format_num_components(format), nir_address_format_bit_size(format),
+          index, .desc_type = nir_descriptor_type_uniform_buffer);
+-
+-      dyn_yz_flip_mask =
+-         nir_load_ubo(builder, 1, 32,
+-                            nir_channel(builder, load_desc, 0),
+-                            nir_imm_int(builder, offset),
+-                            .align_mul = 256,
+-                            .align_offset = offset,
+-                            .range_base = offset,
+-                            .range = 4);
++      dyn_yz_flip_mask = nir_load_ubo(builder, 1, 32, nir_channel(builder, desc, 0),
++         nir_imm_int(builder, offset), .align_mul = 256, .align_offset = offset,
++         .range_base = offset, .range = 4);
+       *data->reads_sysval_ubo = true;
+    }
+-
+    if (rt_conf->yz_flip.mode & DXIL_SPIRV_Y_FLIP_UNCONDITIONAL)
+       y_flip_mask = nir_imm_int(builder, rt_conf->yz_flip.y_mask);
+    else if (rt_conf->yz_flip.mode & DXIL_SPIRV_Y_FLIP_CONDITIONAL)
+       y_flip_mask = nir_iand_imm(builder, dyn_yz_flip_mask, DXIL_SPIRV_Y_FLIP_MASK);
+-
+    if (rt_conf->yz_flip.mode & DXIL_SPIRV_Z_FLIP_UNCONDITIONAL)
+       z_flip_mask = nir_imm_int(builder, rt_conf->yz_flip.z_mask);
+    else if (rt_conf->yz_flip.mode & DXIL_SPIRV_Z_FLIP_CONDITIONAL)
+       z_flip_mask = nir_ushr_imm(builder, dyn_yz_flip_mask, DXIL_SPIRV_Z_FLIP_SHIFT);
+-
+-   /* TODO: Multi-viewport */
+-
+    if (y_flip_mask) {
+-      nir_def *flip = nir_test_mask(builder, y_flip_mask, 1);
+-
+-      // Z-flip => pos.y = -pos.y
++      nir_def *flip = nir_test_mask(builder, nir_ushr(builder, y_flip_mask, viewport), 1);
+       y_pos = nir_bcsel(builder, flip, nir_fneg(builder, y_pos), y_pos);
+    }
+-
+    if (z_flip_mask) {
+-      nir_def *flip = nir_test_mask(builder, z_flip_mask, 1);
+-
+-      // Z-flip => pos.z = -pos.z + 1.0f
++      nir_def *flip = nir_test_mask(builder, nir_ushr(builder, z_flip_mask, viewport), 1);
++      // In homogeneous clip coordinates reversed depth is w-z, not 1-z.
+       z_pos = nir_bcsel(builder, flip,
+-                        nir_fadd_imm(builder, nir_fneg(builder, z_pos), 1.0f),
+-                        z_pos);
++         nir_fsub(builder, nir_channel(builder, pos, 3), z_pos), z_pos);
+    }
++   nir_store_var(builder, data->position,
++      nir_vec4(builder, nir_channel(builder, pos, 0), y_pos, z_pos,
++               nir_channel(builder, pos, 3)), 0xf);
++}
+ 
+-   nir_def *def = nir_vec4(builder,
+-                               nir_channel(builder, pos, 0),
+-                               y_pos,
+-                               z_pos,
+-                               nir_channel(builder, pos, 3));
+-   nir_src_rewrite(&intrin->src[1], def);
++static bool
++lower_yz_flip(nir_builder *builder, nir_instr *instr, void *cb_data)
++{
++   if (instr->type != nir_instr_type_intrinsic)
++      return false;
++   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
++   if (intrin->intrinsic != nir_intrinsic_emit_vertex &&
++       intrin->intrinsic != nir_intrinsic_emit_vertex_with_counter)
++      return false;
++   builder->cursor = nir_before_instr(instr);
++   emit_yz_flip(builder, cb_data);
+    return true;
+ }
+ 
+ bool
+ dxil_spirv_nir_lower_yz_flip(nir_shader *shader,
+-                             const struct dxil_spirv_runtime_conf *rt_conf,
+-                             bool *reads_sysval_ubo)
++                          const struct dxil_spirv_runtime_conf *rt_conf,
++                          bool *reads_sysval_ubo)
+ {
+    struct lower_yz_flip_data data = {
+-      .rt_conf = rt_conf,
+-      .reads_sysval_ubo = reads_sysval_ubo,
++      .rt_conf = rt_conf, .reads_sysval_ubo = reads_sysval_ubo,
+    };
+-
+-   return nir_shader_instructions_pass(shader, lower_yz_flip,
+-                                       nir_metadata_control_flow |
+-                                       nir_metadata_loop_analysis,
+-                                       &data);
++   nir_foreach_variable_with_modes(var, shader, nir_var_shader_out) {
++      if (var->data.location == VARYING_SLOT_POS) data.position = var;
++      if (var->data.location == VARYING_SLOT_VIEWPORT) data.viewport = var;
++   }
++   if (!data.position)
++      return false;
++   // The final viewport index is available here even if its guest export came
++   // after Position. Convert only at actual GS emission or entrypoint exit.
++   if (shader->info.stage == MESA_SHADER_GEOMETRY)
++      return nir_shader_instructions_pass(shader, lower_yz_flip,
++         nir_metadata_control_flow | nir_metadata_loop_analysis, &data);
++   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
++   nir_builder builder = nir_builder_at(nir_after_impl(impl));
++   emit_yz_flip(&builder, &data);
++   return nir_progress(true, impl,
++      nir_metadata_control_flow | nir_metadata_loop_analysis);
+ }
+ 
+ static bool
+@@ -794,7 +777,6 @@ dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
+ {
+    glsl_type_singleton_init_or_ref();
+ 
+-   metadata->requires_runtime_data = false;
+    if (prev_stage_nir) {
+       if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+          nir->info.clip_distance_array_size = prev_stage_nir->info.clip_distance_array_size;
+diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.c b/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
+index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385d6f82db3 100644
+--- a/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
++++ b/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
+@@ -23,14 +23,19 @@
+ 
+ #include "dxil_spirv_nir.h"
+ #include "spirv_to_dxil.h"
++#include "spirv_to_dxil_linked.h"
+ #include "dxil_nir.h"
+ #include "nir_to_dxil.h"
+ #include "shader_enums.h"
+ #include "spirv/nir_spirv.h"
+ #include "util/blob.h"
++#include "util/u_thread.h"
+ 
+ #include "git_sha1.h"
+ #include "vulkan/vulkan.h"
++#include "util/format/u_format_s3tc.h"
++#include "util/format/u_format_rgtc.h"
++#include "util/format/u_format_bptc.h"
+ 
+ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_NONE == MESA_SHADER_NONE, "must match");
+ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_VERTEX == MESA_SHADER_VERTEX, "must match");
+@@ -41,8 +46,10 @@ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_FRAGMENT == MESA_SHADER_FRAGM
+ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_COMPUTE == MESA_SHADER_COMPUTE, "must match");
+ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_KERNEL == MESA_SHADER_KERNEL, "must match");
+ 
+-bool
+-spirv_to_dxil(const uint32_t *words, size_t word_count,
++static thread_local uint32_t native_clock_backend;
++
++static bool
++spirv_to_dxil_impl(const uint32_t *words, size_t word_count,
+               struct dxil_spirv_specialization *specializations,
+               unsigned int num_specializations, dxil_spirv_shader_stage stage,
+               const char *entry_point_name,
+@@ -50,7 +57,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+               const struct dxil_spirv_debug_options *dgb_opts,
+               const struct dxil_spirv_runtime_conf *conf,
+               const struct dxil_spirv_logger *logger,
+-              struct dxil_spirv_object *out_dxil)
++              struct dxil_spirv_object *out_dxil, unsigned wave_size)
+ {
+    if (stage == DXIL_SPIRV_SHADER_NONE || stage == DXIL_SPIRV_SHADER_KERNEL)
+       return false;
+@@ -61,6 +68,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+       .environment = DXIL_ENVIRONMENT_VULKAN,
+       .shader_model_max = conf->shader_model_max,
+       .validator_version_max = validator_version_max,
++      .native_clock_backend = native_clock_backend,
+    };
+ 
+    const struct spirv_to_nir_options *spirv_opts = dxil_spirv_nir_get_spirv_options();
+@@ -93,6 +101,16 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+    nir_validate_shader(nir,
+                        "Validate before feeding NIR to the DXIL compiler");
+ 
++   if (wave_size) {
++      if (stage != DXIL_SPIRV_SHADER_COMPUTE || conf->shader_model_max < SHADER_MODEL_6_6) {
++         ralloc_free(nir);
++         glsl_type_singleton_decref();
++         return false;
++      }
++      nir->info.min_subgroup_size = wave_size;
++      nir->info.max_subgroup_size = wave_size;
++      nir->info.api_subgroup_size = wave_size;
++   }
+    dxil_spirv_nir_prep(nir);
+ 
+    dxil_spirv_nir_passes(nir, conf, &out_dxil->metadata);
+@@ -120,6 +138,54 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+    return true;
+ }
+ 
++bool
++spirv_to_dxil(const uint32_t *words, size_t word_count,
++              struct dxil_spirv_specialization *specializations,
++              unsigned int num_specializations, dxil_spirv_shader_stage stage,
++              const char *entry_point_name,
++              enum dxil_validator_version validator_version_max,
++              const struct dxil_spirv_debug_options *dgb_opts,
++              const struct dxil_spirv_runtime_conf *conf,
++              const struct dxil_spirv_logger *logger,
++              struct dxil_spirv_object *out_dxil)
++{
++   return spirv_to_dxil_impl(words, word_count, specializations, num_specializations,
++                            stage, entry_point_name, validator_version_max,
++                            dgb_opts, conf, logger, out_dxil, 0);
++}
++
++bool
++spirv_to_dxil_compute_waves64(const uint32_t *words, size_t word_count,
++              struct dxil_spirv_specialization *specializations,
++              unsigned int num_specializations, dxil_spirv_shader_stage stage,
++              const char *entry_point_name,
++              enum dxil_validator_version validator_version_max,
++              const struct dxil_spirv_debug_options *dgb_opts,
++              const struct dxil_spirv_runtime_conf *conf,
++              const struct dxil_spirv_logger *logger,
++              struct dxil_spirv_object *out_dxil)
++{
++   return spirv_to_dxil_impl(words, word_count, specializations, num_specializations,
++                            stage, entry_point_name, validator_version_max,
++                            dgb_opts, conf, logger, out_dxil, 64);
++}
++
++bool
++spirv_to_dxil_compute_waves32(const uint32_t *words, size_t word_count,
++              struct dxil_spirv_specialization *specializations,
++              unsigned int num_specializations, dxil_spirv_shader_stage stage,
++              const char *entry_point_name,
++              enum dxil_validator_version validator_version_max,
++              const struct dxil_spirv_debug_options *dgb_opts,
++              const struct dxil_spirv_runtime_conf *conf,
++              const struct dxil_spirv_logger *logger,
++              struct dxil_spirv_object *out_dxil)
++{
++   return spirv_to_dxil_impl(words, word_count, specializations, num_specializations,
++                            stage, entry_point_name, validator_version_max,
++                            dgb_opts, conf, logger, out_dxil, 32);
++}
++
+ void
+ spirv_to_dxil_free(struct dxil_spirv_object *dxil)
+ {
+@@ -136,3 +202,205 @@ spirv_to_dxil_get_version()
+    }
+    return 0;
+ }
++
++uint64_t
++spirv_to_dxil_native_features(void)
++{
++   return 15;
++}
++
++bool
++spirv_to_dxil_decode_bc(uint32_t format, uint32_t number,
++                       const uint8_t *source, size_t source_size,
++                       uint32_t width, uint32_t height,
++                       uint8_t *destination, size_t destination_size)
++{
++   if (!source || !destination || !width || !height || width > 16384 || height > 16384 ||
++       format < 35 || format > 41)
++      return false;
++   bool floating = format >= 38 && format <= 40;
++   if ((format <= 37 || format == 41) ? (number != 0 && number != 9) :
++       format == 40 ? (number != 0 && number != 1 && number != 7) :
++       (number != 0 && number != 1))
++      return false;
++   unsigned block_bytes = format == 35 || format == 38 ? 8 : 16;
++   unsigned pixel_bytes = floating ? 16 : 4;
++   unsigned columns = (width + 3) / 4, rows = (height + 3) / 4;
++   if (source_size < (size_t)columns * rows * block_bytes ||
++       destination_size < (size_t)width * height * pixel_bytes)
++      return false;
++   for (unsigned y = 0; y < rows; ++y) {
++      for (unsigned x = 0; x < columns; ++x) {
++         const uint8_t *block = source + ((size_t)y * columns + x) * block_bytes;
++         union { float floats[64]; uint8_t bytes[256]; } decoded;
++         switch (format) {
++         case 35: util_format_dxt1_rgba_unpack_rgba_8unorm(decoded.bytes, 16, block, block_bytes, 4, 4); break;
++         case 36: util_format_dxt3_rgba_unpack_rgba_8unorm(decoded.bytes, 16, block, block_bytes, 4, 4); break;
++         case 37: util_format_dxt5_rgba_unpack_rgba_8unorm(decoded.bytes, 16, block, block_bytes, 4, 4); break;
++         case 38:
++            if (number == 1) util_format_rgtc1_snorm_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            else util_format_rgtc1_unorm_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            break;
++         case 39:
++            if (number == 1) util_format_rgtc2_snorm_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            else util_format_rgtc2_unorm_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            break;
++         case 40:
++            if (number == 1) util_format_bptc_rgb_float_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            else util_format_bptc_rgb_ufloat_unpack_rgba_float(decoded.floats, 64, block, block_bytes, 4, 4);
++            break;
++         case 41: util_format_bptc_rgba_unorm_unpack_rgba_8unorm(decoded.bytes, 16, block, block_bytes, 4, 4); break;
++         }
++         for (unsigned row = 0; row < MIN2(4, height - y * 4); ++row)
++            memcpy(destination + ((size_t)(y * 4 + row) * width + x * 4) * pixel_bytes,
++                   decoded.bytes + row * 4 * pixel_bytes,
++                   MIN2(4, width - x * 4) * pixel_bytes);
++      }
++   }
++   return true;
++}
++
++uint32_t
++spirv_to_dxil_set_native_clock_backend(uint32_t backend)
++{
++   if (backend > 2)
++      return UINT32_MAX;
++   uint32_t previous = native_clock_backend;
++   native_clock_backend = backend;
++   return previous;
++}
++
++bool
++spirv_to_dxil_linked(const struct dxil_spirv_linked_stage *stages,
++                     unsigned stage_count,
++                     enum dxil_validator_version validator_version_max,
++                     const struct dxil_spirv_debug_options *debug_options,
++                     const struct dxil_spirv_runtime_conf *conf,
++                     const struct dxil_spirv_logger *logger,
++                     struct dxil_spirv_object *out_dxils)
++{
++   if (!stages || !out_dxils || !conf || !logger || !logger->log ||
++       stage_count == 0 || stage_count > MESA_SHADER_COMPUTE + 1)
++      return false;
++   memset(out_dxils, 0, sizeof(*out_dxils) * stage_count);
++   int indices[MESA_SHADER_COMPUTE + 1];
++   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; ++i)
++      indices[i] = -1;
++   for (unsigned i = 0; i < stage_count; ++i) {
++      int stage = (int)stages[i].stage;
++      if (stage < MESA_SHADER_VERTEX || stage > MESA_SHADER_COMPUTE || indices[stage] >= 0 ||
++          !stages[i].words || stages[i].word_count < 5 || stages[i].words[0] != 0x07230203u ||
++          !stages[i].entry_point_name || !stages[i].entry_point_name[0] ||
++          (stages[i].num_specializations && !stages[i].specializations)) {
++         logger->log(logger->priv, "Invalid or duplicate linked shader stage");
++         return false;
++      }
++      indices[stage] = i;
++   }
++   if ((indices[MESA_SHADER_COMPUTE] >= 0 && stage_count != 1) ||
++       ((indices[MESA_SHADER_TESS_CTRL] >= 0) != (indices[MESA_SHADER_TESS_EVAL] >= 0))) {
++      logger->log(logger->priv, "Linked graphics compilation requires an HS/DS pair and excludes compute");
++      return false;
++   }
++   glsl_type_singleton_init_or_ref();
++   bool success = false;
++   nir_shader *shaders[MESA_SHADER_COMPUTE + 1] = {0};
++   nir_shader_compiler_options nir_options;
++   const unsigned supported_bit_sizes = 16 | 32 | 64;
++   dxil_get_nir_compiler_options(&nir_options, conf->shader_model_max,
++                                supported_bit_sizes, supported_bit_sizes);
++   nir_options.lower_base_vertex =
++      conf->first_vertex_and_base_instance_mode != DXIL_SPIRV_SYSVAL_TYPE_ZERO;
++   const struct spirv_to_nir_options *spirv_options = dxil_spirv_nir_get_spirv_options();
++   for (unsigned i = 0; i < stage_count; ++i) {
++      const struct dxil_spirv_linked_stage *input = &stages[i];
++      struct nir_spirv_specialization *spec = NULL;
++      if (input->num_specializations) {
++         spec = vtn_alloc_specialization(input->num_specializations);
++         for (unsigned j = 0; j < input->num_specializations; ++j)
++            vtn_add_specialization_entry(spec, j, input->specializations[j].id,
++                                         sizeof(input->specializations[j].value),
++                                         &input->specializations[j].value, false);
++      }
++      shaders[i] = spirv_to_nir(input->words, input->word_count, spec,
++                                (mesa_shader_stage)input->stage,
++                                input->entry_point_name, spirv_options, &nir_options);
++      vtn_free_specialization(spec);
++      if (!shaders[i]) {
++         logger->log(logger->priv, "Linked SPIR-V to NIR conversion failed");
++         goto cleanup;
++      }
++      nir_validate_shader(shaders[i], "Validate before linked DXIL compilation");
++      dxil_spirv_nir_prep(shaders[i]);
++      /* Apply viewport conversion exactly once, after the last position
++       * producing stage. Applying it to VS as well as DS/GS inverts twice;
++       * passing it to PS/HS/CS violates the NIR lowering contract. */
++      struct dxil_spirv_runtime_conf stage_conf = *conf;
++      int last_position = indices[MESA_SHADER_GEOMETRY] >= 0 ? MESA_SHADER_GEOMETRY :
++                          indices[MESA_SHADER_TESS_EVAL] >= 0 ? MESA_SHADER_TESS_EVAL :
++                          MESA_SHADER_VERTEX;
++      if ((int)input->stage != last_position)
++         stage_conf.yz_flip.mode = DXIL_SPIRV_YZ_FLIP_NONE;
++      dxil_spirv_nir_passes(shaders[i], &stage_conf, &out_dxils[i].metadata);
++   }
++   /* Reverse stage order is intentional: downstream linking changes upstream
++    * tessellation IO and patch constants before that upstream stage is linked. */
++   for (int current = MESA_SHADER_FRAGMENT; current >= MESA_SHADER_VERTEX; --current) {
++      if (indices[current] < 0)
++         continue;
++      for (int previous = current - 1; previous >= MESA_SHADER_VERTEX; --previous) {
++         if (indices[previous] < 0)
++            continue;
++         int index = indices[current];
++         dxil_spirv_nir_link(shaders[index], shaders[indices[previous]], conf,
++                             &out_dxils[index].metadata);
++         break;
++      }
++   }
++   struct nir_to_dxil_options opts = {
++      .environment = DXIL_ENVIRONMENT_VULKAN,
++      .shader_model_max = conf->shader_model_max,
++      .validator_version_max = validator_version_max,
++      .native_clock_backend = native_clock_backend,
++   };
++   /* Input distance semantics use the producer clip length, independently
++    * of the consumer's output clipping. Snapshot before DXIL compilation. */
++   unsigned input_clip_sizes[MESA_SHADER_STAGES] = {0};
++   for (unsigned i = 0; i < stage_count; ++i) {
++      if (shaders[i]->info.stage == MESA_SHADER_COMPUTE)
++         continue;
++      for (int previous = (int)shaders[i]->info.stage - 1;
++           previous >= MESA_SHADER_VERTEX; --previous) {
++         if (indices[previous] < 0)
++            continue;
++         input_clip_sizes[i] = shaders[indices[previous]]->info.clip_distance_array_size;
++         break;
++      }
++   }
++   struct dxil_logger inner_logger = {.priv = logger->priv, .log = logger->log};
++   for (unsigned i = 0; i < stage_count; ++i) {
++      opts.input_clip_size = input_clip_sizes[i];
++      if (debug_options && debug_options->dump_nir)
++         nir_print_shader(shaders[i], stderr);
++      struct blob binary;
++      if (!nir_to_dxil(shaders[i], &opts, &inner_logger, &binary)) {
++         if (binary.allocated)
++            blob_finish(&binary);
++         logger->log(logger->priv, "Linked NIR to DXIL conversion failed");
++         goto cleanup;
++      }
++      blob_finish_get_buffer(&binary, &out_dxils[i].binary.buffer, &out_dxils[i].binary.size);
++   }
++   success = true;
++cleanup:
++   for (unsigned i = 0; i < stage_count; ++i) {
++      if (shaders[i])
++         ralloc_free(shaders[i]);
++      if (!success) {
++         free(out_dxils[i].binary.buffer);
++         memset(&out_dxils[i], 0, sizeof(out_dxils[i]));
++      }
++   }
++   glsl_type_singleton_decref();
++   return success;
++}
+diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.def b/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
+index 62851f2160b7caf1b94dfc0d07e71bee45aadcb7..e555286b7ee9e5503050cac5a1642042999f1428 100644
+--- a/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
++++ b/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
+@@ -2,3 +2,9 @@ EXPORTS
+     spirv_to_dxil
+     spirv_to_dxil_free
+     spirv_to_dxil_get_version
++    spirv_to_dxil_linked
++    spirv_to_dxil_compute_waves32
++    spirv_to_dxil_compute_waves64
++    spirv_to_dxil_native_features
++    spirv_to_dxil_set_native_clock_backend
++    spirv_to_dxil_decode_bc
+diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.h b/src/microsoft/spirv_to_dxil/spirv_to_dxil.h
+index 8f4684ca58af9a4692e3bb7f55bd82a20fde7f10..198f7c5fe946dfaa1feb87fcde7c989d083295ac 100644
+--- a/src/microsoft/spirv_to_dxil/spirv_to_dxil.h
++++ b/src/microsoft/spirv_to_dxil/spirv_to_dxil.h
+@@ -243,6 +243,10 @@ spirv_to_dxil_free(struct dxil_spirv_object *dxil);
+ 
+ uint64_t
+ spirv_to_dxil_get_version(void);
++uint64_t
++spirv_to_dxil_native_features(void);
++uint32_t
++spirv_to_dxil_set_native_clock_backend(uint32_t backend);
+ 
+ #ifdef __cplusplus
+ }

@@ -1,0 +1,69 @@
+{
+  "upstream_repository": "https://gitlab.freedesktop.org/mesa/mesa.git",
+  "upstream_commit": "b628375fb1fd99476bfbaaa0532deb6fe3a6870e",
+  "reference_submodule": "externals/mesa-kosmickrisp/externals/mesa",
+  "reference_shadps4_commit": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
+  "patch": "mesa-b628375f-native.patch",
+  "patch_sha256": "d4d16e7054beb94acdf45beeb7e68b5380ac391f2aa189f01970d2ebeaf18b2b",
+  "linked_header": "mesa-api/spirv_to_dxil_linked.h",
+  "linked_header_sha256": "0995dca79faacc4fc592406644b1897282e5ba1925b5df6471f2259390702870",
+  "native_feature_export": "spirv_to_dxil_native_features",
+  "native_feature_bits": {
+    "nv_shader_clock": 1,
+    "amd_shader_clock": 2,
+    "compute_wave64": 4,
+    "bc_volume_decode": 8
+  },
+  "clock_driver_extension": {
+    "uav_register": 1,
+    "register_space": 29,
+    "opcode": 19,
+    "timer_low": 9,
+    "timer_high": 10
+  },
+  "nvapi_abi_reference": {
+    "repository": "https://github.com/NVIDIA/nvapi",
+    "commit": "70d337db9186e968eab622f7e786de7e437faf3d",
+    "runtime": "Windows System32 nvapi64.dll from the installed NVIDIA driver"
+  },
+  "compiler": {
+    "id": "MSVC",
+    "version": "19.51.36260",
+    "architecture": "x64",
+    "runtime": "MD",
+    "buildtype": "release"
+  },
+  "meson_options": {
+    "spirv-to-dxil": true,
+    "gallium-drivers": [],
+    "vulkan-drivers": [],
+    "llvm": "disabled",
+    "platforms": [],
+    "opengl": false,
+    "egl": "disabled",
+    "gles1": "disabled",
+    "gles2": "disabled",
+    "glx": "disabled",
+    "microsoft-clc": "disabled",
+    "c_args": "/wd4189"
+  },
+  "final_gpu_verification": "not_run",
+  "package_integration": "pending_full_implementation_boundary",
+  "clock_selection_export": "spirv_to_dxil_set_native_clock_backend",
+  "clock_selection": {
+    "none": 0,
+    "nvapi": 1,
+    "ags": 2,
+    "storage": "compiler-thread-local, restored after each compilation"
+  },
+  "ags_abi_reference": {
+    "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/AGS_SDK",
+    "commit": "086c47ed8e427199510887230718cd7c086f9702",
+    "header_sha256": "4a84c8555b925f746a38a8c327c63cc3941257ec5e021620058b35e1a1d61a15",
+    "dll_sha256": "482b241ea855fdd59aaa7687c385ce4165b5340857e6a0e6d15ba27ecb65ee70",
+    "uav_register": 0,
+    "register_space": 2147420894,
+    "subgroup_operation": 31,
+    "device_operation": 32
+  }
+}

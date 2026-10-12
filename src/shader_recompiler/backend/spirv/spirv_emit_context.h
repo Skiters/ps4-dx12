@@ -258,6 +258,10 @@ public:
 
     Id output_position{};
     Id output_point_size{};
+    Id native_point_runtime{};
+    bool native_point_private_distances{};
+    std::array<u8,2> native_point_distance_component_masks{};
+    Id native_point_misc{};
     Id output_layer{};
     Id output_viewport_index{};
     Id primitive_id{};
@@ -319,6 +323,9 @@ public:
         bool is_integer = false;
         bool is_storage = false;
         bool native_slice_view = false;
+        bool native_msaa_storage = false;
+        u32 native_packed_format = 0;
+        AmdGpu::NumberFormat native_packed_number_format{};
         MipStorageFallbackMode mip_fallback_mode{};
     };
 
@@ -393,7 +400,11 @@ public:
     Id input_attr_array;
     Id output_attr_array;
     std::array<SpirvAttribute, IR::NumParams> input_params{};
+    std::array<u8, IR::NumParams> native_point_input_component_masks{};
     std::array<SpirvAttribute, IR::NumParams> output_params{};
+    Id native_point_capture_buffer,native_point_capture_pointer,native_point_capture_counter;
+    Id native_point_capture_index;
+    Id native_point_capture_image_type;
     std::array<SpirvAttribute, IR::NumRenderTargets> frag_outputs{};
 
     Id uf11_to_f32{};
