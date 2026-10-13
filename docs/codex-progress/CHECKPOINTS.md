@@ -1,5 +1,20 @@
 # Checkpoints
 
+## Active continuation checkpoint — 2026-10-13
+
+[SESSION_HANDOFF.md](SESSION_HANDOFF.md) is authoritative. Source WIP `0a3571a4b76bf1a6683a47f1ee409fe2555614a3`
+adds production ordered point capture/replay and placed MSAA color-transfer initialization.
+Stage23/pipeline4/metadata-v32. Registry128 partial groups; no new overall audit or semantic closure.
+Six offline chains and864 point GPU cases pass; complete native suite before final MSAA
+fix174/227,53fail. Later targeted MSAA successes do not make it green. Current Bloodborne
+world/control/image/FPS not verified (black window). Continue EmitImageWrite LOD assertion
+with native_packed_16_msaa, then packed/alias correctness and owned-image waits.
+Latest human request authorizes incremental GPU/game checks; old emergency/test gates below are historical.
+Source/code/diagnostics/build recovery: F:/PS4Dev/handoff/point-capture-20261013.
+
+Targeted post-init backing:46/48 passed,208.566s; two format19 RT capability failures.
+Preview19 installed: dx12-20261013-full-port-preview-34d785e8b1dc,76 runtime hashes/20 copied saves verified, previous selection preserved.
+
 ## 2026-10-13 — emergency full-port session handoff
 
 Authoritative recovery: [SESSION_HANDOFF.md](SESSION_HANDOFF.md).

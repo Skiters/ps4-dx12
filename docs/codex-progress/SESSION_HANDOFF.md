@@ -1,315 +1,202 @@
-# SESSION HANDOFF — emergency checkpoint, 2026-10-13
+# SESSION HANDOFF — active full-port checkpoint, 2026-10-13
 
-This is the authoritative starting point for the next session. The latest human
-request stopped development for preservation only. No new game runs, profiling,
-GPU tests, long builds or implementation changes were made during checkpointing.
-Older sections called "Current" in the other progress documents are historical.
+Authoritative continuation for this repository. The latest human request resumed
+development and explicitly permits GPU/regression/game checks after logical changes.
+The emergency-only stop and old whole-port-before-any-test gate are superseded.
+Older current-state headings in other notes are historical. No new overall audit was run.
 
-## A. Current project state
+## A. Current state
 
-- Repository: `F:\PS4Dev\work\shadps4-dx12-src`, remote
-  `https://github.com/Skiters/ps4-dx12.git`, branch `fix/mixed-cmask`, upstream
-  `origin/fix/mixed-cmask`.
-- Before checkpoint: `e84e31133320830db6268f3beefe9ddda1fb08cc`.
-  Source WIP checkpoint: `c0aa3e4a6fb2de072b29ffa4d0682d5accd9c292`.
-  The documentation checkpoint follows it. Its exact final SHA/status are saved
-  externally in `F:\PS4Dev\handoff\full-port-emergency-20261013\CHECKPOINT_FINAL.json`;
-  verify against `git rev-parse HEAD` before resuming. A document cannot contain
-  the SHA of its own commit.
-- Immutable original source: `F:\PS4Dev\work\shadps4-original-e0a46675`, revision
-  `e0a466753a1aacbc8db8253be685bf7ab4d9daae` with pinned submodules. Do not change
-  the reference or substitute the installed DLSS fork.
-- Full-port registry has 126 partial groups. Last saved audit: 1,501 associations,
-  13 mappings, **zero semantic closures**. Full implementation and acceptance
-  remain open. See `full-port-e0a46675/STATUS.md` for preserved chronological detail.
-- Historical DX12 reached the Bloodborne world, movement/camera/menu/attack and
-  short backstep; rendering artifacts and unplayable speed remained. Those runs
-  concern earlier executables, not the present full-port source.
-- Current source compiles/links, and earlier versions of the new shader paths
-  compile/sign offline. No current Bloodborne/GPU/XInput/FPS acceptance exists.
-  Point capture remains opt-in, default false in production.
+- Repository `F:/PS4Dev/work/shadps4-dx12-src`; branch `fix/mixed-cmask`, upstream
+  `origin/fix/mixed-cmask`, remote `https://github.com/Skiters/ps4-dx12.git`.
+- Source checkpoint `0a3571a4b76bf1a6683a47f1ee409fe2555614a3`. A later documentation checkpoint may be HEAD;
+  exact final HEAD/status/push evidence is in `F:/PS4Dev/handoff/point-capture-20261013/CHECKPOINT_FINAL.json`.
+- Source remains dirty with broader unfinished full-port changes and pre-existing
+  staged network deletions. The source commit preserves 32 selected implementation/
+  fixture files; it is WIP, not a claim that the whole port is complete. Original stage split was verified unchanged.
+- Registry: 128 partial groups, zero whole-port semantic closures. Last overall
+  audit was 126 groups/1,501 associations/13 mappings; do not imply a fresh audit.
+- Ordered point capture/replay now runs on hardware. Ordinary shaders switch to
+  it only when the explicit oversized point signature/output-budget exception is raised.
+- Native MSAA color upload/sample-copy now initializes fully overwritten placed
+  color layers before draw. Depth/stencil and partial-plane semantics are preserved;
+  complete MSAA/packed-format parity remains open.
+- Current Bloodborne world/control/image/FPS acceptance is NOT established.
+  Historical working-world runs concern older executables. Current launch showed
+  a black window and no new completed frames in the short capture period.
 
-## B. Completed implementation and evidence
+## B. Implemented production changes
 
-The WIP commit preserves 19 known files from the current point/capture work;
-`code-checkpoint-files.json` in the external handoff lists them exactly. It is an
-unfinished development checkpoint, not a correctness/performance completion.
-Other broad pre-existing migrations, network deletions and desktop changes were
-not swept into that commit; their provenance was not re-established here.
+- `guest_shader_frontend.cpp`: `BuildPointCaptureGraphics` compiles original ES/GS
+  producer and original FS plus generated replay VS/GS; restores compilation profile
+  with RAII. Failed ordinary specializations cache `NativePointCapture::Required`.
+- `emit_spirv_quad_rect.cpp`: generated `EmitNativePointReplayVertex/Geometry` read
+  typed R32_UINT t0/space33 records; preserve position/size, sparse clip/cull,
+  viewport/layer, depth and original PrimitiveID. Original guest GS is not rerun per corner.
+- `native_point_capture.h`, `emit_spirv_point_capture.h`: 152 words/608 bytes per
+  record; valid tag is original PrimitiveID+1; checked byte-address/instance bounds.
+- New `guest_point_capture.cpp/.h` and `guest_point_capture_clear.hlsl`:
+  budgeted placed scratch reuse, tag-only CS clear, disjoint producer instances,
+  UAV ordering, typed-SRV replay, original attachments bound/cleared once,
+  descriptor/allocation/resource leases retained through intermediate Finish/final fences.
+  No normal CPU scratch readback or unconditional additional Finish.
+- `guest_rasterizer.cpp`: production Required fallback, original-resource producer
+  preparation followed by fragment/replay preparation, correct point front-facing
+  orientation. Tessellation/on-chip/multiple GS streams remain unsupported here.
+- `ring_access_elimination.cpp`: immediate scalar SOFFSET contributes to coherent
+  ES/GS ring addresses. Previously wide attribute stores overwrote position words.
+  Dynamic scalar offsets remain open.
+- `rasterizer.h`, `guest_compute.cpp`, `guest_rasterizer.cpp`: memory extents are
+  checked by their owner rather than initializing a process-global guest singleton
+  in standalone renderers. Host ranges reject oversized descriptors; Core uses PS4 ClampRangeSize.
+- `guest_pipeline_persistence.cpp`: Stage23/pipeline4/metadata-v32 invalidates old
+  captured-record/ring-address semantics. Shader signing/serialization fixtures updated.
+- `guest_multisample.cpp/.h`: transfer leases retain physical array layer separately
+  from row-pitch constants. Full color slice upload/copy transitions to RT then
+  discards exactly that overwritten subresource before the native shader draw.
+  `multisample_upload.h` initializes its fully overwritten whole color array.
+- Fixtures now check actual CPU-copy/GPU-detile pending work, whole PageWatch pages,
+  native VideoOut SRV mapping and UNORM gamma clamping; image/padding/sample comparisons remain.
 
-- Groups 123/124: `guest_point_transport.h`, `guest_point_shader.h`,
-  `emit_spirv_point.h`, `spirv_emit_context.*`, `EmitGetAttribute` and
-  `guest_pipeline_persistence.cpp` preserve live source/component mappings and
-  qualifiers. Compatible groups pack into shared float4 host rows with explicit
-  component offsets. 32 scalar sources fit eight rows. Center/centroid/sample,
-  aliased and mixed interpolation preparations compile/sign; prepared GPU
-  oracles were not executed. Preview 18 includes through group 124/core 232.
-- Group 125: `NativePointCapture::Record` / `Plan::Make` / `Plan::Slot` in
-  `src/shader_recompiler/native_point_capture.h`; SPIR-V producer helpers in
-  `backend/spirv/emit_spirv_point_capture.h`; capture handling in
-  `EmitSetAttribute`, `EmitVertex`, `EndPrimitive` and `DefineInputs`.
-  `DefineNativePointCaptureBuffer` / `EmitNativePointCapture` use fixed
-  primitive/invocation/emission slots, retain original guest loops and
-  side effects, write one raw UAV record, and avoid hardware vertex emission.
-  Original GS `InvocationId` input is declared when original IR reads it.
-- Shared record ABI: 152 uint words / 608 bytes; valid=0, position=1..4, size=5,
-  layer=6, viewport=7, clip=8..15, cull=16..23, 32 float4 parameters=24..151.
-  Descriptor binding 0 / space 33. `Plan` checks arithmetic and total **byte**
-  addressing against uint32 bounds. Publication requires completed producer
-  work and a UAV barrier; the valid word is not atomic publication.
-- `native-port/gcn_winding_test.cpp` prepares capture-/capture2- offline chains,
-  rejects execution of those modes, and fixes wide MUBUF fixture store offsets.
-  Full 32-source records retain all 128 values. All claims are static/offline.
-- Pinned Mesa native patch includes prior clip-size/interstage fixes, canonical
-  SHA256 `d4d16e7054beb94acdf45beeb7e68b5380ac391f2aa189f01970d2ebeaf18b2b`.
-  `native-port/vendor/mesa-native.json` and the patch are saved in the WIP.
-  Do not patch generated Mesa build directories as the lasting source.
+## C. Last unfinished work
 
-## C. Work interrupted immediately before checkpoint
+MSAA placed-resource initialization is implemented and targeted checks improved.
+The next production blocker exposed by those checks is `EmitImageWrite` LOD fallback
+at `src/shader_recompiler/backend/spirv/emit_spirv_image.cpp:610`.
+`native_packed_16_msaa`, `_17_msaa`, `_18_msaa`, `_19_msaa` now reach an assertion
+requiring DynamicIndex mip fallback. Determine the actual emitted LOD and mip/view
+metadata; implement correct constant/dynamic/native-MSAA storage selection using
+the existing Vulkan/shared emitter semantics. Do not bypass the image write.
 
-**Group 126: captured fragment attribute reads without forwarding the full
-128-component guest signature through replay VS/GS.**
+Also unfinished: packed10 UNORM word preservation; packed16/17/18 sampled
+normalization; format19 multisample RT capability/fallback; owned-image dispatch
+completion waits; buffer/image prewrite snapshots; CMASK, DS/SRV planes and residency.
 
-Implemented: fragment input is one flat uint record ID; `EmitGetAttribute`
-uses the original source/channel or original synthetic clip index. Capture FS
-skips ordinary varying declarations while preserving original resource
-reflection and IR defaults. Profile/runtime flags and persistence versions are
-included: StageVersion 21, PipelineVersion 4, metadata-v30.
+## D. Proven issues versus hypotheses
 
-First implementation used readonly SPIR-V StorageBuffer. Existing pinned Mesa
-still emitted `native_point_capture` as byte-address **UAV u0, space33**, despite
-NonWritable. The final static proof correctly failed its SRV expectation.
+Proven: last complete native suite has 53 failures; exact names/reasons are in
+`C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work/point-capture-final-native-summary-20261013.json`.
+After it, targeted MSAA tests show three packed10 modes passing, one UNORM mismatch
+and four packed-format LOD assertions; shared color layers passes. Retain both pre-
+and post-fix logs. Init errors, format capability failures, padding/value mismatches
+and forced waits are separate problems, not one cause.
 
-Latest change: `DefineNativePointCaptureReader` declares a sampled uint Buffer
-image, `SampledBuffer` capability, UniformConstant binding; `EmitGetAttribute`
-uses `OpImageFetch`. Intended host view is **R32_UINT SRV t0, space33**, addressed
-in **152-word strides**, with original word offsets. Producer stays a raw UAV.
-This last change passes C++ build/link (core 237/checks 190), but its frontend
-fixture, SPIR-V→DXIL signing, actual resource reflection and affine word
-addresses have **not yet been verified**.
-
-`gcn-winding-test.exe` and `point-capture-reader-final-dxil-*` artifacts still
-belong to core 236 / the rejected raw-reader implementation. Do not use them as
-proof of core 237. `verify-captured-fragment.py` still expects rawBufferLoad and
-608-byte addressing; update the proof for typed loads and 152-word addressing
-after inspecting fresh artifacts. Preserve the old failure evidence.
-
-Not implemented: generated replay VS/GS, runtime capture allocation/clear,
-root descriptors, UAV→SRV transitions, replay draw submission, validity-hole
-handling, lifetime/fences/pressure, indirect/instance/tessellation/stream bounds,
-and runtime equivalence. Do not enable the production flag yet.
-
-## D. Confirmed problems and separate hypotheses
-
-Confirmed:
-
-- readonly SSBO translated to UAV under `native_storage_buffer_uavs=true`;
-  the old proof failure is a real binding mismatch, not a parser false positive.
-- Forwarding all 128 components through replay signatures reintroduces the
-  register/signature budget. Existing 32-source packing covers only prepared
-  sparse scalar cases, not general full float4 semantics.
-- Mesa can combine valid-marker/payload writes. Concurrent readers are unsafe.
-- Historical matched DX12 baseline A/A2 failed during loading on overlapping
-  SRV/UAV aliases; no matched speedup was established.
-- Historical B still materialized 7.115 GB at guest address 0x2d1ce3000 in its
-  bounded sample. Scope totals showed heavy coherence/materialization/retirement
-  work. This is evidence for that historical core only.
-
-Hypotheses/open correctness questions:
-
-- Typed image declaration will produce t0 SRV: pending fresh signed reflection.
-- A flat record ID plus PS fetch can preserve point interpolation/precision:
-  pending review of PerVertex, centroid/sample, derivatives, MSAA and coverage.
-- Unit-point manual expansion can match clipping/raster coverage: unverified.
-- Capture/replay can improve a real game: no measurements exist.
+Hypotheses only: the Bloodborne black window may involve launch visibility,
+presentation or renderer/guest progress. It is not established that the new point
+path caused it, that the game reached Hunter's Dream, or that current FPS improved.
+First run used Start-Process WindowStyle Hidden; screenshot helper later failed
+`IGraphicsCaptureItemInterop.CreateForMonitor` (0x80070057). A future interactive
+validation should use an observed visible test window and avoid blind input.
 
 ## E. Measurements and provenance
 
-Main catalogue:
-`F:\PS4Dev\handoff\full-port-emergency-20261013\DIAGNOSTIC_PROVENANCE.json`.
-It records absolute paths, session/run IDs, source SHA, executable SHA256,
-dates/scenarios/results/limits for 25 preserved datasets. Unknown fields are
-explicitly unknown; neighboring original manifests are authoritative.
-`evidence-files.json` indexes 111,647 existing evidence files by path, size and
-file modification UTC; modification time is **not** measurement time.
+- Final complete suite BEFORE final MSAA init fix: 174/227 passed, 53 failed,
+  822.034 s, raw log `F:/Codex-Shared/devtools/logs/command-20261013-172342-31160.log`.
+  Earlier resumed suite: 110/227 passed, 117 failed, 665.41 s. This is test evidence,
+  not a performance improvement; many removed failures were outdated fixture assumptions.
+- Nine unique point modes x96 cold/warm/facing/flip/cull cases =864 hardware cases.
+  Includes two GS invocations and three draw instances; whole 64-KiB guest output,
+  atomic counters, depth/stencil and padding checked. Known half-UNORM midpoint
+  accepts 127/128 only at explicitly expected color bytes; other bytes stay exact.
+- Fresh metadata32 six signed producer/FS/replay chains and typed SRV proof:
+  `C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work/point-capture-final-offline-20261013`,
+  `C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work/point-capture-final32-proof.jsonl` (32 original source/component offsets).
+- Final point GPU logs: `C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work/point-capture-final32-gpu-*.log` and
+  `point-capture-final32-three-instances-gpu.log`; latter raw log
+  `F:/Codex-Shared/devtools/logs/command-20261013-174006-85624.log`, 8.56 s.
+- Post-init: `msaa-initialization-regressions-20261013.log` (3/8 pass, 57.491 s),
+  `msaa-initialization-packed-backing-20261013.log` (14/16 pass, 74.764 s),
+  `msaa-initialization-all-backing-20261013.log` and shared-layer raw log
+  `F:/Codex-Shared/devtools/logs/command-20261013-175340-15484.log` (pass, 15.062 s).
+  The complete targeted backing rerun passed46/48 in208.566s; remaining format19
+  sample2 cases explicitly lack native RT support. Raw log:
+  `F:/Codex-Shared/devtools/logs/command-20261013-175541-94968.log`.
+- Game run `F:\PS4Dev\handoff\point-capture-20261013/bloodborne-current`: executable
+  `d2684254a886ad3102792cab2f2b16edd2c707c999b0e19f1f95ea555f45cbe5`, build from
+  dirty source based on 676d628; manifest/patch/logs/exit/capture/XInput are local.
+  XInput session `a503e4b259e24d31a0eb34d6eac5af3d`, PID41608, feeder70912,
+  date 2026-10-13; input A and neutral verified, reaction not verified. Exited0 by
+  owned CloseMainWindow, feeder neutral/detached. No valid current completed-guest-FPS
+  sample; do not report zero FPS or compare this to a world baseline. FG disabled.
+- Reuse existing Vulkan evidence `docs/codex-progress/vulkan-session-20261011` and
+  `F:/PS4Dev/handoff/performance-recovery-20261011`. Historical DX12 B:124 completed
+  frames/90.015605s =1.377539 FPS, median interval727ms/P95765ms. A/A2 failed loading;
+  no matched speedup comparison exists. Passive143/90.098142s =1.587158 had uncontrolled input/focus.
 
-| Historical evidence | Result | Trust boundary |
-|---|---|---|
-| Covered-envelope DX12 B, ba3892f, SHA256 866e800e5f7f97fb7c3613697869883178091888ca82290d1aeec4567a26aa77 | 124 frames / 90.015605 s; 1.377539 FPS; median 727.008 ms, P95 765.871 ms | A/A2 failed; no matched speedup; no FG |
-| Protected-page/index DX12, 0c340b4, SHA256 9438103c6eca8b5453971a55fc20159ce19091a75fc3784120d6cee50ad4c1c0 | 143 / 90.098142 s; 1.587158 FPS; earlier passive baseline 0.863128 | Focus/input uncontrolled; not a baseline for current source |
-| Covered-envelope B resource scopes | 266,769,064 materialized / 278,011,416 uploaded / 14,048,893 readback bytes per frame; inclusive submit/wait 11.924 s, retirement 8.102 s, materialization 11.572 s | Nested scopes and differing windows; do not sum or infer causal speedup |
-| Compatible-source Vulkan c7e065d1, SHA256 7a9811b94ab1b5da3dade41c7af5720c0916e064b10d66082b09e159ca4dc724 | Saved tagged VideoOut, queue/PM4, BufferCache, TextureCache, MemoryTracker, transfers and GPU detile attribution | Use PINNED_PROBE.json; capped guest FPS does not prove zero overhead; clocks uncalibrated; differs from installed974-dirty |
-| Installed DLSS/FG 974-dirty, SHA256 7d350796bdd27515f85951226fed73a7167487f0eb5b590e1d0cfb2504eab773 | HUD/collector and XInput controls observed in prior sessions | Base/pre-FG guest FPS and independent displayed-frame rate not measured |
+## F. Verification boundaries
 
-Raw sets remain at `F:\PS4Dev\handoff\covered-envelopes-20261012`,
-`performance-recovery-20261011`, `high-memory-20261011`, `gxworker-20261011`,
-`vulkan-live-monitor`, `vulkan-reference-profiler-20261011`, `compute-dispatch-cycle`,
-`resource-cycle`, `migration-validation` and other paths in the catalogue.
-`important-evidence-index.json` separately indexes crash evidence, XInput,
-monitor programs and run metadata. No old results were deleted or repeated.
+Core/check builds pass. Six final offline chains and nine final point GPU modes pass.
+Metadata/buffer dispatch and resident indices16/32/UAV/UAV-write pass. Current full
+suite is NOT green; do not turn targeted reruns into a fabricated full-suite result.
+No current game-world, gameplay response, stable image or FPS acceptance.
+No original Vulkan or original saves changed. Partial-render disabling was not used.
 
-## F. Latest verification
+## G. Preserved builds and files
 
-- Core 237: `point-capture-reader-core-237.log`, wrapper
-  `command-20261013-025120-27688.log`, 5.381 s, passed C++ compile/link.
-- Checks 190: `point-capture-reader-checks-190.log`, wrapper
-  `command-20261013-025120-107444.log`, 4.613 s, passed compile/link;
-  existing deprecated warnings retained. These are build ordinals, not numbers
-  of executed regression tests.
-- Before final typed-reader patch, core 236/checks189, all ten full-core
-  fixtures compiled/linked; 54 ordinary chains and six capture producer +
-  separately compiled fragment chains signed offline. No device was created.
-- Group125 producer proof passed five modes: one ES atomic, one GS atomic,
-  original loops/slot arithmetic, zero hardware emissions, all original values.
-- Group126 audit passed before final typed-reader patch, wrapper
-  `command-20261013-024807-53592.log`, 21.585 s; 1,501 associations/13 mappings/
-  zero closures. No final audit rerun during emergency preservation.
-- Failed: raw capture-FS SRV expectation. Saved failure/old artifacts are retained.
-- Not run: typed-reader signed proof, replay runtime, current regression
-  execution/GPU validation, Bloodborne/FPS/gameplay/stability. Historical suites
-  220/220 and 221/221 are evidence for their old exact builds only.
+- Latest experimental core `F:\PS4Dev\work\shadps4-dx12-src\build-migration-core\shadPS4-DX12-Core.exe`, SHA256 `34d785e8b1dcee941daa8b2447ec9bd164dff59a6bfa39d525b548a7eaf06d29`;
+  matching `shadPS4-DX12-Core.pdb`, `native-core.map`, `native-compiler/` alongside.
+  Build logs `point-capture-metadata32-core-build-20261013.log` and
+  `msaa-initialization-core-build-20261013.log` in `C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work`.
+- Immutable original source `F:/PS4Dev/work/shadps4-original-e0a46675`, SHA
+  e0a466753a1aacbc8db8253be685bf7ab4d9daae. Installed Vulkan/DLSS/FG
+  `F:/Apps/shadPS4-DLSS-DLAA-1.8.4/shadPS4.exe` remains untouched.
+- Historical working-world DX12:
+  `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261012-ba3892f-covered/shadPS4-DX12-Core.exe`.
+- Existing desktop `C:/Users/skei/AppData/Local/Programs/PS4Desktop-DX12/PS4Desktop.exe`;
+  installed preview18 `dx12-20261013-full-port-preview-519d8356217d` remains immutable.
+  New preview19 is installed as `dx12-20261013-full-port-preview-34d785e8b1dc`,
+  display name `DX12 — перенос №19 — 13.10.2026`, same latest executable SHA256.
+  Its directory is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261013-full-port-preview-34d785e8b1dc`;
+  matching symbols/provenance/runtime files are retained there. Isolated profile:
+  `C:/Users/skei/AppData/Local/PS4Desktop/core-profiles/dx12-20261013-full-port-preview-34d785e8b1dc/native-profile`.
+  All76 runtime-file hashes and20 copied saves verified; prior selected package/settings
+  selection and original save hashes preserved. No gameplay success claimed for preview19.
+- Seed saves `F:/PS4Dev/handoff/coherence-20261011/seed`; isolated game profile
+  `F:\PS4Dev\handoff\point-capture-20261013/bloodborne-current/user`; original save hashes verified while copying.
+- XInput/HUD/live monitor `F:/PS4Dev/handoff/vulkan-live-monitor/program`.
+  Existing user monitor/PresentMon instances are not owned; do not stop them.
+- All source before the new commit: `F:\PS4Dev\handoff\point-capture-20261013/before-source-commit`:
+  verified zip, working/staged/unstaged binary patches, original index and file manifest.
+  Final residual archive is recorded in CHECKPOINT_FINAL.json. Do not reapply patches
+  to this existing dirty tree. Use a separate clean checkout of the recorded archive HEAD
+  if recovery is necessary. Old emergency backups are preserved unchanged at
+  `F:/PS4Dev/handoff/full-port-emergency-20261013`.
 
-Logs/artifacts/scripts from this work remain under
-`C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work`;
-raw command logs under `F:\Codex-Shared\devtools\logs`.
-194 continuation scripts/logs/proofs were also copied to external
-`full-port-emergency-20261013\continuation-tools`.
+## H. Exact next action
 
-## G. Next specific implementation
-
-1. Rebuild only the stale gcn_winding CPU fixture against core237. Regenerate
-   capture fragment artifacts; verify signed t0/space33 and correct original
-   source/channel word addresses. Update `verify-captured-fragment.py` and the
-   group126 contract text to describe a typed SRV instead of readonly raw SSBO.
-2. Implement generated replay VS/GS using `guest_point_shader.h`,
-   `guest_shader_frontend.*`, `guest_pipeline_cache.*` and shared capture ABI.
-   VS supplies SV_VertexID record ID; GS reads validity and original point fields,
-   applies original transforms and emits position + flat record ID only.
-3. Integrate capture/replay through `graphics_submission.cpp`,
-   `guest_rasterizer.cpp`, `resource_bindings.*`, scheduler/allocator ownership:
-   clear invalid slots, run original ES/GS once, UAV barrier/transition, replay
-   with original PS/resources/attachments/depth/stencil/viewports/scissors.
-   Do not replay guest side effects or mechanically remove waits.
-4. Prove allocation/fence pressure and checked instance/indirect/restart/stream
-   bounds. Never use draw.count as a safe tessellation amplification bound.
-   Preserve original VS side-effect/cache frequency for indexed draws.
-5. Finish required full-port integration gates before GPU/game validation;
-   then minimal targeted regressions, existing isolated XInput scenario and
-   completed-guest-frame comparison against saved compatible evidence. A failed
-   old baseline must not be replaced by a fabricated matched comparison.
-
-GraphicsRuntime layout remains authoritative: Mesa first36 bytes, flip mask36,
-float4 viewport arrays offsets48/304/560, size816, CBV allocation1024.
-Reuse Release Ninja `build-migration-core` / `build-migration-checks`, clang-cl
-22.1.3 with existing MSVC19.51 ABI/VS18/SDK10.0.26100. Do not change compiler/ABI
-or reconfigure trees to obtain navigation. `point-capture-replay-design.md` is
-preserved in continuation-tools; do not rederive that design.
-
-## H. Exact next action and recovery
-
-On the existing machine/tree, **do not apply patches again**. First:
+Read this file and final checkpoint JSON, check HEAD/status, preserve residual changes.
+Then run the existing failing case (no general audit):
 
 ```powershell
-Set-Location 'F:\PS4Dev\work\shadps4-dx12-src'
-git rev-parse HEAD
-git status --short
-Get-Content -Raw 'F:\PS4Dev\handoff\full-port-emergency-20261013\CHECKPOINT_FINAL.json'
+& 'F:/Codex-Shared/devtools/bin/codex-dev.cmd' rtk ctest --test-dir 'F:/PS4Dev/work/shadps4-dx12-src/build-migration-checks' --output-on-failure -R native_packed_16_msaa
 ```
 
-After verifying HEAD and reading this file, the first development command is:
+Continue production `EmitImageWrite`/native storage mip selection from its saved
+assertion. Inspect only relevant IR/resource metadata and pinned Vulkan/shared
+behavior. Implement real image-write support; build incrementally, verify affected
+packed/MSAA/alias cases, then minimally test Bloodborne through the existing virtual
+XInput in a copied profile and measure completed guest frames without FG.
 
-```powershell
-& 'F:\Codex-Shared\devtools\bin\codex-dev.cmd' run 'C:\Users\skei\Documents\Codex\2026-10-12\skiters-ps4-dx12-fix-mixed-cmask\work\Compile-Port-Fixture.cmd' gcn_winding
-```
+## I. Do not repeat without a new failing case
 
-This is compile-only, not a game/GPU run. If the original task directory is
-unavailable, use the preserved continuation-tools copy; native paths are explicit.
-
-Before-checkpoint snapshot directory:
-`F:\PS4Dev\handoff\full-port-emergency-20261013` contains `staged.patch`,
-`unstaged.patch`, `head-working.patch`, `index-before.bin`, full status/log/stat
-outputs, `working-files-before.zip` and its per-file SHA256 manifest. Snapshot
-contains 253 tracked-change paths and 155 new files, including deletions.
-
-Final residual patches/status/untracked manifest and `RESTORE.md` in that same
-directory describe exact restoration onto a **clean separate checkout at the
-final checkpoint SHA**. Apply final staged patch with `--index`, then final
-unstaged patch; restore only residual untracked entries from the archive.
-Never extract the entire before-checkpoint archive over an existing tree or
-replace its index blindly. New files now committed must not be reintroduced
-from the old archive. Existing unknown changes remain in the current tree.
-
-Normal upstream push is authorized by the user's persistent AGENTS preference;
-checkpoint validation checks preservation, not semantic completion. Actual push
-outcome/remote SHA is recorded in CHECKPOINT_FINAL.json, without force or merge.
-
-## Saved builds, symbols and profiles
-
-- Historical last game-verified DX12:
-  `C:\Users\skei\AppData\Local\PS4Desktop\cores\dx12-20261012-ba3892f-covered\shadPS4-DX12-Core.exe`;
-  SHA256 866e800e5f7f97fb7c3613697869883178091888ca82290d1aeec4567a26aa77.
-- Latest installed experimental preview18:
-  `C:\Users\skei\AppData\Local\PS4Desktop\cores\dx12-20261013-full-port-preview-519d8356217d\shadPS4-DX12-Core.exe`;
-  SHA256 519d8356217d04c9b8c12251bbd1efc014ac4f86d8325e08d3eca7614a180f87.
-  Matching profile: `C:\Users\skei\AppData\Local\PS4Desktop\core-profiles\dx12-20261013-full-port-preview-519d8356217d\native-profile`.
-- Latest development core237, **not installed or game-verified**:
-  `F:\PS4Dev\handoff\full-port-emergency-20261013\experimental-core-237\shadPS4-DX12-Core.exe`;
-  SHA256 a639d91da0561b213cbfa7075fbbf6959b1ba560c15c12e67e92cfcfbc4b6d4a.
-  Matching `shadPS4-DX12-Core.pdb`, `native-core.map`, Mesa and root runtime DLLs
-  preserved alongside. Original build remains in `build-migration-core`.
-- Compatible Vulkan reference build/profiles and exact executable identity:
-  `F:\PS4Dev\handoff\performance-recovery-20261011\pinned-capture-build.json`,
-  `vulkan-pinned-1`, `vulkan-pinned-trace-1`; profiler ModeB build also remains at
-  `F:\PS4Dev\handoff\vulkan-reference-profiler-20261011\mode-b-build\shadps4.exe`.
-  These are different references; do not interchange their hashes/results.
-- Installed DLSS/FG: `F:\Apps\shadPS4-DLSS-DLAA-1.8.4\shadPS4.exe`;
-  HUD `F:\PS4Dev\handoff\vulkan-live-monitor\program\LiveHud.exe`, monitor
-  `Launch-LiveMonitor.ps1` / `live_metrics.py`, virtual XInput `xinput_control.py`
-  in the same program directory. Their historical sessions remain alongside.
-- Test seeds/saves: `F:\PS4Dev\handoff\coherence-20261011`,
-  `F:\PS4Dev\handoff\save-source-snapshot`, historical run profile manifests,
-  and installed per-core profiles. Preview18 copied/hash-checked 20 saves from
-  the selected first preview95d72e06d1ac; originals/default/earlier builds kept.
-  No originals or installed Vulkan were changed during checkpointing.
-
-## Process cleanup
-
-No session-owned game, developer core, feeder, profiler or trace collector
-remained from the current full-port work. No virtual gamepad was created during
-this work, so no owned pad needed resetting/releasing. PresentMon PIDs42552 and
-80352 were observed with unknown ownership and deliberately left running.
-No user game, original HUD or persistent monitor was stopped. Process inventory
-is saved externally; do not infer ownership from executable names alone.
-
-## I. Do not repeat without new evidence
-
-- Original source audit, architecture mapping and 126-group inventory; use
-  saved STATUS/contracts/inventory first, do not restart from the old chat.
-- Vulkan installed-binary/source identity/HUD/FG audits and compatible-source
-  queue/PM4/cache/transfer profiling. Installed974-dirty cannot inherit c7 results.
-- Already diagnosed signature packing/free-slot/0xc0000409 cases; sparse packing
-  and synthetic clip row fixes are saved. Reopen only on a new failing case.
-- The readonly-SSBO experiment: confirmed UAV output; do not repeat unchanged.
-- Capture ABI, byte-bound correction, Private pointer and wide fixture offset
-  diagnoses. Original producer proofs are retained.
-- Baseline A/A2 launch failures and frozen/coherence experiments. Do not remove
-  fence/ownership waits, skip aliases or claim narrower GPU writes from totals.
-- Old unvalidated GPU timestamp results; BENCHMARKS/STATE document their limits.
-- New game/FPS/profile runs before the full-port implementation gate. Emergency
-  handoff is not permission to run Bloodborne immediately.
+No new whole-port audit or rereading old chat/architecture. Typed SRV/t0-space33/
+152-word addressing, signature packing, Private pointers, literal ring SOFFSET,
+point front-facing and producer/replay instancing are already proved by saved cases.
+Do not repeat the raw readonly-SSBO experiment (it became a UAV). Do not weaken
+memory/ownership/fence/alias operations to improve FPS. Do not silently ignore the
+53 complete-suite failures. Never discard partial DS/other layers to initialize a
+color transfer. Initial erroneous discard used row pitch as layer; corrected explicit
+layer is verified. Do not rerun dozens of identical game launches. Never reset/clean
+this tree, force-push, replace installed Vulkan, mutate original saves or delete old results.
 
 ## NEXT CODEX SESSION — START HERE
 
-> Продолжи Skiters/ps4-dx12 с последнего checkpoint на ветке fix/mixed-cmask.
-> Сначала прочитай F:\PS4Dev\work\shadps4-dx12-src\docs\codex-progress\SESSION_HANDOFF.md
-> и проверь Git HEAD/status по CHECKPOINT_FINAL.json. Сохрани оставшиеся dirty
-> изменения; на существующем дереве patches повторно не применять. Восстанови
-> незавершённую работу группы126: свежая CPU-fixture gcn_winding, проверка typed
-> R32_UINT SRV t0 space33 и 152-word адресации, затем C++ replay VS/GS и безопасный
-> capture/replay runtime с allocation/clear/barriers/fences. Используй сохранённые
-> Vulkan/DX12 измерения и доказательства, не повторяй завершённые исследования.
-> Собери и проверь изменённые компоненты; после полного implementation gate
-> проведи минимально необходимые игровые испытания через существующий виртуальный
-> XInput в копии профиля. Сравни completed guest FPS с сохранённым baseline,
-> учитывая его ограничения и провал A/A2. Не меняй установленный Vulkan,
-> оригинальные сохранения или старые сборки. Продолжай с checkpoint, не с истории чата.
+> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask. Прочитай SESSION_HANDOFF.md и
+> CHECKPOINT_FINAL.json, проверь HEAD/status и сохрани dirty изменения. Не повторяй
+> общий аудит и доказанные исследования capture/replay. Продолжи реальный C++ перенос
+> EmitImageWrite/native storage mip selection: native_packed_16_msaa вызывает assertion
+> для ImageWrite с LOD после исправления placed MSAA initialization. Используй сохранённые
+> Vulkan/DX12 данные и точные native failures. Собери и проверь packed/MSAA/alias случаи,
+> затем минимально проверь Bloodborne через существующий виртуальный XInput в копии
+> профиля; измерь completed guest FPS без FG и сравни с baseline с его ограничениями.
+> Не меняй оригинальный Vulkan/сохранения. Продолжай с checkpoint и обновляй parity.

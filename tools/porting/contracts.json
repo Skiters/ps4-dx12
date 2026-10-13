@@ -2473,7 +2473,11 @@
         "src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp",
         "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp"
       ],
-      "upstream_symbols": ["DefineInputs", "EmitGetAttribute", "BuildRuntimeInfo"],
+      "upstream_symbols": [
+        "DefineInputs",
+        "EmitGetAttribute",
+        "BuildRuntimeInfo"
+      ],
       "native_paths": [
         "src/shader_recompiler/runtime_info.h",
         "src/shader_recompiler/backend/spirv/spirv_emit_context.cpp",
@@ -2485,14 +2489,85 @@
         "native-port/gcn_winding_test.cpp"
       ],
       "contract": {
-        "inputs": "Opt-in original PS point interpolators, their source controls/components/defaults, synthetic clip input and a flat uint capture record id.",
-        "outputs": "Captured PS declares only a flat uint record input and readonly raw record SRV in space33. Original parameter reads use original source/component at record word24+source*4+component, synthetic clipping uses original clip word8+component. Capture fetch precedes ordinary generic component compaction. Defaults remain original IR constants and original PS computations/side effects remain. Shared producer/reader buffer declarations and byte ABI prevent full 128-component hardware signatures.",
-        "ordering": "Captured FS runtime participates in equality/specialization/persistence. Consumer is valid only after capture completion/barrier; production opt-in stays disabled pending replay and submission. Stage v21/metadata v30 reject older records, pipeline v4 unchanged.",
-        "verification_prepared": "Capture fixture producer chains additionally compile/sign their original captured PS separately. New full 32-source GCN preparation reads alternating x/y/z/w channels from all 32 recorded sources and keeps original front face/MRT. Signed PS must contain one uint flat TEXCOORD and raw t0 space33 loads at exact record byte offsets while preserving aliases and mixed interpolation source values. Ordinary 53 chains/all ten C++ fixtures require regression builds; no GPU/runtime execution.",
-        "open_contracts": "Signing/static evidence pending. Generated replay shaders, original qualifier/precision/PerVertex/sample equivalence, derivatives, coverage, clipping, allocation/synchronization/lifetime, all draw types and runtime/game acceptance remain open. No semantic closure."
+        "inputs": "Original PS point interpolators/components/defaults, synthetic clip input and flat uint capture record ID. Production activates capture only on the explicit oversized point-signature/output-budget Required exception.",
+        "outputs": "Typed readonly R32_UINT texel SRV t0 space33, NOT raw SSBO/UAV. Original source/component loads use record*152+24+source*4+component; sparse clip/cull inputs use original recorded components. Original PS computations and side effects survive.",
+        "ordering": "Producer valid tag is original PrimitiveID+1. Full producer pass and UAV barrier precede typed-SRV replay. Stage23/pipeline4/metadata-v32 reject previous record/ring-address semantics. Failed ordinary specializations cache the Required exception to avoid per-draw recompilation.",
+        "verification_prepared": "Six signed typed-reader and linked replay chains; nine GPU modes, 96 cold/warm/facing/flip/cull cases each, including two GS invocations and three draw instances. Full 64-KiB guest results and stencil checked; only known half-UNORM 127/128 rounding has bounded tolerance. Broad native suite failures remain separate.",
+        "open_contracts": "All draw types, dynamic scalar ring offsets, MSAA/PerVertex/sample qualifiers, arbitrary derivatives/coverage and Bloodborne world/FPS acceptance remain open. No full semantic closure."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+      "state": "not_run",
+        "evidence": "F:/PS4Dev/handoff/point-capture-20261013; source/core and fixture logs listed in SESSION_HANDOFF.md",
+        "limitations": "Bloodborne game-world acceptance failed/not established; complete native suite is not green."
+      }
+    },
+    {
+      "id": "native-point-capture-replay-submission",
+      "upstream_paths": [
+        "src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp",
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+        "src/video_core/renderer_vulkan/vk_scheduler.cpp"
+      ],
+      "upstream_symbols": [
+        "EmitEmitVertex",
+        "Draw",
+        "Flush"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_point_capture.h",
+        "src/video_core/renderer_d3d12/guest_point_capture.cpp",
+        "src/video_core/renderer_d3d12/guest_point_capture_clear.hlsl",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/guest_shader_frontend.cpp",
+        "src/shader_recompiler/backend/spirv/emit_spirv_quad_rect.cpp",
+        "src/shader_recompiler/ir/passes/ring_access_elimination.cpp",
+        "native-port/Host-Passes.cmake",
+        "native-port/gcn_winding_test.cpp"
+      ],
+      "contract": {
+        "inputs": "Oversized EsGs PointList outputs, indexed/non-indexed original draw, instance count/base, geometry invocation/output bound, original attachments and reflected guest resources.",
+        "outputs": "Original ES/GS executes once per source instance with rasterization disabled into disjoint 608-byte records. Generated VS/GS reads typed SRV and expands valid recorded points to one square each; original FS, layer/viewport, primitive identity, parameters and sparse clipping restored. Immediate GS scalar SOFFSET contributes to ring attribute address.",
+        "ordering": "Placed scratch obeys existing buffer budget; CS clears valid tags only. Producer instances complete before UAV ordering and SRV transition. One replay binds/clears original attachments after producer resources. Descriptor/allocation/scratch leases survive intermediate Finish and final retirement; no routine CPU scratch readback/extra forced finish. RAII restores original compilation profile.",
+        "verification_prepared": "Production pass and production shader generators run in gcn_winding fixture: 864 GPU cases across nine modes; original ES/GS atomic counters and entire guest memory/stencil checked. Three-instance case verifies cached default-path Required throws before fallback.",
+        "open_contracts": "Tessellation/on-chip/multiple GS streams, dynamic ring scalar offsets, complete indirect batches, large-residency pressure, MSAA/precise coverage and game acceptance remain open."
+      },
+      "implementation_status": "integrated_partial_review_pending",
+      "final_verification": {
+        "state": "not_run",
+        "evidence": "SESSION_HANDOFF.md; point-capture-20261013 provenance",
+        "limitations": "No complete Vulkan parity or current Bloodborne speedup claim."
+      }
+    },
+    {
+      "id": "native-placed-color-transfer-initialization",
+      "upstream_paths": [
+        "src/video_core/renderer_vulkan/vk_texture_cache.cpp",
+        "src/video_core/renderer_vulkan/vk_scheduler.cpp"
+      ],
+      "upstream_symbols": [
+        "RefreshImage",
+        "CopyImage",
+        "Flush"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "src/video_core/renderer_d3d12/guest_multisample.h",
+        "src/video_core/renderer_d3d12/multisample_upload.h",
+        "native-port/packed_backing_test.cpp"
+      ],
+      "contract": {
+        "inputs": "New/reused native placed color attachment, full selected layer transfer or sample-backing conversion, source sample-major guest data and physical array layer.",
+        "outputs": "D3D12 render-target initialization precedes shader upload/copy. Only the fully replaced color subresource is discarded; the following full-slice draw restores every sample. Direct full-array color upload discards the full destination it overwrites.",
+        "ordering": "Transition to RENDER_TARGET before DiscardResource and draw. Layer is retained explicitly in the transfer lease, independent of row-pitch constants. Other array layers, DS planes, guest fast-clear state and allocation/fence leases are preserved.",
+        "verification_prepared": "native_packed_backing_16_8_2 and native_guest_shared_color_layers pass with GPU validation. Packed10 SNORM/SINT/UINT MSAA roundtrips pass; broader backing results are saved externally. Full 64-bit/padding/sample comparisons retained.",
+        "open_contracts": "Packed format19 RT capability, packed10 UNORM word mismatch, packed16/17/18 normalization, EmitImageWrite LOD assertion, DS initialization/partial slices and Bloodborne acceptance remain open."
+      },
+      "implementation_status": "integrated_partial_review_pending",
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Partial GPU transfer invariants verified; full contract and game acceptance remain open. See SESSION_HANDOFF.md and msaa-initialization logs."
+      }
     },
     {
       "id": "native-present-modes",

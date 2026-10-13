@@ -1,5 +1,22 @@
 # Vulkan / native D3D12 parity audit
 
+## Current verified boundary — 2026-10-13
+
+Latest source/state/evidence are in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
+Old emergency GPU/game prohibition is superseded by the human's resumed development request.
+Full-engine Vulkan parity remains partial; new registry groups are127/128, not audited closures.
+
+| Mechanism | Implemented | Remaining | GPU verified | Current Bloodborne verified |
+| --- | --- | --- | --- | --- |
+| Captured FS typed read | R32_UINT SRV, original152-word ABI/32-source components | Sample/PerVertex/derivative precision and full games | Six signed chains; packed32/counters/MRT cases | No |
+| Oversized EsGs point replay | Original ES/GS capture, generated VS/GS, original FS; placement, clear, barriers and leases | Tess/on-chip/streams, complete indirect/residency/MSAA coverage | Nine modes/864 cases, two GS invocations/three draw instances | No |
+| Coherent ring address | Immediate scalar SOFFSET included | Dynamic scalar offsets | Wide GS attribute/position cases | No |
+| Placed MSAA color initialization | Fully overwritten color layer initialized before upload/copy draw; other layers/DS preserved | Packed19 RT support, packed normalization, LOD write, DS/partial slices | Packed backing/packed10 modes/shared-color layers targeted results | No |
+| BufferCache/TextureCache/MemoryTracker | Existing native implementation retained, owner-based extents | Prewrite aliases, owned-image waits, residency and remaining53 full-suite failures | Partial; complete suite174/227 before latest MSAA fix | No current acceptance |
+
+The current black-window launch is not a valid world baseline or FPS measurement.
+Original Vulkan/saves unchanged; no feature was disabled for a speed claim.
+
 ## Observed Vulkan session â€” 2026-10-11
 
 The running Bloodborne v0.19.0 log identifies exact source `c7e065d1b415be16c23e260a21f1dd8bbfc4cb57`.

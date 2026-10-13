@@ -3334,3 +3334,9 @@ emergency request development stopped; no new builds/tests/profile/game runs.
 Source WIP c0aa3e4 and full residual patch/archive are preserved. Read
 ../SESSION_HANDOFF.md and external CHECKPOINT_FINAL.json before continuing;
 do not repeat old audits or apply patches onto the already-dirty current tree.
+
+2026-10-13 resumed development: groups127/128 register ordered point capture/replay
+and placed-color MSAA transfer initialization. Source WIP 0a3571a4b76bf1a6683a47f1ee409fe2555614a3; Stage23/metadata-v32.
+Six final offline chains,864 point GPU cases verified; full native suite174/227
+before final MSAA init fix,53 remaining failures. Later targeted results in SESSION_HANDOFF.md.
+No new overall audit/semantic closure; no current Bloodborne world/FPS acceptance.
