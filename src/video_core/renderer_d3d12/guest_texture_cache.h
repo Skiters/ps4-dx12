@@ -2,42 +2,74 @@
 #pragma once
 #include "resources.h"
 #include "memory_allocator.h"
+#include "guest_tiler.h"
+#include "guest_multisample.h"
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <span>
 #include <memory>
+#include <string>
+#include <optional>
 #include <dxgi1_4.h>
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 namespace AmdGpu {struct Image;struct ColorBuffer;struct DepthBuffer;struct DepthView;union CbDbExtent;}
 namespace NativeDX12 {
 struct GuestTextureDesc {
     uint64_t address=0;
     uint32_t width=1,height=1,pitch=1,levels=1,layers=1;
     uint32_t storage_height=0; // Attachment allocation can exceed its logical view.
+    uint64_t storage_slice_bytes=0; // CB/DB registers define the physical slice.
     uint32_t data_format=10,number_format=0,tile_mode=13;
     bool pow2_padding=false;
+    bool alt_tile=false;
+    uint32_t bank_swizzle=0;
     uint32_t first_mip=0,first_layer=0,view_layers=1;
     uint32_t min_lod=0; // Absolute resource LOD, guest unsigned 4.8 format.
     std::array<uint32_t,4> swizzle{4,5,6,7};
     bool writable=false;
+    bool native_packed10_raw=false;
+    bool native_raw32=false;
     bool render_target=false;
     bool depth_target=false;
     uint64_t stencil_address=0;
     bool one_dimensional=false;
     uint32_t volume_depth=0;
     uint32_t samples=1;
+    bool UsesRawPacked10()const{return data_format==9&&writable&&!render_target&&!depth_target&&
+        (native_packed10_raw||number_format==1||number_format==5);}
+    bool UsesRaw32()const{return UsesRawPacked10()||((data_format==4||data_format==10)&&
+        native_raw32&&writable&&!render_target&&!depth_target);}
     bool operator==(const GuestTextureDesc&)const=default;
 };
-struct GuestMipLayout {uint32_t pitch,height;uint64_t offset,slice_bytes;bool macro=false;};
+struct GuestMipLayout {
+    uint32_t pitch,height;
+    uint64_t offset,slice_bytes;
+    bool macro=false;
+    uint32_t thickness=1;
+};
 struct GuestTextureCopyPlans;
+class GuestPackedTransfer;
+class GuestBcDecoder;
 struct GuestTextureLayout {
     DXGI_FORMAT format=DXGI_FORMAT_UNKNOWN;uint32_t bytes_per_pixel=0;
+    uint32_t expanded_bytes_per_pixel=0;
+    uint32_t HostBytesPerPixel()const{return expanded_bytes_per_pixel?expanded_bytes_per_pixel:bytes_per_pixel==12?16:
+        bytes_per_pixel==2&&format==DXGI_FORMAT_R32_UINT?4:bytes_per_pixel;}
     uint32_t block_extent=1;
     uint64_t guest_bytes=0,logical_bytes=0;
     std::vector<GuestMipLayout> mips;
     std::shared_ptr<GuestTextureCopyPlans> copy_plans;
 };
+inline bool HasExactPackedExpansion(const GuestTextureDesc& d,const GuestTextureLayout& l){
+    return l.expanded_bytes_per_pixel==16&&(d.data_format==9||
+        (d.data_format>=16&&d.data_format<=19&&
+         (d.volume_depth||d.one_dimensional||(d.data_format==19&&d.samples>1&&!d.render_target))&&
+         d.number_format==0));
+}
 GuestTextureDesc DescribeGuestTexture(const AmdGpu::Image& image);
 GuestTextureDesc DescribeGuestColorBuffer(const AmdGpu::ColorBuffer&,AmdGpu::CbDbExtent);
 uint64_t GuestCmaskBytes(const AmdGpu::ColorBuffer&);
@@ -53,6 +85,9 @@ bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc samp
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view);
+bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view);
+void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc>);
+bool CompatibleGuestPackedStorage(GuestTextureDesc source,GuestTextureDesc view);
 // Reuses PS4 thin/display 8x8 microtile addressing from host_shaders/tiling.comp.
 uint64_t GuestPixelOffset(const GuestTextureDesc&,const GuestTextureLayout&,
                           uint32_t mip,uint32_t layer,uint32_t x,uint32_t y,uint32_t sample=0);
@@ -66,28 +101,79 @@ class GuestTextureCache {
 public:
     struct Entry {
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
+        GuestTextureCache* cache{};
+        uint64_t image_uid{};
+        // Tokens can outlive cache destruction after a device-loss error.
+        // Their counter must not point back into the destroyed Entry.
+        std::shared_ptr<uint32_t> binding_pins;
+        bool BindingPinned()const{return binding_pins&&*binding_pins;}
+        std::array<uint64_t,3> metadata_addresses{};
+        uint32_t htile_initial_mask=UINT32_MAX;
+        std::map<UINT,Resource> sample_backings;
+        std::vector<std::shared_ptr<GuestMultisample::CopyLease>> sample_copy_leases;
+        std::vector<Resource> storage_samples;
+        Resource storage_linear;
+        std::vector<std::shared_ptr<GuestMultisample::StorageLease>> storage_leases;
+        std::vector<std::shared_ptr<void>> storage_clear_leases;
         std::vector<Resource> uploads;uint64_t fence=0;bool pending=false;
+        std::vector<Resource> buffer_sync_resources;
+        uint64_t buffer_sync_allocation_bytes{};
         bool gpu_owned=false;
+        // Separate shader buffer/image writers retain the original cache
+        // domains. Their image version does not replace physical buffer bytes.
+        bool buffer_alias_version=false,buffer_alias_watch=false;
+        bool linear_download_pending=false;
+        // Ownership changes also invalidate the CP's authoritative-image index.
+        void SetGpuOwned(bool);
         bool cpu_watched=false;
         // Refilled only after the entry's GPU fence has retired.
         std::vector<Resource> upload_pool;
+        std::vector<Resource> tiler_input_pool,tiler_output_pool;
+        std::vector<std::shared_ptr<GuestTiler::Lease>> tiler_leases;
+        std::shared_ptr<GuestTiler> tiler;
+        std::shared_ptr<GuestMultisample> multisample;
+        std::vector<std::shared_ptr<GuestMultisample::Lease>> multisample_leases;
         std::vector<std::byte> sampled_snapshot;
         std::vector<std::byte> stencil_snapshot;
         GuestTextureLayout stencil_layout;
         std::shared_ptr<std::vector<Resource>> readback_pool;
         uint64_t last_use=0;
+        uint64_t allocation_bytes=0,readback_reserve_bytes=0;
+        uint64_t format_retirement_bytes{};
+        Resource expanded_guest_backing,expanded_written_mask;
+        uint64_t expanded_backing_bytes{};
+        std::vector<std::shared_ptr<GuestPackedTransfer>> format_transfers;
+        uint64_t ResidentBytes()const;
         void RememberSnapshot(std::span<const std::byte>,std::span<const std::byte> stencil={});
         D3D12_SHADER_RESOURCE_VIEW_DESC Srv()const;
         D3D12_SHADER_RESOURCE_VIEW_DESC Srv(const GuestTextureDesc& sampled_view)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(uint32_t mip)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(const GuestTextureDesc& view,uint32_t mip)const;
         D3D12_RENDER_TARGET_VIEW_DESC Rtv(uint32_t mip=0)const;
+        D3D12_RENDER_TARGET_VIEW_DESC Rtv(const GuestTextureDesc&,uint32_t mip=0)const;
         D3D12_DEPTH_STENCIL_VIEW_DESC Dsv(bool read_only_depth=false,bool read_only_stencil=false)const;
+        D3D12_DEPTH_STENCIL_VIEW_DESC Dsv(const GuestTextureDesc&,bool read_only_depth=false,bool read_only_stencil=false)const;
+    };
+    enum class MetaType { CMask,FMask,HTile };
+    struct MetaDataInfo {
+        MetaType type;
+        uint64_t owner_uid{};
+        uint32_t num_samples=1;
+        uint32_t clear_mask=UINT32_MAX;
     };
 private:
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
+    std::shared_ptr<GuestTiler> tiler_;
+    std::shared_ptr<GuestMultisample> multisample_;
     PlacedTextureAllocator texture_allocator_;
     std::unordered_multimap<uint64_t,Entry*> address_index_;
+    mutable std::map<uint64_t,uint64_t> guest_overlap_ranges_;
+    mutable std::map<uint64_t,uint64_t> guest_owned_overlap_ranges_;
+    mutable bool guest_overlap_ranges_dirty_=true;
+    mutable bool guest_owned_overlap_ranges_dirty_=true;
+    std::unordered_map<uint64_t,Entry*> image_uids_;
+    std::unordered_map<uint64_t,MetaDataInfo> surface_metas_;
+    uint64_t next_image_uid_=1;
     std::unordered_set<DXGI_FORMAT> writable_formats_;
     uint64_t collected_fence_{};
     uint64_t use_sequence_=0;
@@ -95,41 +181,81 @@ private:
     HANDLE budget_event_{};
     DWORD budget_cookie_{};
     uint64_t resident_budget_=512*1024*1024,budget_checked_at_=0;
+    std::shared_ptr<std::atomic<uint64_t>> pressure_retirement_bytes_=std::make_shared<std::atomic<uint64_t>>(0);
+    std::wstring converter_;
+    std::unique_ptr<GuestBcDecoder> bc_decoder_;
     void RefreshMemoryBudget();
-    void Index(Entry& entry){address_index_.emplace(entry.desc.address,&entry);}
-    void RebuildIndex(){address_index_.clear();for(auto& entry:entries_)Index(*entry);}
+    void ReserveMemory(uint64_t bytes,uint64_t completed,Entry* preserve=nullptr);
+    bool ConvertPackedBacking(Entry&,const GuestTextureDesc&,const GuestTextureLayout&,
+        ID3D12GraphicsCommandList*);
+    void Index(Entry& entry){guest_overlap_ranges_dirty_=guest_owned_overlap_ranges_dirty_=true;address_index_.emplace(entry.desc.address,&entry);image_uids_.emplace(entry.image_uid,&entry);}
+    void RebuildIndex(){
+        guest_overlap_ranges_dirty_=guest_owned_overlap_ranges_dirty_=true;
+        address_index_.clear();image_uids_.clear();for(auto& entry:entries_)Index(*entry);
+        std::erase_if(surface_metas_,[&](const auto& meta){return !image_uids_.contains(meta.second.owner_uid);});
+    }
     std::function<void(Entry&)> resolve_owned_;
+    std::function<void(Entry&)> retire_pressure_;
+    std::function<uint64_t()> wait_pressure_;
     std::function<bool(Entry&)> acquire_owned_;
+    std::function<void(Entry&)> notify_write_;
+    std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain_buffer_alias_;
     std::function<void()> retire_pending_;
     std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
 public:
-    explicit GuestTextureCache(ID3D12Device* device);
+    explicit GuestTextureCache(ID3D12Device* device,std::wstring converter={});
     ~GuestTextureCache();
     void ValidateWritableFormat(DXGI_FORMAT);
+    void RegisterMeta(Entry&,MetaType,uint64_t address,uint32_t initial_mask=UINT32_MAX);
+    std::optional<MetaDataInfo> GetMetaInfo(uint64_t address)const;
+    Resource RetileBufferVersion(Entry&,Resource& initial,ID3D12GraphicsCommandList*,uint64_t completed);
+    void ClearRawStorageImage(Entry&,const float (&color)[4],ID3D12GraphicsCommandList*,uint64_t completed);
+    bool ClearMeta(uint64_t address);
+    bool ConsumeMeta(uint64_t address,uint32_t slice);
+    void RemoveMeta(uint64_t address,uint64_t size);
+    void SetBackingSamples(Entry&,UINT samples,ID3D12GraphicsCommandList*,bool copy=true);
+    std::shared_ptr<GuestMultisample::StorageLease> PrepareMultisampleStorage(Entry&);
     Entry& Upload(const GuestTextureDesc&,std::span<const std::byte> guest_bytes,
                   ID3D12GraphicsCommandList*,uint64_t completed_fence,
-                  std::span<const std::byte> stencil_bytes={});
+                  std::span<const std::byte> stencil_bytes={},bool guest_snapshot=false,
+                  const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false);
+    static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
+    std::shared_ptr<void> PinBinding(Entry&);
+    struct PressureSourceLease {std::shared_ptr<void> lease;uint64_t bytes;};
+    PressureSourceLease RetainPressureSource(Entry&);
+    uint64_t PressureRetirementBytes()const{return pressure_retirement_bytes_->load();}
+    uint64_t ResidentBytes()const;
     void Submitted(uint64_t fence);
     void Used(Entry& entry,uint64_t fence);
     void Collect(uint64_t completed_fence);
     void SetOwnershipResolver(std::function<void(Entry&)> resolver){resolve_owned_=std::move(resolver);}
+    void SetPressureRetirement(std::function<void(Entry&)> retirement){retire_pressure_=std::move(retirement);}
+    void SetPressureWait(std::function<uint64_t()> wait){wait_pressure_=std::move(wait);}
     void SetOwnershipAcquirer(std::function<bool(Entry&)> acquire){acquire_owned_=std::move(acquire);}
+    void SetImageWriteNotifier(std::function<void(Entry&)> notify){notify_write_=std::move(notify);}
+    void SetBufferAliasRetention(std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain){retain_buffer_alias_=std::move(retain);}
+    bool CanRetainBufferAlias(const GuestTextureDesc& desc,const GuestTextureLayout& layout)const {
+        return retain_buffer_alias_&&retain_buffer_alias_(desc,layout);
+    }
     bool Own(Entry& entry){
-        if(entry.gpu_owned)return true;
+        if(entry.gpu_owned){if(notify_write_)notify_write_(entry);return true;}
         if(!acquire_owned_||!acquire_owned_(entry))return false;
-        entry.gpu_owned=true;return true;}
+        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);return true;}
     bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
         const auto [first,last]=address_index_.equal_range(desc.address);
         for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&
-            CompatibleGuestShaderStorage(it->second->desc,desc))return true;
+            (CompatibleGuestShaderStorage(it->second->desc,desc)||
+             CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
         return false;}
     void SetPendingRetirement(std::function<void()> retirement){retire_pending_=std::move(retirement);}
     void SetCopySubmission(std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
         submit_copy_=std::move(submit);}
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}
-    auto& Entries(){return entries_;}
+    const auto& Entries(){return entries_;}
+    const auto& Entries()const{return entries_;}
+    bool HasGuestRangeOverlap(uint64_t address,uint64_t size,bool gpu_owned_only=false)const;
     Resource* CoherentDisplayTexture(uint64_t address,UINT width,UINT height,UINT pitch,uint64_t completed_fence);
     // Invalidation is safe only once all pending/submitted users have finished.
     void Invalidate(uint64_t address,uint64_t size,uint64_t completed_fence);

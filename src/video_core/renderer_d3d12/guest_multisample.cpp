@@ -22,7 +22,9 @@ DXGI_FORMAT LinearFormat(DXGI_FORMAT format){
 }
 DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if(d.depth_target)return LinearFormat(layout.format);
-    if(d.data_format>=16&&d.data_format<=19)return d.writable?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R16_UINT;
+    if(d.data_format>=16&&d.data_format<=19)
+        return layout.expanded_bytes_per_pixel==16?DXGI_FORMAT_R32G32B32A32_UINT:
+            d.writable?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R16_UINT;
     switch(d.data_format){
     case 1:return DXGI_FORMAT_R8_UINT;
     case 2:return DXGI_FORMAT_R16_UINT;
@@ -85,7 +87,8 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
        uint64_t(d.samples)*d.layers>65535)
         throw std::out_of_range("Native guest MSAA linear addressing exceeds buffer");
     const auto buffer_format=TransferFormat(interpreted,physical);
-    const bool packed=!d.writable&&d.data_format>=16&&d.data_format<=19;
+    const bool packed=!d.writable&&!layout.expanded_bytes_per_pixel&&
+        d.data_format>=16&&d.data_format<=19;
     const auto attachment_format=depth?(d.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
         layout.bytes_per_pixel==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT):
         packed?layout.format:TransferFormat(d,layout);

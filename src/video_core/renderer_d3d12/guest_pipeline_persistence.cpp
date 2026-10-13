@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=23,PipelineVersion=4;
+constexpr u32 StageVersion=24,PipelineVersion=4;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";
@@ -32,7 +32,7 @@ std::array<std::byte,32> ExecutableIdentity(){
     return digest;
 }
 std::vector<u8> Identity(const GuestShaderCache& shaders){
-    CacheKey key;key.Text("native-pipeline-metadata-v32");key.Blob(ExecutableIdentity());
+    CacheKey key;key.Text("native-pipeline-metadata-v33");key.Blob(ExecutableIdentity());
     key.Blob(shaders.ConfigurationIdentity());
     return {reinterpret_cast<const u8*>(key.bytes.data()),reinterpret_cast<const u8*>(key.bytes.data()+key.bytes.size())};
 }

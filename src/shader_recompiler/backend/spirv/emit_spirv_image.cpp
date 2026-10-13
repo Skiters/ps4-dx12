@@ -265,7 +265,10 @@ Id EmitImageQueryDimensions(EmitContext& ctx, IR::Inst* inst, u32 handle, Id lod
     const auto& texture = ctx.images[handle & 0xFFFF];
     Id image_ptr = texture.id;
     Id array_lod_valid{};
-    if (texture.mip_fallback_mode == MipStorageFallbackMode::DynamicIndex) {
+    if (texture.native_msaa_storage) {
+        const Id pointer_type = ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type);
+        image_ptr = ctx.OpAccessChain(pointer_type, image_ptr, std::array{ctx.u32_zero_value});
+    } else if (texture.mip_fallback_mode == MipStorageFallbackMode::DynamicIndex) {
         const Id pointer_type = ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type);
         Id index = Sirit::ValidId(lod) ? lod : ctx.u32_zero_value;
         if (ctx.profile.native_coherent_images) {
@@ -288,11 +291,13 @@ Id EmitImageQueryDimensions(EmitContext& ctx, IR::Inst* inst, u32 handle, Id lod
         // count. Preserve the guest view's count, included in specialization.
         if (texture.is_storage && ctx.profile.native_coherent_images) {
             const auto sharp = ctx.info.images[handle & 0xFFFF].GetSharp(ctx.info);
+            if (texture.native_msaa_storage) return ctx.ConstU32(1U);
             return ctx.ConstU32(u32(sharp.last_level - sharp.base_level + 1));
         }
         return ctx.OpImageQueryLevels(ctx.U32[1], image);
     }};
-    const bool uses_lod{texture.view_type != AmdGpu::ImageType::Color2DMsaa && !texture.is_storage};
+    const bool uses_lod{texture.view_type != AmdGpu::ImageType::Color2DMsaa &&
+        texture.view_type != AmdGpu::ImageType::Color2DMsaaArray && !texture.is_storage};
     const auto query{[&](Id type) {
         const Id physical_type = texture.native_slice_view ? ctx.U32[3] : type;
         Id base = uses_lod ? ctx.OpImageQuerySizeLod(physical_type, image, lod)
@@ -347,6 +352,7 @@ Id EmitImageQueryDimensions(EmitContext& ctx, IR::Inst* inst, u32 handle, Id lod
     case AmdGpu::ImageType::Color2DMsaa:
         return ctx.OpCompositeConstruct(ctx.U32[4], query(ctx.U32[2]), zero, mips());
     case AmdGpu::ImageType::Color2DArray:
+    case AmdGpu::ImageType::Color2DMsaaArray:
     case AmdGpu::ImageType::Cube:
     case AmdGpu::ImageType::Color3D:
         return ctx.OpCompositeConstruct(ctx.U32[4], query(ctx.U32[3]), mips());
@@ -402,6 +408,106 @@ static Id BoundNativeStorageMip(EmitContext& ctx, u32 handle, Id lod, Id& coords
     coords = ctx.OpCompositeInsert(ctx.U32[components], bounded_x, coords, 0U);
     return ctx.OpSelect(ctx.U32[1], valid, index, ctx.u32_zero_value);
 }
+static Id NativeStorageSample(EmitContext& ctx, u32 handle, Id ms) {
+    const auto& texture = ctx.images[handle & 0xFFFF];
+    const auto samples = ctx.info.images[handle & 0xFFFF].GetSharp(ctx.info).NumSamples();
+    const Id index = Sirit::ValidId(ms) ? ctx.OpUMod(ctx.U32[1], ms, ctx.ConstU32(samples)) : ctx.u32_zero_value;
+    const Id pointer_type = ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type);
+    const Id pointer = ctx.OpAccessChain(pointer_type, texture.id, std::array{index});
+    ctx.Decorate(pointer, spv::Decoration::NonUniform);
+    return pointer;
+}
+
+static std::array<u32, 8> Packed16Fields(u32 format) {
+    switch (format) {
+    case 16: return {11, 5, 5, 6, 0, 5, 0, 0};
+    case 17: return {10, 5, 5, 5, 0, 5, 15, 1};
+    case 18: return {11, 5, 6, 5, 1, 5, 0, 1};
+    case 19: return {4, 4, 8, 4, 12, 4, 0, 4};
+    default: throw std::invalid_argument("Invalid native packed image format");
+    }
+}
+
+static Id UnpackNativePacked16(EmitContext& ctx, Id texel, u32 format) {
+    const auto fields = Packed16Fields(format);
+    const auto word = ctx.OpCompositeExtract(ctx.U32[1], texel, 0U);
+    std::array<Id, 4> channels{};
+    for (u32 i = 0; i < 4; ++i) {
+        const u32 bits = fields[i * 2 + 1];
+        if (!bits) { channels[i] = ctx.ConstF32(1.0f); continue; }
+        const auto component = ctx.OpBitFieldUExtract(ctx.U32[1], word,
+            ctx.ConstU32(fields[i * 2]), ctx.ConstU32(bits));
+        channels[i] = ctx.OpFDiv(ctx.F32[1], ctx.OpConvertUToF(ctx.F32[1], component),
+            ctx.ConstF32(float((1U << bits) - 1U)));
+    }
+    return ctx.OpCompositeConstruct(ctx.F32[4], channels[0], channels[1], channels[2], channels[3]);
+}
+
+static Id PackNativePacked16(EmitContext& ctx, Id color, u32 format) {
+    const auto fields = Packed16Fields(format);
+    Id word = ctx.ConstU32(0U);
+    for (u32 i = 0; i < 4; ++i) {
+        const u32 bits = fields[i * 2 + 1];
+        if (!bits) continue;
+        const auto value = ctx.OpCompositeExtract(ctx.F32[1], color, i);
+        const auto clamped = ctx.OpFClamp(ctx.F32[1], value, ctx.ConstF32(0.0f), ctx.ConstF32(1.0f));
+        const auto scaled = ctx.OpFMul(ctx.F32[1], clamped, ctx.ConstF32(float((1U << bits) - 1U)));
+        const auto component = ctx.OpConvertFToU(ctx.U32[1], ctx.OpRoundEven(ctx.F32[1], scaled));
+        word = ctx.OpBitwiseOr(ctx.U32[1], word,
+            ctx.OpShiftLeftLogical(ctx.U32[1], component, ctx.ConstU32(fields[i * 2])));
+    }
+    const auto zero = ctx.ConstU32(0U);
+    return ctx.OpCompositeConstruct(ctx.U32[4], word, zero, zero, zero);
+}
+static Id UnpackNativePacked10(EmitContext& ctx, Id texel, AmdGpu::NumberFormat number, u32 format = 9) {
+    const bool signed_value = number == AmdGpu::NumberFormat::Snorm || number == AmdGpu::NumberFormat::Sint;
+    const bool integer = AmdGpu::IsInteger(number);
+    const auto word = ctx.OpCompositeExtract(ctx.U32[1], texel, 0U);
+    std::array<Id, 4> channels{};
+    for (u32 i = 0; i < 4; ++i) {
+        const u32 bits = format == 10 ? 8 : i == 3 ? 2 : 10;
+        const u32 offset = i * (format == 10 ? 8 : 10);
+        const auto raw = signed_value ?
+            ctx.OpBitFieldSExtract(ctx.U32[1], word, ctx.ConstU32(offset), ctx.ConstU32(bits)) :
+            ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(offset), ctx.ConstU32(bits));
+        if (integer) { channels[i] = ctx.OpBitcast(ctx.F32[1], raw); continue; }
+        const auto decoded = signed_value ? ctx.OpConvertSToF(ctx.F32[1], ctx.OpBitcast(ctx.S32[1], raw)) :
+                                            ctx.OpConvertUToF(ctx.F32[1], raw);
+        channels[i] = ctx.OpFDiv(ctx.F32[1], decoded,
+            ctx.ConstF32(float((1U << (bits - u32(signed_value))) - 1U)));
+        if (signed_value) channels[i] = ctx.OpFMax(ctx.F32[1], channels[i], ctx.ConstF32(-1.0f));
+    }
+    return ctx.OpCompositeConstruct(ctx.F32[4], channels[0], channels[1], channels[2], channels[3]);
+}
+static Id PackNativePacked10(EmitContext& ctx, Id color, AmdGpu::NumberFormat number, u32 format = 9) {
+    const bool signed_value = number == AmdGpu::NumberFormat::Snorm || number == AmdGpu::NumberFormat::Sint;
+    const bool integer = AmdGpu::IsInteger(number);
+    Id word = ctx.u32_zero_value;
+    for (u32 i = 0; i < 4; ++i) {
+        const u32 bits = format == 10 ? 8 : i == 3 ? 2 : 10;
+        const auto value = ctx.OpCompositeExtract(ctx.F32[1], color, i);
+        Id component;
+        if (integer) {
+            if (signed_value) {
+                const auto clamped = ctx.OpSClamp(ctx.S32[1], ctx.OpBitcast(ctx.S32[1], value),
+                    ctx.ConstS32(-s32(1U << (bits - 1))), ctx.ConstS32(s32((1U << (bits - 1)) - 1)));
+                component = ctx.OpBitcast(ctx.U32[1], clamped);
+            } else component = ctx.OpUMin(ctx.U32[1], ctx.OpBitcast(ctx.U32[1], value),
+                                         ctx.ConstU32((1U << bits) - 1));
+        } else {
+            const auto clamped = ctx.OpFClamp(ctx.F32[1], value,
+                ctx.ConstF32(signed_value ? -1.0f : 0.0f), ctx.ConstF32(1.0f));
+            const auto scaled = ctx.OpFMul(ctx.F32[1], clamped,
+                ctx.ConstF32(float((1U << (bits - u32(signed_value))) - 1U)));
+            const auto rounded = ctx.OpRoundEven(ctx.F32[1], scaled);
+            component = signed_value ? ctx.OpBitcast(ctx.U32[1], ctx.OpConvertFToS(ctx.S32[1], rounded)) :
+                                       ctx.OpConvertFToU(ctx.U32[1], rounded);
+        }
+        component = ctx.OpBitwiseAnd(ctx.U32[1], component, ctx.ConstU32((1U << bits) - 1));
+        word = ctx.OpBitwiseOr(ctx.U32[1], word, ctx.OpShiftLeftLogical(ctx.U32[1], component, ctx.ConstU32(i * (format == 10 ? 8 : 10))));
+    }
+    return ctx.OpCompositeConstruct(ctx.U32[4], word, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value);
+}
 Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod, Id ms) {
     const auto& texture = ctx.images[handle & 0xFFFF];
     const Id color_type = texture.data_types->Get(4);
@@ -410,7 +516,8 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
     Id texel;
     if (!texture.is_storage) {
         const Id image = ctx.OpLoad(texture.image_type, texture.id);
-        if (texture.view_type == AmdGpu::ImageType::Color2DMsaa) {
+        if (texture.view_type == AmdGpu::ImageType::Color2DMsaa ||
+            texture.view_type == AmdGpu::ImageType::Color2DMsaaArray) {
             // GCN hardware wraps out-of-range MSAA sample indices
             if (Sirit::ValidId(ms)) {
                 const Id sample_count = ctx.OpImageQuerySamples(ctx.U32[1], image);
@@ -425,9 +532,37 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
             operands.Add(spv::ImageOperandsMask::Sample, ms);
         }
         texel = ctx.OpImageFetch(color_type, image, fixed_coords, operands.mask, operands.operands);
+        if (ctx.profile.native_coherent_images) {
+            const auto sharp = ctx.info.images[handle & 0xFFFF].GetSharp(ctx.info);
+            const u32 format = u32(sharp.GetDataFmt());
+            if (format >= 16 && format <= 18 &&
+                sharp.GetNumberFmt() == AmdGpu::NumberFormat::Unorm) {
+                // Native B5/B6 fetches can expand through eight-bit UNORM.
+                // Recover the original integer component before normalizing to
+                // the guest width. This is valid for unfiltered ImageFetch only;
+                // applying it after a filtered sample would quantize the result.
+                const auto mapping = sharp.DstSelect();
+                const std::array<u32, 4> selectors{u32(mapping.r), u32(mapping.g),
+                                                   u32(mapping.b), u32(mapping.a)};
+                const std::array<u32, 4> widths{5, format == 16 ? 6U : 5U, 5,
+                                               format == 16 ? 0U : 1U};
+                for (u32 channel = 0; channel < 4; ++channel) {
+                    const u32 selector = selectors[channel];
+                    if (selector < 4 || selector > 7 || !widths[selector - 4]) continue;
+                    const Id maximum = ctx.ConstF32(float((1U << widths[selector - 4]) - 1));
+                    const Id value = ctx.OpCompositeExtract(ctx.F32[1], texel, channel);
+                    const Id integer = ctx.OpRoundEven(ctx.F32[1],
+                        ctx.OpFMul(ctx.F32[1], value, maximum));
+                    texel = ctx.OpCompositeInsert(ctx.F32[4],
+                        ctx.OpFDiv(ctx.F32[1], integer, maximum), texel, channel);
+                }
+            }
+        }
     } else {
         Id image_ptr = texture.id;
-        if (ctx.profile.supports_image_load_store_lod) {
+        if (texture.native_msaa_storage) {
+            image_ptr = NativeStorageSample(ctx, handle, ms);
+        } else if (ctx.profile.supports_image_load_store_lod) {
             operands.Add(spv::ImageOperandsMask::Lod, lod);
         } else if (Sirit::ValidId(lod) ||
                    (ctx.profile.native_coherent_images &&
@@ -445,6 +580,23 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
         const Id image = ctx.OpLoad(texture.image_type, image_ptr);
         texel = ctx.OpImageRead(color_type, image, fixed_coords, operands.mask, operands.operands);
     }
+    if (ctx.profile.native_coherent_images && texture.is_storage) {
+        const auto sharp = ctx.info.images[handle & 0xFFFF].GetSharp(ctx.info);
+        if (sharp.GetDataFmt() == AmdGpu::DataFormat::Format32_32_32) {
+            const Id one = sharp.GetNumberFmt() == AmdGpu::NumberFormat::Float ? ctx.ConstF32(1.0f) :
+                sharp.GetNumberFmt() == AmdGpu::NumberFormat::Sint ? ctx.ConstS32(1) : ctx.ConstU32(1U);
+            texel = ctx.OpCompositeInsert(color_type, one, texel, 3U);
+        }
+    }
+    if(texture.native_packed_format==4){
+        const auto word=ctx.OpCompositeExtract(ctx.U32[1],texel,0U);
+        const auto one=AmdGpu::IsInteger(texture.native_packed_number_format)?
+            ctx.OpBitcast(ctx.F32[1],ctx.ConstU32(1U)):ctx.ConstF32(1.0f);
+        texel=ctx.OpCompositeConstruct(ctx.F32[4],ctx.OpBitcast(ctx.F32[1],word),
+            ctx.f32_zero_value,ctx.f32_zero_value,one);
+    }else if(texture.native_packed_format==9||texture.native_packed_format==10)
+        texel=UnpackNativePacked10(ctx,texel,texture.native_packed_number_format,texture.native_packed_format);
+    else if(texture.native_packed_format)texel=UnpackNativePacked16(ctx,texel,texture.native_packed_format);
     if (ctx.profile.native_coherent_images && texture.is_storage &&
         ctx.info.images[handle & 0xFFFF].native_srgb_read) {
         // The shared UAV is UNORM. Restore the sRGB SRV's RGB decode before
@@ -462,6 +614,7 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
         }
         texel = ctx.OpCompositeConstruct(ctx.F32[4], channels[0], channels[1], channels[2], channels[3]);
     }
+    if (texture.native_packed_format) return texel;
     return texture.is_integer ? ctx.OpBitcast(ctx.F32[4], texel) : texel;
 }
 
@@ -472,8 +625,10 @@ void EmitImageWrite(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id 
     const Id color_type = texture.data_types->Get(4);
     Id fixed_coords = FixImageCoords<false>(ctx, coords, texture.view_type, texture.native_slice_view);
     ImageOperands operands;
-    operands.Add(spv::ImageOperandsMask::Sample, ms);
-    if (ctx.profile.supports_image_load_store_lod) {
+    if (texture.native_msaa_storage) {
+        image_ptr = NativeStorageSample(ctx, handle, ms);
+    } else if (ctx.profile.supports_image_load_store_lod) {
+        operands.Add(spv::ImageOperandsMask::Sample, ms);
         operands.Add(spv::ImageOperandsMask::Lod, lod);
     } else if (Sirit::ValidId(lod) ||
                    (ctx.profile.native_coherent_images &&
@@ -486,8 +641,16 @@ void EmitImageWrite(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id 
         if (ctx.profile.native_coherent_images)
             ctx.Decorate(image_ptr, spv::Decoration::NonUniform);
     }
+    if (!texture.native_msaa_storage && !ctx.profile.supports_image_load_store_lod)
+        operands.Add(spv::ImageOperandsMask::Sample, ms);
     const Id image = ctx.OpLoad(texture.image_type, image_ptr);
-    const Id texel = texture.is_integer ? ctx.OpBitcast(color_type, color) : color;
+    const Id texel = texture.native_packed_format == 4 ?
+        ctx.OpCompositeConstruct(ctx.U32[4],ctx.OpBitcast(ctx.U32[1],ctx.OpCompositeExtract(ctx.F32[1],color,0U)),
+            ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value) :
+        texture.native_packed_format == 9 || texture.native_packed_format == 10 ?
+        PackNativePacked10(ctx, color, texture.native_packed_number_format,texture.native_packed_format) :
+        texture.native_packed_format ? PackNativePacked16(ctx, color, texture.native_packed_format) :
+        texture.is_integer ? ctx.OpBitcast(color_type, color) : color;
     ctx.OpImageWrite(image, fixed_coords, texel, operands.mask, operands.operands);
 }
 
