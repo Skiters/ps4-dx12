@@ -5,6 +5,88 @@ development and explicitly permits GPU/regression/game checks after logical chan
 The emergency-only stop and old whole-port-before-any-test gate are superseded.
 Older current-state headings in other notes are historical. No new overall audit was run.
 
+## Active packed-gap continuation — 2026-10-13 evening
+
+This section supersedes the older point-capture checkpoint below. Source commit
+`3f1249b` was pushed to origin/fix/mixed-cmask. It preserves seven selected files,
+including their previously uncommitted integration; it is explicitly WIP.
+The 22 pre-existing staged network deletions remain outside this commit.
+Exact new-session delta, before/current sources and index backup:
+`F:/PS4Dev/handoff/packed-gaps-20261013` (`session-only.patch`, `changed-sources.zip`).
+
+- The saved EmitImageWrite assertion was a malformed hand-emitted fixture:
+  its sampled-output single-mip UAV received LOD=0 while metadata said None.
+  Pinned Vulkan and ResourcePatchingPass already drop LOD for a fixed view;
+  packed_image_test.cpp now follows that contract, retaining dynamic mip/sample
+  addressing and every content/padding expectation. The production assertion
+  was NOT bypassed. Do not repeat the earlier speculative emitter-LOD rewrite.
+- Production EmitImageRead now reconstructs exact guest 5/6-bit UNORM values
+  after native B5/B6 unfiltered fetch (including SRV component selection).
+  Filtered samples are not requantized. Formats16/17/18 linear+tiled+MSAA:9/9 PASS.
+- LayoutGuestTexture/HasExactPackedExpansion/GuestTiler/GuestMultisample now
+  support sampled format19 MSAA through existing GPU float4 expansion and raw
+  sample transfers. Exact guest packed backing, sample/layer layout and padding
+  are retained. Format19 sampled+backing tests:7/7 PASS, including former two
+  unsupported-RT backing failures. Full guest format19 render-target blending/
+  quantization is still open; the fallback is explicitly for sampled resources.
+- Stage24/pipeline4/metadata-v33 invalidates old shader semantics. Core build
+  succeeded (command-20261013-223852-41016.log), executable SHA256
+  `25ca1dee9a3d0c9348bc8dba01850e67604476f6ed2bc54c1cc1b5644fee2872`.
+- Packed10 UNORM MSAA passes the current rerun without a separate fix. Its old
+  mismatch is not declared resolved; retain as non-reproduced evidence.
+- Final configured suite: **324/344 PASS,20 FAIL**. Native subset: **209/227
+  PASS,18 FAIL**. This combines retained first49 and same-selection CTest -F;
+  signed-packed sampled timed out60s. It is not a wholly green suite or a claim
+  that all35 native improvements since174/227 are due to this session's fixes.
+  Full log command-20261013-224303-101900.log; detailed failure list/provenance:
+  F:/PS4Dev/handoff/packed-gaps-20261013/suite-summary.json and suite-*.log.
+- Stronger final packed fixture rejects NaN and passes no LOD for MSAA; all12
+  linear/tiled/MSAA cases16–19 PASS in56.17s, raw command-20261013-225604-72632.log.
+  This fixture-only hardening followed the full suite; production code unchanged.
+- Exactly one new game run, bloodborne-packed-gaps, exited0 after123.8697s.
+  Executable25ca1dee..., PID48864, XInput daemon14484/session
+  da65fd4a5f2d48a9b79a8aa7277ee20a. A200ms + neutral acknowledged; controller
+  removed on game exit. Original20 seed saves verified unchanged; no remote
+  session, driver/service or original Vulkan changes.
+- **BLACK IMAGE CONFIRMED** in both engine-generated screenshots: game-only
+  source225745 and output-with-overlays225822 (PNG files in run/user/screenshots).
+  Both were viewed. PM4 draw/dispatch, GPU submissions and Present continue.
+  2794 paired completed guest frames/93.101581s yields~29.99949 completions/s,
+  median33.363ms,P9535.459ms; this is BLACK-FRAME THROUGHPUT, not world/gameplay
+  FPS. No gameplay response or matched speedup accepted. The defect is present
+  by the snapshot/source-to-present boundary; exact first producer remains unknown.
+  Do not attribute it solely to Windows.Graphics.Capture or claim recovery.
+- Installed preview21: dx12-20261013-full-port-preview-25ca1dee9a3d,
+  C:/Users/skei/AppData/Local/PS4Desktop/cores/<id>/shadPS4-DX12-Core.exe,
+  matching symbols/provenance;76 runtime hashes and20 copied saves verified.
+  Existing PS4Desktop and previous selected package were preserved.
+  Game report: F:/PS4Dev/handoff/point-capture-20261013/bloodborne-packed-gaps/RESULT.json.
+
+The previous preview20 short run (bloodborne-short-2207) completed4495 paired
+guest frames over149.785095s (~30.003/s), exit0 after180.843s; image/gameplay scene
+was unverified because Windows.Graphics.Capture failed. It is not a world FPS
+baseline and cannot be compared with historical1.377539FPS.
+
+Next production work: narrow the black source boundary using the saved two
+captures, current PM4/renderer logs and the existing surface path:
+MemorySurfaceProvider::Snapshot -> GuestRasterizer::PrepareDisplayTexture ->
+GuestPresenter::PrepareFrame/Present. Determine whether the current guest color
+writer produces black or an obsolete/incorrect image version is selected for
+VideoOut; fix that demonstrated ownership/render path. Do not rerun the same
+game launch until a concrete change or a necessary bounded observation is ready.
+Reuse native_coherent_sampled_attachment and native_guest_buffer-image-alias/
+partial as existing regressions; do not invent a new profiling framework.
+
+Other remaining failures (full list in suite-summary): odd buffer byte range,
+arena residency, 10-bit VideoOut, two old texture fixtures, signed-packed sampled
+timeout, CMASK, PageWatch line219, owned-image dispatch/sample forced waits,
+BC volume update, MINMAX-sRGB, mixed DS/SRV planes/view ranges, dual-face culling.
+Cold runtime compilation contributing to the owned-test3s threshold is only a
+hypothesis; preserve fences/PageWatch while diagnosing it.
+No new whole-port audit, point replay rerun or whole-group closure claim.
+
+## Historical point-capture checkpoint
+
 ## A. Current state
 
 - Repository `F:/PS4Dev/work/shadps4-dx12-src`; branch `fix/mixed-cmask`, upstream
@@ -191,12 +273,18 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 
 ## NEXT CODEX SESSION — START HERE
 
-> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask. Прочитай SESSION_HANDOFF.md и
-> CHECKPOINT_FINAL.json, проверь HEAD/status и сохрани dirty изменения. Не повторяй
-> общий аудит и доказанные исследования capture/replay. Продолжи реальный C++ перенос
-> EmitImageWrite/native storage mip selection: native_packed_16_msaa вызывает assertion
-> для ImageWrite с LOD после исправления placed MSAA initialization. Используй сохранённые
-> Vulkan/DX12 данные и точные native failures. Собери и проверь packed/MSAA/alias случаи,
-> затем минимально проверь Bloodborne через существующий виртуальный XInput в копии
-> профиля; измерь completed guest FPS без FG и сравни с baseline с его ограничениями.
-> Не меняй оригинальный Vulkan/сохранения. Продолжай с checkpoint и обновляй parity.
+> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask с актуального HEAD. Прочитай
+> активный packed-gap раздел SESSION_HANDOFF.md и
+> F:/PS4Dev/handoff/packed-gaps-20261013/CHECKPOINT_FINAL.json. Сохрани dirty tree
+> и22 staged удаления. Packed16–18 fetch и sampled packed19 MSAA исправлены;
+> ImageWrite assertion был нарушением контракта fixture, не переписывай emitter
+> по старой гипотезе. Полный suite324/344, native209/227;12 усиленных packed PASS.
+> Следующий блокер: оба штатных снимка Bloodborne чёрные при продолжающихся
+> PM4/GPU/flip/Present. Локализуй и исправь первый неправильный producer/version
+> в MemorySurfaceProvider::Snapshot -> GuestRasterizer::PrepareDisplayTexture ->
+> GuestPresenter::PrepareFrame, используя сохранённые логи/снимки и Vulkan-эталон.
+> Используй existing coherent sampled/alias regressions, затем сборку и один
+> необходимый короткий изолированный XInput-прогон. Проверяй фактическую сцену,
+> а не только отправку ввода;30 black completions/s не игровой FPS. Не трогай
+> удалённую сессию, оригинальные сохранения/Vulkan. Продолжай production C++/HLSL,
+> сохраняй и push проверенные commits, не повторяй общие аудиты.

@@ -1,5 +1,9 @@
 # Vulkan / native D3D12 parity audit
 
+## Packed gaps — 2026-10-13 evening
+
+Current source3f1249b, Stage24/metadata33. Unfiltered packed16–18 normalization:9/9 GPU cases pass. Sampled packed19 MSAA GPU expansion:7/7 sampled/backing cases pass. All remain partial groups: filtered precision, full RT quantization/blending, ownership and complete-game acceptance remain open. EmitImageWrite assertion was fixture misuse, not a proven missing production LOD path. Full suite324/344, native209/227; strengthened packed12/12 PASS. Bloodborne source/output black in engine captures, no gameplay acceptance. See SESSION_HANDOFF.md for current results; older black-window and Stage23 descriptions are historical.
+
 ## Current verified boundary � 2026-10-13
 
 Latest source/state/evidence are in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).

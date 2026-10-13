@@ -2561,7 +2561,7 @@
         "outputs": "D3D12 render-target initialization precedes shader upload/copy. Only the fully replaced color subresource is discarded; the following full-slice draw restores every sample. Direct full-array color upload discards the full destination it overwrites.",
         "ordering": "Transition to RENDER_TARGET before DiscardResource and draw. Layer is retained explicitly in the transfer lease, independent of row-pitch constants. Other array layers, DS planes, guest fast-clear state and allocation/fence leases are preserved.",
         "verification_prepared": "native_packed_backing_16_8_2 and native_guest_shared_color_layers pass with GPU validation. Packed10 SNORM/SINT/UINT MSAA roundtrips pass; broader backing results are saved externally. Full 64-bit/padding/sample comparisons retained.",
-        "open_contracts": "Packed format19 RT capability, packed10 UNORM word mismatch, packed16/17/18 normalization, EmitImageWrite LOD assertion, DS initialization/partial slices and Bloodborne acceptance remain open."
+        "open_contracts": "Packed16/17/18 unfiltered normalization and sampled packed19 MSAA expansion pass targeted GPU tests (3f1249b). The ImageWrite assertion was a hand-emitted fixture LOD-contract violation, corrected without bypassing production assertions. Full format19 render-target blending/quantization, filtered packed precision, DS initialization/partial slices and Bloodborne acceptance remain open. Packed10 UNORM old mismatch did not reproduce in the current targeted rerun; no separate fix claimed."
       },
       "implementation_status": "integrated_partial_review_pending",
       "final_verification": {
