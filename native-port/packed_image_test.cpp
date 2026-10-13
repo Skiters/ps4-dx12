@@ -46,7 +46,8 @@ std::vector<u32> Emit(Shader::Info& info,bool read_only,u32 samples,u32 levels){
     const auto barrier=[&]{c.OpMemoryBarrier(c.ConstU32(u32(spv::Scope::Device)),
         c.ConstU32(u32(spv::MemorySemanticsMask::AcquireRelease|spv::MemorySemanticsMask::ImageMemory)));};
     for(u32 mip=0;mip<levels;++mip)for(u32 layer=0;layer<3;++layer)for(u32 sample=0;sample<samples;++sample){
-        const auto lod=c.ConstU32(mip),ms=samples>1?c.ConstU32(sample):Sirit::Id{};
+        const auto lod=samples>1?Sirit::Id{}:c.ConstU32(mip);
+        const auto ms=samples>1?c.ConstU32(sample):Sirit::Id{};
         // Match ResourcePatchingPass: single-view UAVs have no LOD operand;
         // native MSAA storage selects a sample descriptor, never a mip.
         const auto storage_lod=levels>1?lod:Sirit::Id{};
@@ -133,7 +134,7 @@ int RunNativePackedImage(const wchar_t* converter,const wchar_t* dxc,std::wstrin
     for(u32 mip=0;mip<desc.levels;++mip)for(u32 layer=0;layer<3;++layer)for(u32 sample=0;sample<desc.samples;++sample)for(u32 x=0;x<8;++x){
         const auto offset=GuestPixelOffset(output_desc,output_layout,mip,layer,sample*8+x,0);
         std::array<float,4> observed{},wanted{};memcpy(observed.data(),output_bytes.data()+offset,16);memcpy(wanted.data(),output_expected.data()+offset,16);
-        for(u32 channel=0;channel<4;++channel)if(std::abs(observed[channel]-wanted[channel])>2e-7f)
+        for(u32 channel=0;channel<4;++channel)if(!std::isfinite(observed[channel])||std::abs(observed[channel]-wanted[channel])>2e-7f)
             throw std::runtime_error(fmt::format("Packed sampled mismatch mip={} layer={} sample={} x={} channel={} observed={} expected={}",mip,layer,sample,x,channel,observed[channel],wanted[channel]));
         memcpy(output_bytes.data()+offset,wanted.data(),16);
     }
