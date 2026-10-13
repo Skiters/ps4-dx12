@@ -70,6 +70,10 @@ float4 main(float4 position:SV_Position,uint sample:SV_SampleIndex):SV_Target{
         if(!(source.state&D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
             source.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         destination.Transition(list,D3D12_RESOURCE_STATE_RENDER_TARGET);
+        // The following draw loop overwrites all samples of every array
+        // slice. Initialize a placed render target without clearing guest
+        // contents that will be supplied by the transfer itself.
+        DX12_API_CALL(list->DiscardResource(destination.handle.Get(),nullptr));
         DX12_API_CALL(list->SetGraphicsRootSignature(root_.Get()));DX12_API_CALL(list->SetPipelineState(pipeline_.Get()));
         DX12_API_CALL(list->SetGraphicsRootShaderResourceView(0,DX12_API_CALL(source.handle->GetGPUVirtualAddress())));
         D3D12_VIEWPORT viewport{0,0,float(width_),float(height_),0,1};D3D12_RECT scissor{0,0,LONG(width_),LONG(height_)};

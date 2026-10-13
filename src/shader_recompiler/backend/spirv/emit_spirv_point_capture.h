@@ -75,7 +75,7 @@ inline void EmitNativePointCapture(EmitContext& ctx){
             write(NativePointCapture::ParameterWord+source*4+component,ctx.OpBitcast(ctx.U32[1],
                 ctx.OpCompositeExtract(ctx.F32[1],value,component)));
     }
-    write(NativePointCapture::ValidWord,ctx.ConstU32(1u));
+    write(NativePointCapture::ValidWord,ctx.OpIAdd(ctx.U32[1],primitive,ctx.ConstU32(1u)));
     ctx.OpBranch(end_label);ctx.AddLabel(end_label);
 }
 }

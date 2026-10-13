@@ -12,6 +12,7 @@
 #include "common/assert.h"
 #include "common/func_traits.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
+#include "shader_recompiler/native_point_capture.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/frontend/translate/translate.h"
@@ -466,7 +467,7 @@ void DefineEntryPoint(const Info& info, EmitContext& ctx, Id main,const IR::Prog
                 distance_components(1)*u32(!expanded_points&&info.stores.GetAny(IR::Attribute::CullDistance));
             const u32 expansion=expanded_points?4:1;
             if(!vertices||vertices>256||u64(vertices)*expansion*components>1024)
-                throw std::runtime_error("Native point geometry exceeds the GS output component budget");
+                throw NativePointCapture::Required("Native point geometry exceeds the GS output component budget");
             vertices*=expansion;
         }
         ctx.AddExecutionMode(main, expanded_points?spv::ExecutionMode::OutputTriangleStrip:

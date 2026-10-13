@@ -11,6 +11,8 @@ inline constexpr u32 DescriptorSet=33,Binding=0;
 inline constexpr u32 ValidWord=0,PositionWord=1,SizeWord=5,LayerWord=6,ViewportWord=7,
     ClipWord=8,CullWord=16,ParameterWord=24,RecordWords=152;
 struct Record {
+    // Zero is an unfilled slot; otherwise this is original PrimitiveId + 1.
+    // The tag preserves primitive IDs across replay and instanced segments.
     u32 valid{};
     std::array<u32,4> position;
     u32 size,layer,viewport;
@@ -18,6 +20,7 @@ struct Record {
     std::array<std::array<u32,4>,32> parameters;
 };
 inline constexpr u64 RecordBytes=RecordWords*sizeof(u32);
+class Required : public std::runtime_error {public:using std::runtime_error::runtime_error;};
 static_assert(std::is_standard_layout_v<Record>&&std::is_trivially_copyable_v<Record>);
 static_assert(sizeof(Record)==RecordBytes&&RecordBytes%16==0);
 static_assert(offsetof(Record,position)==PositionWord*4&&offsetof(Record,size)==SizeWord*4);

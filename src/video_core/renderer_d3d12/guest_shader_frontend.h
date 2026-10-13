@@ -19,13 +19,14 @@ struct GuestShaderStage {
     Shader::StageSpecialization specialization;
     std::vector<u32> spirv;
     std::vector<u32> patch_spirv;
-    bool is_patched{},debug_collected{};
+    bool is_patched{},debug_collected{},requires_point_capture{};
     std::span<const u32> EffectiveSpirv()const{return is_patched?std::span<const u32>(patch_spirv):std::span<const u32>(spirv);}
 };
 struct GuestGraphicsStages {
     std::array<GuestShaderStage*, Shader::MaxStageTypes> stages{};
     u32 mrt_mask{};
 };
+struct GuestPointCaptureStages {GuestGraphicsStages producer,replay;};
 // Owns original guest reflection and specialization. Stage objects have stable
 // addresses because StageSpecialization retains an Info pointer.
 // GPU command thread only; outputs remain owned by this frontend.
@@ -54,6 +55,8 @@ public:
         u32 instance_sgpr_offset = 0, bool is_indirect = false);
     GuestGraphicsStages BuildGraphics(const AmdGpu::Regs&, u16 vertex_sgpr_offset = 0,
         u32 instance_sgpr_offset = 0, bool is_indirect = false);
+    GuestPointCaptureStages BuildPointCaptureGraphics(const AmdGpu::Regs&,
+        u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0,bool is_indirect=false);
     GuestShaderStage& BuildCompute(AmdGpu::Liverpool&);
 };
 }

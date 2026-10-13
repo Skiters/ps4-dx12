@@ -13,7 +13,7 @@
 
 namespace NativeDX12 {
 GuestShaderStage* GuestShaderFrontend::FindStage(u64 id){
-    for(auto& [key,variants]:programs_)for(auto& [index,stage]:variants)if(stage->id==id)return stage.get();
+    for(auto& [key,variants]:programs_)for(auto& [index,stage]:variants)if(stage->id==id&&!stage->requires_point_capture)return stage.get();
     for(auto& [key,stage]:auxiliary_)if(stage->id==id)return stage.get();return nullptr;
 }
 GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
@@ -102,6 +102,8 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             }
             const Shader::StageSpecialization requested(variant->info, requested_runtime, stage_profile, bindings);
             if (variant->specialization == requested) {
+                if(variant->requires_point_capture)
+                    throw Shader::NativePointCapture::Required("Cached guest point specialization requires capture/replay");
 #ifdef SHADPS4_NATIVE_DX12_CORE
                 if(!variant->debug_collected)DumpShaderSource(*variant,index,params.code);
                 CollectShaderDebug(*variant,index,params.code);
@@ -142,8 +144,9 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
         mutable_runtime.hw.fs.native_point_input_offsets=transport.offsets;
         mutable_runtime.hw.fs.native_point_input_widths=transport.widths;
     }
-    stage->spirv = Shader::Backend::SPIRV::EmitSPIRV(stage_profile, mutable_runtime, program, allocated);
-    if (stage->spirv.empty()) throw std::runtime_error("Guest shader produced no intermediate");
+    try{stage->spirv = Shader::Backend::SPIRV::EmitSPIRV(stage_profile, mutable_runtime, program, allocated);}
+    catch(const Shader::NativePointCapture::Required&){stage->requires_point_capture=true;}
+    if (stage->spirv.empty()&&!stage->requires_point_capture) throw std::runtime_error("Guest shader produced no intermediate");
     stage->runtime = mutable_runtime;
     stage->specialization = Shader::StageSpecialization(stage->info, mutable_runtime, stage_profile, bindings);
     stage->id = ReserveStageId();
@@ -151,9 +154,11 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     bindings = allocated;
     auto& result = *stage;
 #ifdef SHADPS4_NATIVE_DX12_CORE
-    LoadShaderPatch(*stage,index);CollectShaderDebug(*stage,index,params.code);
+    if(!stage->requires_point_capture){LoadShaderPatch(*stage,index);CollectShaderDebug(*stage,index,params.code);}
 #endif
     variants.emplace(index,std::move(stage));
+    if(result.requires_point_capture)
+        throw Shader::NativePointCapture::Required("Guest point specialization requires capture/replay");
     return result;
 }
 
@@ -294,6 +299,37 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
         }
         result.stages[u32(SwStage::Geometry)]=found->second.get();
     }
+    return result;
+}
+
+GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const AmdGpu::Regs& regs,
+    u16 vertex_sgpr_offset,u32 instance_sgpr_offset,bool is_indirect){
+    using Shader::SwStage;
+    if(regs.stage_enable.raw!=AmdGpu::ShaderStageEnable::VgtStages::EsGs||
+       regs.vgt_gs_out_prim_type.GetPrimitiveType(0)!=AmdGpu::GsOutputPrimitiveType::PointList)
+        throw std::runtime_error("Native point capture currently requires export/geometry point output");
+    struct RestoreProfile {Shader::Profile& target;Shader::Profile original;~RestoreProfile(){target=original;}};
+    RestoreProfile restore{profile_,profile_};profile_.native_point_capture=true;
+    auto original=BuildGraphics(regs,vertex_sgpr_offset,instance_sgpr_offset,is_indirect);
+    const auto* geometry=original.stages[u32(SwStage::Geometry)];
+    if(!geometry||geometry->auxiliary||!geometry->runtime.hw.gs.native_point_capture)
+        throw std::logic_error("Missing native point capture producer");
+    GuestPointCaptureStages result;result.producer=original;
+    result.producer.stages[u32(SwStage::Fragment)]=nullptr;result.producer.mrt_mask=0;
+    result.replay.mrt_mask=original.mrt_mask;
+    result.replay.stages[u32(SwStage::Fragment)]=original.stages[u32(SwStage::Fragment)];
+    const auto auxiliary=[&](Shader::SwStage logical,std::vector<u32> words){
+        auto found=auxiliary_.find(words);
+        if(found==auxiliary_.end()){
+            auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;
+            stage->info.sw_stage=logical;stage->info.hw_stage=logical==SwStage::Vertex?Shader::HwStage::Vertex:Shader::HwStage::Geometry;
+            stage->spirv=words;found=auxiliary_.emplace(std::move(words),std::move(stage)).first;
+        }
+        return found->second.get();
+    };
+    result.replay.stages[u32(SwStage::Vertex)]=auxiliary(SwStage::Vertex,EmitNativePointReplayVertex());
+    result.replay.stages[u32(SwStage::Geometry)]=auxiliary(SwStage::Geometry,
+        EmitNativePointReplayGeometry(geometry->info,geometry->runtime.hw.gs,profile_));
     return result;
 }
 

@@ -3,7 +3,12 @@
 
 #include <sirit/sirit.h>
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point_capture.h"
 #include "shader_recompiler/runtime_info.h"
+#include "video_core/renderer_d3d12/guest_point_shader.h"
+#include <limits>
+#include <bit>
 
 namespace Shader::Backend::SPIRV {
 
@@ -338,3 +343,205 @@ std::vector<u32> EmitAuxilaryTessShader(AuxShaderType type, const HwFragmentRunt
 }
 
 } // namespace Shader::Backend::SPIRV
+
+namespace NativeDX12 {
+// This private varying never reaches the fragment shader. Guest parameters
+// occupy locations 0..31; the auxiliary GS consumes the exported point size.
+std::vector<u32> EmitGuestPointGeometry(const Shader::Info& vertex,bool clip_depth,bool emulated_clip,u32 live_parameters,
+    std::span<const Shader::NativePointOutput> transport){
+    using Sirit::Id;
+    struct Emitter:Sirit::Module {
+        std::vector<Id> interfaces;
+        Id Variable(Id type,spv::StorageClass storage,std::optional<u32> location={},
+                    std::optional<spv::BuiltIn> builtin={}){
+            const auto variable=AddGlobalVariable(TypePointer(storage,type),storage);interfaces.push_back(variable);
+            if(location)Decorate(variable,spv::Decoration::Location,*location);
+            if(builtin)Decorate(variable,spv::Decoration::BuiltIn,*builtin);
+            return variable;
+        }
+        Emitter():Sirit::Module{0x00010500}{}
+    } ctx;
+    ctx.AddCapability(spv::Capability::Shader);ctx.AddCapability(spv::Capability::Geometry);
+    const auto void_type=ctx.TypeVoid(),float_type=ctx.TypeFloat(32),uint_type=ctx.TypeUInt(32);
+    const auto zero=ctx.Constant(uint_type,0u),one=ctx.Constant(uint_type,1u);
+    const auto vec4=ctx.TypeVector(float_type,4),position_array=ctx.TypeArray(vec4,one);
+    const auto input_position=ctx.Variable(position_array,spv::StorageClass::Input,{},spv::BuiltIn::Position);
+    const auto output_position=ctx.Variable(vec4,spv::StorageClass::Output,{},spv::BuiltIn::Position);
+    const auto misc_type=ctx.TypeVector(uint_type,4);
+    const auto input_misc=ctx.Variable(ctx.TypeArray(misc_type,one),spv::StorageClass::Input,NativePointMiscLocation(vertex,emulated_clip,live_parameters,transport));
+    const auto input_primitive=ctx.Variable(uint_type,spv::StorageClass::Input,{},spv::BuiltIn::PrimitiveId);
+    const auto output_primitive=ctx.Variable(uint_type,spv::StorageClass::Output,{},spv::BuiltIn::PrimitiveId);
+    const bool routed_viewport=vertex.stores.GetAny(Shader::IR::Attribute::ViewportIndex);
+    Id output_viewport{},output_layer{};
+    if(routed_viewport){
+        ctx.AddCapability(spv::Capability::MultiViewport);
+        output_viewport=ctx.Variable(uint_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);
+    }
+    struct Varying {Id type,input,output;};std::vector<Varying> varyings;
+    if(emulated_clip){const auto type=ctx.TypeVector(float_type,Shader::MaxEmulatedClipDistances);
+        varyings.push_back({type,ctx.Variable(ctx.TypeArray(type,one),spv::StorageClass::Input,0),
+            ctx.Variable(type,spv::StorageClass::Output,0)});}
+    const bool routed_layer=vertex.stores.GetAny(Shader::IR::Attribute::RenderTargetIndex);
+    if(routed_layer)output_layer=ctx.Variable(uint_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
+    for(u32 param=0;param<Shader::IR::NumParams;++param){const auto attribute=Shader::IR::Attribute::Param0+param;
+        const auto width=Shader::NativePointOutputWidth(transport,param);
+        if(transport.empty()?(!(live_parameters&(1u<<param))||!vertex.stores.GetAny(attribute)):!width)continue;
+        const auto components=transport.empty()?vertex.stores.NumComponents(attribute):width;
+        const auto type=components==1?float_type:ctx.TypeVector(float_type,components);
+        const u32 location=param+(emulated_clip?1:0);
+        varyings.push_back({type,ctx.Variable(ctx.TypeArray(type,one),spv::StorageClass::Input,location),
+            ctx.Variable(type,spv::StorageClass::Output,location)});
+    }
+    struct Distance {Id type,input;u32 components;};std::vector<Distance> distances;
+    for(const auto attribute:{Shader::IR::Attribute::ClipDistance,Shader::IR::Attribute::CullDistance}){
+        if(!vertex.stores.GetAny(attribute)||(emulated_clip&&attribute==Shader::IR::Attribute::ClipDistance))continue;
+        const auto builtin=attribute==Shader::IR::Attribute::ClipDistance?spv::BuiltIn::ClipDistance:spv::BuiltIn::CullDistance;
+        ctx.AddCapability(attribute==Shader::IR::Attribute::ClipDistance?spv::Capability::ClipDistance:spv::Capability::CullDistance);
+        const u32 components=std::popcount(u32(vertex.stores.flags[Shader::Info::AttributeFlags::Index(attribute)]));
+        const auto type=ctx.TypeArray(float_type,ctx.Constant(uint_type,components));
+        distances.push_back({type,ctx.Variable(ctx.TypeArray(type,one),spv::StorageClass::Input,{},builtin),
+            components});
+    }
+    const auto runtime=Shader::Backend::SPIRV::DefinePointRuntime(ctx);
+    ctx.interfaces.push_back(runtime);
+    const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
+    ctx.AddExecutionMode(main,spv::ExecutionMode::InputPoints);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputTriangleStrip);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,4u);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,1u);
+    ctx.AddEntryPoint(spv::ExecutionModel::Geometry,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
+    const auto position=ctx.OpLoad(vec4,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,vec4),input_position,zero));
+    const auto misc=ctx.OpLoad(misc_type,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,misc_type),input_misc,zero));
+    const auto size=ctx.OpBitcast(float_type,ctx.OpCompositeExtract(uint_type,misc,0u));
+    const auto viewport=routed_viewport?ctx.OpCompositeExtract(uint_type,misc,2u):zero;
+    std::vector<Shader::Backend::SPIRV::PointOutput> outputs;
+    std::vector<Shader::Backend::SPIRV::PointDistance> clip_values;
+    for(const auto& varying:varyings){const auto value=ctx.OpLoad(varying.type,
+        ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,varying.type),varying.input,zero));
+        outputs.push_back({varying.type,varying.output,value});}
+    if(emulated_clip)for(u32 component=0;component<Shader::MaxEmulatedClipDistances;++component)
+        clip_values.push_back({ctx.OpCompositeExtract(float_type,outputs.front().value,component),true});
+    for(const auto& distance:distances){const auto value=ctx.OpLoad(distance.type,
+        ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,distance.type),distance.input,zero));
+        for(u32 component=0;component<distance.components;++component)
+            clip_values.push_back({ctx.OpCompositeExtract(float_type,value,component),false});}
+    outputs.push_back({uint_type,output_primitive,ctx.OpLoad(uint_type,input_primitive)});
+    if(routed_viewport)outputs.push_back({uint_type,output_viewport,viewport});
+    if(routed_layer)outputs.push_back({uint_type,output_layer,ctx.OpCompositeExtract(uint_type,misc,1u)});
+    Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,position,size,viewport,
+        clip_depth,output_position,outputs,clip_values);
+    ctx.OpReturn();ctx.OpFunctionEnd();
+    return ctx.Assemble();
+}
+}
+
+namespace NativeDX12 {
+namespace {
+struct PointReplayEmitter : Sirit::Module {
+    std::vector<Sirit::Id> interfaces;
+    PointReplayEmitter():Sirit::Module{0x00010500}{AddCapability(spv::Capability::Shader);}
+    Sirit::Id Variable(Sirit::Id type,spv::StorageClass storage,
+        std::optional<u32> location={},std::optional<spv::BuiltIn> builtin={}){
+        const auto id=AddGlobalVariable(TypePointer(storage,type),storage);interfaces.push_back(id);
+        if(location)Decorate(id,spv::Decoration::Location,*location);
+        if(builtin)Decorate(id,spv::Decoration::BuiltIn,*builtin);
+        return id;
+    }
+};
+}
+std::vector<u32> EmitNativePointReplayVertex(){
+    PointReplayEmitter ctx;
+    const auto u32_type=ctx.TypeUInt(32),f32=ctx.TypeFloat(32),vec4=ctx.TypeVector(f32,4),void_type=ctx.TypeVoid();
+    const auto vertex=ctx.Variable(u32_type,spv::StorageClass::Input,{},spv::BuiltIn::VertexIndex);
+    const auto record=ctx.Variable(u32_type,spv::StorageClass::Output,0);
+    ctx.Decorate(record,spv::Decoration::Flat);
+    const auto position=ctx.Variable(vec4,spv::StorageClass::Output,{},spv::BuiltIn::Position);
+    const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
+    ctx.AddEntryPoint(spv::ExecutionModel::Vertex,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
+    ctx.OpStore(record,ctx.OpLoad(u32_type,vertex));
+    const auto zero=ctx.Constant(f32,0.f),one=ctx.Constant(f32,1.f);
+    ctx.OpStore(position,ctx.ConstantComposite(vec4,zero,zero,zero,one));
+    ctx.OpReturn();ctx.OpFunctionEnd();return ctx.Assemble();
+}
+std::vector<u32> EmitNativePointReplayGeometry(const Shader::Info& source,
+    const Shader::HwGeometryRuntimeInfo& geometry,const Shader::Profile& profile){
+    using namespace Shader::NativePointCapture;
+    using namespace Shader::Backend::SPIRV;
+    using Shader::IR::Attribute;
+    (void)Plan::Make(1,geometry.num_invocations,geometry.output_vertices,1);
+    PointReplayEmitter ctx;ctx.AddCapability(spv::Capability::Geometry);
+    const auto u32_type=ctx.TypeUInt(32),f32=ctx.TypeFloat(32),boolean=ctx.TypeBool();
+    const auto vec4=ctx.TypeVector(f32,4),void_type=ctx.TypeVoid();
+    const auto zero=ctx.Constant(u32_type,0u),one=ctx.Constant(u32_type,1u);
+    const auto input=ctx.Variable(ctx.TypeArray(u32_type,one),spv::StorageClass::Input,0);
+    ctx.Decorate(input,spv::Decoration::Flat);
+    const auto output=ctx.Variable(u32_type,spv::StorageClass::Output,0);
+    ctx.Decorate(output,spv::Decoration::Flat);
+    const auto position_output=ctx.Variable(vec4,spv::StorageClass::Output,{},spv::BuiltIn::Position);
+    const auto primitive_output=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::PrimitiveId);
+    Sirit::Id viewport_output{},layer_output{};
+    if(source.stores.GetAny(Attribute::ViewportIndex)){
+        ctx.AddCapability(spv::Capability::MultiViewport);
+        viewport_output=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);
+    }
+    if(source.stores.GetAny(Attribute::RenderTargetIndex))
+        layer_output=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
+    const auto reader=DefineNativePointCaptureReader(ctx);
+    const auto runtime=DefinePointRuntime(ctx);
+    ctx.interfaces.push_back(reader[0]);ctx.interfaces.push_back(runtime);
+    const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
+    ctx.AddExecutionMode(main,spv::ExecutionMode::InputPoints);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputTriangleStrip);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,4u);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,1u);
+    ctx.AddEntryPoint(spv::ExecutionModel::Geometry,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
+    const auto record=ctx.OpLoad(u32_type,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,u32_type),input,zero));
+    const auto image=ctx.OpLoad(reader[1],reader[0]);
+    const auto base=ctx.OpIMul(u32_type,record,ctx.Constant(u32_type,RecordWords));
+    const auto word=[&](u32 offset){
+        const auto value=ctx.OpImageFetch(ctx.TypeVector(u32_type,4),image,
+            ctx.OpIAdd(u32_type,base,ctx.Constant(u32_type,offset)),spv::ImageOperandsMask::MaskNone,{});
+        return ctx.OpCompositeExtract(u32_type,value,0u);
+    };
+    const auto scalar=[&](u32 offset){return ctx.OpBitcast(f32,word(offset));};
+    const auto primitive_tag=word(ValidWord);
+    const auto valid=ctx.OpINotEqual(boolean,primitive_tag,zero);
+    const auto body=ctx.OpLabel(),done=ctx.OpLabel();
+    ctx.OpSelectionMerge(done,spv::SelectionControlMask::MaskNone);
+    ctx.OpBranchConditional(valid,body,done);ctx.AddLabel(body);
+    auto position=ctx.OpCompositeConstruct(vec4,scalar(PositionWord),scalar(PositionWord+1),
+        scalar(PositionWord+2),scalar(PositionWord+3));
+    const auto viewport=viewport_output.value?word(ViewportWord):zero;
+    if(geometry.native_point_negative_one_to_one){
+        const auto z=ctx.OpCompositeExtract(f32,position,2u),w=ctx.OpCompositeExtract(f32,position,3u);
+        position=ctx.OpCompositeInsert(vec4,ctx.OpFMul(f32,ctx.OpFAdd(f32,z,w),ctx.Constant(f32,.5f)),position,2u);
+    }
+    if(geometry.native_point_clip_disable){
+        const auto selected=ctx.OpUMin(u32_type,viewport,ctx.Constant(u32_type,15u));
+        const auto transform=[&](u32 component){return ctx.OpLoad(f32,ctx.OpAccessChain(
+            ctx.TypePointer(spv::StorageClass::Uniform,f32),runtime,ctx.Constant(u32_type,12u),selected,
+            ctx.Constant(u32_type,component)));};
+        for(u32 axis=0;axis<2;++axis){
+            const auto window=ctx.OpFAdd(f32,ctx.OpFMul(f32,ctx.OpCompositeExtract(f32,position,axis),transform(axis+2)),transform(axis));
+            const float half_extent=float(std::min(axis?profile.max_viewport_height/2:profile.max_viewport_width/2,8192u));
+            if(!(half_extent>0))throw std::invalid_argument("Invalid point replay clip extent");
+            position=ctx.OpCompositeInsert(vec4,ctx.OpFSub(f32,ctx.OpFDiv(f32,window,ctx.Constant(f32,half_extent)),
+                ctx.Constant(f32,1.f)),position,axis);
+        }
+    }
+    std::vector<PointOutput> outputs{{u32_type,output,record},{u32_type,primitive_output,
+        ctx.OpISub(u32_type,primitive_tag,one)}};
+    if(viewport_output.value)outputs.push_back({u32_type,viewport_output,viewport});
+    if(layer_output.value)outputs.push_back({u32_type,layer_output,word(LayerWord)});
+    std::vector<PointDistance> distances;
+    for(const auto attribute:{Attribute::ClipDistance,Attribute::CullDistance}){
+        const bool clip=attribute==Attribute::ClipDistance;
+        const u32 mask=source.stores.flags[Shader::Info::AttributeFlags::Index(attribute)];
+        for(u32 component=0;component<8;++component)if(mask&(1u<<component))
+            distances.push_back({scalar((clip?ClipWord:CullWord)+component),clip&&profile.needs_clip_distance_emulation});
+    }
+    EmitPointStrip(ctx,runtime,position,scalar(SizeWord),viewport,geometry.native_point_clip_depth,
+        position_output,outputs,distances);
+    ctx.OpBranch(done);ctx.AddLabel(done);ctx.OpReturn();ctx.OpFunctionEnd();return ctx.Assemble();
+}
+}

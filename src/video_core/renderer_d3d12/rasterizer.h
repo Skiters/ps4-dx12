@@ -14,6 +14,7 @@
 #include <functional>
 #include <deque>
 #include <optional>
+#include <atomic>
 namespace NativeDX12 {
 class ShaderPipeline;
 class ResourceBindings;
@@ -31,6 +32,7 @@ public:
     struct MemoryReuseStats {u64 snapshots{},staging{},watch_candidates{};};
     MemoryReuseStats MemoryReuse()const {std::lock_guard lock(execution_mutex_);return memory_reuse_;}
     struct TemporaryBuffer {std::vector<u32> words;};
+    struct BufferCopy {VAddr destination,source;u32 bytes;};
     std::shared_ptr<TemporaryBuffer> AcquireTemporaryBuffer(u64,const void* initial=nullptr);
 private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
@@ -41,6 +43,9 @@ private:
         bool cpu_watch_pending=false; // Protected while comparing; not yet a CPU/GPU equality proof.
         bool cpu_partial_proof=false;
         std::map<u64,u64> cpu_dirty_ranges; // Unprotected CPU pages; the remaining snapshot is proved.
+        bool gpu_cpu_diverged=false; // Readonly image/metadata synthesis changed the GPU arena only.
+        std::map<u64,u64> cpu_upload_ranges; // Actual CPU stores require upload even for identical bytes.
+        u64 cpu_upload_generation{};
         bool initial_upload_failed=false;u64 allocation_id{},last_use{};};
     struct RetiredBuffer {Resource gpu;u64 fence;u64 allocation_id;};
     std::vector<RetiredBuffer> buffer_pool_;
@@ -72,6 +77,19 @@ private:
     unsigned read_only_batches_{};
     ComPtr<ID3D12Device> device_;
     CommandScheduler scheduler_;
+    std::map<std::pair<VAddr,u64>,u32> pending_image_commits_;
+    struct PendingImageCommit {VAddr address;u64 bytes;bool backing_valid=true;};
+    std::vector<std::weak_ptr<PendingImageCommit>> pending_image_tickets_;
+    void CancelImageBackingCommits(VAddr,u64);
+    std::shared_ptr<std::atomic<u64>> priority_image_bytes_=std::make_shared<std::atomic<u64>>(0);
+    bool HasPendingImageCommit(VAddr address,u64 bytes)const{
+        for(const auto& [range,count]:pending_image_commits_)
+            if(count&&address<range.first+range.second&&range.first<address+bytes)return true;
+        return false;
+    }
+    bool host_markers_enabled_{},guest_markers_enabled_{};
+    std::vector<std::string> marker_scopes_;
+    size_t recorded_marker_scopes_{};
     PlacedBufferAllocator buffer_allocator_;
     std::unique_ptr<Descriptors> color_descriptors_,depth_descriptors_;
     std::map<VAddr,Mapping> mappings_;
@@ -123,10 +141,17 @@ private:
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);
     void ClearMappings(){for(auto& [_,mapping]:mappings_)RetireBuffer(mapping);mappings_.clear();dirty_mappings_.clear();cached_buffer_bytes_=0;
         std::lock_guard lock(memory_index_mutex_);indexed_buffers_.clear();}
+    bool IsGdsRange(VAddr address,u64 size) const {
+        const auto base=reinterpret_cast<VAddr>(gds_.data());
+        return address>=base&&address-base<=gds_.size()&&size<=gds_.size()-(address-base);
+    }
     void MarkDirty(Mapping& mapping,bool dirty,u64 offset=0,u64 bytes=UINT64_MAX){
         if(!dirty){dirty_mappings_.erase(mapping.base);mapping.dirty_ranges.clear();mapping.dirty=false;return;}
         if(offset>mapping.size)throw std::out_of_range("dirty buffer offset");
         bytes=std::min(bytes,mapping.size-offset);if(!bytes)return;
+        // GDS has no direct guest CPU alias. Its internal host array is read
+        // only through the CP readback path, so it needs no page protection.
+        if(IsGdsRange(mapping.base,mapping.size))mapping.gpu_owned=true;
         u64 newly_dirty=bytes;
         u64 begin=offset,end=offset+bytes;auto it=mapping.dirty_ranges.lower_bound(begin);
         if(it!=mapping.dirty_ranges.begin()&&std::prev(it)->second>=begin)it=std::prev(it);
@@ -137,17 +162,20 @@ private:
         Diagnostics::Count("buffer-dirty.new-bytes",newly_dirty);
         mapping.dirty_ranges.emplace(begin,end);dirty_mappings_.insert(mapping.base);mapping.dirty=true;}
     void ForgetBacking(VAddr,u64);
+    void CopyBufferBatchImpl(std::span<const BufferCopy>,bool submit_when_deferred);
     static void Unsupported(const char* operation);
 protected:
     virtual void CheckBacking(VAddr,u64,bool);
     virtual void CheckGpuBacking(VAddr address,u64 size,bool writing){Rasterizer::CheckBacking(address,size,writing);}
     virtual void PrepareGpuBacking(VAddr,u64,bool) {}
+    virtual bool HasGpuImageOverlap(VAddr,u64)const {return false;}
 public:
     void SetBufferOwnership(std::function<bool(VAddr,u64)> own,
         std::function<bool(VAddr,std::span<const std::byte>)> commit,std::function<void(VAddr,u64)> release){
         own_buffer_=std::move(own);commit_buffer_=std::move(commit);release_buffer_=std::move(release);}
     void ResolveGpuBuffers(VAddr,u64);
     void ReleaseCpuBufferWatches(VAddr,u64);
+    void ReleaseUnusedReadOnlyWatches(VAddr,u64,std::span<const std::pair<VAddr,u64>> retained={});
     void InvalidateCpuBufferPages(VAddr,u64);
     void SetBufferWriteWatch(std::function<bool(VAddr,u64)> watch){watch_buffer_=std::move(watch);}
     void SetBufferPageRewatch(std::function<bool(VAddr,u64)> watch){rewatch_buffer_=std::move(watch);}
@@ -155,13 +183,24 @@ public:
     void SetBufferWatchTransfer(std::function<bool(VAddr,u64,bool)> transfer){transfer_buffer_watch_=std::move(transfer);}
     void EnableBufferStreaming(bool enabled){stream_buffers_enabled_=enabled;}
     void EnableBufferArenas(bool enabled){buffer_arenas_enabled_=enabled;}
-    struct ShaderBufferRequest {VAddr address;u64 size;bool written=false;bool unordered_access=false;bool resident=false;};
     struct BufferWrite {VAddr address;u64 size;};
+    struct ShaderBufferRequest {
+        VAddr address;u64 size;bool written=false;bool unordered_access=false;bool resident=false;
+        u8 write_byte_adjust=0;u64 original_write_bytes=0;
+        BufferWrite WriteRange()const{
+            const auto bytes=original_write_bytes?original_write_bytes:size;
+            if(write_byte_adjust>size||bytes>size-write_byte_adjust||address>UINT64_MAX-write_byte_adjust)
+                throw std::invalid_argument("Original shader write exceeds its native envelope");
+            return {address+write_byte_adjust,bytes};
+        }
+    };
     bool BuffersMayDefer(std::span<const ShaderBufferRequest>);
+    virtual void NotifyGpuBufferWrite(VAddr,u64) {}
     void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
         std::lock_guard lock(execution_mutex_);for(const auto& request:requests)if(request.written){
             auto& mapping=Find(request.address,request.size,false);
-            MarkDirty(mapping,true,request.address-mapping.base,request.size);}}
+            const auto write=request.WriteRange();
+            MarkDirty(mapping,true,write.address-mapping.base,write.size);}}
     struct ShaderBufferView {
         ComPtr<ID3D12Resource> resource;u64 offset,size;
         std::shared_ptr<UploadArena> lease;
@@ -172,7 +211,25 @@ public:
     // CPU-visible fallbacks reconcile writes before taking their next snapshot.
     std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>,
         std::optional<std::span<const BufferWrite>> known_writes=std::nullopt);
-    struct BufferCopy {VAddr destination,source;u32 bytes;};
+    Resource CaptureShaderBuffer(VAddr address,u64 bytes);
+    bool IsGpuBufferModified(VAddr address,u64 bytes)const;
+    Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
+    void CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state);
+    void FillPreparedShaderBuffer(VAddr address,u64 bytes,u32 value,D3D12_RESOURCE_STATES final_state);
+    void CommitImageBacking(VAddr,std::span<const std::byte>,
+        const std::function<bool(VAddr,std::span<std::byte>)>& read,
+        const std::function<bool(VAddr,std::span<const std::byte>)>& write);
+    void DeferImageBacking(u64 fence,VAddr,u64 bytes,u64 retained_bytes,
+        std::function<bool(VAddr,std::span<std::byte>)> read,
+        std::function<bool(VAddr,std::span<const std::byte>)> write,
+        std::function<void(u64,std::span<std::byte>)> resolve);
+    // Must be called outside ExecutionMutex and other callback-needed locks.
+    void DrainPriorityOperations(){scheduler_.DrainPriority();}
+    u64 PendingImageCommitBytes()const{return priority_image_bytes_->load();}
+    bool FormattedBufferNeedsImageSync(VAddr address,u64 bytes){
+        std::lock_guard lock(execution_mutex_);
+        return bytes>16384||HasGpuOwnedOverlap(address,bytes);
+    }
     // Ordered GPU copy packets, bounded like the guest copy-shader HLE batches.
     // Whole guarded pages stay GPU-owned until CPU access; other ranges reconcile.
     void CopyBufferBatch(std::span<const BufferCopy>);
@@ -181,6 +238,19 @@ public:
         std::lock_guard lock(execution_mutex_);scheduler_.SubmitCopy(record);}
     VAddr GdsAddress() const {return reinterpret_cast<VAddr>(gds_.data());}
     u64 CompletedFence() const {return scheduler_.Completed();}
+    // Host-only scratch obeys the same placed-buffer budget and retirement
+    // checks as guest buffers. The caller must retain its allocation to fence.
+    Resource AcquireTransientBuffer(u64 bytes){std::lock_guard lock(execution_mutex_);return AcquireBuffer(bytes);}
+    // Resource preparation asks its memory owner, not a process-global guest
+    // singleton. Standalone renderers retain the requested extent so normal
+    // budget/mapping validation rejects oversized descriptors; the actual
+    // guest backend overrides this with PS4 address-space boundaries.
+    virtual u64 ClampMemoryRange(VAddr address,u64 bytes){
+        std::lock_guard lock(execution_mutex_);
+        if(bytes>UINT64_MAX-address)throw std::out_of_range("Native guest memory extent overflow");
+        if(!IsMapped(address,bytes))throw std::out_of_range("Native guest memory extent outside registered backing");
+        return bytes;
+    }
     u64 SubmittedFence() const {return scheduler_.Submitted();}
     void MakeQueueWait(ID3D12CommandQueue* queue,u64 fence){
         std::lock_guard lock(execution_mutex_);scheduler_.MakeQueueWait(queue,fence);}
@@ -203,13 +273,19 @@ public:
     UploadArena::Slice UploadConstants(std::span<const std::byte>);
     DescriptorHeapPool& BindingHeapPool();
     void RetainUntilFinish(std::function<void(u64)> retirement);
+    void RetainUntilFence(u64 fence,std::function<void(u64)> retirement){
+        std::lock_guard lock(execution_mutex_);
+        if(!fence||fence>scheduler_.Submitted())throw std::invalid_argument("Unsubmitted retirement fence");
+        try{scheduler_.Defer(fence,retirement);}
+        catch(...){scheduler_.Wait(fence);retirement(fence);throw;}
+    }
     void NotifyOnSubmission(std::function<void(u64)> callback){
         std::lock_guard lock(execution_mutex_);submission_callbacks_.push_back(std::move(callback));}
     void CollectRetirements(){std::lock_guard lock(execution_mutex_);scheduler_.Collect();}
     void EnableHostSpanCache(bool enabled){std::lock_guard lock(execution_mutex_);cache_host_spans_=enabled;readable_spans_.clear();writable_spans_.clear();}
     // Data-only CPU writes do not change page protections or committed backing.
     // Caller retires GPU writes before modifying the guest bytes.
-    void NotifyCpuWrite(VAddr address,u64 size){std::lock_guard lock(execution_mutex_);
+    virtual void NotifyCpuWrite(VAddr address,u64 size){std::lock_guard lock(execution_mutex_);
         ResolveGpuBuffers(address,size);InvalidateCpuBufferPages(address,size);}
     void ExecuteCompute(const ShaderPipeline&,ResourceBindings&,u32 x,u32 y,u32 z,bool wait=true);
     void ValidateDebugMessages();
@@ -240,9 +316,12 @@ public:
     void DrawIndirect(bool,VAddr,u32,u32,u32,VAddr,u16,u16) override;
     void DispatchDirect() override;
     void DispatchIndirect(VAddr,u32,u32) override;
-    void ScopeMarkerBegin(const std::string_view&,bool=false) override {}
-    void ScopeMarkerEnd(bool=false) override {}
-    void ScopedMarkerInsertColor(const std::string_view&,u32,bool=false) override {}
+    void SetMarkersEnabled(bool host,bool guest);
+    bool MarkersEnabled()const override{return host_markers_enabled_;}
+    void ScopeMarkerBegin(const std::string_view&,bool=false) override;
+    void ScopeMarkerEnd(bool=false) override;
+    void ScopedMarkerInsert(const std::string_view&,bool=false);
+    void ScopedMarkerInsertColor(const std::string_view&,u32,bool=false) override;
     void FillBuffer(VAddr,u32,u32,bool) override;
     void CopyBuffer(VAddr,VAddr,u32,bool,bool) override;
     u32 ReadDataFromGds(u32) override;

@@ -33,7 +33,8 @@ int main(){try{
         for(unsigned pass=0;pass<3;++pass){
             if(pass==2)backing[0]^=std::byte{0x55};
             auto& entry=cache.Upload(d,backing,raster.RecordingList(),raster.CompletedFence());
-            if((pass==1)!=entry.uploads.empty())throw std::runtime_error("Native sampled texture reuse/CPU change detection mismatch");
+            const bool upload_pending=!entry.uploads.empty()||!entry.tiler_leases.empty()||!entry.multisample_leases.empty();
+            if((pass!=1)!=upload_pending)throw std::runtime_error("Native sampled texture reuse/CPU change detection mismatch");
             auto token=raster.Flush();cache.Submitted(token);raster.Finish();
             GuestImageReadback rb(device.Get(),entry,raster.RecordingList());token=raster.Flush();rb.Submitted(token);cache.Used(entry,token);raster.Finish();
             std::vector<std::byte> result(backing.size(),std::byte{0xcd});rb.Resolve(raster.CompletedFence(),result);

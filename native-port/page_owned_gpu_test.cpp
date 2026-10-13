@@ -7,6 +7,7 @@
 #include "video_core/renderer_d3d12/backend_factory.h"
 #include "video_core/renderer_d3d12/memory_surface_provider.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
+#include "common/scope_exit.h"
 #include <cstdio>
 #include <source_location>
 #include <thread>
@@ -56,16 +57,18 @@ int main(int argc,char**){try{
             renderer.Finish();std::vector<std::byte> result(alias,alias+bytes);
             GuestImageReadback readback(device.Get(),image,renderer.RecordingList());const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
             readback.Resolve(renderer.CompletedFence(),result);memcpy(alias,result.data(),bytes);
-            image.RememberSnapshot(result);image.gpu_owned=false;++resolutions;watcher->Untrack(address,bytes);
+            image.RememberSnapshot(result);image.SetGpuOwned(false);++resolutions;watcher->Untrack(address,bytes);
+            Require(!cache.HasGuestRangeOverlap(address,bytes,true));
         };PageWatch watch([&](uint64_t address){++page_faults;resolve(address);});watcher=&watch;
         cache.SetOwnershipResolver([&](auto&){resolve(address);renderer.RecordingList();});
         renderer.resolve=[&](VAddr address,u64){resolve(address);};
-        Require(watch.Track(address,bytes));image.gpu_owned=true;
+        Require(watch.Track(address,bytes));image.SetGpuOwned(true);
         Descriptors rtvs(device.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_RTV,1,false);
         auto view=image.Rtv();DX12_API_CALL(device->CreateRenderTargetView(image.texture.handle.Get(),&view,rtvs.Cpu(0)));
         image.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float color[]{1.f,1.f,0.f,1.f};DX12_API_CALL(renderer.RecordingList()->ClearRenderTargetView(rtvs.Cpu(0),color,0,nullptr));
         auto fence=renderer.Flush();cache.Submitted(fence);renderer.Finish();
+        Require(cache.HasGuestRangeOverlap(address,bytes,true));
         Require(alias[0]==std::byte{0}&&image.gpu_owned&&resolutions==0);
         auto sampled=desc;sampled.render_target=false;
         auto& reused=cache.Upload(sampled,{guest,bytes},renderer.RecordingList(),renderer.CompletedFence());Require(&reused==&image);
@@ -78,7 +81,7 @@ int main(int argc,char**){try{
         const auto corner=GuestPixelOffset(desc,layout,0,0,width-1,height-1);Require(cpu[corner]==255&&cpu[corner+1]==255);
         // BGRA display swaps channels on the GPU, retaining page ownership.
         // No CPU resolve/detile/upload is needed just to present a frame.
-        memset(alias,0,bytes);Require(watch.Track(address,bytes));image.gpu_owned=true;
+        memset(alias,0,bytes);Require(watch.Track(address,bytes));image.SetGpuOwned(true);
         Libraries::VideoOut::BufferAttributeGroup group{};
         group.attrib.width=group.attrib.pitch_in_pixel=width;group.attrib.height=height;
         group.attrib.tiling_mode=Libraries::VideoOut::TilingMode::Tile;
@@ -92,13 +95,15 @@ int main(int argc,char**){try{
         auto display=TextureTransfer::Create(device.Get(),*snapshot.texture,true);
         display.Readback(renderer.RecordingList(),*snapshot.texture);renderer.Finish();
         std::vector<std::byte> pixels(size_t(width)*height*4);display.ReadRows(pixels.data(),pixels.size(),width*4);
+        Require(snapshot.component_mapping==D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
+            2,1,0,D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1));
         for(size_t pixel=0;pixel<pixels.size();pixel+=4)
-            Require(pixels[pixel]==std::byte{0}&&pixels[pixel+1]==std::byte{255}&&pixels[pixel+2]==std::byte{255}&&pixels[pixel+3]==std::byte{255});
+            Require(pixels[pixel]==std::byte{255}&&pixels[pixel+1]==std::byte{255}&&pixels[pixel+2]==std::byte{0}&&pixels[pixel+3]==std::byte{255});
         renderer.resolve={};
         // A compute UAV aliases the protected color target but cannot reuse
         // its render-only resource. Exercise the common Upload fallback with
         // the renderer lock held, exactly as ExecuteGuestResources does.
-        memset(alias,0,bytes);Require(watch.Track(address,bytes));image.gpu_owned=true;
+        memset(alias,0,bytes);Require(watch.Track(address,bytes));image.SetGpuOwned(true);
         const auto previous_faults=page_faults;
         auto writable=sampled;writable.writable=true;
         {
@@ -154,7 +159,9 @@ int main(int argc,char**){try{
         const auto saved=dst.desc.tile_mode;dst.desc.tile_mode=13;
         Require(!GuestImageCopyCompatible(src,dst));dst.desc.tile_mode=saved;
         const auto saved_bytes=dst.layout.logical_bytes;--dst.layout.logical_bytes;
-        Require(!GuestImageCopyCompatible(src,dst)&&!GuestImageClearCompatible(dst));dst.layout.logical_bytes=saved_bytes;
+        // A whole-allocation copy needs matching padding coverage. Image
+        // clears affect texels independently of physical guest padding.
+        Require(!GuestImageCopyCompatible(src,dst)&&GuestImageClearCompatible(dst));dst.layout.logical_bytes=saved_bytes;
         const float yellow[]{1,1,0,1},green[]{0,1,0,1};
         auto src_heap=RecordGuestImageClear(device.Get(),src,renderer.RecordingList(),yellow);
         auto dst_heap=RecordGuestImageClear(device.Get(),dst,renderer.RecordingList(),green);
@@ -166,6 +173,387 @@ int main(int argc,char**){try{
             second[i+1]==std::byte{255}&&second[i+2]==std::byte{0}&&second[i+3]==std::byte{255});
         cache.Invalidate(src.desc.address,src.layout.guest_bytes,renderer.CompletedFence());
         cache.Invalidate(dst.desc.address,dst.layout.guest_bytes,renderer.CompletedFence());
+    }
+    {
+        GuestTextureDesc padded;padded.width=17;padded.pitch=32;padded.height=9;
+        padded.layers=3;padded.view_layers=1;padded.first_layer=1;
+        padded.levels=2;padded.first_mip=1;padded.tile_mode=13;padded.render_target=true;
+        const auto layout=LayoutGuestTexture(padded);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+        padded.address=reinterpret_cast<uint64_t>(guest.data());
+        auto& image=cache.Upload(padded,guest,renderer.RecordingList(),renderer.CompletedFence());
+        Require(layout.logical_bytes<layout.guest_bytes&&GuestImageClearCompatible(image));
+        const float yellow[]{1,1,0,1};const u32 rgba=0xff00ffff;
+        auto heap=RecordGuestImageClear(device.Get(),image,renderer.RecordingList(),yellow);
+        GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+        const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+        readback.Resolve(renderer.CompletedFence(),guest);
+        for(u32 mip=0;mip<padded.levels;++mip)for(u32 layer=0;layer<padded.layers;++layer)
+        for(u32 y=0;y<std::max(padded.height>>mip,1u);++y)
+        for(u32 x=0;x<std::max(padded.width>>mip,1u);++x)
+            memcpy(expected.data()+GuestPixelOffset(padded,layout,mip,layer,x,y),&rgba,4);
+        Require(guest==expected);
+        cache.Invalidate(padded.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 data:{4u,10u,14u})for(const u32 tile:{8u,13u})
+    for(const auto swizzle:{std::array<u32,4>{5,4,7,6},std::array<u32,4>{0,4,1,7}}){
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=9;d.layers=3;d.first_layer=1;d.view_layers=1;
+        d.levels=2;d.first_mip=1;d.data_format=data;d.number_format=data==10?0:7;
+        d.tile_mode=tile;d.render_target=true;d.swizzle=swizzle;
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+        d.address=reinterpret_cast<uint64_t>(guest.data());
+        auto& image=cache.Upload(d,guest,renderer.RecordingList(),renderer.CompletedFence());
+        Require(GuestImageClearCompatible(image));const auto original=image.texture.handle;
+        const float color[]{0.25f,0.5f,-0.5f,1.f};
+        auto heap=RecordGuestImageClear(device.Get(),image,renderer.RecordingList(),color);
+        GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+        const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+        readback.Resolve(renderer.CompletedFence(),guest);
+        const std::array<u32,4> words{0x3e800000u,0x3f000000u,0xbf000000u,0x3f800000u};
+        const u32 rgba=0xff008040u;
+        for(u32 mip=0;mip<d.levels;++mip)for(u32 layer=0;layer<d.layers;++layer)
+        for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+            memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),
+                   data==10?static_cast<const void*>(&rgba):words.data(),data==14?16:4);
+        Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+        cache.Collect(renderer.CompletedFence());cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 samples:{2u,4u,8u})for(const u32 tile:{8u,13u})for(const u32 usage:{0u,1u,2u}){
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=9;d.layers=3;d.first_layer=1;d.view_layers=1;
+        d.data_format=4;d.number_format=7;d.samples=samples;d.tile_mode=tile;
+        d.writable=usage==1;d.render_target=usage==2;
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+        d.address=reinterpret_cast<uint64_t>(guest.data());
+        auto& image=cache.Upload(d,guest,renderer.RecordingList(),renderer.CompletedFence());
+        Require(GuestImageClearCompatible(image)&&image.texture.handle->GetDesc().SampleDesc.Count==samples);
+        const auto original=image.texture.handle;
+        for(const u32 word:{0x3e800000u,0x80000000u}){
+            const float color[]{std::bit_cast<float>(word),0.f,0.f,1.f};
+            auto heap=RecordGuestImageClear(device.Get(),image,renderer.RecordingList(),color);
+            GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+            const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+            readback.Resolve(renderer.CompletedFence(),guest);
+            for(u32 layer=0;layer<d.layers;++layer)for(u32 sample=0;sample<samples;++sample)
+            for(u32 y=0;y<d.height;++y)for(u32 x=0;x<d.width;++x)
+                memcpy(expected.data()+GuestPixelOffset(d,layout,0,layer,x,y,sample),&word,4);
+            Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+        }
+        cache.Collect(renderer.CompletedFence());cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 samples:{2u,4u,8u})for(const u32 tile:{8u,13u})
+    for(const u32 number:{4u,5u,7u})for(const bool raw:{false,true}){
+        if(raw&&number!=7)continue;
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=9;d.layers=3;d.first_layer=1;d.view_layers=1;
+        d.data_format=4;d.number_format=number;d.samples=samples;d.tile_mode=tile;d.writable=true;d.native_raw32=raw;
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+        d.address=reinterpret_cast<uint64_t>(guest.data());
+        auto& image=cache.Upload(d,guest,renderer.RecordingList(),renderer.CompletedFence());
+        const auto original=image.texture.handle;
+        for(const u32 word:{0x3e800000u,0x80000000u}){
+            const float color[]{std::bit_cast<float>(word),0.f,0.f,1.f};
+            Require(GuestMultisampleStorageClearCompatible(image,color));
+            auto clear=RecordGuestMultisampleStorageClear(device.Get(),cache,image,renderer.RecordingList(),color);
+            GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+            const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+            readback.Resolve(renderer.CompletedFence(),guest);
+            for(u32 layer=0;layer<d.layers;++layer)for(u32 sample=0;sample<samples;++sample)
+            for(u32 y=0;y<d.height;++y)for(u32 x=0;x<d.width;++x)
+                memcpy(expected.data()+GuestPixelOffset(d,layout,0,layer,x,y,sample),&word,4);
+            Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+            cache.Collect(renderer.CompletedFence());Require(image.storage_clear_leases.empty());
+        }
+        cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 data:{4u,11u,13u,14u})for(const u32 number:{4u,5u,7u})
+    for(const bool readonly:{false,true})for(const u32 shape:{0u,1u,2u}){
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=shape==1?1:9;
+        d.data_format=data;d.number_format=number;d.writable=!readonly;d.native_raw32=data==4;
+        d.one_dimensional=shape==1;d.volume_depth=shape==2?4:0;
+        d.layers=shape==2?1:3;d.first_layer=shape==2?0:1;d.view_layers=1;
+        d.levels=3;d.first_mip=1;d.tile_mode=13;
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+        d.address=reinterpret_cast<uint64_t>(guest.data());
+        auto& image=cache.Upload(d,guest,renderer.RecordingList(),renderer.CompletedFence());
+        const float color[]{1.5f,-0.f,-3.25f,0.25f};
+        const auto original=image.texture.handle;const auto allocation=image.allocation_bytes;
+        std::shared_ptr<GuestStorageImageClearLease> lease;
+        if(readonly){Require(GuestConvertedStorageClearCompatible(image)&&!GuestStorageImageClearCompatible(image,color));
+            cache.ClearRawStorageImage(image,color,renderer.RecordingList(),renderer.CompletedFence());}
+        else{Require(GuestStorageImageClearCompatible(image,color));
+            lease=RecordGuestStorageImageClear(device.Get(),image,renderer.RecordingList(),color);}
+        GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+        Resource host_rgb;D3D12_PLACED_SUBRESOURCE_FOOTPRINT rgb_fp{};
+        if(data==13){const auto texture=image.texture.handle->GetDesc();UINT64 total{};
+            const auto sub=d.first_mip+d.first_layer*d.levels;
+            device->GetCopyableFootprints(&texture,sub,1,0,&rgb_fp,nullptr,nullptr,&total);
+            host_rgb=Buffer(device.Get(),total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            image.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            D3D12_TEXTURE_COPY_LOCATION from{},to{};from.pResource=image.texture.handle.Get();
+            from.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;from.SubresourceIndex=sub;
+            to.pResource=host_rgb.handle.Get();to.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;to.PlacedFootprint=rgb_fp;
+            renderer.RecordingList()->CopyTextureRegion(&to,0,0,0,&from,nullptr);
+        }
+        const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+        readback.Resolve(renderer.CompletedFence(),guest);
+        const u32 bits[]{std::bit_cast<u32>(color[0]),std::bit_cast<u32>(color[1]),
+            std::bit_cast<u32>(color[2]),std::bit_cast<u32>(color[3])};
+        const u32 components=data==4?1:data==11?2:data==13?3:4;
+        for(u32 mip=0;mip<d.levels;++mip)
+        for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
+        for(u32 y=0;y<std::max(d.height>>mip,1u);++y)
+        for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+            memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),bits,components*4);
+        Require(guest==expected);
+        if(data==13){void* mapped{};D3D12_RANGE all{0,SIZE_T(host_rgb.handle->GetDesc().Width)};
+            Check(host_rgb.handle->Map(0,&all,&mapped));bool exact=true;
+            for(UINT z=0;z<rgb_fp.Footprint.Depth;++z)for(UINT y=0;y<rgb_fp.Footprint.Height;++y)
+            for(UINT x=0;x<rgb_fp.Footprint.Width;++x){u32 alpha;
+                memcpy(&alpha,static_cast<const std::byte*>(mapped)+rgb_fp.Offset+
+                    (uint64_t(z)*rgb_fp.Footprint.Height+y)*rgb_fp.Footprint.RowPitch+x*16+12,4);
+                exact&=alpha==(number==7?0x3f800000u:1u);
+            }
+            D3D12_RANGE none{};host_rgb.handle->Unmap(0,&none);Require(exact);
+        }
+        if(data==4){
+            const float negative_zero[]{-0.f,0.f,0.f,0.f};const u32 sign=0x80000000;
+            std::shared_ptr<GuestStorageImageClearLease> signed_lease;
+            if(readonly)cache.ClearRawStorageImage(image,negative_zero,renderer.RecordingList(),renderer.CompletedFence());
+            else signed_lease=RecordGuestStorageImageClear(device.Get(),image,renderer.RecordingList(),negative_zero);
+            GuestImageReadback signed_readback(device.Get(),image,renderer.RecordingList());
+            const auto signed_fence=renderer.Flush();cache.Submitted(signed_fence);
+            signed_readback.Submitted(signed_fence);renderer.Finish();
+            signed_readback.Resolve(renderer.CompletedFence(),guest);
+            for(u32 mip=0;mip<d.levels;++mip)
+            for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
+            for(u32 y=0;y<std::max(d.height>>mip,1u);++y)
+            for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+                memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),&sign,4);
+            Require(guest==expected);
+        }
+        if(readonly){cache.Collect(renderer.CompletedFence());
+            Require(image.texture.handle==original&&image.desc==d&&image.allocation_bytes==allocation&&image.format_transfers.empty());}
+        cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 data:{1u,2u,3u,5u,9u,10u,12u,16u,17u,18u,19u})for(const u32 number:{0u,1u,4u,5u,7u,9u}){
+        if(number==9&&data!=10)continue;
+        const bool half=data==2||data==5||data==12;
+        const bool packed10=data==9;
+        const bool packed16=data>=16&&data<=19;
+        const bool srgb=number==9;
+        if(packed16&&number!=0)continue;
+        if(number==7&&!half)continue;
+        for(const bool raw:{false,true}){
+        if((raw&&data!=10&&!packed10)||(packed10&&!raw))continue;
+        for(const bool readonly:{false,true}){
+        if(readonly&&raw&&!packed10)continue;
+        for(const u32 shape:{0u,1u,2u}){
+            GuestTextureDesc d;d.width=17;d.pitch=32;d.height=shape==1?1:9;
+            d.data_format=data;d.number_format=number;d.writable=!readonly;
+            d.native_raw32=raw;
+            d.native_packed10_raw=packed10;
+            d.one_dimensional=shape==1;d.volume_depth=shape==2?4:0;
+            d.layers=shape==2?1:3;d.first_layer=shape==2?0:1;d.view_layers=1;
+            d.levels=3;d.first_mip=1;d.tile_mode=13;
+            const auto layout=LayoutGuestTexture(d);
+            std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6}),expected=guest;
+            d.address=reinterpret_cast<uint64_t>(guest.data());
+            auto& image=cache.Upload(d,guest,renderer.RecordingList(),renderer.CompletedFence());
+            float color[]{0.25f,0.5f,-0.5f,1.f};u32 components[4]{};
+            if(number==4||number==5){
+                const u32 unsigned_values[]{15,127,31,1};const s32 signed_values[]{-15,127,-31,1};
+                for(unsigned component=0;component<4;++component){
+                    components[component]=number==4?unsigned_values[component]:u32(signed_values[component]);
+                    color[component]=std::bit_cast<float>(components[component]);
+                }
+            }else if(number==7){
+                const float floats[]{1.5f,-0.f,-3.25f,0.25f};const u32 bits[]{0x3e00,0x8000,0xc280,0x3400};
+                std::copy(std::begin(floats),std::end(floats),color);
+                std::copy(std::begin(bits),std::end(bits),components);
+            }else{
+                const u32 unorm8[]{64,128,0,255},unorm16[]{16384,32768,0,65535};
+                const u32 snorm8[]{32,64,u32(-64),127},snorm16[]{8192,16384,u32(-16384),32767};
+                const auto* values=number==0?(half?unorm16:unorm8):(half?snorm16:snorm8);
+                std::copy(values,values+4,components);
+            }
+            if(packed16)components[0]=data==16?(8u<<11)|(32u<<5):data==17?(8u<<10)|(16u<<5)|(1u<<15):
+                data==18?(8u<<11)|(16u<<6)|1u:(4u<<4)|(8u<<8)|15u;
+            if(srgb){const u32 encoded[]{137,188,0,255};std::copy(encoded,encoded+4,components);}
+            if(packed10){const u32 unorm[]{256,512,0,3},snorm[]{128,256,768,1};
+                const auto* values=number==0?unorm:number==1?snorm:components;u32 word{};
+                for(unsigned c=0;c<4;++c)word|=(values[c]&(c==3?3u:1023u))<<(c*10);
+                components[0]=word;}
+            const auto original=image.texture.handle;
+            const auto allocation=image.allocation_bytes;
+            if(layout.expanded_bytes_per_pixel)image.SetGpuOwned(true);
+            std::shared_ptr<GuestStorageImageClearLease> lease;
+            if(raw||packed16||srgb||readonly){
+                Require(GuestConvertedStorageClearCompatible(image)&&!GuestStorageImageClearCompatible(image,color));
+                cache.ClearRawStorageImage(image,color,renderer.RecordingList(),renderer.CompletedFence());
+                Require(image.texture.handle==original&&image.desc==d&&image.pending&&
+                    image.allocation_bytes>allocation&&!image.format_transfers.empty());
+            }else{
+                Require(GuestStorageImageClearCompatible(image,color));
+                lease=RecordGuestStorageImageClear(device.Get(),image,renderer.RecordingList(),color);
+            }
+            GuestImageReadback readback(device.Get(),image,renderer.RecordingList());
+            const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+            readback.Resolve(renderer.CompletedFence(),guest);
+            const u32 component_bytes=packed10?4:half||packed16?2:1,channels=layout.bytes_per_pixel/component_bytes;
+            for(u32 mip=0;mip<d.levels;++mip)
+            for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
+            for(u32 y=0;y<std::max(d.height>>mip,1u);++y)
+            for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+            for(u32 component=0;component<channels;++component)
+                memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y)+component*component_bytes,
+                    &components[component],component_bytes);
+            Require(guest==expected);
+            if(packed10){
+                float edge[4];u32 values[4];
+                if(number==0){const float input[]{-1.f,1.f,2.f,0.5f};const u32 bits[]{0,1023,1023,2};
+                    std::copy(input,input+4,edge);std::copy(bits,bits+4,values);
+                }else if(number==1){const float input[]{-1.f,-0.5f,0.5f,-1.f};const u32 bits[]{513,768,256,3};
+                    std::copy(input,input+4,edge);std::copy(bits,bits+4,values);
+                }else if(number==4){const u32 input[]{UINT32_MAX,1024,511,4},bits[]{1023,1023,511,3};
+                    for(unsigned c=0;c<4;++c)edge[c]=std::bit_cast<float>(input[c]);std::copy(bits,bits+4,values);
+                }else{const s32 input[]{-700,700,-512,-3};const u32 bits[]{512,511,512,2};
+                    for(unsigned c=0;c<4;++c)edge[c]=std::bit_cast<float>(input[c]);std::copy(bits,bits+4,values);}
+                u32 word{};for(unsigned c=0;c<4;++c)word|=values[c]<<(c*10);
+                cache.ClearRawStorageImage(image,edge,renderer.RecordingList(),renderer.CompletedFence());
+                GuestImageReadback edge_readback(device.Get(),image,renderer.RecordingList());
+                const auto edge_fence=renderer.Flush();cache.Submitted(edge_fence);edge_readback.Submitted(edge_fence);
+                renderer.Finish();edge_readback.Resolve(renderer.CompletedFence(),guest);
+                for(u32 mip=0;mip<d.levels;++mip)
+                for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
+                for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+                    memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),&word,4);
+                Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+            }
+            if(srgb){
+                const float edge[]{0.003f,0.0031308f,0.004f,0.5f};const u32 encoded=0x800d0a0a;
+                cache.ClearRawStorageImage(image,edge,renderer.RecordingList(),renderer.CompletedFence());
+                GuestImageReadback edge_readback(device.Get(),image,renderer.RecordingList());
+                const auto edge_fence=renderer.Flush();cache.Submitted(edge_fence);edge_readback.Submitted(edge_fence);
+                renderer.Finish();edge_readback.Resolve(renderer.CompletedFence(),guest);
+                for(u32 mip=0;mip<d.levels;++mip)
+                for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
+                for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
+                    memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),&encoded,4);
+                Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+            }
+            if(raw||packed16||srgb||readonly){cache.Collect(renderer.CompletedFence());
+                Require(image.format_transfers.empty()&&image.format_retirement_bytes==0&&
+                    image.allocation_bytes==allocation&&image.texture.handle==original);}
+            if(layout.expanded_bytes_per_pixel){
+                Require(image.expanded_guest_backing.handle&&image.expanded_written_mask.handle&&image.expanded_backing_bytes);
+                image.SetGpuOwned(false);
+            }
+            cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+        }
+        }
+        }
+    }
+    // Original linear downloads copy mip zero into compact array/depth rows;
+    // they do not use the physical full-mip-chain stride between array layers.
+    for(const u32 data:{4u,9u,10u,13u,16u,17u,18u,19u})for(const u32 shape:{0u,1u,2u}){
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=shape==1?1:9;
+        d.data_format=data;d.number_format=data==4||data==13?7:data==9?1:0;
+        d.writable=data!=9&&(data<16||shape==0);
+        d.native_raw32=data==10;d.one_dimensional=shape==1;d.volume_depth=shape==2?4:0;
+        d.layers=shape==2?1:3;d.first_layer=shape==2?0:1;d.view_layers=1;
+        d.levels=3;d.first_mip=1;d.tile_mode=8;
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> backing(layout.guest_bytes,std::byte{0xee}),expected=backing;
+        d.address=reinterpret_cast<uint64_t>(backing.data());
+        auto& image=cache.Upload(d,backing,renderer.RecordingList(),renderer.CompletedFence());
+        const float color[]{0.25f,0.5f,-0.5f,1.f};
+        if(layout.expanded_bytes_per_pixel)image.SetGpuOwned(true);
+        std::shared_ptr<GuestStorageImageClearLease> lease;
+        if(data==9||data==10||data>=16)cache.ClearRawStorageImage(image,color,renderer.RecordingList(),renderer.CompletedFence());
+        else lease=RecordGuestStorageImageClear(device.Get(),image,renderer.RecordingList(),color);
+        const auto resident_before_source=cache.ResidentBytes();
+        auto retained_source=cache.RetainPressureSource(image);
+        Require(cache.ResidentBytes()==resident_before_source+retained_source.bytes);
+        GuestLinearImageReadback download(device.Get(),image,renderer.RecordingList());
+        const auto compact=uint64_t(d.pitch)*d.height*std::max(d.volume_depth,1u)*d.layers*layout.bytes_per_pixel;
+        Require(download.Bytes()==compact&&compact<backing.size());
+        const auto fence=renderer.Flush();cache.Submitted(fence);download.Submitted(fence);renderer.Finish();
+        download.ReleaseSource(renderer.CompletedFence());
+        retained_source.lease.reset();Require(!cache.PressureRetirementBytes());
+        download.Resolve(renderer.CompletedFence(),backing);
+        const u32 words[]{0x3e800000,0x3f000000,0xbf000000},rgba=0xff008040;
+        const u16 packed=data==16?0x4400:data==17?0xa200:data==18?0x4401:0x084f;
+        const u32 signed_packed=0x70040080;
+        for(u32 layer=0;layer<d.layers;++layer)for(u32 z=0;z<std::max(d.volume_depth,1u);++z)
+        for(u32 y=0;y<d.height;++y)for(u32 x=0;x<d.width;++x){
+            auto* texel=expected.data()+((uint64_t(layer)*std::max(d.volume_depth,1u)+z)*d.height+y)*d.pitch*layout.bytes_per_pixel+x*layout.bytes_per_pixel;
+            if(data>=16)memcpy(texel,&packed,2);
+            else if(data==9)memcpy(texel,&signed_packed,4);
+            else memcpy(texel,data==10?&rgba:words,layout.bytes_per_pixel);
+        }
+        Require(backing==expected);
+        if(layout.expanded_bytes_per_pixel)image.SetGpuOwned(false);
+        cache.Collect(renderer.CompletedFence());
+        cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
+    }
+    for(const u32 data:{4u,9u,16u,17u,18u,19u}){
+        // Evicted cache/allocator lifetimes can end while the compact GPU copy
+        // is blocked. Its source lease must retain placed storage independently.
+        Rasterizer queued(device.Get());
+        GuestTextureDesc d;d.width=17;d.pitch=32;d.height=9;d.layers=3;d.levels=3;
+        d.data_format=data;d.number_format=data==4?7:data==9?1:0;d.writable=data==4;d.tile_mode=8;
+        if(data>=16){d.layers=1;d.volume_depth=4;}
+        const auto layout=LayoutGuestTexture(d);
+        std::vector<std::byte> backing(layout.guest_bytes,std::byte{0xee}),expected=backing;
+        d.address=reinterpret_cast<uint64_t>(backing.data());queued.MapMemory(d.address,backing.size());
+        ComPtr<ID3D12Fence> gate;Check(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate)));
+        SCOPE_EXIT {gate->Signal(1);};
+        uint64_t copy_fence{},retained_bytes{};
+        {
+            std::lock_guard lock(queued.ExecutionMutex());
+            {
+                GuestTextureCache retiring(device.Get());
+                auto& image=retiring.Upload(d,backing,queued.RecordingList(),queued.CompletedFence());
+                const float color[]{0.25f,0.5f,-0.5f,1.f};
+                std::shared_ptr<GuestStorageImageClearLease> clear;
+                if(layout.expanded_bytes_per_pixel){image.SetGpuOwned(true);
+                    retiring.ClearRawStorageImage(image,color,queued.RecordingList(),queued.CompletedFence());}
+                else clear=RecordGuestStorageImageClear(device.Get(),image,queued.RecordingList(),color);
+                const auto initial=queued.Flush();retiring.Submitted(initial);queued.Finish();retiring.Collect(queued.CompletedFence());
+                auto source=retiring.RetainPressureSource(image);auto second_source=source.lease;
+                u64 expected_source=image.allocation_bytes;
+                if(layout.expanded_bytes_per_pixel){const auto packed=image.expanded_guest_backing.handle->GetDesc();
+                    expected_source+=device->GetResourceAllocationInfo(0,1,&packed).SizeInBytes;}
+                Require(source.bytes==expected_source&&retiring.PressureRetirementBytes()==source.bytes);
+                second_source.reset();Require(retiring.PressureRetirementBytes()==source.bytes);
+                auto download=std::make_shared<GuestLinearImageReadback>(device.Get(),image,queued.RecordingList());
+                queued.WaitExternalFence(gate.Get(),1);
+                copy_fence=queued.Flush();retiring.Submitted(copy_fence);download->Submitted(copy_fence);
+                Require(queued.CompletedFence()<copy_fence&&retiring.PressureRetirementBytes()==source.bytes);
+                retained_bytes=download->Bytes()+download->AllocationBytes()+source.bytes;
+                queued.RetainUntilFence(copy_fence,[download,lease=std::move(source.lease)](u64 completed){download->ReleaseSource(completed);});
+                queued.DeferImageBacking(copy_fence,d.address,download->Bytes(),download->AllocationBytes()+source.bytes,
+                    [&](VAddr,std::span<std::byte> data){memcpy(data.data(),backing.data(),data.size());return true;},
+                    [&](VAddr,std::span<const std::byte> data){memcpy(backing.data(),data.data(),data.size());return true;},
+                    [download](u64 completed,std::span<std::byte> data){download->ReleaseSource(completed);download->Resolve(completed,data);});
+            }
+            // Cache entries, upload pools, allocator and the clear descriptor
+            // owner are gone before this GPU fence is signaled.
+            Require(queued.CompletedFence()<copy_fence&&queued.PendingImageCommitBytes()==retained_bytes);
+            Check(gate->Signal(1));
+        }
+        queued.DrainPriorityOperations();queued.CollectRetirements();
+        Require(!queued.PendingImageCommitBytes());
+        const u32 word=data==4?0x3e800000u:0x70040080u;
+        const u16 packed=data==16?0x4400:data==17?0xa200:data==18?0x4401:0x084f;
+        for(u32 layer=0;layer<d.layers;++layer)for(u32 z=0;z<std::max(d.volume_depth,1u);++z)
+        for(u32 y=0;y<d.height;++y)for(u32 x=0;x<d.width;++x)
+            memcpy(expected.data()+((uint64_t(layer)*std::max(d.volume_depth,1u)+z)*d.height+y)*d.pitch*layout.bytes_per_pixel+x*layout.bytes_per_pixel,
+                   data>=16?static_cast<const void*>(&packed):&word,layout.bytes_per_pixel);
+        Require(backing==expected);
     }
     renderer.UnmapMemory(address,bytes);UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
     {
@@ -207,11 +595,11 @@ int main(int argc,char**){try{
             renderer.Finish();std::vector<std::byte> depth(alias,alias+depth_size),stencil(alias+depth_size,alias+total);
             GuestImageReadback rb(device.Get(),image,renderer.RecordingList());auto fence=renderer.Flush();cache.Submitted(fence);rb.Submitted(fence);renderer.Finish();
             rb.Resolve(renderer.CompletedFence(),depth,stencil);memcpy(alias,depth.data(),depth_size);memcpy(alias+depth_size,stencil.data(),stencil_size);
-            image.RememberSnapshot(depth,stencil);image.gpu_owned=false;++commits;
+            image.RememberSnapshot(depth,stencil);image.SetGpuOwned(false);++commits;
             watcher->Untrack(address,depth_size);watcher->Untrack(address+depth_size,stencil_size);
         };
         PageWatch watch(resolve);watcher=&watch;
-        Require(watch.Track(address,depth_size)&&watch.Track(address+depth_size,stencil_size));image.gpu_owned=true;
+        Require(watch.Track(address,depth_size)&&watch.Track(address+depth_size,stencil_size));image.SetGpuOwned(true);
         Descriptors dsv(device.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_DSV,1,false);auto view=image.Dsv();
         device->CreateDepthStencilView(image.texture.handle.Get(),&view,dsv.Cpu(0));
         image.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_DEPTH_WRITE);

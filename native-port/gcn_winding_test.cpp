@@ -5,10 +5,13 @@
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include "video_core/renderer_d3d12/guest_viewports.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
+#include "video_core/renderer_d3d12/guest_point_capture.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "common/serdes.h"
+#include "common/path_util.h"
+#include "video_core/cache_storage.h"
 #include "core/emulator_settings.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -72,10 +75,11 @@ int main(int argc,char** argv){try{
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
     const bool point_capture_two=mode.starts_with("capture2-");
-    const bool point_capture=mode.starts_with("capture-")||point_capture_two;
+    const bool point_capture_three=mode.starts_with("capture3-");
+    const u32 capture_instances=point_capture_three?3u:1u;
+    const bool point_capture=mode.starts_with("capture-")||point_capture_two||point_capture_three;
     if(point_capture){
-        if(!compile_shaders)throw std::invalid_argument("Point capture replay integration is not complete");
-        mode.remove_prefix(point_capture_two?9:8);
+        mode.remove_prefix(point_capture_two||point_capture_three?9:8);
     }
     if(compile_shaders)if(const auto* compiler_log=std::getenv("NATIVE_POINT_COMPILER_LOG")){
         Common::Log::Setup(compiler_log);
@@ -127,11 +131,15 @@ int main(int argc,char** argv){try{
     const bool gcn_geometry=mode=="point-size-gcn-geometry"||mode=="point-unit-gcn-geometry"||gcn_saturated||gcn_declared||gcn_loop||gcn_clip_viewport;
     const bool geometry_unit=mode=="point-unit-geometry"||mode=="point-unit-gcn-geometry"||unit_declared||unit_loop||mode=="point-unit-gcn-viewport-clip-disabled"||mode=="point-unit-gcn-loop-clip-bound"||mode=="point-unit-gcn-loop-clip-cull-bound"||gcn_sparse_distances||vs_unit;
     const bool sized_points=mode=="point-size"||point_clip||point_layer||point_viewport||geometry_points||gcn_geometry||point_saturated;
-    const bool expanded_points=sized_points&&!geometry_unit;
+    const bool expanded_points=point_capture||(sized_points&&!geometry_unit);
     if(!sized_points&&mode!="base"&&!late_viewport)throw std::invalid_argument("Invalid winding mode");
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     _putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
-    auto* memory=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    // PS4 buffer sharps hold only 40 address bits. An arbitrary host allocation
+    // can silently truncate before reaching the renderer's range validation.
+    std::byte* memory=nullptr;
+    for(u64 hint=0x200000000;!memory&&hint<0x210000000;hint+=0x1000000)
+        memory=static_cast<std::byte*>(VirtualAlloc(reinterpret_cast<void*>(hint),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     if(!memory)throw std::runtime_error("Winding guest allocation failed");
     struct Allocation{void* value;~Allocation(){VirtualFree(value,0,MEM_RELEASE);}} allocation{memory};
     const auto address=reinterpret_cast<u64>(memory);
@@ -363,12 +371,26 @@ int main(int argc,char** argv){try{
     if(geometry_points){prepared_geometry=PreparedPointGeometry(profile,geometry_unit,frontend.ReserveStageId(),
         guest.stages[u32(Shader::SwStage::Vertex)]->info);
         guest.stages[u32(Shader::SwStage::Geometry)]=&prepared_geometry;}
+    if(!compile_shaders){
+        const auto cache=std::filesystem::current_path()/"gpu-point-regression-cache";
+        std::filesystem::create_directories(cache);Common::FS::SetUserPath(Common::FS::PathType::CacheDir,cache);
+        _wputenv_s(L"SHADPS4_NATIVE_SHADER_CACHE",cache.c_str());
+        EmulatorSettings.SetPipelineCacheEnabled(true);EmulatorSettings.SetPipelineCacheArchived(false);
+        Storage::DataBase::Instance().Open();
+        if(!Storage::DataBase::Instance().IsOpened())throw std::runtime_error("Cannot open isolated winding metadata database");
+        Storage::DataBase::Instance().FinishPreload();
+    }
     std::vector<GuestResourceStage> resources;GuestShaderFrontend restored(profile);
     for(const auto* stage:guest.stages)if(stage){
         if(stage->spirv.empty()||stage->info.translation_failed)throw std::runtime_error("Winding GCN translation failed");
         if(compile_shaders)continue;
-        Serialization::Archive ar;frontend.SerializeStage(ar,*stage);Serialization::Archive saved{ar.TakeOff()};
+        Serialization::Archive ar;frontend.SerializeStage(ar,*stage);
+        // Persistence IO is asynchronous. Restoration reads the next preload
+        // session, not a file that may still be in the writer's queue.
+        Storage::DataBase::Instance().Close();Storage::DataBase::Instance().Open();
+        Serialization::Archive saved{ar.TakeOff()};
         const auto& restored_stage=restored.RestoreStage(saved);
+        Storage::DataBase::Instance().FinishPreload();
         if(restored_stage.spirv!=stage->spirv||!saved.IsEoS())throw std::runtime_error("Winding metadata mismatch");
         if(gcn_geometry&&stage->info.hw_stage==Shader::HwStage::Geometry){
             if(restored_stage.runtime.hw.gs.vs_copy.data()||restored_stage.runtime.hw.gs.vs_copy.size()||
@@ -428,12 +450,50 @@ int main(int argc,char** argv){try{
             fragment_dxil.write(reinterpret_cast<const char*>(bytecode.data()),bytecode.size());
             if(!fragment_spirv||!fragment_dxil)throw std::runtime_error("Cannot save captured fragment");
             printf("COMPILED: %s captured fragment, signed DXIL %zu bytes\n",argv[3],bytecode.size());
+            const auto* geometry=guest.stages[u32(Shader::SwStage::Geometry)];
+            const auto replay_vertex=EmitNativePointReplayVertex();
+            const auto replay_geometry=EmitNativePointReplayGeometry(geometry->info,geometry->runtime.hw.gs,frontend.Profile());
+            const LinkedSpirvStage replay_inputs[]{{SpirvStage::Vertex,replay_vertex},
+                {SpirvStage::Geometry,replay_geometry},{SpirvStage::Pixel,fragment.spirv}};
+            for(size_t i=0;i<std::size(replay_inputs);++i){
+                std::ofstream input(directory/("replay-"+std::to_string(i)+".spv"),std::ios::binary);
+                input.write(reinterpret_cast<const char*>(replay_inputs[i].words.data()),replay_inputs[i].words.size_bytes());
+                if(!input)throw std::runtime_error("Cannot save point replay SPIR-V input");
+            }
+            const auto replay_result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),replay_inputs,options);
+            if(!replay_result.success)throw std::runtime_error("Point replay compilation failed: "+replay_result.diagnostics);
+            for(size_t i=0;i<std::size(replay_inputs);++i){
+                std::ofstream replay_spirv(directory/("replay-"+std::to_string(i)+".spv"),std::ios::binary);
+                replay_spirv.write(reinterpret_cast<const char*>(replay_inputs[i].words.data()),replay_inputs[i].words.size_bytes());
+                std::ofstream replay_dxil(directory/("replay-"+std::to_string(i)+".dxil"),std::ios::binary);
+                const auto& code=replay_result.stages[i].bytecode;
+                replay_dxil.write(reinterpret_cast<const char*>(code.data()),code.size());
+                if(!replay_spirv||!replay_dxil)throw std::runtime_error("Cannot save point replay compiler artifacts");
+                printf("COMPILED: %s replay stage %zu, signed DXIL %zu bytes\n",argv[3],i,code.size());
+            }
         }
         return 0;
     }
     auto device=HardwareDevice();ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
     GuestShaderCache shaders(std::filesystem::path(argv[1]).wstring(),options);
     GuestPipelineCache pipelines(device.Get(),std::filesystem::path(argv[2]).wstring(),frontend,shaders);
+    std::optional<GuestPointCaptureStages> capture;
+    std::unique_ptr<NativePointCapturePass> capture_pass;
+    std::vector<GuestResourceStage> capture_resources,replay_resources;
+    if(point_capture){
+        if(gcn_loop){
+            auto ordinary_profile=profile;ordinary_profile.native_point_capture=false;
+            GuestShaderFrontend ordinary(ordinary_profile);
+            for(unsigned attempt=0;attempt<2;++attempt){
+                bool required=false;try{ordinary.BuildGraphics(regs);}catch(const Shader::NativePointCapture::Required&){required=true;}
+                if(!required)throw std::runtime_error("Oversized point GS did not request production capture fallback");
+            }
+        }
+        capture=frontend.BuildPointCaptureGraphics(regs);
+        capture_pass=std::make_unique<NativePointCapturePass>(device.Get());
+        for(const auto* stage:capture->producer.stages)if(stage)capture_resources.push_back({&stage->info,stage->bindings_start});
+        for(const auto* stage:capture->replay.stages)if(stage)replay_resources.push_back({&stage->info,stage->bindings_start});
+    }
     Rasterizer rasterizer(device.Get());rasterizer.MapMemory(address,65536);GuestTextureCache textures(device.Get());
     GuestTextureDesc color;color.address=address+4096;color.width=16;color.height=8;color.pitch=24;color.tile_mode=8;
     color.render_target=color.writable=true;if(point_layer)color.layers=color.view_layers=3;
@@ -447,12 +507,15 @@ int main(int argc,char** argv){try{
             regs.viewports[i].yscale=mask&(1u<<i)?scale:-scale;}
         regs.polygon_control.front_face=ccw?AmdGpu::FrontFace::CounterClockwise:AmdGpu::FrontFace::Clockwise;
         regs.polygon_control.cull_front=cull==1;regs.polygon_control.cull_back=cull==2;
-        const auto viewports=BuildGuestViewports(regs);auto state=BuildGuestGraphicsState(regs,formats,point_layer?DXGI_FORMAT_UNKNOWN:dl.format);
-        if(sized_points&&!vs_unit){if(expanded_points)state.pipeline.RasterizerState.FrontCounterClockwise=bool(viewports.flip_mask&1);
+        const auto viewports=BuildGuestViewports(regs);auto state=BuildGuestGraphicsState(regs,formats,
+            point_layer?DXGI_FORMAT_UNKNOWN:depth.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:dl.format);
+        if(sized_points&&!vs_unit){if(expanded_points)state.pipeline.RasterizerState.FrontCounterClockwise=!bool(viewports.flip_mask&1);
             const auto* geometry=guest.stages[u32(Shader::SwStage::Geometry)];
             if(!geometry||(gcn_geometry?(geometry->auxiliary||!geometry->runtime.hw.gs.native_point_expansion):!geometry->auxiliary))
                 throw std::runtime_error("Point did not acquire the expected native geometry adaptation");}
-        const auto& pipeline=pipelines.Graphics(guest,state.pipeline);
+        const auto original_state=state;
+        if(capture){state.topology=D3D_PRIMITIVE_TOPOLOGY_POINTLIST;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;}
+        const auto& pipeline=pipelines.Graphics(capture?capture->replay:guest,state.pipeline);
         const u32 point_viewport_index=point_viewport&&ccw?1:0;
         const auto& point_vp=regs.viewports[point_viewport_index];
         const auto& native_vp=viewports.viewports[point_viewport_index];
@@ -481,8 +544,10 @@ int main(int argc,char** argv){try{
                 memcpy(memory+8192+GuestPixelOffset(depth,dl,0,0,x,y),&z,4);memory[12288+GuestPixelOffset(stencil,sl,0,0,x,y)]=std::byte{7};}
             if(point_layer)for(u32 layer=1;layer<color.layers;++layer)for(u32 y=0;y<color.height;++y)for(u32 x=0;x<color.width;++x){
                 const u8 before[]{21,31,41,51};memcpy(memory+4096+GuestPixelOffset(color,cl,0,layer,x,y),before,4);}
-            std::vector<std::byte> expected(memory,memory+65536);rasterizer.InvalidateMemory(address,65536);
-            if(gcn_geometry){const u32 counters[]{78,92};memcpy(expected.data()+32768,counters,sizeof(counters));}
+            std::vector<std::byte> expected(memory,memory+65536);std::vector<bool> half_unorm(65536);
+            rasterizer.InvalidateMemory(address,65536);
+            textures.Invalidate(address,65536,rasterizer.CompletedFence());
+            if(gcn_geometry){const u32 counters[]{77+capture_instances,91+capture_instances*(point_capture_two?2u:1u)};memcpy(expected.data()+32768,counters,sizeof(counters));}
             if(point_saturated){const u32 counter=78;memcpy(expected.data()+32768,&counter,4);}
             for(unsigned y=0;y<8;++y)for(unsigned x=0;x<16;++x){const bool front=OriginalFront(regs,x/8,reverse);
                 if(sized_points){const double half=ccw&&!geometry_unit?2.:0.5;
@@ -490,23 +555,64 @@ int main(int argc,char** argv){try{
                        double(y)+0.5<center_y-half||double(y)+0.5>=center_y+half)continue;
                 }else if((cull==1&&front)||(cull==2&&!front))continue;
                 const u32 layer=point_layer?(ccw?1:2):0;
-                const u8 result[]{u8(sized_points||front?255:0),u8(point_edge?(ccw?112:80):loop_alias_default?0:loop_live||vs_qualified?(live_lane==0?32:live_lane==2?128:191):point_packed_gcn?128:point_packed?(point_packed_clip?62:64):point_depth||point_live?128:0),u8(loop_live_xw||vs_qualified?191:255),u8(loop_reserved?128:255)};memcpy(expected.data()+4096+GuestPixelOffset(color,cl,0,layer,x,y),result,4);
-                if(!point_layer)expected[12288+GuestPixelOffset(stencil,sl,0,0,x,y)]=std::byte(gcn_geometry?9:sized_points||front?8:6);}
+                const u8 result[]{u8(sized_points||front?255:0),u8(point_edge?(ccw?112:80):loop_alias_default?0:loop_live||vs_qualified?(live_lane==0?32:live_lane==2?128:191):point_packed_gcn?128:point_packed?(point_packed_clip?62:64):point_depth||point_live?128:0),u8(loop_live_xw||vs_qualified?191:255),u8(loop_reserved?128:255)};
+                const auto pixel=4096+GuestPixelOffset(color,cl,0,layer,x,y);memcpy(expected.data()+pixel,result,4);
+                // Only an explicitly written 0.5 UNORM channel has this tie.
+                // D3D permits 0.6 integer ULP for FLOAT -> UNORM (spec3.2.3.6):
+                // https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm
+                for(u32 channel=0;channel<4;++channel)half_unorm[pixel+channel]=result[channel]==128;
+                if(!point_layer)expected[12288+GuestPixelOffset(stencil,sl,0,0,x,y)]=std::byte(gcn_geometry?
+                    7+2*capture_instances*(point_capture_two?2u:1u):sized_points||front?8:6);}
             GraphicsRuntime runtime{};runtime.yz_flip_mask=viewports.flip_mask;runtime.SetViewports(viewports.viewports,expanded_points,viewports.clip_transforms);
             GuestTextureCache::Entry* target{};GuestTextureCache::Entry* ds{};
             auto color_memory=std::span(memory+4096,size_t(cl.guest_bytes)),depth_memory=std::span(memory+8192,size_t(dl.guest_bytes)),stencil_memory=std::span(memory+12288,size_t(sl.guest_bytes));
-            ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,resources,push,runtime,[&](ResourceBindings& bindings){
+            Rasterizer::DrawArguments output_draw{sized_points?1u:6u,capture_instances};
+            const auto submit=[&](ResourceBindings& bindings){
                 target=&textures.Upload(color,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
                 ds=&textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
                 const Rasterizer::ColorAttachment attachment[]{ {&target->texture,target->Rtv()} };
                 const Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
-                rasterizer.ExecuteGraphics(pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,{sized_points?1u:6u},{},nullptr,false);
-            },textures);
+                rasterizer.ExecuteGraphics(pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false);
+            };
+            if(capture){
+                const auto& gs=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
+                const auto plan=Shader::NativePointCapture::Plan::Make(output_draw.count,gs.num_invocations,gs.output_vertices,output_draw.instances);
+                const auto producer_state=NativePointCapturePass::ProducerState(original_state);
+                const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
+                capture_pass->Execute(rasterizer,plan,output_draw,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
+                    ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
+                        [&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
+                            rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
+                                viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false);},textures);
+                    if(std::getenv("NATIVE_POINT_DEBUG_CAPTURE")){
+                        const u64 count=std::min<u64>(bytes,Shader::NativePointCapture::RecordBytes*2);
+                        auto download=Buffer(device.Get(),count,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+                        buffer.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+                        rasterizer.RecordingList()->CopyBufferRegion(download.handle.Get(),0,buffer.handle.Get(),offset,count);
+                        rasterizer.Finish();void* data{};D3D12_RANGE range{0,SIZE_T(count)};Check(download.handle->Map(0,&range,&data));
+                        std::ofstream dump("point-runtime-records.bin",std::ios::binary);dump.write(static_cast<const char*>(data),count);
+                        D3D12_RANGE empty{};download.handle->Unmap(0,&empty);
+                        buffer.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    }
+                },[&](Resource& buffer,const Rasterizer::DrawArguments& draw){
+                    output_draw=draw;ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,replay_resources,push,runtime,
+                        [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit(bindings);},textures);
+                });
+            }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,resources,push,runtime,submit,textures);
             rasterizer.Finish();GuestImageReadback cr(device.Get(),*target,rasterizer.RecordingList()),dr(device.Get(),*ds,rasterizer.RecordingList());
             const auto fence=rasterizer.Flush();cr.Submitted(fence);dr.Submitted(fence);textures.Used(*target,fence);textures.Used(*ds,fence);rasterizer.Finish();
             cr.Resolve(rasterizer.CompletedFence(),color_memory);dr.Resolve(rasterizer.CompletedFence(),depth_memory,stencil_memory);
             textures.Collect(rasterizer.CompletedFence());
-            if(memcmp(memory,expected.data(),65536))throw std::runtime_error("Actual facing/culling/stencil/guest padding mismatch: mask="+std::to_string(mask)+" ccw="+std::to_string(ccw)+" cull="+std::to_string(cull)+" reverse="+std::to_string(reverse)+" edge="+std::to_string(edge)+" warm="+std::to_string(warm));
+            bool mismatch=false;
+            for(size_t byte=0;byte<65536;++byte)if(memory[byte]!=expected[byte]&&
+                !(half_unorm[byte]&&memory[byte]==std::byte{127})){mismatch=true;break;}
+            if(mismatch){
+                std::ofstream actual("point-runtime-actual.bin",std::ios::binary),oracle("point-runtime-expected.bin",std::ios::binary);
+                actual.write(reinterpret_cast<const char*>(memory),65536);oracle.write(reinterpret_cast<const char*>(expected.data()),65536);
+                unsigned shown{};for(size_t byte=0;byte<65536&&shown<24;++byte)if(memory[byte]!=expected[byte]){
+                    fprintf(stderr,"point mismatch byte=%zu actual=%u expected=%u\n",byte,unsigned(memory[byte]),unsigned(expected[byte]));++shown;}
+                throw std::runtime_error("Actual facing/culling/stencil/guest padding mismatch: mask="+std::to_string(mask)+" ccw="+std::to_string(ccw)+" cull="+std::to_string(cull)+" reverse="+std::to_string(reverse)+" edge="+std::to_string(edge)+" warm="+std::to_string(warm));
+            }
         }
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T size{};Check(messages->GetMessage(i,nullptr,&size));std::vector<std::byte> bytes(size);

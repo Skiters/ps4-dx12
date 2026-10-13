@@ -62,12 +62,15 @@ int main(){try{
         throw std::runtime_error("Retired immutable display allocation was not reused");
     if(read(*reused.texture)!=linear)
         throw std::runtime_error("Reused immutable display frame differs");
-    // A format requiring channel conversion must use the checked CPU path.
+    // VideoOut preserves raw guest storage and performs BGRA/opaque-alpha
+    // conversion through the immutable snapshot's native SRV mapping.
     group.attrib.pixel_format=Libraries::VideoOut::PixelFormat::A8R8G8B8Srgb;
     auto bgra=provider.Snapshot(group,desc.address);auto expected=linear;
     provider.Drain();
-    for(size_t i=0;i<expected.size();i+=4)std::swap(expected[i],expected[i+2]);
-    if(read(*bgra.texture)!=expected)throw std::runtime_error("BGRA display conversion differs");
+    const auto mapping=D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(2,1,0,D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1);
+    if(read(*bgra.texture)!=expected||bgra.component_mapping!=mapping||
+       bgra.view_format!=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+        throw std::runtime_error("BGRA display storage/view mapping differs");
     // Non-RGBA8 VideoOut formats must reach the existing RGBA8 presenter
     // through the checked conversion fallback rather than aborting a frame.
     std::array<uint32_t,2> ten_bit{0u|(512u<<10)|(1023u<<20)|(3u<<30),

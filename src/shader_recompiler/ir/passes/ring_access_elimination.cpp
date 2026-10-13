@@ -67,7 +67,9 @@ void RingAccessElimination(const IR::Program& program, const RuntimeInfo& runtim
                     break;
                 }
 
-                const auto offset = inst.Flags<IR::BufferInstInfo>().inst_offset.Value();
+                const auto scalar_offset=IR::GetBufferSOffsetArg(&inst);
+                const u64 offset=u64(inst.Flags<IR::BufferInstInfo>().inst_offset.Value())+
+                    (scalar_offset.IsImmediate()?scalar_offset.U32():0u);
                 ASSERT(offset < runtime_info.hw.es.vertex_data_size * 4);
                 const auto data = ir.BitCast<IR::F32>(IR::U32{inst.Arg(2)});
                 const auto attrib =
@@ -131,7 +133,12 @@ void RingAccessElimination(const IR::Program& program, const RuntimeInfo& runtim
                     break;
                 }
 
-                const auto offset = inst.Flags<IR::BufferInstInfo>().inst_offset.Value();
+                // MUBUF's 12-bit instruction offset is only part of its byte
+                // address. Large rings use a literal scalar SOFFSET; dropping
+                // it makes later parameters overwrite the first position.
+                const auto scalar_offset=IR::GetBufferSOffsetArg(&inst);
+                const u64 offset=u64(inst.Flags<IR::BufferInstInfo>().inst_offset.Value())+
+                    (scalar_offset.IsImmediate()?scalar_offset.U32():0u);
                 const auto data = ir.BitCast<IR::F32>(IR::U32{inst.Arg(2)});
                 const auto comp_ofs = info.gs_copy_data.output_vertices * sizeof(u32);
                 const auto output_size = gs_info.output_vertices * dwords_per_vertex * sizeof(u32);

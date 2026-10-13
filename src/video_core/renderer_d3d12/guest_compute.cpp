@@ -1,16 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_compute.h"
+#include "nv_shader_clock.h"
 #include "guest_sampler.h"
 #include "guest_image_readback.h"
 #include "diagnostics.h"
 #include "guest_dma.h"
+#include "shader_recompiler/native_dma.h"
+#ifdef SHADPS4_NATIVE_DX12_CORE
+#include "core/memory.h"
+#endif
 #include <algorithm>
 #include <cstring>
+#include <map>
 #include <set>
 #include <tuple>
 namespace NativeDX12 {
 namespace {
-constexpr u64 MaxBytes=256*1024*1024;
+constexpr u64 MaxBytes=Shader::NativeDma::MaxBufferBytes;
+std::optional<u32> FormattedMetadataValue(const GuestTextureCache::MetaDataInfo& meta){
+    if(meta.type==GuestTextureCache::MetaType::HTile)return 0xf;
+    if(meta.type!=GuestTextureCache::MetaType::CMask)return std::nullopt;
+    switch(meta.num_samples){
+    case 1:case 8:return 0xffffffff;
+    case 2:return 0xdddddddd;
+    case 4:return 0xeeeeeeee;
+    // The pinned original returns an engaged optional containing zero here.
+    default:return 0;
+    }
+}
 struct TemporaryMemory {
     Rasterizer& rasterizer;
     explicit TemporaryMemory(Rasterizer& owner):rasterizer(owner){}
@@ -90,13 +107,15 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
-    struct Pending {UINT reg;bool uav;u32 push_index,byte_adjust;};
+    struct Pending {UINT reg;bool uav;u32 push_index,byte_adjust;bool formatted_read{};u64 original_bytes{};};
     std::vector<Pending> pending;
     struct DmaPending {UINT reg;bool fault;};std::vector<DmaPending> dma_pending;
     const bool uses_dma=std::any_of(stages.begin(),stages.end(),[](const auto& stage){return stage.info&&stage.info->uses_dma;});
     auto* dma=uses_dma?&rasterizer.DmaMemory():nullptr;
     std::vector<Rasterizer::ShaderBufferRequest> requests;
-    struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;};
+    struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;bool sample_storage;
+        std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
+        std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false;};
     std::vector<ImagePending> images;
     struct SamplerPending {UINT reg;D3D12_SAMPLER_DESC desc;};std::vector<SamplerPending> samplers;
     auto temporary_lease=std::make_shared<TemporaryMemory>(rasterizer);
@@ -128,17 +147,18 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(!reflected)continue; // DXIL optimization removed this guest descriptor.
         const auto& source=info.buffers[index];const bool uav=reflected->type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
         if(source.is_written&&!uav)throw std::runtime_error("Native writable guest buffer reflected as SRV");
-        VAddr address{};u64 size{};u32 adjust{};
+        VAddr address{};u64 size{},original_bytes{};u32 adjust{};
         switch(source.buffer_type) {
         case Shader::BufferType::Guest: {
             auto sharp=source.GetSharp(info);
             size=sharp.GetSize();
             if(!sharp.base_address||!size){std::tie(address,size)=temporary.Make(16);break;}
+            size=rasterizer.ClampMemoryRange(sharp.base_address,size);
             if(size>MaxBytes)throw std::out_of_range("Native guest shader buffer exceeds slice budget: address="+
                 std::to_string(sharp.base_address)+" bytes="+std::to_string(size)+
                 " stride="+std::to_string(sharp.stride)+" records="+std::to_string(sharp.num_records)+
                 " shader="+std::to_string(info.pgm_hash)+" binding="+std::to_string(index));
-            adjust=u32(sharp.base_address&3);address=sharp.base_address&~u64(3);
+            original_bytes=size;adjust=u32(sharp.base_address&3);address=sharp.base_address&~u64(3);
             size=(size+adjust+3)&~u64(3);break;
         }
         case Shader::BufferType::Flatbuf:
@@ -178,8 +198,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             covered.emplace(reg,0);continue;
         default:throw std::runtime_error("Native guest direct-memory-addressing buffer is not connected");
         }
-        requests.push_back({address,size,source.is_written,uav});
-        pending.push_back({reg,uav,start.buffer+u32(index),adjust});covered.emplace(reg,0);
+        requests.push_back({address,size,source.is_written,uav,false,u8(adjust),original_bytes});
+        pending.push_back({reg,uav,start.buffer+u32(index),adjust,
+            source.buffer_type==Shader::BufferType::Guest&&source.is_formatted&&!source.is_written,original_bytes});covered.emplace(reg,0);
     }
     u64 image_reg=u64(start.unified)+info.buffers.size();
     for(const auto& source:info.images) {
@@ -193,6 +214,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             const auto sharp=source.GetSharp(info);
             const bool array=source.is_array||sharp.GetType()==AmdGpu::ImageType::Cube;
             auto desc=DescribeGuestTexture(sharp);desc.writable=source.is_written;
+            desc.native_packed10_raw=source.native_packed10_raw;
+            desc.native_raw32=source.native_raw32;
             // Original GCN IR lowers PS4 1D image operations to 2D with Y=0.
             // The native view must match that emitted DXIL resource dimension.
             if(desc.one_dimensional)desc.one_dimensional=false;
@@ -206,14 +229,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,source.is_written);
             UINT mip=desc.first_mip;
             if(source.mip_fallback_mode==Shader::MipStorageFallbackMode::ConstantIndex)mip+=source.constant_mip_index;
-            if(mip>=desc.levels||count>desc.levels-mip)throw std::out_of_range("Native image mip descriptor span");
-            for(const auto& b:requests)if(sharp&&b.address<desc.address+layout.guest_bytes&&desc.address<b.address+b.size&&
-                (b.written||desc.writable))
-                throw std::runtime_error("Native simultaneous writable buffer/image alias needs shared cache coherency: buffer="+
-                    std::to_string(b.address)+" bytes="+std::to_string(b.size)+" written="+std::to_string(b.written)+
-                    " image="+std::to_string(desc.address)+" bytes="+std::to_string(layout.guest_bytes)+" writable="+std::to_string(desc.writable));
+            if(mip>=desc.levels||(!source.native_msaa_storage&&count>desc.levels-mip)||
+               (source.native_msaa_storage&&count!=desc.samples))throw std::out_of_range("Native image descriptor span");
             for(const auto& previous:images)if(sharp&&!previous.null_resource&&previous.desc.address<desc.address+layout.guest_bytes&&desc.address<previous.desc.address+previous.layout.guest_bytes){
-                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc))
+                const bool converted_views=(!previous.desc.writable||!desc.writable)&&
+                    desc.data_format==9&&CompatibleGuestPackedStorage(previous.desc,desc);
+                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views)
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
                 if(previous.desc.writable!=desc.writable){
                     const auto previous_end=previous.desc.writable?previous.mip+previous.count:previous.desc.levels;
@@ -224,7 +245,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                         throw std::runtime_error("Native overlapping SRV/UAV image subresources require shader access unification");
                 }
             }
-            images.push_back({desc,std::move(layout),UINT(image_reg),count,mip,array,!bool(sharp)});
+            images.push_back({desc,std::move(layout),UINT(image_reg),count,mip,array,!bool(sharp),source.native_msaa_storage,{},{}});
         }
         image_reg+=count;
     }
@@ -258,16 +279,70 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             shader.address<input.address+input.size&&input.address<shader.address+shader.size)input.unordered_access=true;
         requests.push_back(input);
     }
-    // Separate native buffer/texture views are valid for read-only aliases: both
-    // are materialized from the same retired CPU-visible guest contents. Writes
-    // require shared ownership/feedback semantics and remain explicit failures.
-    for(const auto& image:images)for(const auto& b:requests)
+    // The original binds buffers and refreshes sampled images before execution.
+    // Two writers likewise keep separate cache domains, when the backend can
+    // retain both versions without selecting an arbitrary physical winner.
+    for(auto& image:images)for(const auto& b:requests)
         if(!image.null_resource&&b.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<b.address+b.size&&
-            (b.written||image.desc.writable))
-            throw std::runtime_error("Native cross-stage writable buffer/image alias needs shared cache coherency: buffer="+
+            image.desc.writable&&b.written){
+            if(!textures||!textures->CanRetainBufferAlias(image.desc,image.layout)||
+               b.WriteRange().address!=image.desc.address)
+                throw std::runtime_error("Native cross-stage writable buffer/image alias needs shared cache coherency: buffer="+
                 std::to_string(b.address)+" bytes="+std::to_string(b.size)+" written="+std::to_string(b.written)+
                 " image="+std::to_string(image.desc.address)+" bytes="+std::to_string(image.layout.guest_bytes)+" writable="+std::to_string(image.desc.writable));
+            image.buffer_writer_alias=true;
+        }
+    const auto separate_overlap=[&](VAddr address,u64 bytes){
+        if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
+            address<entry->desc.address+entry->layout.guest_bytes&&entry->desc.address<address+bytes)return true;
+        return std::ranges::any_of(images,[&](const auto& image){return image.buffer_writer_alias&&
+            address<image.desc.address+image.layout.guest_bytes&&image.desc.address<address+bytes;});
+    };
+    std::vector<std::pair<size_t,GuestTextureCache::Entry*>> formatted_images;
+    std::vector<std::shared_ptr<void>> formatted_image_pins;
+    std::vector<std::pair<size_t,u32>> formatted_metadata;
+    if(textures)for(size_t i=0;i<ordinary_count;++i)if(pending[i].formatted_read&&
+        rasterizer.FormattedBufferNeedsImageSync(requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)){
+        if(const auto meta=textures->GetMetaInfo(requests[i].address+pending[i].byte_adjust))
+            if(const auto value=FormattedMetadataValue(*meta)){
+                if(pending[i].byte_adjust)throw std::runtime_error("Formatted metadata synthesis requires DWORD-aligned original sharp");
+                requests[i].resident=true;formatted_metadata.emplace_back(i,*value);
+            }
+    }
+    for(size_t i=0;i<ordinary_count;++i)if(separate_overlap(requests[i].address,requests[i].size)){
+        if(pending[i].formatted_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})&&
+           rasterizer.FormattedBufferNeedsImageSync(
+            requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)){
+            GuestTextureCache::Entry* version{};size_t candidates{};
+            if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
+                entry->desc.address==requests[i].address){
+                ++candidates;
+                if(!version||(version->layout.guest_bytes!=pending[i].original_bytes&&entry->layout.guest_bytes==pending[i].original_bytes))
+                    version=entry.get();
+            }
+            if(candidates>1&&version->layout.guest_bytes!=pending[i].original_bytes)
+                throw std::runtime_error("Formatted buffer has ambiguous independent image versions");
+            if(!version||pending[i].byte_adjust||std::ranges::any_of(requests,[&](const auto& buffer){
+                return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
+                    version->desc.address<buffer.address+buffer.size;}))
+                throw std::runtime_error("Independent formatted image/buffer partial or simultaneous-write ordering is not adapted");
+            requests[i].resident=true;
+            formatted_image_pins.push_back(textures->PinBinding(*version));
+            formatted_images.emplace_back(i,version);
+            // Original arenas may fit the whole image beyond a shorter sharp.
+            // Prepare that transfer range without enlarging the shader view.
+            if(version->layout.guest_bytes>requests[i].size&&std::ranges::none_of(requests,[&](const auto& buffer){
+                return !buffer.written&&buffer.resident&&buffer.address==version->desc.address&&
+                    buffer.size>=version->layout.guest_bytes&&buffer.unordered_access==requests[i].unordered_access;}))
+                requests.push_back({version->desc.address,version->layout.guest_bytes,false,requests[i].unordered_access,true});
+        }
+    }
     for(const auto& binding:pipeline.Layout().Bindings()) {
+        if(binding.nv_clock||binding.amd_clock)continue;
+        // Native capture/replay storage is supplied by the graphics callback,
+        // never interpreted as a guest sharp or mapped into PageWatch.
+        if(!pipeline.IsCompute()&&binding.space==33&&binding.reg==0&&binding.count==1&&
+           (binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV||binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV))continue;
         if(dma&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&binding.space==Shader::NativeDma::DescriptorSet&&
            binding.reg==0&&binding.count==Shader::NativeDma::BankCount)continue;
         if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.count==1&&
@@ -278,8 +353,66 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             throw std::runtime_error("Native guest compute DXIL resource has no guest metadata binding");
     }
     diagnostic.Detail("compute=%u buffers=%zu images=%zu samplers=%zu",unsigned(pipeline.IsCompute()),requests.size(),images.size(),samplers.size());
+    // Invalidation uses the original logical sharp address even when a cached
+    // native envelope is already protected or starts before that sharp.
+    for(size_t i=0;i<ordinary_count;++i)if(requests[i].written){const auto write=requests[i].WriteRange();
+        rasterizer.NotifyGpuBufferWrite(write.address,write.size);}
+    const bool retained_image_buffer_writer=std::ranges::any_of(requests,[&](const auto& buffer){
+        return buffer.written&&separate_overlap(buffer.address,buffer.size);
+    });
+    std::map<std::pair<VAddr,u64>,std::shared_ptr<const std::vector<std::byte>>> image_snapshots;
+    std::map<std::pair<VAddr,u64>,std::shared_ptr<Resource>> gpu_image_snapshots;
+    u64 gpu_snapshot_bytes{};
+    for(auto& image:images)if(!image.null_resource&&(!image.desc.writable||image.buffer_writer_alias)&&
+        std::ranges::any_of(requests,[&](const auto& buffer){return buffer.written&&
+            buffer.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<buffer.address+buffer.size;})){
+        const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
+        if(GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)&&
+           rasterizer.IsGpuBufferModified(key.first,key.second)){
+            auto existing=gpu_image_snapshots.find(key);
+            const auto capacity=(key.second+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
+                ~u64(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1);
+            if(existing!=gpu_image_snapshots.end()){
+                image.gpu_snapshot=existing->second;continue;
+            }
+            if(capacity<=64*1024*1024-gpu_snapshot_bytes){
+                diagnostic.Stage("buffer-image-gpu-prewrite-snapshot");
+                image.gpu_snapshot=std::make_shared<Resource>(rasterizer.CaptureShaderBuffer(key.first,key.second));
+                gpu_image_snapshots.emplace(key,image.gpu_snapshot);gpu_snapshot_bytes+=capacity;
+                Diagnostics::Count("buffer-image.gpu-snapshot.bytes",key.second);
+                continue;
+            }
+        }
+        auto& snapshot=image_snapshots[key];
+        if(!snapshot){
+            diagnostic.Stage("buffer-image-prewrite-snapshot");
+            if(!rasterizer.ReadMemory(key.first,key.second))
+                throw std::out_of_range("Native sampled buffer/image alias has no readable guest backing");
+            rasterizer.ValidateHostMemory(key.first,key.second);
+            auto bytes=std::make_shared<std::vector<std::byte>>(size_t(key.second));
+            memcpy(bytes->data(),reinterpret_cast<const void*>(key.first),bytes->size());
+            Diagnostics::Count("buffer-image.snapshot.bytes",key.second);
+            snapshot=std::move(bytes);
+        }
+        image.guest_snapshot=snapshot;
+    }
     diagnostic.Stage("buffer-views");
     auto views=rasterizer.PrepareShaderBuffers(requests);
+    for(const auto& [index,value]:formatted_metadata){
+        const auto& request=requests[index];
+        rasterizer.FillPreparedShaderBuffer(request.address,request.size,value,
+            request.unordered_access?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    if(!formatted_images.empty())rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+    for(const auto& [index,image]:formatted_images){
+        const auto& request=requests[index];
+        auto initial=rasterizer.CapturePreparedShaderBuffer(request.address,image->layout.guest_bytes);
+        auto tiled=textures->RetileBufferVersion(*image,initial,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        rasterizer.CopyToPreparedShaderBuffer(request.address,image->layout.guest_bytes,tiled,
+            request.unordered_access?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
     diagnostic.Stage("descriptor-heap-allocation");
     auto bindings_lease=std::make_shared<ResourceBindings>(device,pipeline.Layout(),&rasterizer.BindingHeapPool());
     auto& bindings=*bindings_lease;
@@ -289,6 +422,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // Raw SRV/UAV base is aligned to 16 bytes; PS4 sub-dword offsets go
         // through the original compiler's PushData adjustment, never truncation.
         const auto base=view.offset&~u64(15);const auto delta=view.offset-base;
+        if(view.size>Shader::NativeDma::MaxRawViewBytes-delta)
+            throw std::out_of_range("Native raw buffer descriptor element count overflow");
         push.buf_offsets[target.push_index]=u8(delta+target.byte_adjust);
         const auto elements=UINT((view.size+delta)/4);
         if(target.uav) {
@@ -320,15 +455,21 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         auto runtime_buffer=rasterizer.UploadConstants(runtime);
         for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV)
             table.Cbv(0,b.space,b.space==30?push_buffer.resource:runtime_buffer.resource,
-                b.space==30?push_buffer.offset:runtime_buffer.offset,256);
+                b.space==30?push_buffer.offset:runtime_buffer.offset,
+                b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
     });
     std::vector<GuestTextureCache::Entry*> uploaded;
     std::vector<std::pair<GuestTextureDesc,GuestTextureCache::Entry*>> uploaded_views;
     // Keep all recorded resources alive on exceptions as well as normal GPU
     // completion. Cache entries own texture uploads; readbacks own their buffers.
     std::vector<std::unique_ptr<GuestImageReadback>> readbacks;
+    std::vector<std::pair<GuestTextureCache::Entry*,std::shared_ptr<GuestMultisample::StorageLease>>> storage_transfers;
     try {
         diagnostic.Stage("image-upload-and-descriptors");
+        // Converted sampled views retain their pre-dispatch resources. Record
+        // them first so the final authoritative cache backing is the resource
+        // used by all compatible writable views during the guest operation.
+        std::stable_partition(images.begin(),images.end(),[](const auto& image){return !image.desc.writable;});
         for(const auto& image:images) {
             // Native null views match the guest null T# without reading address
             // zero or allocating/uploading fake guest backing. Reads return 0;
@@ -336,53 +477,89 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             GuestTextureCache::Entry null_entry;
             null_entry.desc=image.desc;null_entry.layout=image.layout;
             GuestTextureCache::Entry* entry=image.null_resource?&null_entry:nullptr;
+            bool separate_input=image.buffer_writer_alias;
+            for(const auto& candidate:images)if(candidate.buffer_writer_alias&&
+                CompatibleGuestShaderStorage(candidate.desc,image.desc))separate_input=true;
             if(!entry)for(const auto& [description,previous]:uploaded_views)
-                if(description==image.desc||CompatibleGuestShaderStorage(description,image.desc)){entry=previous;break;}
+                if((description==image.desc||CompatibleGuestShaderStorage(description,image.desc))&&
+                   (previous->desc==image.desc||CompatibleGuestShaderStorage(previous->desc,image.desc))){entry=previous;break;}
             if(!entry) {
                 // Allocate with UAV capability even if a sampled descriptor is
                 // encountered first. All group members bind this same storage.
                 auto storage=image.desc;
                 for(const auto& candidate:images)if(!candidate.null_resource&&candidate.desc.writable&&
                     CompatibleGuestShaderStorage(candidate.desc,image.desc)){storage=candidate.desc;break;}
-                const auto guest=std::span(reinterpret_cast<const std::byte*>(image.desc.address),size_t(image.layout.guest_bytes));
-                entry=&textures->Upload(storage,guest,rasterizer.RecordingList(),rasterizer.CompletedFence());uploaded.push_back(entry);
+                const auto guest=image.guest_snapshot?std::span<const std::byte>(*image.guest_snapshot):
+                    std::span(reinterpret_cast<const std::byte*>(image.desc.address),size_t(image.layout.guest_bytes));
+                entry=&textures->Upload(storage,image.gpu_snapshot?std::span<const std::byte>{}:guest,
+                    rasterizer.RecordingList(),rasterizer.CompletedFence(),{},
+                    bool(image.guest_snapshot)||bool(image.gpu_snapshot),image.gpu_snapshot.get(),
+                    separate_input&&(bool(image.guest_snapshot)||bool(image.gpu_snapshot)));
+                if(std::ranges::find(uploaded,entry)==uploaded.end()){
+                    bindings.RetainAllocation(textures->PinBinding(*entry));uploaded.push_back(entry);
+                }
                 uploaded_views.emplace_back(storage,entry);
             }
+            if(!image.null_resource&&separate_input)entry->buffer_alias_version=true;
             if(!image.null_resource){
+                textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
+                if(image.sample_storage&&image.desc.samples>1){
+                    if(std::ranges::none_of(storage_transfers,[entry](const auto& transfer){return transfer.first==entry;}))
+                        storage_transfers.emplace_back(entry,textures->PrepareMultisampleStorage(*entry));
+                }else{
                 const auto state=image.desc.writable?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
                 const auto last_mip=image.desc.writable?image.mip+image.count:image.desc.levels;
                 for(UINT layer=image.desc.first_layer;layer<image.desc.first_layer+image.desc.view_layers;++layer)
                     for(UINT mip=image.mip;mip<last_mip;++mip)
                         entry->texture.Transition(rasterizer.RecordingList(),state,mip+layer*image.desc.levels);
+                }
             }
             for(UINT i=0;i<image.count;++i)for(const auto& b:pipeline.Layout().Bindings()) {
                 const auto reg=image.reg+i;if(b.space!=0||reg<b.reg||reg-b.reg>=b.count)continue;
                 if(image.desc.writable&&b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV) {
-                    auto view=entry->Uav(image.desc,image.mip+i);
+                    const auto mip=image.sample_storage?0:image.mip+i;
+                    auto view=entry->Uav(image.desc,mip);
                     if(image.array&&image.desc.layers==1){
-                        if(image.desc.one_dimensional){view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={image.mip+i,0,1};}
-                        else{view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={image.mip+i,0,1,0};}
+                        if(image.desc.one_dimensional){view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={mip,0,1};}
+                        else{view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={mip,0,1,0};}
                     }
-                    bindings.Uav(b.reg,0,entry->texture.handle.Get(),view,reg-b.reg);
+                    auto* storage=&entry->texture;
+                    if(!image.null_resource&&image.sample_storage&&image.desc.samples>1)
+                        storage=&entry->storage_samples.at(i);
+                    bindings.RetainAllocation(storage->allocation);
+                    bindings.Uav(b.reg,0,storage->handle.Get(),view,reg-b.reg);
                 }else if(!image.desc.writable&&b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV) {
                     auto view=entry->Srv(image.desc);
                     if(image.array&&image.desc.layers==1){
                         if(image.desc.one_dimensional){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={image.desc.first_mip,image.desc.levels-image.desc.first_mip,0,1,0};}
+                        else if(image.desc.samples>1){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;view.Texture2DMSArray={0,1};}
                         else{view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={image.desc.first_mip,image.desc.levels-image.desc.first_mip,0,1,0,0};}
                     }
+                    bindings.RetainAllocation(entry->texture.allocation);
                     bindings.Srv(b.reg,0,entry->texture.handle.Get(),view,reg-b.reg);
                 }
             }
         }
+        for(const auto& [entry,transfer]:storage_transfers)
+            transfer->Record(rasterizer.RecordingList(),entry->texture,entry->storage_samples,entry->storage_linear,false);
         diagnostic.Stage("sampler-descriptors");
         for(const auto& sampler:samplers)for(const auto& b:pipeline.Layout().Bindings())
             if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER&&b.space==0&&sampler.reg>=b.reg&&sampler.reg-b.reg<b.count)
                 bindings.Sampler(b.reg,0,sampler.desc,sampler.reg-b.reg);
         diagnostic.Stage("draw-or-dispatch-recording");
         bool owned_images=false;
+        if(retained_image_buffer_writer||std::ranges::any_of(uploaded,[](const auto* entry){return entry->buffer_alias_version;})){
+            rasterizer.MarkShaderBufferWrites(requests);
+            if(!rasterizer.BuffersMayDefer(requests))
+                throw std::runtime_error("Independent image version lost its writable buffer ownership before execution");
+        }
         for(auto* entry:uploaded)if(entry->desc.writable)owned_images|=textures->Own(*entry);
+        for(auto* entry:uploaded)if(entry->buffer_alias_version&&!entry->gpu_owned)
+            throw std::runtime_error("Independent buffer/image cache ownership was not acquired");
         submit(bindings);
+        for(const auto& [entry,transfer]:storage_transfers)
+            transfer->Record(rasterizer.RecordingList(),entry->texture,entry->storage_samples,entry->storage_linear,true);
         if(dma)dma->RecordFaults(rasterizer);
         diagnostic.Stage("image-readback-recording");
         // The graphics callback can upload color/depth attachments even when
@@ -445,12 +622,9 @@ void ExecuteGuestBufferCompute(ID3D12Device* device,Rasterizer& rasterizer,
     if(std::any_of(std::begin(invocation.groups),std::end(invocation.groups),[](u32 dim){return dim>65535;})){
         // D3D12 caps each Dispatch dimension at 65535. Preserve guest
         // NumWorkgroups while adding each chunk's offset to BaseWorkgroup.
-        u64 chunks=1;
         for(unsigned i=0;i<3;++i){
             if(u64(invocation.base[i])+invocation.groups[i]-1>UINT32_MAX)
                 throw std::out_of_range("Native split dispatch base overflow");
-            chunks*=((u64(invocation.groups[i])+65534)/65535);
-            if(chunks>4096)throw std::out_of_range("Native split dispatch submission budget");
         }
         for(u64 z=0;z<invocation.groups[2];z+=65535)
         for(u64 y=0;y<invocation.groups[1];y+=65535)

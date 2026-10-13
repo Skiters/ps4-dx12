@@ -5,7 +5,6 @@
 #include "guest_texture_cache.h"
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
-#include "guest_depth_metadata.h"
 #include "guest_sampler.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "texture_resources.h"
@@ -17,6 +16,231 @@
 #include <d3d12sdklayers.h>
 using namespace NativeDX12;
 static ComPtr<ID3D12InfoQueue> debug_queue;
+void CheckDepthStencilShaderPlanes(ID3D12Device* device,const wchar_t* compiler){
+    auto vs=Shader::Backend::DX12::CompileDxil(compiler,R"(
+float4 main(uint id:SV_VertexID):SV_Position{return float4(id==1?3:-1,id==2?3:-1,0.5,1);}
+)",Shader::Backend::DX12::Stage::Vertex);
+    for(bool sample_stencil:{false,true}){
+        auto ps=Shader::Backend::DX12::CompileDxil(compiler,sample_stencil?R"(
+Texture2D<uint> source:register(t0);
+float4 main(float4 p:SV_Position):SV_Target0{return float4(source.Load(int3(int2(p.xy),0)),0,0,1);}
+)":R"(
+Texture2D<float> source:register(t0);
+float4 main(float4 p:SV_Position):SV_Target0{return float4(source.Load(int3(int2(p.xy),0)),0,0,1);}
+)",Shader::Backend::DX12::Stage::Pixel);
+        if(!vs.success||!ps.success)throw std::runtime_error(vs.diagnostics+ps.diagnostics);
+        GuestTextureDesc desc;desc.address=0x40000;desc.stencil_address=0x50000;
+        desc.width=desc.height=desc.pitch=8;desc.tile_mode=8;
+        desc.data_format=4;desc.number_format=7;desc.depth_target=true;
+        const auto layout=LayoutGuestTexture(desc);const auto stencil=DescribeGuestStencil(desc);
+        const auto stencil_layout=LayoutGuestTexture(stencil);
+        std::vector<std::byte> depth_bytes(layout.guest_bytes,std::byte{0xcd}),stencil_bytes(stencil_layout.guest_bytes,std::byte{0xcd});
+        Rasterizer rasterizer(device);GuestTextureCache textures(device);
+        auto color=Texture2D(device,8,8,DXGI_FORMAT_R32G32B32A32_FLOAT,D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,D3D12_RESOURCE_STATE_COMMON);
+        const DXGI_FORMAT formats[]{DXGI_FORMAT_R32G32B32A32_FLOAT};
+        AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+        regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+        regs.color_target_mask.SetMask(0,15);regs.depth_control.depth_enable=regs.depth_control.stencil_enable=1;
+        regs.depth_buffer.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;regs.depth_buffer.z_read_base=UINT(desc.address>>8);
+        regs.depth_buffer.stencil_info.format=AmdGpu::DepthBuffer::StencilFormat::Stencil8;regs.depth_buffer.stencil_read_base=UINT(desc.stencil_address>>8);
+        regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;regs.depth_control.depth_write_enable=sample_stencil;
+        regs.depth_control.stencil_ref_func=regs.depth_control.stencil_bf_func=AmdGpu::CompareFunc::Always;
+        regs.stencil_ref_front.stencil_mask=regs.stencil_ref_front.stencil_write_mask=255;regs.stencil_ref_back=regs.stencil_ref_front;
+        regs.stencil_control.stencil_zpass_front=regs.stencil_control.stencil_zpass_back=
+            sample_stencil?AmdGpu::StencilFunc::Keep:AmdGpu::StencilFunc::AddClamp;
+        const auto state=BuildGuestGraphicsState(regs,formats,DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+        ShaderPipeline pipeline(device,compiler,{vs.bytecode,ps.bytecode},state.pipeline);
+        for(bool clear_sampled:{false,true})for(unsigned warm=0;warm<3;++warm){
+            const float depth_value=0.75f+float(warm)*0.125f;const u8 stencil_value=u8(37+warm);
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                memcpy(depth_bytes.data()+GuestPixelOffset(desc,layout,0,0,x,y),&depth_value,4);
+                stencil_bytes[GuestPixelOffset(stencil,stencil_layout,0,0,x,y)]=std::byte(stencil_value);
+            }
+            const float sampled_depth=clear_sampled?0.625f+float(warm)*0.125f:depth_value;
+            const u8 sampled_stencil=clear_sampled?u8(51+warm):stencil_value;
+            auto expected_depth=depth_bytes,expected_stencil=stencil_bytes;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                const float value=sample_stencil?0.5f:sampled_depth;
+                memcpy(expected_depth.data()+GuestPixelOffset(desc,layout,0,0,x,y),&value,4);
+                expected_stencil[GuestPixelOffset(stencil,stencil_layout,0,0,x,y)]=std::byte(sample_stencil?sampled_stencil:stencil_value+1);
+            }
+            auto& entry=textures.Upload(desc,depth_bytes,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_bytes);
+            ResourceBindings bindings(device,pipeline.Layout());bindings.RetainAllocation(textures.PinBinding(entry));
+            bindings.RetainAllocation(entry.texture.allocation);
+            auto srv=entry.Srv();if(sample_stencil){srv.Format=DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;srv.Texture2D.PlaneSlice=1;}
+            bindings.Srv(0,0,entry.texture.handle.Get(),srv);
+            Rasterizer::DepthAttachment attachment{&entry.texture,entry.Dsv(desc,!sample_stencil,sample_stencil),
+                !sample_stencil,sample_stencil,clear_sampled&&!sample_stencil,sampled_depth,
+                clear_sampled&&sample_stencil,sampled_stencil};
+            const Rasterizer::ColorAttachment target{&color};const D3D12_VIEWPORT viewport{0,0,8,8,0,1};const D3D12_RECT scissor{0,0,8,8};
+            const std::array<float,4> blend{};auto conflicting=attachment;
+            conflicting.read_only_depth=conflicting.read_only_stencil=false;bool rejected=false;
+            try{rasterizer.ExecuteGraphics(pipeline,bindings,state,std::span(&target,1),&conflicting,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);}
+            catch(const std::runtime_error&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Sampled writable DS plane was accepted");
+            rasterizer.ExecuteGraphics(pipeline,bindings,state,std::span(&target,1),&attachment,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+            auto colors=TextureTransfer::Create(device,color,true);colors.Readback(rasterizer.RecordingList(),color);
+            GuestImageReadback readback(device,entry,rasterizer.RecordingList());
+            const auto fence=rasterizer.Flush();readback.Submitted(fence);textures.Submitted(fence);rasterizer.Finish();
+            readback.Resolve(rasterizer.CompletedFence(),depth_bytes,stencil_bytes);
+            if(depth_bytes!=expected_depth||stencil_bytes!=expected_stencil)
+                throw std::runtime_error("Mixed DS/SRV plane results or padding mismatch");
+            std::array<float,8*8*4> observed{};colors.ReadRows(observed.data(),sizeof(observed),8*16);
+            const float expected=sample_stencil?float(sampled_stencil):sampled_depth;
+            for(UINT i=0;i<64;++i)if(observed[i*4]!=expected||observed[i*4+1]!=0||observed[i*4+2]!=0||observed[i*4+3]!=1)
+                throw std::runtime_error("Mixed DS/SRV shader sampled the wrong plane or version");
+        }
+    }
+}
+void CheckDepthStencilViewRanges(ID3D12Device* device,const wchar_t* compiler){
+    auto vs=Shader::Backend::DX12::CompileDxil(compiler,R"(
+float4 main(uint id:SV_VertexID):SV_Position{return float4(id==1?3:-1,id==2?3:-1,0.5,1);}
+)",Shader::Backend::DX12::Stage::Vertex);
+    auto ps=Shader::Backend::DX12::CompileDxil(compiler,R"(
+Texture2DArray<float> source:register(t0);
+float4 main():SV_Target0{return float4(source.Load(int4(0,0,0,0)),0,0,1);}
+)",Shader::Backend::DX12::Stage::Pixel);
+    if(!vs.success||!ps.success)throw std::runtime_error(vs.diagnostics+ps.diagnostics);
+    GuestTextureDesc desc;desc.address=0x80000;desc.width=desc.height=desc.pitch=8;
+    desc.layers=desc.view_layers=desc.levels=2;desc.tile_mode=8;desc.data_format=4;desc.number_format=7;desc.depth_target=true;
+    const auto layout=LayoutGuestTexture(desc);std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xcd});
+    Rasterizer rasterizer(device);GuestTextureCache textures(device);
+    auto color=Texture2D(device,4,4,DXGI_FORMAT_R32G32B32A32_FLOAT,D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,D3D12_RESOURCE_STATE_COMMON);
+    const DXGI_FORMAT formats[]{DXGI_FORMAT_R32G32B32A32_FLOAT};AmdGpu::Regs regs{};
+    regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+    regs.color_target_mask.SetMask(0,15);regs.depth_control.depth_enable=regs.depth_control.depth_write_enable=1;
+    regs.depth_buffer.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;regs.depth_buffer.z_read_base=UINT(desc.address>>8);
+    regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;
+    const auto state=BuildGuestGraphicsState(regs,formats,DXGI_FORMAT_D32_FLOAT);
+    ShaderPipeline pipeline(device,compiler,{vs.bytecode,ps.bytecode},state.pipeline);
+    // writer mip/layer and sampled mip/layer. Both descriptors expose exactly
+    // one subresource; a shader cannot accidentally reach the writable one.
+    const std::array<std::array<UINT,4>,4> cases{{{0,0,0,1},{0,1,0,0},{0,0,1,0},{1,0,0,0}}};
+    for(const auto& test:cases)for(UINT warm=0;warm<3;++warm){
+        for(UINT layer=0;layer<2;++layer)for(UINT mip=0;mip<2;++mip){
+            const float value=0.75f+float(warm)/32+float(layer)/8+float(mip)/16;
+            for(UINT y=0;y<(8u>>mip);++y)for(UINT x=0;x<(8u>>mip);++x)
+                memcpy(guest.data()+GuestPixelOffset(desc,layout,mip,layer,x,y),&value,4);
+        }
+        auto expected=guest;const float written=0.5f;
+        for(UINT y=0;y<4;++y)for(UINT x=0;x<4;++x)
+            memcpy(expected.data()+GuestPixelOffset(desc,layout,test[0],test[1],x,y),&written,4);
+        auto& entry=textures.Upload(desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        std::array<D3D12_RESOURCE_STATES,4> preceding{};for(UINT i=0;i<4;++i)preceding[i]=entry.texture.State(i);
+        ResourceBindings bindings(device,pipeline.Layout());bindings.RetainAllocation(textures.PinBinding(entry));
+        bindings.RetainAllocation(entry.texture.allocation);
+        auto srv=entry.Srv();srv.Texture2DArray.MostDetailedMip=test[2];srv.Texture2DArray.MipLevels=1;
+        srv.Texture2DArray.FirstArraySlice=test[3];srv.Texture2DArray.ArraySize=1;
+        auto overwritten=srv;overwritten.Texture2DArray.MostDetailedMip=test[0];overwritten.Texture2DArray.FirstArraySlice=test[1];
+        bindings.Srv(0,0,entry.texture.handle.Get(),overwritten);
+        bindings.Srv(0,0,entry.texture.handle.Get(),srv);
+        auto view=entry.Dsv();view.Texture2DArray.MipSlice=test[0];view.Texture2DArray.FirstArraySlice=test[1];view.Texture2DArray.ArraySize=1;
+        const Rasterizer::DepthAttachment attachment{&entry.texture,view,false,true};
+        const Rasterizer::ColorAttachment target{&color};const D3D12_VIEWPORT viewport{0,0,4,4,0,1};const D3D12_RECT scissor{0,0,4,4};
+        const std::array<float,4> blend{};auto conflicting=attachment;
+        conflicting.view.Texture2DArray.MipSlice=test[2];conflicting.view.Texture2DArray.FirstArraySlice=test[3];bool rejected=false;
+        try{rasterizer.ExecuteGraphics(pipeline,bindings,state,std::span(&target,1),&conflicting,
+            std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);}
+        catch(const std::runtime_error&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Overlapping writable depth view was accepted");
+        rasterizer.ExecuteGraphics(pipeline,bindings,state,std::span(&target,1),&attachment,
+            std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+        const auto writer=test[0]+test[1]*2,reader=test[2]+test[3]*2;
+        const auto shader_state=D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        for(UINT i=0;i<4;++i)if(entry.texture.State(i)!=(i==writer?D3D12_RESOURCE_STATE_DEPTH_WRITE:i==reader?shader_state:preceding[i]))
+            throw std::runtime_error("Depth view range transitioned an unrelated subresource");
+        auto colors=TextureTransfer::Create(device,color,true);colors.Readback(rasterizer.RecordingList(),color);
+        GuestImageReadback readback(device,entry,rasterizer.RecordingList());const auto fence=rasterizer.Flush();
+        readback.Submitted(fence);textures.Submitted(fence);rasterizer.Finish();readback.Resolve(rasterizer.CompletedFence(),guest);
+        if(guest!=expected)throw std::runtime_error("Disjoint depth view contents or padding mismatch");
+        std::array<float,4*4*4> observed{};colors.ReadRows(observed.data(),sizeof(observed),4*16);
+        const float sampled=0.75f+float(warm)/32+float(test[3])/8+float(test[2])/16;
+        for(UINT i=0;i<16;++i)if(observed[i*4]!=sampled||observed[i*4+1]!=0||observed[i*4+2]!=0||observed[i*4+3]!=1)
+            throw std::runtime_error("Shader read the writable depth view instead of its own mip/layer");
+    }
+}
+void CheckSharedColorLayers(ID3D12Device* device,const wchar_t* compiler){
+    auto vs=Shader::Backend::DX12::CompileDxil(compiler,R"(
+float4 main(uint id:SV_VertexID):SV_Position{return float4(id==1?3:-1,id==2?3:-1,0,1);}
+)",Shader::Backend::DX12::Stage::Vertex);
+    auto ps=Shader::Backend::DX12::CompileDxil(compiler,R"(
+struct Result {float4 a:SV_Target0;float4 b:SV_Target1;float4 c:SV_Target2;};
+Result main(){Result r;r.a=float4(1,0,0,1);r.b=float4(0,1,0,1);r.c=float4(0,0,1,1);return r;}
+)",Shader::Backend::DX12::Stage::Pixel);
+    if(!vs.success||!ps.success)throw std::runtime_error(vs.diagnostics+ps.diagnostics);
+    auto* memory=static_cast<std::byte*>(VirtualAlloc(reinterpret_cast<void*>(0x1000000000ULL),65536,
+        MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    if(!memory)throw std::runtime_error("Shared color allocation");
+    struct Allocation{void* p;~Allocation(){VirtualFree(p,0,MEM_RELEASE);}} allocation{memory};
+    const auto base=reinterpret_cast<VAddr>(memory);
+    for(uint32_t log2_samples:{0u,2u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
+        memset(memory,0xee,65536);
+        std::array<GuestTextureDesc,3> descriptions;
+        for(size_t i=0;i<descriptions.size();++i){
+            AmdGpu::ColorBuffer color{};color.base_address=UINT(base>>8);color.info.format=10;
+            color.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
+            color.attrib.num_fragments_log2=log2_samples;color.pitch.tile_max=1;color.slice.tile_max=1;
+            color.view.slice_start=color.view.slice_max=order[i];
+            AmdGpu::CbDbExtent extent{};extent.width=extent.height=8;
+            descriptions[i]=DescribeGuestColorBuffer(color,extent);
+        }
+        MergeGuestColorAttachmentLayers(descriptions);
+        const auto layout=LayoutGuestTexture(descriptions[0]);
+        const auto bytes=std::span(memory,size_t(layout.guest_bytes));
+        std::vector<std::byte> expected(bytes.begin(),bytes.end());
+        const u32 values[]{0xff0000ff,0xff00ff00,0xffff0000};
+        for(size_t i=0;i<descriptions.size();++i){const auto& d=descriptions[i];
+            if(d.layers!=3||d.first_layer!=order[i]||d.view_layers!=1)
+                throw std::runtime_error("Merged color storage changed active view slices");
+            for(uint32_t sample=0;sample<d.samples;++sample)
+            for(uint32_t y=0;y<8;++y)for(uint32_t x=0;x<8;++x){
+                const auto offset=GuestPixelOffset(d,layout,0,d.first_layer,x,y,sample);
+                memcpy(expected.data()+offset,&values[i],4);
+            }
+        }
+        Rasterizer rasterizer(device);rasterizer.MapMemory(base,65536);GuestTextureCache textures(device);
+        AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+        regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+        regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+        for(uint32_t i=0;i<3;++i){regs.color_target_mask.SetMask(i,15);
+            regs.color_buffers[i].attrib.num_fragments_log2=log2_samples;}
+        const DXGI_FORMAT formats[]{layout.format,layout.format,layout.format};
+        const auto state=BuildGuestGraphicsState(regs,formats);
+        ShaderPipeline pipeline(device,compiler,{vs.bytecode,ps.bytecode},state.pipeline);
+        GuestTextureCache::Entry* previous{};
+        for(unsigned warm=0;warm<2;++warm){
+            std::array<Rasterizer::ColorAttachment,3> attachments;
+            GuestTextureCache::Entry* shared{};
+            for(size_t i=0;i<descriptions.size();++i){
+                auto& entry=textures.Upload(descriptions[i],bytes,rasterizer.RecordingList(),rasterizer.CompletedFence());
+                if(shared&&shared!=&entry)throw std::runtime_error("Disjoint color views created separate cache backings");
+                shared=&entry;attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
+            }
+            if(previous&&previous!=shared)throw std::runtime_error("Warm shared color backing replaced");
+            previous=shared;ResourceBindings bindings(device,pipeline.Layout());
+            const D3D12_VIEWPORT viewport{0,0,8,8,0,1};const D3D12_RECT scissor{0,0,8,8};
+            const std::array<float,4> blend{};
+            auto conflicting=attachments;conflicting[1]=conflicting[0];bool rejected{};
+            try{rasterizer.ExecuteGraphics(pipeline,bindings,state,conflicting,nullptr,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);}
+            catch(const std::invalid_argument&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Overlapping native color subresources accepted");
+            rasterizer.ExecuteGraphics(pipeline,bindings,state,attachments,nullptr,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+            GuestImageReadback readback(device,*shared,rasterizer.RecordingList());
+            const auto fence=rasterizer.Flush();readback.Submitted(fence);textures.Submitted(fence);textures.Used(*shared,fence);rasterizer.Finish();
+            auto observed=std::vector<std::byte>(bytes.begin(),bytes.end());
+            readback.Resolve(rasterizer.CompletedFence(),observed);
+            if(observed!=expected)throw std::runtime_error("Shared MRT layer/sample contents or guest padding mismatch");
+            if(!std::all_of(bytes.begin(),bytes.end(),[](auto value){return value==std::byte{0xee};}))
+                throw std::runtime_error("Shared color GPU fixture modified CPU source");
+        }
+    }
+    puts("PASS: actual shared MRT backing, layer permutations, single/MSAA samples, cold/warm and padding");
+}
 int wmain(int argc,wchar_t** argv){try {
     const std::array<u32,5> sequence{10,11,12,13,14};
     if(ExpandGuestPrimitive(AmdGpu::PrimitiveType::TriangleFan,sequence)!=
@@ -92,6 +316,9 @@ int wmain(int argc,wchar_t** argv){try {
     ComPtr<ID3D12Debug> debug;if(SUCCEEDED(DX12_API_CALL(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)))))DX12_API_CALL(debug->EnableDebugLayer());
     if(argc!=2&&argc!=3)throw std::invalid_argument("usage: guest-graphics-resources dxcompiler.dll [depth]");
     const bool cross_stage_alias=argc==3&&std::wstring_view(argv[2])==L"cross-stage-alias";
+    const bool shared_layers=argc==3&&std::wstring_view(argv[2])==L"shared-layers";
+    const bool plane_feedback=argc==3&&std::wstring_view(argv[2])==L"plane-feedback";
+    const bool depth_ranges=argc==3&&std::wstring_view(argv[2])==L"depth-view-ranges";
     const bool attachments_only=argc==3&&std::wstring_view(argv[2])==L"attachments";
     const bool readonly_alias=argc==3&&std::wstring_view(argv[2])==L"readonly-alias";
     const bool linear_color=argc==3&&std::wstring_view(argv[2])==L"linear-color";
@@ -101,7 +328,7 @@ int wmain(int argc,wchar_t** argv){try {
     const bool index_uav_write=index_uav&&std::wstring_view(argv[2])==L"indices-uav-write";
     const bool bounds=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bounds");
     const bool bounds_reject=bounds&&std::wstring_view(argv[2])==L"depth-bounds-reject";
-    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices;
+    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges;
     const bool stale_stencil=argc==3&&std::wstring_view(argv[2])==L"depth-stale-stencil";
     const bool bias=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bias");
     const bool fractional_bias=bias&&std::wstring_view(argv[2])==L"depth-bias-fractional";
@@ -168,6 +395,19 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1>a;auto hr=DX12_API_CALL(factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&a)));if(hr==DXGI_ERROR_NOT_FOUND)break;Check(hr);DXGI_ADAPTER_DESC1 d{};Check(DX12_API_CALL(a->GetDesc1(&d)));if(d.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)continue;if(SUCCEEDED(DX12_API_CALL(D3D12CreateDevice(a.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)))))break;}
     if(!device)throw std::runtime_error("No hardware device");
     DX12_API_CALL(device.As(&debug_queue));
+    if(shared_layers||plane_feedback||depth_ranges){
+        if(!debug||!debug_queue)throw std::runtime_error("Shared color validation requires the D3D12 debug layer");
+        if(depth_ranges)CheckDepthStencilViewRanges(device.Get(),argv[1]);
+        else if(plane_feedback)CheckDepthStencilShaderPlanes(device.Get(),argv[1]);
+        else CheckSharedColorLayers(device.Get(),argv[1]);
+        for(UINT64 i=0;i<debug_queue->GetNumStoredMessages();++i){
+            SIZE_T size{};Check(debug_queue->GetMessage(i,nullptr,&size));std::vector<std::byte> bytes(size);
+            auto* message=reinterpret_cast<D3D12_MESSAGE*>(bytes.data());Check(debug_queue->GetMessage(i,message,&size));
+            if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
+                throw std::runtime_error(std::string("Shared color D3D12 validation: ")+message->pDescription);
+        }
+        return 0;
+    }
     if(cross_stage_alias&&(!debug||!debug_queue))
         throw std::runtime_error("Cross-stage validation requires the D3D12 debug layer");
     auto* memory=static_cast<std::byte*>(VirtualAlloc(reinterpret_cast<void*>(0x1000000000ULL),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
@@ -296,7 +536,6 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     GraphicsRuntime runtime{};runtime.viewport_width=runtime.viewport_height=8;
     if(bias)runtime.depth_bias=0.25f;
     if(htile)runtime.depth_bias=0.25f;
-    GuestDepthMetadata metadata;if(htile){metadata.Register(0x1000);metadata.Consume(0x1000,0);metadata.Clear(0x1000);}
     std::unique_ptr<GuestImageReadback> combined_readback;
     ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,stages,push,runtime,[&](ResourceBindings& bindings) {
         // Texture/attachment ownership resolution can retire earlier work
@@ -309,8 +548,13 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         Rasterizer::DepthAttachment depth{};
         if(use_depth) {
             depth_target=&textures.Upload(depth_desc,std::span(memory+8192,256),rasterizer.RecordingList(),rasterizer.CompletedFence(),use_stencil?std::span(memory+12288,256):std::span<std::byte>{});
+            if(htile){
+                textures.RegisterMeta(*depth_target,GuestTextureCache::MetaType::HTile,0x1000);
+                if(!textures.ConsumeMeta(0x1000,0)||textures.ConsumeMeta(0x1000,0)||!textures.ClearMeta(0x1000))
+                    throw std::runtime_error("Live depth attachment HTile state mismatch");
+            }
             depth={&depth_target->texture,depth_target->Dsv(),false,false,
-                clear_depth||(htile&&metadata.Consume(0x1000,0)),0.75f,clear_stencil,7};
+                clear_depth||(htile&&textures.ConsumeMeta(0x1000,0)),0.75f,clear_stencil,7};
         }
         Rasterizer::IndexBinding indices;
         if(resident_indices)indices=rasterizer.PreparedIndexBuffer(index_address,index_bytes,index_format);
@@ -378,10 +622,14 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     }
     if(GetModuleHandleW(L"vulkan-1.dll"))throw std::runtime_error("Unexpected Vulkan runtime");
     textures.Collect(rasterizer.CompletedFence());
-    auto* first_upload=target->upload_pool.at(0).handle.Get();
+    const auto transfer_pending=[](const GuestTextureCache::Entry& entry){
+        return !entry.uploads.empty()||!entry.tiler_leases.empty()||!entry.multisample_leases.empty();
+    };
+    const bool gpu_upload=!target->tiler_input_pool.empty();
+    auto* first_upload=gpu_upload?target->tiler_input_pool.at(0).handle.Get():target->upload_pool.at(0).handle.Get();
     target->sampled_snapshot.assign(color_memory.begin(),color_memory.end());
     auto& reused=textures.Upload(color_desc,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
-    if(&reused!=target||!reused.uploads.empty())throw std::runtime_error("Coherent native render target was uploaded again");
+    if(&reused!=target||transfer_pending(reused))throw std::runtime_error("Coherent native render target was uploaded again");
     fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();
     GuestImageReadback reused_readback(device.Get(),reused,rasterizer.RecordingList());
     if(reused.readback_pool.get()!=first_readback_pool)throw std::runtime_error("Retired native image readback allocation was not reused");
@@ -391,8 +639,8 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     if(reused_linear!=linear)throw std::runtime_error("Native render target reuse changed GPU contents");
     color_memory[0]^=std::byte{1};
     auto& changed=textures.Upload(color_desc,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
-    if(changed.uploads.empty())throw std::runtime_error("Native render target ignored a CPU modification");
-    if(changed.uploads.at(0).handle.Get()!=first_upload)
+    if(!transfer_pending(changed))throw std::runtime_error("Native render target ignored a CPU modification");
+    if((gpu_upload?changed.tiler_input_pool.at(0).handle.Get():changed.uploads.at(0).handle.Get())!=first_upload)
         throw std::runtime_error("Retired texture upload allocation was not reused");
     fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();
     {GuestImageReadback changed_rb(device.Get(),changed,rasterizer.RecordingList());
@@ -407,18 +655,18 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         const auto stencil_memory=use_stencil?std::span(memory+12288,256):std::span<std::byte>{};
         depth_target->RememberSnapshot(depth_memory,stencil_memory);
         auto& coherent=textures.Upload(depth_desc,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
-        if(&coherent!=depth_target||!coherent.uploads.empty())throw std::runtime_error("Coherent depth/stencil uploaded again");
+        if(&coherent!=depth_target||transfer_pending(coherent))throw std::runtime_error("Coherent depth/stencil uploaded again");
         fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();
         // Change only stencil first: depth matching must not hide a CPU stencil write.
         if(use_stencil){
             stencil_memory[0]^=std::byte{1};
             auto& altered=textures.Upload(depth_desc,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
-            if(altered.uploads.empty())throw std::runtime_error("CPU stencil modification was ignored");
+            if(!transfer_pending(altered))throw std::runtime_error("CPU stencil modification was ignored");
             fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();
         }
         const float cpu_depth=0.625f;memcpy(depth_memory.data(),&cpu_depth,4);
         auto& altered=textures.Upload(depth_desc,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
-        if(altered.uploads.empty())throw std::runtime_error("CPU depth modification was ignored");
+        if(!transfer_pending(altered))throw std::runtime_error("CPU depth modification was ignored");
         fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();
         const std::vector<std::byte> expected_depth(depth_memory.begin(),depth_memory.end()),
             expected_stencil(stencil_memory.begin(),stencil_memory.end());
