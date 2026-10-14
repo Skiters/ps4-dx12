@@ -1,5 +1,22 @@
 # Checkpoints
 
+## Active black-frame continuation — 2026-10-14
+
+SESSION_HANDOFF.md active section is authoritative; older priorities/results below are historical.
+Source fixes e267eb8, capture metadata24bf8c0, producer/ROP capture 1fb65f7b10fc;
+prior integration WIP5b6f47e. All pushed to origin/fix/mixed-cmask, without22 pre-existing staged network deletions.
+Stage24/pipeline4/metadata34. Menus recovered; final world remains fog/sky; G-buffer contains player/environment.
+No accepted world controls, FPS or speedup. Full suite326/346 (native211/229) before final depth/fixture changes;
+three later targeted passes are separate, not a new full-suite result. All128 contract groups remain partial/open.
+Preview23 dx12-20261014-full-port-preview-bde5503581e2, SHA256 bde5503581e2178aa854703d9ec6823287d6b9ea243a61b41bc8e2f767ace760;76 runtime hashes/20 copied saves verified.
+Previous selected version/settings, saves and installed Vulkan preserved. Data/code recovery: F:/PS4Dev/handoff/black-continuation-20261014.
+AvPlayer source commit952234f517d5: old queue AV/new atomic queue PASS; latest game failed a
+separate EventWriteEop backing-write assertion before world/ROP capture. No accepted latest-game milestone.
+Current first blocker: EventWriteEop::SignalFence -> Core::Memory::TryWriteBacking failure (liverpool.cpp:705).
+Then actual scene-color attachment producers/ROP before blur; depth is finite0.98016..1.
+Do not blame PS8c08444c solely: its almost-black bloom input can preserve pre-existing fogged destination.
+
+
 ## Packed-gap checkpoint — 2026-10-13 evening
 
 Source3f1249b pushed; Stage24/metadata33. Current full suite324/344, native209/227; final finite packed12/12 PASS. Preview21 SHA25ca1dee9a3d0c9348bc8dba01850e67604476f6ed2bc54c1cc1b5644fee2872. One123.8697s game run exited0, original20 saves unchanged, pad neutral/removed. Two engine captures black:2794 completed flips in93.101581s (~30/s) are NOT gameplay FPS. No matched performance comparison. See SESSION_HANDOFF and F:/PS4Dev/handoff/packed-gaps-20261013 for exact evidence, failures and next source-boundary task.

@@ -398,7 +398,7 @@
         "open_contracts": "Actual timing/events/pause/flip-rate/backpressure/resize acceptance, timer precision and retained extension regressions remain open."
       },
       "implementation_status": "integrated_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary is still open."}
+      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Source/snapshot/presenter byte exact in bounded captured flips; final world incorrect, cadence/whole-game acceptance still open.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
     },
     {
       "id": "common-windows-mapping-protections",
@@ -565,7 +565,7 @@
         "open_contracts": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim."
       },
       "implementation_status": "partial_integrated",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary is still open."}
+      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Partial position exports corrected in native Mesa. Production RectList old compiler FAIL/new64pixelsPASS in both viewport orientations; SRGB minmax/dual-face baseline failures remain. No whole-group closure.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
     },
     {
       "id": "native-compute-wave-size",
@@ -883,7 +883,7 @@
         "open_contracts": "Final GPU states/contents, actual guest descriptor integration, combined stencil/multisample/cube ranges and lifetime/performance acceptance remain open. Physical buffer/image and shader/attachment simultaneous writers still require separate ownership adaptation. No semantic closure."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Single-sample depth mip uploads and production Dsv mip/layer ranges verified by12 GPU cases. Stencil shader planes and coherent sampled fixture PASS after justified fixture corrections. Combined MSAA/cube/full game still open.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
     },
     {
       "id": "native-independent-buffer-image-versions",
@@ -898,7 +898,7 @@
         "open_contracts": "Formatted readonly buffer synchronization, domain-preserving pressure eviction/incompatible views, original queued linear-image readbacks, other formats/layouts/mips/layers/samples, partial/sub-DWORD aliases and atomic writers remain open or explicitly rejected. GPU contents, real CPU fault behavior and lifetime acceptance are unverified. No semantic closure."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Mixed NOACCESS/read-only guards and GPU-only incompatible single-sample image transfer PASS with distinct image/physical buffer/padding. Two observed loader blockers cleared; MSAA/partial/pressure/alias closure still open.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
     },
     {
       "id": "native-independent-formatted-buffer-sync",

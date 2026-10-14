@@ -1,4 +1,178 @@
-# SESSION HANDOFF — active full-port checkpoint, 2026-10-13
+# SESSION HANDOFF — active full-port checkpoint, 2026-10-14
+
+## Active black-frame continuation — 2026-10-14
+
+SESSION_HANDOFF.md active section is authoritative; older priorities/results below are historical.
+Source fixes e267eb8, capture metadata24bf8c0, producer/ROP capture 1fb65f7b10fc;
+prior integration WIP5b6f47e. All pushed to origin/fix/mixed-cmask, without22 pre-existing staged network deletions.
+Stage24/pipeline4/metadata34. Menus recovered; final world remains fog/sky; G-buffer contains player/environment.
+No accepted world controls, FPS or speedup. Full suite326/346 (native211/229) before final depth/fixture changes;
+three later targeted passes are separate, not a new full-suite result. All128 contract groups remain partial/open.
+Preview23 dx12-20261014-full-port-preview-bde5503581e2, SHA256 bde5503581e2178aa854703d9ec6823287d6b9ea243a61b41bc8e2f767ace760;76 runtime hashes/20 copied saves verified.
+Previous selected version/settings, saves and installed Vulkan preserved. Data/code recovery: F:/PS4Dev/handoff/black-continuation-20261014.
+AvPlayer source commit952234f517d5: old queue AV/new atomic queue PASS; latest game failed a
+separate EventWriteEop backing-write assertion before world/ROP capture. No accepted latest-game milestone.
+Current first blocker: EventWriteEop::SignalFence -> Core::Memory::TryWriteBacking failure (liverpool.cpp:705).
+Then actual scene-color attachment producers/ROP before blur; depth is finite0.98016..1.
+Do not blame PS8c08444c solely: its almost-black bloom input can preserve pre-existing fogged destination.
+
+## A. Active project/source state
+
+Full Vulkan-to-native-D3D12 port is incomplete. Baseline was b8d614b1d398d47a3d6045172b846f9965c502cf;
+branch fix/mixed-cmask. Logical source commits: 5b6f47e0a999f9574024c8099575299f6bbe9c8e, e267eb8d05f3ba9bcab43596f94cdecb6bb055ce,
+24bf8c098e5baac51262dc0afbcd2913f0a7cd9d, 1fb65f7b10fc7a4d1d9881b75684d70ae8bf811e.
+AvPlayer queue/source fix: 952234f517d5fd638fb3e08cc579873ac64b75b3.
+Actual final checkpoint HEAD/upstream/status is in F:/PS4Dev/handoff/black-continuation-20261014/CHECKPOINT_FINAL.json.
+Many earlier full-port files remain dirty/untracked. The pushed commits alone do not reproduce this full dirty build.
+Keep the tree; exact tracked/untracked contents, original index/stage split are saved in final-residual.
+Recover only in a separate clean checkout of its recorded HEAD; never apply the archive over this dirty tree.
+
+## B. Verified production corrections
+
+- Mesa native patch, dxil_nir.c::update_writes/dxil_nir_ensure_position_writes: partial Y/Z viewport stores
+  had widened to XYZW and zeroed X/W. A function-local vec4 preserves previously written position components;
+  GS EmitVertex/EmitVertexWithCounter resets to undef afterwards. Native patch SHA256
+  180e873aacadea12976ae3a121e34e7a9194fabaa10b3d5789cb8aaa586ee129.
+  Production auxiliary RectList failed with installed old DLL (IA3/DS4, clip_out0/PS0, zero RGBA),
+  now emits exact64 red pixels in both viewport orientations (clip_out2/PS64).
+- page_watch.h::TrackReadOnly/UntrackReadOnly: independent image write guards accept stronger buffer NOACCESS
+  without weakening it. Readable witnesses keep strict default behavior. GuestRasterizer::WatchBufferImageVersions
+  uses the write-guard mode; DiscardBufferImageVersions releases through ReleaseIndependentImageWatches,
+  retaining buffer guards and sibling image watches.
+- GuestTextureCache::SetIndependentVersionTransfer/Upload and GuestRasterizer::SetBackingAccess:
+  incompatible single-sample image views obtain a GPU-only retiled snapshot of the independent image domain,
+  seeded from physical backing to preserve padding, then acquire replacement ownership before retiring source.
+  No CPU download/physical-buffer commit. Real tiled R32float-quarter -> RGBA8 interpretation test preserves
+  distinct physical buffer-one and all padding. MSAA transfer remains explicitly unsupported.
+- GuestTextureCache::Upload admits single-sample depth mip chains; Entry::Dsv selects requested mip/layers.
+  Twelve view-range cases now use production Dsv; content/padding/disjoint-state checks pass.
+- Fixture corrections: stencil G component mapped to scalar R for uint HLSL SRV; GPU-detile upload leases
+  accepted by coherent sampled fixture. All old pixel/plane/padding expected values retained.
+- AvPlayerQueue::Size/Pop/PopIf and AvPlayerSource::GetVideoData/GetAudioData: check/peek/consume under
+  queue lock, future timestamps retained, selected frame checked before retiring previous buffer;
+  source state mutex serializes issuing current-frame pointers against Stop and competing consumers.
+  Last native AV was symbolized with matching map/PDB to AvPlayerQueue<Frame>::Pop at RIP7000001ccaff;
+  same concurrent consumers/Clear test crashed old queue3221225477, fixed queue PASS with FIFO/deadline checks.
+
+## C. Current unfinished work and exact evidence
+
+Initial snapshots60/61/62 in diagnostic-game prove selected native RT was already zero; immutable snapshot
+and presenter source were byte-exact. RectList/DXIL clipping cause above is closed for that case.
+fixed-game restored observed offline/Continue menus, then hit PageWatch guard exception; next build advanced
+and hit independent-domain resolver exception; subsequent GPU transfer fixed both observed loader blockers.
+domain-fixed-game ran602.36s exit0; gbuffer-capture-game362.43s exit0, G-buffer UID83/PSa291c498 shows player
+and Hunter's Dream environment in encoded material/normal RGB. Final picture still sky/fog without normal player.
+Linked world snapshots4192..4194 source/snapshot/presenter are exact; no late display-copy loss proved.
+
+Old gbuffer-capture candidate address labels were wrong for NONselected images (all showed display address).
+UID/resource pointer/format/writer hashes/pixels remain valid. Do not reconstruct bindings from those addresses.
+24bf8c0 corrected actual address/allocation/swizzle labels; original raw capture was preserved with warning.
+
+lighting-input-game362.61s exit0 identifies PS8c08444c input640x400 at24eff8000, producer PSa61e325d.
+Its color input readback was omitted by an erroneous diagnostic interpretation of ShaderPlanes mask3;
+that diagnostic guard was corrected using native plane count. Do not claim its empty BIN means black pixels.
+producer-graph-game361.52s exit0 captures actual resource reads and same-draw outputs for four passes:
+898dabb3 ->57f3b8c2 ->a61e325d ->8c08444c. Depth UID78/address2667e0000 has1,024,000 finite values,
+min0.9801632762/max1.0. Output334 of898dabb3 is almost zero (4 nonzero half values), consistent with a
+bloom/auxiliary target but NOT independently proven erroneous. Blur8c has one-color-pixel input while its
+output49 contains complex sky/fog: shader inputs alone omit destination/ROP history.
+
+ROP capture adds target-before reads and actual blend/logic/write-mask state; roots at final blit38d65b32,
+discovers last recorded graphics producers from actual bindings/destinations (max8 passes,16 inputs/pass,
+256MiB GPU staging quota). Ordinary draws do not enable capture or Finish. Retains staging COM leases in
+bindings through GPU completion. Latest run F:\PS4Dev\handoff\black-continuation-20261014\avplayer-fixed-game, 152.87s, exit-2147483645.
+ROP extension has NOT been captured in-game: rop-graph-game failed143.12s in AvPlayerQueue::Pop BEFORE NEXT,
+then avplayer-fixed-game failed152.87s in EventWriteEop::SignalFence/TryWriteBacking assertion liverpool.cpp705.
+No AV exception in the latter; do not claim whole game stability or a valid ROP graph. Its empty ROP summary
+means no capture, not empty GPU contents. Preserve both runs and failures. Basic producer graph remains:
+57f3b8c2, 898dabb3, 8c08444c, a61e325d; see PRODUCER_GRAPH_SUMMARY.json and per-pass requested-views/SPV/DXIL.
+Each before/after pair shares ordered GPU commands, but graph discovery spans later frames. Same shader hash
+can be reused for different passes, so this is a bounded partial graph, not one complete flip DAG.
+Recorded producer labels cover graphics only; compute/copy/clear writers remain a further attribution limit.
+
+## D. Proven problems versus hypotheses
+
+Proven: AvPlayer non-atomic empty check/front consumption race and old-queue AV/new PASS; latest EOP backing-write
+failure (address/size not recorded yet). Previous position component loss; mixed page-guard rejection; missing incompatible independent
+single-sample resolver; depth mip/DSV rejection; current incomplete final image;17 baseline failures remain
+unresolved after the three later targeted passes. No gameplay/control/performance acceptance.
+Hypotheses: scene HDR color lost before/composited over by later lighting/sky pass; wrong resource version,
+binding, buffer constants, MRT export/ROP or alpha/depth semantics. Empty depth/all-NaN explanation is not
+supported by this captured finite, nonempty depth. PS8c/898 roles are not declared root causes.
+
+## E. Measurements and games (not gameplay FPS)
+
+All run-specific launch/exit/profile/source-patch/executable hashes/XInput session IDs and original20 save
+hash checks are in RUNS.json and each RESULT.json. Dates/scenario: Bloodborne CUSA03173 v1.09, offline,
+Continue from cloned seed; FG false, partial_render0. Paired completion counts are mixed startup/menu/load/
+incomplete-scene throughput; readbacks/debug layer/probes alter pacing. No FPS/speedup comparison is valid.
+Original Vulkan baseline/profile/performance history below is preserved; do not compare black/menu completions
+against historical1.377539 FPS. Historical0.0064ms GPU inference remains withdrawn.
+
+## F. Latest checks and diagnostic failures
+
+Full configured suite326/346 (native211/229),20 failures,820.287s: command-20261014-043903-40692.log.
+Full suite ran BEFORE final depth/fixture corrections. Later targeted coherent attachment/DS shader planes/
+DS view ranges all PASS (045834-75048,045839-47208,045840-113088). Do not publish329/346 as a rerun.
+Latest RectList PASS045440-82392; PageWatch ownership PASS045441-24232; independent transfer PASS045441-87992.
+Native Mesa source-contract check passed after exact byte/hash patch normalization. Full suite failure list and
+later results: suite-summary.json; old-timeout signed-packed60s is retained, not rerun to pad reporting.
+AV queue standalone PASS0.081s (command-20261014-061035-65320); old queue AV2.351s (061035-18828).
+New test makes current selection347 tests; full346-suite predates it. No second full suite was run.
+Unresolved baseline: copy dirty ranges, resources/residency, two10-bit display cases, old hardware texture fixtures,
+signed packed timeout, CMASK, two GPU page-ownership cases, buffer/image alias+partial, owned dispatch/sample,
+BC volume, SRGB MIN/MAX and dual-face culling.
+Noncausal clip/cull and local/global shadow experiments archived; global shadow caused compiler AV.
+Independent transfer test's initial bad UAV CPU-handle/early-release fixture caused a GPU hang/TDR;
+fixture was corrected with CPU descriptor heap and completion-before-assert, final Debug Layer test PASS.
+No reboot, session/driver/service reset. Preserve raw failed logs; do not repeat those experiments.
+No second full suite was run after diagnostics-only changes.
+
+## G. Preserved binaries/profiles/tools
+
+- Current installed preview23: C:\Users\skei\AppData\Local\PS4Desktop\cores\dx12-20261014-full-port-preview-bde5503581e2/shadPS4-DX12-Core.exe; matching symbols/shadPS4-DX12-Core.pdb, native-core.map,
+  native-compiler, provenance/compiler-profile.json/source.patch and core-version.json in package.
+  SHA256 bde5503581e2178aa854703d9ec6823287d6b9ea243a61b41bc8e2f767ace760. Existing PS4Desktop -> Versions -> DX12 — перенос №23 —14.10.2026.
+- Preview22 C:/Users/skei/Documents/Codex/2026-10-12/skiters-ps4-dx12-fix-mixed-cmask/outputs/DX12-preview-22-20261014 remains available (functional fixes, before graph).
+- Experimental game exe and matching symbols inside each run/core; last gamecc1ff355.... Package refreshes
+  committed revision afterwards; compiler/renderer functional state unchanged from latest game.
+- Build tree F:/PS4Dev/work/shadps4-dx12-src/build-migration-core; tests build-migration-checks. Pinned clang-cl22.1.3,
+  MSVC ABI19.51, VS18/SDK26100. Reuse incremental builds; do not change compiler for clangd.
+- Reference F:/PS4Dev/work/shadps4-original-e0a46675, SHAe0a466753a1aacbc8db8253be685bf7ab4d9daae;
+  installed Vulkan/DLSS/FG F:/Apps/shadPS4-DLSS-DLAA-1.8.4/shadPS4.exe untouched.
+- Historical working-world DX12 C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261012-ba3892f-covered/shadPS4-DX12-Core.exe.
+- Seed F:/PS4Dev/handoff/coherence-20261011/seed. Existing XInput/HUD/live-monitor F:/PS4Dev/handoff/vulkan-live-monitor/program.
+  Flydigi client C:/Program Files/Flydigi Space Station/driver/flydigimapclient.dll, SHAb4af07797a2e3c8150a033a5c4425530a330036891d113cb78a22d065e8b4b5a.
+  Own pads neutral/stopped/device removed; all own test windows closed. User monitors/session untouched.
+
+## H. Next exact action
+
+First verify git status --short and git rev-parse HEAD in F:/PS4Dev/work/shadps4-dx12-src, then read
+F:/PS4Dev/handoff/black-continuation-20261014/avplayer-fixed-game/RESULT.json and stdout.txt critical assertion.
+Next concrete change: in src/video_core/amdgpu/liverpool.cpp EventWriteEop callback, report the failed address,
+data width/value and packet data-select before the existing fatal assertion. Trace that actual range through
+Core::Memory::TryWriteBacking, remap/unmap/protection and PM4/EOP lifetime/queue ordering; compare pinned Vulkan.
+Do NOT ignore the failed write, disable PageWatch or invent a fence acknowledgement. This code was already
+dirty before this session; preserve its provenance/whole-tree archive and isolate any next-session delta.
+After fixing that blocker, resume scene-color/ROP attribution with existing basic graph data:
+F:/PS4Dev/handoff/black-continuation-20261014/producer-graph-game/display-capture/PRODUCER_GRAPH_SUMMARY.json.
+Exact saved analysis command:
+python "C:/Users/skei/Documents/Codex/2026-10-12/skiters-ps4-dx12-fix-mixed-cmask/work/analyze-producer-graph.py"
+Inspect target-before versus output HDR/scene-color passes and actual requested-view/blend metadata;
+use saved production fragment SPIR-V/DXIL (dxc -dumpbin FILE, no -all) to attribute the earliest genuine loss.
+Then patch the demonstrated producer/binding/export/ROP contract in GuestRasterizer::DrawInternal,
+ExecuteGuestResources, GuestTextureCache::Upload/Entry::Srv or corresponding shader emitter/compiler.
+Do not rewrite display selection, disable depth/culling or blame bloom solely from a sparse input.
+Add a failing-before/passing-after GPU case to existing graphics/coherent/alias tests; incremental core via
+"C:/Users/skei/Documents/Codex/2026-10-12/skiters-ps4-dx12-fix-mixed-cmask/work/Build-Aliases-Core.cmd", targeted Debug Layer tests, one necessary postfix XInput test.
+
+## I. Do not repeat
+
+No overall port audit/HUD/profiler rebuild, EmitImageWrite speculative LOD rewrite, old F1-F3/resident-index
+or memory-budget investigation without new evidence. Do not re-run identical launches or full suites to fill
+reports. Preserve noaccess/independent domains, physical padding, barriers/fences/allocation/descriptor leases.
+No reset/clean, forced push, deleting old captures, replacing Vulkan, modifying original saves or session reset.
+
 
 Authoritative continuation for this repository. The latest human request resumed
 development and explicitly permits GPU/regression/game checks after logical changes.
@@ -271,7 +445,7 @@ color transfer. Initial erroneous discard used row pitch as layer; corrected exp
 layer is verified. Do not rerun dozens of identical game launches. Never reset/clean
 this tree, force-push, replace installed Vulkan, mutate original saves or delete old results.
 
-## NEXT CODEX SESSION — START HERE
+## Historical next-session prompt — superseded2026-10-14
 
 > Продолжи Skiters/ps4-dx12 на fix/mixed-cmask с актуального HEAD. Прочитай
 > активный packed-gap раздел SESSION_HANDOFF.md и
@@ -288,3 +462,26 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 > а не только отправку ввода;30 black completions/s не игровой FPS. Не трогай
 > удалённую сессию, оригинальные сохранения/Vulkan. Продолжай production C++/HLSL,
 > сохраняй и push проверенные commits, не повторяй общие аудиты.
+
+## NEXT CODEX SESSION — START HERE
+
+> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask. Прочитай актуальный SESSION_HANDOFF.md и
+> F:/PS4Dev/handoff/black-continuation-20261014/CHECKPOINT_FINAL.json; проверь текущий HEAD.
+> Сохрани dirty tree и22 чужих staged удаления; восстановление только в отдельном checkout.
+> Меню восстановлено: Mesa partial SV_Position, PageWatch mixed guards, GPU independent image transfer,
+> depth mip/DSV исправлены; не открывай закрытую ImageWrite LOD-гипотезу. Полный suite326/346,
+> native211/229 до трёх поздних targeted PASS; полного повторного suite не было.
+> AvPlayerQueue/Source race952234f: old AV/new queue PASS. Последний игровой прогон падает в
+> EventWriteEop::SignalFence/TryWriteBacking (liverpool.cpp705), до мира/ROP capture.
+> Сначала запиши адрес/ширину failed EOP write и исправь доказанный backing/unmap/fence lifetime контракт,
+> используя avplayer-fixed-game/RESULT.json/stdout, без игнорирования write/assertion или отключения PageWatch.
+> Итоговый мир пока fog/sky; G-buffer показывает персонажа. Используй сохранённые Vulkan/DX12
+> данные и producer-graph-game/display-capture/PRODUCER_GRAPH_SUMMARY.json, реальные SPV/DXIL/outputs.
+> ROP target-before extension подготовлен, но не захвачен в игре — два следующих запуска прерваны раньше.
+> Не повторяй завершённые исследования. Найди первый неверный scene-color producer/ROP или binding;
+> PS8c читает почти чёрный bloom, depth конечный0.98016..1 — эти факты сами не доказывают root cause.
+> Исправь конкретный production C++/shader contract, собери ядро, проверь relevant GPU regressions.
+> Проведи только необходимый изолированный XInput-прогон, проверь реальную сцену и ввод, neutral/release.
+> Сравни FPS с сохранённым baseline лишь при сопоставимом корректном мире, без FG/black throughput.
+> Продолжай полноценный порт с последнего checkpoint; сохраняй локальные commits и push upstream без force.
+> Не трогай удалённую сессию, оригинальный Vulkan, пользовательские saves и постоянный HUD/monitor.
