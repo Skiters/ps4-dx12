@@ -425,9 +425,12 @@ void GuestRasterizer::CaptureDisplayCandidates(VAddr address,uint64_t id,Resourc
          entry->desc.height==display.Height&&input_count++<16)){
         auto& image=*entry;const auto& d=image.desc;const auto native=image.texture.handle->GetDesc();
         std::ostringstream info;
-        info<<"snapshot="<<id<<" address="<<std::hex<<address<<" resource="<<image.texture.handle.Get()
+        info<<"snapshot="<<id<<" address="<<std::hex<<d.address<<" display_address="<<address<<" resource="<<image.texture.handle.Get()
+            <<" allocation="<<image.texture.allocation.get()
             <<std::dec<<" uid="<<image.image_uid<<" width="<<d.width<<" height="<<d.height
             <<" pitch="<<d.pitch<<" tile="<<d.tile_mode<<" data="<<d.data_format<<" number="<<d.number_format
+            <<" bank_swizzle="<<d.bank_swizzle<<" alt_tile="<<d.alt_tile<<" raw32="<<d.native_raw32
+            <<" storage_height="<<d.storage_height<<" storage_slice_bytes="<<d.storage_slice_bytes
             <<" levels="<<d.levels<<" layers="<<d.layers<<" first_mip="<<d.first_mip<<" first_layer="<<d.first_layer
             <<" samples="<<d.samples<<" rt="<<d.render_target<<" writable="<<d.writable
             <<" owned="<<image.gpu_owned<<" alias="<<image.buffer_alias_version<<" pending="<<image.pending
