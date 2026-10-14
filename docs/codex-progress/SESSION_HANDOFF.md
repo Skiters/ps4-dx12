@@ -152,6 +152,9 @@ F:/PS4Dev/handoff/black-continuation-20261014/avplayer-fixed-game/RESULT.json an
 Next concrete change: in src/video_core/amdgpu/liverpool.cpp EventWriteEop callback, report the failed address,
 data width/value and packet data-select before the existing fatal assertion. Trace that actual range through
 Core::Memory::TryWriteBacking, remap/unmap/protection and PM4/EOP lifetime/queue ordering; compare pinned Vulkan.
+Current code reading: TryWriteBacking returns false when its overlapping physically backed VMA list is empty;
+its IsValidMapping assertion did not fire in this run. This narrows the observation to backing/range selection,
+not a demonstrated CPU PageWatch protection rejection. Address/VMA details are still missing; no root cause claimed.
 Do NOT ignore the failed write, disable PageWatch or invent a fence acknowledgement. This code was already
 dirty before this session; preserve its provenance/whole-tree archive and isolate any next-session delta.
 After fixing that blocker, resume scene-color/ROP attribution with existing basic graph data:
