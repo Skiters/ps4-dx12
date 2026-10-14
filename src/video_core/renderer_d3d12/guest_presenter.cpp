@@ -4,9 +4,35 @@
 #include "texture_resources.h"
 #include <cmath>
 #include <cstdio>
+#ifdef SHADPS4_NATIVE_DX12_CORE
+#include "core/emulator_settings.h"
+#include "core/debug_state.h"
+#include "video_core/renderdoc.h"
+#include "core/libraries/videoout/video_out.h"
+#include "imgui/renderer/imgui_core.h"
+#endif
 namespace NativeDX12 {
+#ifdef SHADPS4_NATIVE_DX12_CORE
+static PresentCaptureCallback ScreenshotCallback(VideoCore::ScreenshotKind kind,
+    std::vector<std::filesystem::path> paths){
+    return [kind,paths=std::move(paths)](UINT width,UINT height,DXGI_FORMAT format,bool hdr,
+        std::span<const std::byte> bytes){
+        VideoCore::ScreenshotFormat image_format;
+        switch(format){
+        case DXGI_FORMAT_R8G8B8A8_UNORM:image_format=VideoCore::ScreenshotFormat::R8G8B8A8Unorm;break;
+        case DXGI_FORMAT_R10G10B10A2_UNORM:image_format=VideoCore::ScreenshotFormat::A2B10G10R10UnormPack32;break;
+        default:throw std::runtime_error("Unsupported native screenshot output format");
+        }
+        VideoCore::SavePendingScreenshot({kind,paths,
+            {{reinterpret_cast<const u8*>(bytes.data()),bytes.size()}},width,height,image_format,hdr});
+    };
+}
+#endif
 GuestPresenter::GuestPresenter(ID3D12Device* d,ID3D12CommandQueue* q,HWND w,UINT width,UINT height,GuestSurfaceProvider& provider)
-    :device_(d),queue_(q),presenter_(d,q,w,width,height),surfaces_(provider),width_(width),height_(height) {}
+    :device_(d),queue_(q),presenter_(d,q,w,width,height),surfaces_(provider),width_(width),height_(height) {
+    wchar_t value[2]{};
+    independent_vblank_=GetEnvironmentVariableW(L"SHADPS4_DX12_INDEPENDENT_VBLANK",value,2)==1&&value[0]==L'1';
+}
 GuestPresenter::~GuestPresenter(){try{presenter_.Drain();}catch(...) {}}
 GuestPresenter::Frame* GuestPresenter::Store(GuestSurfaceSnapshot snapshot) {
     if(!snapshot.texture||!snapshot.texture->handle)throw std::invalid_argument("Guest surface provider returned no GPU texture");
@@ -20,7 +46,27 @@ void GuestPresenter::RegisterSurface(const Libraries::VideoOut::BufferAttributeG
     surfaces_.Register(group,address);
 }
 VideoCore::HostFrame* GuestPresenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& group,VAddr address) {
-    return Store(surfaces_.Snapshot(group,address));
+    auto snapshot=surfaces_.Snapshot(group,address);
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    auto screenshot_paths=VideoCore::BuildScreenshotPaths(VideoCore::ScreenshotKind::GameOnly,
+        VideoCore::ConsumeGameOnlyScreenshotRequests());
+    VideoCore::ScreenshotFormat screenshot_format{};
+    using PixelFormat=Libraries::VideoOut::PixelFormat;
+    switch(group.attrib.pixel_format){
+    case PixelFormat::A8B8G8R8Srgb:screenshot_format=VideoCore::ScreenshotFormat::R8G8B8A8Srgb;break;
+    case PixelFormat::A8R8G8B8Srgb:screenshot_format=VideoCore::ScreenshotFormat::B8G8R8A8Srgb;break;
+    case PixelFormat::A2R10G10B10:case PixelFormat::A2R10G10B10Srgb:case PixelFormat::A2R10G10B10Bt2020Pq:
+        screenshot_format=VideoCore::ScreenshotFormat::A2R10G10B10UnormPack32;break;
+    default:if(!screenshot_paths.empty())throw std::invalid_argument("Unsupported original game screenshot format");
+    }
+#endif
+    auto* frame=Store(std::move(snapshot));
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    frame->game_screenshot_paths=std::move(screenshot_paths);
+    frame->game_screenshot_format=screenshot_format;
+    frame->game_screenshot_hdr=group.attrib.pixel_format==PixelFormat::A2R10G10B10Bt2020Pq;
+#endif
+    return frame;
 }
 VideoCore::HostFrame* GuestPresenter::PrepareBlankFrame(bool) {
     std::shared_ptr<Resource> blank;
@@ -55,13 +101,46 @@ void GuestPresenter::Present(VideoCore::HostFrame* host,bool reusing,bool) {
     diagnostic.Stage("snapshot-ready");
     if(snapshot.wait_ready)snapshot.wait_ready();
     diagnostic.Stage("swapchain-present");
-    try{presenter_.Present(*snapshot.texture,nullptr,snapshot.texture);}catch(const std::exception& error){
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    presenter_.SetPresentMode(EmulatorSettings.GetPresentMode());
+    presenter_.SetFsr({EmulatorSettings.IsFsrEnabled(),EmulatorSettings.IsRcasEnabled(),
+        float(EmulatorSettings.GetRcasAttenuation())/1000.f});
+    if(!reusing&&!frame->game_screenshot_paths.empty()){
+        presenter_.CaptureSource([paths=std::move(frame->game_screenshot_paths),
+            format=frame->game_screenshot_format,hdr=frame->game_screenshot_hdr]
+            (UINT width,UINT height,DXGI_FORMAT,bool,std::span<const std::byte> bytes){
+                VideoCore::SavePendingScreenshot({VideoCore::ScreenshotKind::GameOnly,paths,
+                    {{reinterpret_cast<const u8*>(bytes.data()),bytes.size()}},width,height,format,hdr});
+            });
+    }
+    const auto overlay_requests=VideoCore::ConsumeWithOverlaysScreenshotRequests();
+    if(overlay_requests){
+        presenter_.Capture(true,ScreenshotCallback(VideoCore::ScreenshotKind::WithOverlays,
+            VideoCore::BuildScreenshotPaths(VideoCore::ScreenshotKind::WithOverlays,overlay_requests)));
+    }
+#endif
+    try{presenter_.Present(*snapshot.texture,nullptr,snapshot.texture,snapshot.view_format,
+        snapshot.component_mapping,snapshot.srgb_input,reusing,[frame,reusing]{
+            if(frame->guest_flip&&!reusing)frame->TraceGpuCompletion();
+        });}catch(const std::exception& error){
+        if(frame->guest_flip&&!reusing)Common::GuestFrameTrace::Invalid("guest-presentation-error");
         fprintf(stderr,"Native D3D12 presentation failed: %s\n",error.what());fflush(stderr);throw;
     }
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    DebugState.is_using_fsr=presenter_.UsingFsr();
+    const auto source=snapshot.texture->handle->GetDesc();
+    DebugState.game_resolution={UINT(source.Width),source.Height};
+    DebugState.output_resolution={presenter_.GameWidth(),presenter_.GameHeight()};
+#endif
     diagnostic.Stage("presentation-queued");
     if(!reusing){std::lock_guard lock(mutex_);auto node=pending_.extract(frame);last_=std::move(node.mapped());}
 }
-void GuestPresenter::SetHDR(bool enabled){presenter_.SetHDR(enabled);}
+void GuestPresenter::SetHDR(bool enabled){
+    presenter_.SetHDR(enabled);
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    ImGui::Core::OnSurfaceFormatChange(presenter_.OutputFormat());
+#endif
+}
 void GuestPresenter::SetGamma(float gamma){
     if(!std::isfinite(gamma)||gamma<0.1f||gamma>2.f)throw std::invalid_argument("Invalid native VideoOut gamma");
     presenter_.SetGamma(gamma);

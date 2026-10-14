@@ -22,7 +22,7 @@ int main(){try{
     std::recursive_mutex execution;std::mutex gate;std::condition_variable condition;bool entered=false,release=false;
     std::atomic<unsigned> resolutions{},finished{};PageWatch* watcher{};
     {
-        PageWatch watch([&](uint64_t address){std::lock_guard rendering(execution);
+        PageWatch watch([&](uint64_t address,bool writing){std::lock_guard rendering(execution);Require(!writing);
             if(!watcher->Contains(address))return;
             {std::unique_lock waiting(gate);entered=true;condition.notify_all();condition.wait(waiting,[&]{return release;});}
             // Model committing a retired GPU result through physical backing:
@@ -42,7 +42,7 @@ int main(){try{
     }
     {
         unsigned callbacks{};
-        PageWatch watch([&](uint64_t){++callbacks;});
+        PageWatch watch([&](uint64_t,bool writing){Require(writing);++callbacks;});
         Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
         Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==1);
         MEMORY_BASIC_INFORMATION region{};
@@ -87,6 +87,41 @@ int main(){try{
             Require(VirtualQuery(pages,&region,sizeof(region))&&region.Protect==PAGE_READWRITE);
         }
         Require(VirtualFree(pages,0,MEM_RELEASE));
+    }
+    {
+        auto* memory=static_cast<unsigned char*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+        Require(memory);const auto base=reinterpret_cast<uint64_t>(memory);
+        {
+            PageWatch watch([](uint64_t){throw std::runtime_error("mixed ownership probe unexpectedly faulted");});
+            Require(watch.TrackReadOnly(base,16384));
+            Require(watch.TrackOwned(base+4096,8192));
+            MEMORY_BASIC_INFORMATION region{};
+            const auto mode=[&](uint64_t offset,DWORD expected){
+                Require(VirtualQuery(memory+offset,&region,sizeof(region))&&region.Protect==expected);
+            };
+            mode(0,PAGE_READONLY);mode(4096,PAGE_NOACCESS);mode(8192,PAGE_NOACCESS);mode(12288,PAGE_READONLY);
+            Require(watch.Contains(base)&&watch.Contains(base+4096)&&watch.Contains(base+12288));
+            Require(watch.ChangeMode(base+4096,8192,true));
+            Require(watch.UntrackReadOnly(base+4096,4096));
+            mode(4096,PAGE_READWRITE);mode(0,PAGE_READONLY);mode(8192,PAGE_READONLY);
+            Require(watch.TrackOwned(base,16384));
+            for(uint64_t offset=0;offset<16384;offset+=4096)mode(offset,PAGE_NOACCESS);
+            watch.Untrack(base,16384);
+            for(uint64_t offset=0;offset<16384;offset+=4096)mode(offset,PAGE_READWRITE);
+            DWORD previous{};Require(VirtualProtect(memory+12288,4096,PAGE_READONLY,&previous));
+            Require(!watch.TrackOwned(base,16384));
+            mode(0,PAGE_READWRITE);mode(4096,PAGE_READWRITE);mode(8192,PAGE_READWRITE);mode(12288,PAGE_READONLY);
+            Require(!watch.Contains(base)&&!watch.Contains(base+12288));
+            Require(VirtualProtect(memory+12288,4096,PAGE_READWRITE,&previous));
+            Require(watch.TrackReadOnly(base,16384));
+            Require(VirtualProtect(memory+8192,4096,PAGE_READWRITE,&previous));
+            Require(!watch.TrackOwned(base+4096,8192)); // changed OS permissions cannot prove ownership
+            mode(0,PAGE_READONLY);mode(4096,PAGE_READONLY);mode(8192,PAGE_READWRITE);mode(12288,PAGE_READONLY);
+            Require(VirtualProtect(memory+8192,4096,PAGE_READONLY,&previous));
+            watch.Untrack(base,16384);
+            for(uint64_t offset=0;offset<16384;offset+=4096)mode(offset,PAGE_READWRITE);
+        }
+        Require(VirtualFree(memory,0,MEM_RELEASE));
     }
     {
         constexpr uint64_t pages=4097,stride=8192;
