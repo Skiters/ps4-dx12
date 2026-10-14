@@ -6,7 +6,8 @@
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include <cstring>
 using namespace NativeDX12;
-void Require(bool ok){if(!ok)throw std::runtime_error("Coherent sampled-view assertion failed");}
+void RequireAt(bool ok,unsigned line){if(!ok)throw std::runtime_error("Coherent sampled-view assertion failed at line "+std::to_string(line));}
+#define Require(condition) RequireAt(condition,__LINE__)
 int main(){try{
     _putenv_s("SHADPS4_NATIVE_D3D12_VALIDATION","1");
     auto device=CreateHardwareDevice();ComPtr<ID3D12CommandQueue> queue;
@@ -47,7 +48,8 @@ int main(){try{
     // A CPU-written texel prevents borrowing the unchanged attachment. New
     // native upload must expose that new value, preserving all other texels.
     pixels[7]=0.75f;EncodeGuestSubresource(sampled,LayoutGuestTexture(sampled),memory,std::as_bytes(std::span(pixels)),0,0);
-    auto& changed=cache.Upload(sampled,memory,list.Get(),timeline.Completed());Require(&changed!=&attachment&&!changed.uploads.empty());
+    auto& changed=cache.Upload(sampled,memory,list.Get(),timeline.Completed());
+    Require(&changed!=&attachment&&changed.pending&&(!changed.uploads.empty()||!changed.tiler_leases.empty()));
     auto changed_readback=TextureTransfer::Create(device.Get(),changed.texture,true);changed_readback.Readback(list.Get(),changed.texture);
     retire();changed_readback.ReadRows(restored.data(),restored.size()*4,depth.width*4);Require(restored==pixels);
     // Changed descriptor interpretation must be rejected rather than silently

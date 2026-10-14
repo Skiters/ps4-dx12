@@ -67,7 +67,12 @@ float4 main(float4 p:SV_Position):SV_Target0{return float4(source.Load(int3(int2
             auto& entry=textures.Upload(desc,depth_bytes,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_bytes);
             ResourceBindings bindings(device,pipeline.Layout());bindings.RetainAllocation(textures.PinBinding(entry));
             bindings.RetainAllocation(entry.texture.allocation);
-            auto srv=entry.Srv();if(sample_stencil){srv.Format=DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;srv.Texture2D.PlaneSlice=1;}
+            auto srv=entry.Srv();if(sample_stencil){srv.Format=DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;srv.Texture2D.PlaneSlice=1;
+                // The stencil byte occupies G in X32_G8X24. This scalar uint
+                // fixture consumes R, so expose that actual plane through R.
+                srv.Shader4ComponentMapping=D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(1,
+                    D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,
+                    D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1);}
             bindings.Srv(0,0,entry.texture.handle.Get(),srv);
             Rasterizer::DepthAttachment attachment{&entry.texture,entry.Dsv(desc,!sample_stencil,sample_stencil),
                 !sample_stencil,sample_stencil,clear_sampled&&!sample_stencil,sampled_depth,
@@ -90,7 +95,11 @@ float4 main(float4 p:SV_Position):SV_Target0{return float4(source.Load(int3(int2
             std::array<float,8*8*4> observed{};colors.ReadRows(observed.data(),sizeof(observed),8*16);
             const float expected=sample_stencil?float(sampled_stencil):sampled_depth;
             for(UINT i=0;i<64;++i)if(observed[i*4]!=expected||observed[i*4+1]!=0||observed[i*4+2]!=0||observed[i*4+3]!=1)
-                throw std::runtime_error("Mixed DS/SRV shader sampled the wrong plane or version");
+                throw std::runtime_error("Mixed DS/SRV shader sampled the wrong plane or version: stencil="+
+                    std::to_string(sample_stencil)+" clear="+std::to_string(clear_sampled)+" warm="+std::to_string(warm)+
+                    " pixel="+std::to_string(i)+" expected="+std::to_string(expected)+" RGBA="+
+                    std::to_string(observed[i*4])+","+std::to_string(observed[i*4+1])+","+
+                    std::to_string(observed[i*4+2])+","+std::to_string(observed[i*4+3]));
         }
     }
 }
@@ -137,7 +146,10 @@ float4 main():SV_Target0{return float4(source.Load(int4(0,0,0,0)),0,0,1);}
         auto overwritten=srv;overwritten.Texture2DArray.MostDetailedMip=test[0];overwritten.Texture2DArray.FirstArraySlice=test[1];
         bindings.Srv(0,0,entry.texture.handle.Get(),overwritten);
         bindings.Srv(0,0,entry.texture.handle.Get(),srv);
-        auto view=entry.Dsv();view.Texture2DArray.MipSlice=test[0];view.Texture2DArray.FirstArraySlice=test[1];view.Texture2DArray.ArraySize=1;
+        auto attachment_desc=desc;attachment_desc.first_mip=test[0];attachment_desc.first_layer=test[1];attachment_desc.view_layers=1;
+        auto view=entry.Dsv(attachment_desc,false,true);
+        if(view.Texture2DArray.MipSlice!=test[0]||view.Texture2DArray.FirstArraySlice!=test[1]||view.Texture2DArray.ArraySize!=1)
+            throw std::runtime_error("Native DSV ignored its guest mip/layer range");
         const Rasterizer::DepthAttachment attachment{&entry.texture,view,false,true};
         const Rasterizer::ColorAttachment target{&color};const D3D12_VIEWPORT viewport{0,0,4,4,0,1};const D3D12_RECT scissor{0,0,4,4};
         const std::array<float,4> blend{};auto conflicting=attachment;

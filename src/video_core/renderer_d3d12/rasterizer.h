@@ -264,6 +264,7 @@ public:
     // Caller holds ExecutionMutex through the copy and GPU retirement. Never
     // expose a cached image unless its CPU snapshot still matches guest memory.
     virtual Resource* CoherentDisplayTexture(VAddr,UINT,UINT,UINT){return nullptr;}
+    virtual void CaptureDisplayCandidates(VAddr,uint64_t,Resource*){}
     // Submit guest rendering and make a consumer queue wait on its GPU fence.
     // Backends with no native display cache retain the conservative CPU path.
     virtual Resource* PrepareDisplayTexture(VAddr address,UINT width,UINT height,UINT pitch,

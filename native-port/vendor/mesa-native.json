@@ -4,7 +4,7 @@
   "reference_submodule": "externals/mesa-kosmickrisp/externals/mesa",
   "reference_shadps4_commit": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
   "patch": "mesa-b628375f-native.patch",
-  "patch_sha256": "d4d16e7054beb94acdf45beeb7e68b5380ac391f2aa189f01970d2ebeaf18b2b",
+  "patch_sha256": "180e873aacadea12976ae3a121e34e7a9194fabaa10b3d5789cb8aaa586ee129",
   "linked_header": "mesa-api/spirv_to_dxil_linked.h",
   "linked_header_sha256": "0995dca79faacc4fc592406644b1897282e5ba1925b5df6471f2259390702870",
   "native_feature_export": "spirv_to_dxil_native_features",
@@ -65,5 +65,6 @@
     "register_space": 2147420894,
     "subgroup_operation": 31,
     "device_operation": 32
-  }
+  },
+  "viewport_flip_contract": "Preserve partial SV_Position component writes through full DXIL exports; reset geometry state after vertex emission."
 }

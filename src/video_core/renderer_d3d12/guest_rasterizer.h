@@ -62,6 +62,7 @@ public:
     void UnmapMemory(VAddr,u64) override;
     void PrepareMemoryProtection(VAddr,u64) override;
     Resource* CoherentDisplayTexture(VAddr,UINT,UINT,UINT) override;
+    void CaptureDisplayCandidates(VAddr,uint64_t,Resource*) override;
     Resource* PrepareDisplayTexture(VAddr,UINT,UINT,UINT,ID3D12CommandQueue*) override;
     void Draw(bool indexed,u32 index_offset=0) override;
     void FillBuffer(VAddr,u32,u32,bool) override;

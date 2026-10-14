@@ -14,19 +14,16 @@ class MemorySurfaceProvider final : public GuestSurfaceProvider {
     struct Context {
         ComPtr<ID3D12CommandAllocator> allocator;
         ComPtr<ID3D12GraphicsCommandList> commands;
-        std::unique_ptr<Descriptors> swap_views;
         TextureTransfer upload;
         std::shared_ptr<Resource> target;
         u64 fence{};
     };
     std::vector<Context> contexts_;
     size_t active_{};
+    uint64_t snapshot_sequence_{};
     Timeline completion_;
     std::vector<std::shared_ptr<Resource>> snapshots_;
-    ComPtr<ID3D12RootSignature> swap_root_;
-    ComPtr<ID3D12PipelineState> swap_pipeline_;
     Context& AcquireContext();
-    void SwapChannels(Context&,Resource&,Resource&);
 public:
     MemorySurfaceProvider(ID3D12Device*,ID3D12CommandQueue*,Rasterizer&,UINT width,UINT height);
     ~MemorySurfaceProvider() override;

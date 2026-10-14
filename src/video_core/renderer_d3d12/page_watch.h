@@ -111,13 +111,13 @@ public:
     bool WasTracked(uint64_t address){std::lock_guard lock(mutex);const auto it=retired.upper_bound(address);return it!=retired.begin()&&std::prev(it)->second>address;}
     // Preserve protected neighbours when a CPU store invalidates one page.
     // GPU ownership and image retirement still use the whole-range Untrack.
-    bool UntrackReadOnly(uint64_t address,uint64_t size){
+    bool UntrackReadOnly(uint64_t address,uint64_t size,bool preserve_gpu=false){
         if(!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
         std::lock_guard lock(mutex);const auto end=address+size;
         auto first=ranges.lower_bound(address);
         if(first!=ranges.begin()&&std::prev(first)->second.end>address)--first;
         for(auto it=first;it!=ranges.end()&&it->first<end;++it){
-            if(!it->second.read_only)return false;
+            if(!it->second.read_only){if(preserve_gpu)continue;return false;}
             for(const auto& p:it->second.protection){
                 const auto begin=std::max(p.begin,address),stop=std::min(p.begin+p.size,end);
                 if(begin>=stop)continue;
@@ -135,6 +135,7 @@ public:
             return result;
         };
         for(auto it=first;it!=ranges.end()&&it->first<end;){
+            if(!it->second.read_only){++it;continue;}
             const auto begin=it->first,stop=it->second.end;
             const auto a=std::max(begin,address),b=std::min(stop,end);
             auto removed=slice(it->second,a,b,++next_generation);
@@ -151,15 +152,20 @@ public:
         return true;
     }
     // Rearm only the writable holes. Existing read-only pages never lose their
-    // proof; a NOACCESS owner or changed OS protection rejects the transfer.
-    bool TrackReadOnly(uint64_t address,uint64_t size){
+    // proof. Readable witnesses reject NOACCESS; independent image write guards
+    // can share a stronger buffer owner without weakening its protection.
+    bool TrackReadOnly(uint64_t address,uint64_t size,bool allow_gpu=false){
         if(!address||!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
         std::vector<std::pair<uint64_t,uint64_t>> gaps;
         {std::lock_guard lock(mutex);const auto end=address+size;auto cursor=address;
             auto it=ranges.upper_bound(address);
             if(it!=ranges.begin()&&std::prev(it)->second.end>address)--it;
             for(;it!=ranges.end()&&it->first<end;++it){
-                if(!it->second.read_only)return false;
+                // Independent image versions need a CPU-write guard, not a
+                // promise of readable physical backing. A buffer's stronger
+                // NOACCESS guard remains owned by that buffer; its read fault
+                // resolver will rearm this image's READONLY guard on release.
+                if(!it->second.read_only&&!allow_gpu)return false;
                 // These are the same retained pages accepted by an unchanged
                 // watch hit. Core remap/protection notifications retire that
                 // proof. Only gaps acquire new proof and need Track's complete

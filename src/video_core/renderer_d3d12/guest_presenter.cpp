@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_presenter.h"
 #include "texture_resources.h"
+#include "display_capture.h"
 #include <cmath>
 #include <cstdio>
 #ifdef SHADPS4_NATIVE_DX12_CORE
@@ -119,6 +120,18 @@ void GuestPresenter::Present(VideoCore::HostFrame* host,bool reusing,bool) {
             VideoCore::BuildScreenshotPaths(VideoCore::ScreenshotKind::WithOverlays,overlay_requests)));
     }
 #endif
+    if(!reusing&&snapshot.diagnostic_capture_id){
+        const auto id=snapshot.diagnostic_capture_id;
+        DisplayCapture::Save(id,"flip",{},"trace_id="+std::to_string(frame->trace_id));
+        presenter_.CaptureSource([id](UINT width,UINT height,DXGI_FORMAT format,bool,std::span<const std::byte> bytes){
+            DisplayCapture::Save(id,"presenter-source",bytes,"width="+std::to_string(width)+" height="+
+                std::to_string(height)+" format="+std::to_string(format));
+        });
+        presenter_.Capture(true,[id](UINT width,UINT height,DXGI_FORMAT format,bool,std::span<const std::byte> bytes){
+            DisplayCapture::Save(id,"backbuffer",bytes,"width="+std::to_string(width)+" height="+
+                std::to_string(height)+" format="+std::to_string(format));
+        });
+    }
     try{presenter_.Present(*snapshot.texture,nullptr,snapshot.texture,snapshot.view_format,
         snapshot.component_mapping,snapshot.srgb_input,reusing,[frame,reusing]{
             if(frame->guest_flip&&!reusing)frame->TraceGpuCompletion();

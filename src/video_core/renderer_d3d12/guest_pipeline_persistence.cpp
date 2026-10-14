@@ -32,7 +32,7 @@ std::array<std::byte,32> ExecutableIdentity(){
     return digest;
 }
 std::vector<u8> Identity(const GuestShaderCache& shaders){
-    CacheKey key;key.Text("native-pipeline-metadata-v33");key.Blob(ExecutableIdentity());
+    CacheKey key;key.Text("native-pipeline-metadata-v34");key.Blob(ExecutableIdentity());
     key.Blob(shaders.ConfigurationIdentity());
     return {reinterpret_cast<const u8*>(key.bytes.data()),reinterpret_cast<const u8*>(key.bytes.data()+key.bytes.size())};
 }

@@ -244,6 +244,16 @@ endforeach()
 add_executable(native-coherent-sampled-view-test "${CMAKE_CURRENT_SOURCE_DIR}/coherent_sampled_view_test.cpp")
 target_link_libraries(native-coherent-sampled-view-test PRIVATE shadps4_native_guest_textures)
 add_test(NAME native_coherent_sampled_attachment COMMAND native-coherent-sampled-view-test)
+add_executable(native-rect-display-test rect_display_test.cpp
+    "${PORT_ROOT}/src/shader_recompiler/backend/spirv/emit_spirv_quad_rect.cpp")
+target_compile_features(native-rect-display-test PRIVATE cxx_std_23)
+target_include_directories(native-rect-display-test PRIVATE $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
+target_link_libraries(native-rect-display-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures shadps4_dxil_compiler sirit)
+add_test(NAME native_rect_display COMMAND native-rect-display-test "${_compute_mesa}" "${DXC_DLL}")
+add_executable(native-independent-version-transfer-test independent_version_transfer_test.cpp)
+target_compile_features(native-independent-version-transfer-test PRIVATE cxx_std_23)
+target_link_libraries(native-independent-version-transfer-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures)
+add_test(NAME native_independent_image_version_transfer COMMAND native-independent-version-transfer-test)
 add_executable(dx12-memory-surface-provider-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider_test.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider.cpp")

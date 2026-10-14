@@ -9,6 +9,9 @@
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
 #include "diagnostics.h"
+#include "display_capture.h"
+#include "texture_resources.h"
+#include <sstream>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -106,6 +109,26 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     });
     textures_.SetPressureRetirement([this](auto& image){RetireImageForPressure(image);RecordingList();});
     textures_.SetOwnershipAcquirer([this](auto& image){return OwnImage(image);});
+    textures_.SetIndependentVersionTransfer([this](auto& image,VAddr address,u64 bytes){
+        // Retile into a private GPU buffer seeded from the physical buffer
+        // domain. This does not commit image pixels into that buffer domain.
+        auto initial=CaptureShaderBuffer(image.desc.address,image.layout.guest_bytes);
+        auto version=textures_.RetileBufferVersion(image,initial,RecordingList(),CompletedFence());
+        if(address!=image.desc.address||bytes!=image.layout.guest_bytes){
+            auto requested=CaptureShaderBuffer(address,bytes);
+            const auto begin=std::max(address,image.desc.address);
+            const auto end=std::min(address+bytes,image.desc.address+image.layout.guest_bytes);
+            if(begin>=end)throw std::logic_error("Independent image transfer lost its overlap");
+            version.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            requested.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+            DX12_API_CALL(RecordingList()->CopyBufferRegion(requested.handle.Get(),begin-address,
+                version.handle.Get(),begin-image.desc.address,end-begin));
+            version=std::move(requested);
+        }
+        version.Transition(RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        return version;
+    },[this](auto& image){return OwnIndependentImage(image);},
+      [this](auto& image){ReleaseIndependentImageWatches(image);});
     textures_.SetImageWriteNotifier([this](auto& image){QueueLinearImageDownload(image);});
     textures_.SetBufferAliasRetention([this](const auto& desc,const auto& layout){
         return page_watch_&&desc.writable&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
@@ -288,20 +311,22 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
     if(!gpu_write)Finish();
     for(auto* image:versions){
         if(image->buffer_alias_watch){
-            image->buffer_alias_watch=image->buffer_alias_version=false;image->SetGpuOwned(false);
             ReleaseCpuBufferWatches(image->desc.address,image->layout.guest_bytes);
-            page_watch_->UntrackReadOnly(image->desc.address,image->layout.guest_bytes);
         }
-        image->buffer_alias_watch=image->buffer_alias_version=false;image->SetGpuOwned(false);
-        image->sampled_snapshot.clear();image->stencil_snapshot.clear();
+        // Retain other image witnesses as well as stronger buffer guards.
+        // A whole-range read-only untrack would silently unprotect a sibling
+        // sampled view sharing these pages.
+        ReleaseIndependentImageWatches(*image);
     }
     WatchBufferImageVersions(address,size);
 }
 void GuestRasterizer::WatchBufferImageVersions(VAddr address,u64 size){
     for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version&&ImageOverlap(address,size,*image)){
         if(!page_watch_||!has_backing_(image->desc.address,image->layout.guest_bytes)||
-           !page_watch_->TrackReadOnly(image->desc.address,image->layout.guest_bytes))
-            throw std::runtime_error("Cannot protect an independent image version against CPU writes");
+           !page_watch_->TrackReadOnly(image->desc.address,image->layout.guest_bytes,true))
+            throw std::runtime_error("Cannot protect an independent image version against CPU writes: address="+
+                std::to_string(image->desc.address)+" bytes="+std::to_string(image->layout.guest_bytes)+
+                " uid="+std::to_string(image->image_uid));
         image->buffer_alias_watch=true;
     }
 }
@@ -388,6 +413,38 @@ Resource* GuestRasterizer::PrepareDisplayTexture(VAddr address,UINT width,UINT h
         submitted?submitted:CompletedFence());
     if(texture&&submitted)MakeQueueWait(consumer,submitted);
     return texture;
+}
+void GuestRasterizer::CaptureDisplayCandidates(VAddr address,uint64_t id,Resource* selected){
+    if(!DisplayCapture::Selected(id))return;
+    std::lock_guard lock(execution_mutex_);
+    Finish();textures_.Collect(CompletedFence());
+    unsigned input_count{};
+    const auto display=selected?selected->handle->GetDesc():D3D12_RESOURCE_DESC{};
+    for(auto& entry:textures_.Entries())if(entry->desc.address==address||
+        (DisplayCapture::Inputs(id)&&entry->desc.render_target&&entry->desc.width==display.Width&&
+         entry->desc.height==display.Height&&input_count++<16)){
+        auto& image=*entry;const auto& d=image.desc;const auto native=image.texture.handle->GetDesc();
+        std::ostringstream info;
+        info<<"snapshot="<<id<<" address="<<std::hex<<address<<" resource="<<image.texture.handle.Get()
+            <<std::dec<<" uid="<<image.image_uid<<" width="<<d.width<<" height="<<d.height
+            <<" pitch="<<d.pitch<<" tile="<<d.tile_mode<<" data="<<d.data_format<<" number="<<d.number_format
+            <<" levels="<<d.levels<<" layers="<<d.layers<<" first_mip="<<d.first_mip<<" first_layer="<<d.first_layer
+            <<" samples="<<d.samples<<" rt="<<d.render_target<<" writable="<<d.writable
+            <<" owned="<<image.gpu_owned<<" alias="<<image.buffer_alias_version<<" pending="<<image.pending
+            <<" fence="<<image.fence<<" completed="<<CompletedFence()<<" guest_bytes="<<image.layout.guest_bytes
+            <<" native_format="<<native.Format<<" selected="<<(&image.texture==selected)
+            <<" writer="<<image.diagnostic_writer<<" vs="<<std::hex<<image.diagnostic_vs<<" ps="<<image.diagnostic_ps<<std::dec;
+        const auto stage="candidate-"+std::to_string(image.image_uid);
+        if(native.MipLevels!=1||native.DepthOrArraySize!=1||native.SampleDesc.Count!=1||d.depth_target){
+            DisplayCapture::Save(id,stage,{},info.str()+" readback=unsupported-subresources");continue;
+        }
+        const auto prior=image.texture.state;
+        auto transfer=TextureTransfer::Create(device_.Get(),image.texture,true);
+        transfer.Readback(RecordingList(),image.texture);image.texture.Transition(RecordingList(),prior);
+        Finish();std::vector<std::byte> bytes(size_t(transfer.row_bytes)*transfer.rows);
+        transfer.ReadRows(bytes.data(),bytes.size(),transfer.row_bytes);
+        DisplayCapture::Save(id,stage,bytes,info.str()+" row_bytes="+std::to_string(transfer.row_bytes));
+    }
 }
 void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     const GuestTextureDesc& d,const GuestTextureLayout& l) {
@@ -965,6 +1022,16 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         ExecuteGraphics(pipeline,bindings,state,std::span(attachments.data(),target_count),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
+        if(std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")){
+            static u64 writer{};const auto serial=++writer;
+            const auto* vs=guest.stages[u32(Shader::SwStage::Vertex)];
+            const auto* ps=guest.stages[u32(Shader::SwStage::Fragment)];
+            for(UINT i=0;i<target_count;++i)if(targets[i]){
+                targets[i]->diagnostic_writer=serial;
+                targets[i]->diagnostic_vs=vs?vs->info.pgm_hash:0;
+                targets[i]->diagnostic_ps=ps?ps->info.pgm_hash:0;
+            }
+        }
         if(probe){
             RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_result.handle.Get(),0);

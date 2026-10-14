@@ -1,6 +1,8 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "memory_surface_provider.h"
+#include "display_capture.h"
+#include <sstream>
 #include "guest_texture_cache.h"
 #include "texture_resources.h"
 #include <algorithm>
@@ -72,6 +74,8 @@ GuestSurfaceSnapshot MemorySurfaceProvider::Snapshot(const Libraries::VideoOut::
     using namespace Libraries::VideoOut;
     diagnostic.Stage("buffer-reconciliation");
     Validate(group,address);const auto& a=group.attrib;
+    const auto capture_id=++snapshot_sequence_;
+    const bool capture=DisplayCapture::SelectSnapshot(capture_id);
     diagnostic.Detail("address=%llx size=%ux%u",(unsigned long long)address,a.width,a.height);
     diagnostic.Stage("cpu-detile-or-coherent-image");
     std::vector<std::byte> source;
@@ -105,6 +109,7 @@ GuestSurfaceSnapshot MemorySurfaceProvider::Snapshot(const Libraries::VideoOut::
             traced_frames,a.width,a.height,width_,height_,(unsigned long long)address,cached?"coherent-gpu-copy":"cpu-detile-upload");fflush(stderr);
     }
     diagnostic.Stage("snapshot-allocation-and-upload");
+    if(capture)renderer_.CaptureDisplayCandidates(address,capture_id,cached);
     // Retire completed copy references before inspecting snapshot use counts.
     // Otherwise a free texture still appears busy and the pool grows despite
     // its fence having completed (or reports exhaustion at the pool limit).
@@ -135,16 +140,30 @@ GuestSurfaceSnapshot MemorySurfaceProvider::Snapshot(const Libraries::VideoOut::
         context.upload.WriteRows(source.data(),source.size(),u64(a.width)*bytes_per_pixel);context.upload.Upload(commands,*texture);
     }
     diagnostic.Stage("snapshot-gpu-completion");
+    TextureTransfer capture_transfer;
+    if(capture)capture_transfer=TextureTransfer::Create(device_.Get(),*texture,true);
+    if(capture)capture_transfer.Readback(commands,*texture);
     context.target=texture;
     Check(DX12_API_CALL(commands->Close()));context.fence=completion_.Submit(queue_.Get(),commands);
     // The display queue waited for the renderer before reading the cached
     // image. Put the reciprocal wait behind this immutable copy so subsequent
     // guest rendering may safely reuse the same non-simultaneous texture.
     if(cached)renderer_.WaitExternalFence(completion_.Fence(),context.fence);
+    if(capture){
+        completion_.Wait(context.fence);
+        std::vector<std::byte> bytes(size_t(capture_transfer.row_bytes)*capture_transfer.rows);
+        capture_transfer.ReadRows(bytes.data(),bytes.size(),capture_transfer.row_bytes);
+        std::ostringstream info;info<<"snapshot="<<capture_id<<" address="<<std::hex<<address
+            <<" resource="<<texture->handle.Get()<<" selected="<<(cached?cached->handle.Get():nullptr)
+            <<std::dec<<" width="<<a.width<<" height="<<a.height<<" pitch="<<a.pitch_in_pixel
+            <<" video_format="<<unsigned(a.pixel_format)<<" tiling="<<unsigned(a.tiling_mode)
+            <<" native_format="<<storage_format<<" fence="<<context.fence<<" row_bytes="<<capture_transfer.row_bytes;
+        DisplayCapture::Save(capture_id,"snapshot",bytes,info.str());
+    }
     const bool swap_rb=a.pixel_format!=PixelFormat::A8B8G8R8Srgb;
     const UINT mapping=D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(swap_rb?2:0,1,swap_rb?0:2,
         D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1);
     return {std::move(texture),{},completion_.Fence(),context.fence,view_format,mapping,
-        a.pixel_format==PixelFormat::A2R10G10B10Srgb};
+        a.pixel_format==PixelFormat::A2R10G10B10Srgb,capture?capture_id:0};
 }
 }

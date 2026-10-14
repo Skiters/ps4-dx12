@@ -103,6 +103,7 @@ public:
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
         uint64_t image_uid{};
+        uint64_t diagnostic_writer{},diagnostic_vs{},diagnostic_ps{};
         // Tokens can outlive cache destruction after a device-loss error.
         // Their counter must not point back into the destroyed Entry.
         std::shared_ptr<uint32_t> binding_pins;
@@ -195,6 +196,9 @@ private:
         std::erase_if(surface_metas_,[&](const auto& meta){return !image_uids_.contains(meta.second.owner_uid);});
     }
     std::function<void(Entry&)> resolve_owned_;
+    std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
+    std::function<bool(Entry&)> acquire_independent_;
+    std::function<void(Entry&)> retire_independent_;
     std::function<void(Entry&)> retire_pressure_;
     std::function<uint64_t()> wait_pressure_;
     std::function<bool(Entry&)> acquire_owned_;
@@ -230,6 +234,11 @@ public:
     void Used(Entry& entry,uint64_t fence);
     void Collect(uint64_t completed_fence);
     void SetOwnershipResolver(std::function<void(Entry&)> resolver){resolve_owned_=std::move(resolver);}
+    void SetIndependentVersionTransfer(
+        std::function<Resource(Entry&,uint64_t,uint64_t)> read,
+        std::function<bool(Entry&)> acquire,std::function<void(Entry&)> retire){
+        read_independent_=std::move(read);acquire_independent_=std::move(acquire);retire_independent_=std::move(retire);
+    }
     void SetPressureRetirement(std::function<void(Entry&)> retirement){retire_pressure_=std::move(retirement);}
     void SetPressureWait(std::function<uint64_t()> wait){wait_pressure_=std::move(wait);}
     void SetOwnershipAcquirer(std::function<bool(Entry&)> acquire){acquire_owned_=std::move(acquire);}

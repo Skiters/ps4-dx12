@@ -137,6 +137,36 @@ int main(){try{
         }
         Require(VirtualFree(memory,0,MEM_RELEASE));
     }
+    {
+        auto* memory=static_cast<unsigned char*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));Require(memory);
+        const auto base=reinterpret_cast<uint64_t>(memory);memory[4096]=37;
+        PageWatch* active{};unsigned reads{},writes{};
+        {
+            PageWatch watch([&](uint64_t address,bool writing){
+                const auto page=address&~uint64_t(4095);
+                if(writing){++writes;Require(active->UntrackReadOnly(page,4096));}
+                else{++reads;active->Untrack(page,4096);Require(active->TrackReadOnly(base,16384,true));}
+            });active=&watch;
+            Require(watch.Track(base+4096,4096));
+            Require(!watch.TrackReadOnly(base,16384)); // readable witness cannot borrow GPU ownership
+            Require(watch.TrackReadOnly(base,16384,true)); // independent image needs only a write guard
+            MEMORY_BASIC_INFORMATION info{};
+            Require(VirtualQuery(memory+4096,&info,sizeof(info))&&info.Protect==PAGE_NOACCESS);
+            Require(watch.UntrackReadOnly(base,16384,true)); // release image, preserve buffer owner
+            Require(VirtualQuery(memory,&info,sizeof(info))&&info.Protect==PAGE_READWRITE);
+            Require(VirtualQuery(memory+4096,&info,sizeof(info))&&info.Protect==PAGE_NOACCESS);
+            Require(watch.TrackReadOnly(base,16384,true));
+            const auto physical=*reinterpret_cast<volatile unsigned char*>(memory+4096);
+            Require(reads==1&&physical==37);
+            Require(VirtualQuery(memory+4096,&info,sizeof(info))&&info.Protect==PAGE_READONLY);
+            *reinterpret_cast<volatile unsigned char*>(memory+8192)=53;
+            Require(writes==1&&memory[8192]==53);
+            Require(VirtualQuery(memory,&info,sizeof(info))&&info.Protect==PAGE_READONLY);
+            Require(VirtualQuery(memory+12288,&info,sizeof(info))&&info.Protect==PAGE_READONLY);
+            watch.Untrack(base,16384);
+        }
+        Require(VirtualFree(memory,0,MEM_RELEASE));
+    }
     auto directory=std::filesystem::temp_directory_path()/("native-cache-test-"+std::to_string(GetCurrentProcessId()));
     PersistentCache cache(directory);CacheKey key;key.Text("shader inputs");const std::byte payload[]{std::byte{1},std::byte{2},std::byte{3}};
     cache.Store(key.bytes,payload);std::vector<std::byte> result;Require(cache.Load(key.bytes,result)&&result==std::vector<std::byte>(std::begin(payload),std::end(payload)));

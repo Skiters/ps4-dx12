@@ -804,8 +804,9 @@ D3D12_DEPTH_STENCIL_VIEW_DESC GuestTextureCache::Entry::Dsv(bool read_only_depth
         if(desc.layers==1)view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2DMS;
         else{view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
             view.Texture2DMSArray={desc.first_layer,desc.view_layers};}
-    }else if(desc.layers==1)view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2D;
+    }else if(desc.layers==1){view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2D;view.Texture2D.MipSlice=desc.first_mip;}
     else {view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+        view.Texture2DArray.MipSlice=desc.first_mip;
         view.Texture2DArray.FirstArraySlice=desc.first_layer;view.Texture2DArray.ArraySize=desc.view_layers;}
     if(read_only_depth)view.Flags|=D3D12_DSV_FLAG_READ_ONLY_DEPTH;
     if(read_only_stencil&&desc.stencil_address)view.Flags|=D3D12_DSV_FLAG_READ_ONLY_STENCIL;
@@ -1080,6 +1081,22 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
          (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.address,existing->layout.guest_bytes))||
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
+        if(existing->buffer_alias_version){
+            if(!read_independent_||!acquire_independent_||!retire_independent_||
+               !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address||existing->desc.samples!=1)
+                throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
+            auto* source=existing.get();auto pin=PinBinding(*source);
+            auto snapshot=read_independent_(*source,d.address,layout.guest_bytes);
+            // Source ownership and its CPU-write guard remain live until the
+            // new interpretation has acquired its own guard. Pending copies
+            // retain the old allocation/descriptors through normal cache fences.
+            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable);
+            if(!acquire_independent_(converted))
+                throw std::runtime_error("Converted independent image could not retain ownership");
+            retire_independent_(*source);
+            Diagnostics::Count("image-version.gpu-reinterpret");
+            return converted;
+        }
         if(!resolve_owned_)throw std::runtime_error("GPU-owned upload backing has no resolver");
         resolve_owned_(*existing);
         if(existing->gpu_owned)throw std::runtime_error("Upload backing remains GPU-owned after resolution");
@@ -1180,7 +1197,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=WritableStorageFormat(d.data_format,layout.format);
         if(HasExactPackedExpansion(d,layout))r.Format=DXGI_FORMAT_R32G32B32A32_TYPELESS;
         if(d.depth_target) {
-            if(d.writable||d.render_target||d.levels!=1||
+            if(d.writable||d.render_target||(d.samples>1&&d.levels!=1)||
                (layout.format!=DXGI_FORMAT_R32_FLOAT&&layout.format!=DXGI_FORMAT_R16_UNORM))
                 throw std::invalid_argument("Invalid guest depth resource usage/format");
             r.Format=d.stencil_address?DXGI_FORMAT_R32G8X24_TYPELESS:
@@ -1384,7 +1401,7 @@ void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_a
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}
 Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
-    auto ownership_desc=image.desc;ownership_desc.writable=true;
+    auto ownership_desc=image.desc;ownership_desc.writable=true;ownership_desc.render_target=false;
     const auto ownership_layout=LayoutGuestTexture(ownership_desc);
     if(!list||!image.gpu_owned||!image.buffer_alias_version||!CanRetainBufferAlias(ownership_desc,ownership_layout)||
        ownership_layout.guest_bytes!=image.layout.guest_bytes||

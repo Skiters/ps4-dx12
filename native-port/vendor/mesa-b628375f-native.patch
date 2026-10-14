@@ -77,7 +77,7 @@ index c70c67c42109a175f181a1af80f78eb2e425f6be..0d4eff11826f72c4679dd68d497d654a
        UNREACHABLE("Unimplemented");
     case DXIL_RESOURCE_KIND_RAW_BUFFER:
 diff --git a/src/microsoft/compiler/dxil_nir.c b/src/microsoft/compiler/dxil_nir.c
-index 3bad5a48d3d3f109b201284d1c99cce6220460c9..38898c4d2bb6c1a780a6e8faa91ff3cf0427cf5d 100644
+index 3bad5a48d3d3f109b201284d1c99cce6220460c9..b0c386e3196b2c14ddc30803045dc3472a65b6a7 100644
 --- a/src/microsoft/compiler/dxil_nir.c
 +++ b/src/microsoft/compiler/dxil_nir.c
 @@ -1355,6 +1355,15 @@ lower_sysval_to_load_input_impl(nir_builder *b, nir_intrinsic_instr *intr,
@@ -96,6 +96,78 @@ index 3bad5a48d3d3f109b201284d1c99cce6220460c9..38898c4d2bb6c1a780a6e8faa91ff3cf
     default:
        return false;
     }
+@@ -1745,34 +1754,44 @@ dxil_nir_lower_discard_and_terminate(nir_shader *s)
+    return nir_shader_intrinsics_pass(s, lower_kill, nir_metadata_none, NULL);
+ }
+ 
++/* A partial SV_Position store must preserve the preceding component values.
++ * The viewport pass often updates only Y/Z; zero-extending that store resets
++ * homogeneous X/W and clips an otherwise valid DS/GS primitive. Accumulate the
++ * writes in a local value before issuing the required full DXIL export.
++ */
+ static bool
+-update_writes(struct nir_builder *b, nir_intrinsic_instr *intr, void *_state)
++update_writes(struct nir_builder *b, nir_intrinsic_instr *intr, void *state)
+ {
++   nir_variable *position = state;
++   if (intr->intrinsic == nir_intrinsic_emit_vertex ||
++       intr->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
++      /* Geometry outputs are undefined after emission, including components
++       * omitted by the next vertex. Do not carry a previous vertex's values.
++       */
++      b->cursor = nir_after_instr(&intr->instr);
++      nir_store_var(b, position, nir_undef(b, 4, 32), 0xf);
++      return true;
++   }
+    if (intr->intrinsic != nir_intrinsic_store_output)
+       return false;
+-
+    nir_io_semantics io = nir_intrinsic_io_semantics(intr);
+    if (io.location != VARYING_SLOT_POS)
+       return false;
+ 
+    nir_def *src = intr->src[0].ssa;
+    unsigned write_mask = nir_intrinsic_write_mask(intr);
+-   if (src->num_components == 4 && write_mask == 0xf)
+-      return false;
+-
+-   b->cursor = nir_before_instr(&intr->instr);
+    unsigned first_comp = nir_intrinsic_component(intr);
+-   nir_def *channels[4] = { NULL, NULL, NULL, NULL };
+-   assert(first_comp + src->num_components <= ARRAY_SIZE(channels));
++   assert(first_comp + src->num_components <= 4 && src->bit_size == 32);
++   b->cursor = nir_before_instr(&intr->instr);
++   nir_def *channels[4];
++   for (unsigned i = 0; i < 4; ++i)
++      channels[i] = nir_undef(b, 1, 32);
+    for (unsigned i = 0; i < src->num_components; ++i)
+       if (write_mask & (1 << i))
+          channels[i + first_comp] = nir_channel(b, src, i);
+-   for (unsigned i = 0; i < 4; ++i)
+-      if (!channels[i])
+-         channels[i] = nir_imm_intN_t(b, 0, src->bit_size);
+-
++   nir_store_var(b, position, nir_vec(b, channels, 4), write_mask << first_comp);
+    intr->num_components = 4;
+-   nir_src_rewrite(&intr->src[0], nir_vec(b, channels, 4));
++   nir_src_rewrite(&intr->src[0], nir_load_var(b, position));
+    nir_intrinsic_set_component(intr, 0);
+    nir_intrinsic_set_write_mask(intr, 0xf);
+    return true;
+@@ -1787,10 +1806,11 @@ dxil_nir_ensure_position_writes(nir_shader *s)
+       return false;
+    if ((s->info.outputs_written & VARYING_BIT_POS) == 0)
+       return false;
+-
++   nir_variable *position = nir_local_variable_create(
++      nir_shader_get_entrypoint(s), glsl_vec4_type(), "native_position_value");
+    return nir_shader_intrinsics_pass(s, update_writes,
+                                        nir_metadata_control_flow,
+-                                       NULL);
++                                       position);
+ }
+ 
+ static bool
 diff --git a/src/microsoft/compiler/dxil_signature.c b/src/microsoft/compiler/dxil_signature.c
 index 0219e54513355a807c12becaf4489947bd38d343..d21a04ba362465fa80fc386cfc139d4278d4180a 100644
 --- a/src/microsoft/compiler/dxil_signature.c
