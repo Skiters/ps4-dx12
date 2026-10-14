@@ -958,6 +958,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     diagnostic.Stage("resource-upload-and-draw");
     DrawArguments output_draw=draw;
+    // A bounded producer graph after the NEXT snapshot trigger. Copy actual
+    // shader-bound resources before this draw and its outputs afterwards into
+    // the same command stream; do not infer inputs from compatible RTs.
+    struct BoundCapture {std::string name,metadata;TextureTransfer transfer;};
+    std::vector<BoundCapture> bound_captures;
+    uint64_t bound_capture_id{};
     const auto submit_replay=[&](ResourceBindings& bindings) {
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         std::array<ColorAttachment,8> attachments{};
@@ -1022,6 +1028,92 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+        static std::set<u64> captured_bound_draws,capture_producers;
+        static bool capture_root_added{};
+        static u64 capture_bytes{};
+        const auto* capture_ps=std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE_PS");
+        const auto* fragment=guest.stages[u32(Shader::SwStage::Fragment)];
+        const auto capture_id=DisplayCapture::next_start.load();
+        if(capture_ps&&!capture_root_added&&DisplayCapture::Inputs(capture_id)){
+            capture_producers.insert(std::strtoull(capture_ps,nullptr,16));capture_root_added=true;
+        }
+        const bool capture_bound=capture_ps&&fragment&&captured_bound_draws.size()<8&&
+            capture_producers.contains(fragment->info.pgm_hash)&&!captured_bound_draws.contains(fragment->info.pgm_hash);
+        std::string pass_name;
+        if(capture_bound){std::ostringstream name;name<<"bound-"<<std::hex<<fragment->info.pgm_hash;pass_name=name.str();}
+        const auto record_capture=[&](GuestTextureCache::Entry& image,const std::string& role,UINT planes){
+            const auto native=image.texture.handle->GetDesc();const auto& d=image.desc;
+            std::ostringstream metadata;
+            metadata<<"group="<<capture_id<<" role="<<role<<" address="<<std::hex<<d.address
+                <<" resource="<<image.texture.handle.Get()<<" allocation="<<image.texture.allocation.get()
+                <<" pass_ps="<<fragment->info.pgm_hash<<" writer_vs="<<image.diagnostic_vs
+                <<" writer_ps="<<image.diagnostic_ps<<std::dec<<" uid="<<image.image_uid
+                <<" writer="<<image.diagnostic_writer<<" shader_planes="<<planes
+                <<" width="<<d.width<<" height="<<d.height<<" pitch="<<d.pitch
+                <<" tile="<<d.tile_mode<<" data="<<d.data_format<<" number="<<d.number_format
+                <<" bank_swizzle="<<d.bank_swizzle<<" alt_tile="<<d.alt_tile
+                <<" levels="<<d.levels<<" layers="<<d.layers<<" first_mip="<<d.first_mip
+                <<" first_layer="<<d.first_layer<<" samples="<<d.samples<<" depth="<<d.depth_target
+                <<" owned="<<image.gpu_owned<<" alias="<<image.buffer_alias_version<<" pending="<<image.pending
+                <<" fence_before="<<image.fence<<" native_format="<<native.Format;
+            const auto name=pass_name+"-"+role+"-"+std::to_string(image.image_uid);
+            const bool two_planes=native.Format==DXGI_FORMAT_R32G8X24_TYPELESS||
+                native.Format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT||native.Format==DXGI_FORMAT_R24G8_TYPELESS||
+                native.Format==DXGI_FORMAT_D24_UNORM_S8_UINT;
+            // ShaderPlanes is a conservative DS hazard mask; color SRVs also
+            // carry mask3. The native format determines copy plane count.
+            if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.MipLevels!=1||
+               native.DepthOrArraySize!=1||native.SampleDesc.Count!=1||d.stencil_address||two_planes){
+                DisplayCapture::Save(capture_id,name,{},metadata.str()+" readback=unsupported-subresources");return;
+            }
+            const auto prior=image.texture.state;
+            auto transfer=TextureTransfer::Create(device_.Get(),image.texture,true);
+            if(transfer.total_bytes>256*1024*1024-capture_bytes){
+                DisplayCapture::Save(capture_id,name,{},metadata.str()+" readback=capture-budget");return;
+            }
+            capture_bytes+=transfer.total_bytes;
+            bindings.Retain(transfer.staging.handle.Get());
+            transfer.Readback(RecordingList(),image.texture);image.texture.Transition(RecordingList(),prior);
+            bound_captures.push_back({name,metadata.str(),std::move(transfer)});
+        };
+        if(capture_bound){
+            captured_bound_draws.insert(fragment->info.pgm_hash);bound_capture_id=capture_id;
+            UINT captured_inputs{};
+            for(auto& entry:textures_.Entries())if(const auto planes=bindings.ShaderPlanes(entry->texture.handle.Get());planes&&
+                (entry->desc.levels!=1||entry->desc.layers!=1||
+                 bindings.ShaderReferences(entry->texture.handle.Get(),0,0,0)||
+                 bindings.ShaderReferences(entry->texture.handle.Get(),0,0,1))&&captured_inputs++<16){
+                if(entry->diagnostic_ps)capture_producers.insert(entry->diagnostic_ps);
+                record_capture(*entry,"input",planes);
+            }
+            // ROP reads of destination contents are dependencies too. A blur
+            // can add black bloom to an already fogged target; its sampled
+            // texture alone does not identify the scene color producer.
+            for(UINT i=0;i<target_count;++i)if(targets[i]){
+                if(targets[i]->diagnostic_ps)capture_producers.insert(targets[i]->diagnostic_ps);
+                record_capture(*targets[i],"target-before"+std::to_string(i),0);
+            }
+            std::ostringstream sharps;
+            for(UINT i=0;i<target_count;++i)if(targets[i]){
+                const auto& blend=state.pipeline.BlendState.RenderTarget[i];
+                sharps<<"target="<<i<<" blend="<<blend.BlendEnable<<" logic="<<blend.LogicOpEnable
+                    <<" src="<<blend.SrcBlend<<" dst="<<blend.DestBlend<<" op="<<blend.BlendOp
+                    <<" src_alpha="<<blend.SrcBlendAlpha<<" dst_alpha="<<blend.DestBlendAlpha
+                    <<" alpha_op="<<blend.BlendOpAlpha<<" write_mask="<<unsigned(blend.RenderTargetWriteMask)<<"\n";
+            }
+            for(const auto& stage:stages)for(const auto& image:stage.info->images){
+                const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
+                const auto d=DescribeGuestTexture(sharp);
+                sharps<<"stage_hash="<<std::hex<<stage.info->pgm_hash<<" address="<<d.address<<std::dec
+                    <<" writable="<<image.is_written<<" width="<<d.width<<" height="<<d.height
+                    <<" pitch="<<d.pitch<<" tile="<<d.tile_mode<<" data="<<d.data_format<<" number="<<d.number_format
+                    <<" mip="<<d.first_mip<<" levels="<<d.levels<<" layer="<<d.first_layer<<" view_layers="<<d.view_layers<<"\n";
+            }
+            DisplayCapture::Save(capture_id,pass_name+"-requested-views",{},sharps.str());
+            DisplayCapture::Save(capture_id,pass_name+"-fragment.spv",std::as_bytes(fragment->EffectiveSpirv()),"Effective production fragment SPIR-V");
+            const auto& dxil=shaders_.Graphics(guest).stages[u32(Shader::SwStage::Fragment)].bytecode;
+            DisplayCapture::Save(capture_id,pass_name+"-fragment.dxil",std::as_bytes(std::span(dxil)),"Linked production fragment DXIL");
+        }
         ExecuteGraphics(pipeline,bindings,state,std::span(attachments.data(),target_count),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
@@ -1035,6 +1127,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 targets[i]->diagnostic_ps=ps?ps->info.pgm_hash:0;
             }
         }
+        if(capture_bound)for(UINT i=0;i<target_count;++i)if(targets[i])
+            record_capture(*targets[i],"output"+std::to_string(i),0);
         if(probe){
             RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_result.handle.Get(),0);
@@ -1076,6 +1170,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         });
     }else ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,submit_replay,
         textures_,r.ta_bc_base.Address(),index_requests);
+    if(bound_capture_id){
+        Finish();ValidateDebugMessages();
+        for(auto& readback:bound_captures){
+            auto& transfer=readback.transfer;
+            std::vector<std::byte> bytes(size_t(transfer.row_bytes)*transfer.rows);
+            transfer.ReadRows(bytes.data(),bytes.size(),transfer.row_bytes);
+            DisplayCapture::Save(bound_capture_id,readback.name,bytes,readback.metadata+
+                " completed="+std::to_string(CompletedFence())+" row_bytes="+std::to_string(transfer.row_bytes)+
+                " footprint_format="+std::to_string(transfer.footprint.Footprint.Format));
+        }
+    }
     if(probe){
         Finish();
         void* data{};D3D12_RANGE range{0,sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS)};
