@@ -7,11 +7,16 @@
 #include <cstdio>
 using namespace NativeDX12;
 template<class Component=u32>
-void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool writable,bool pressure=false,UINT data_format=4){
+void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool writable,bool pressure=false,UINT data_format=4,
+    bool raw_source=false,bool raw_destination=false){
     Rasterizer renderer(device);GuestTextureCache cache(device);GuestMultisample transfer(device);
     GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;desc.layers=2;
     desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=true;
+    desc.native_raw32=raw_source;
     auto sampled=desc;sampled.writable=writable;sampled.tile_mode=10;
+    sampled.native_raw32=raw_destination;
+    if((raw_source||raw_destination)&&(data_format!=10||(raw_destination&&!writable)))
+        throw std::invalid_argument("Raw RGBA8 fixture needs data10 and a writable raw destination");
     sampled.number_format=number_format==4?5:number_format==5?7:4;
     if constexpr(sizeof(Component)==2)
         sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:number_format==5?7:0;
@@ -64,6 +69,25 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
             return requested;
         },acquire,[](auto& image){image.buffer_alias_version=false;image.SetGpuOwned(false);});
         auto& source=cache.Upload(desc,physical,renderer.RecordingList(),renderer.CompletedFence());
+        const auto require_raw_storage=[](const auto& image){
+            if(image.layout.format!=DXGI_FORMAT_R32_UINT||
+               image.texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_TYPELESS||
+               image.storage_samples.size()!=image.desc.samples||image.Uav(0).Format!=DXGI_FORMAT_R32_UINT)
+                throw std::runtime_error("Raw RGBA8 did not retain R32 native/storage views");
+            for(const auto& plane:image.storage_samples)
+                if(plane.handle->GetDesc().Format!=DXGI_FORMAT_R32_TYPELESS)
+                    throw std::runtime_error("Raw RGBA8 storage plane changed its allocation family");
+        };
+        if(raw_source)require_raw_storage(source);
+        if(raw_destination&&!raw_source){
+            auto invalid=desc;invalid.native_raw32=true;
+            bool rejected{};
+            try{transfer.Prepare(source.texture,gpu,invalid,LayoutGuestTexture(invalid),0,0,false);}
+            catch(const std::invalid_argument& error){
+                rejected=strcmp(error.what(),"Native raw RGBA8 MSAA needs R32 backing and layout")==0;
+            }
+            if(!rejected)throw std::runtime_error("Raw RGBA8 accepted an ordinary RGBA allocation");
+        }
         const auto fp=GuestMultisample::Footprint(desc,layout);
         const auto linear_bytes=GuestMultisample::LinearBytes(desc,fp);
         writes.reserve(desc.layers);writer_leases.reserve(desc.layers);
@@ -158,6 +182,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         }
         const auto source_uid=source.image_uid;
         auto& converted=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence());
+        if(raw_destination)require_raw_storage(converted);
         const bool ownership=transfers==1&&converted.image_uid!=source_uid&&converted.gpu_owned&&
             converted.buffer_alias_version&&!source.gpu_owned;
         const auto result_fp=GuestMultisample::Footprint(sampled,sampled_layout);
@@ -195,7 +220,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(!private_exact)throw std::runtime_error("MSAA private retile changed padding or sample layout");
         if(!unchanged)throw std::runtime_error("MSAA transfer changed physical buffer domain/padding");
         if(!ownership)throw std::runtime_error("MSAA logical ownership transfer failed");
-        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u samples=%u number_format=%u writable=%u pressure=%u layers=2 exact\n",data_format,samples,number_format,unsigned(writable),unsigned(pressure));
+        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u layers=2 exact\n",data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination));
     }catch(...){renderer.Finish();throw;}
 }
 int main(int argc,char** argv){try{
@@ -246,9 +271,13 @@ int main(int argc,char** argv){try{
         packed.writable=true;packed.native_raw32=true;
         const auto packed_layout=LayoutGuestTexture(packed);
         if(!packed.UsesRaw32()||packed_layout.format!=DXGI_FORMAT_R32_UINT||
-           GuestTextureCache::CanTransferIndependentMultisample(packed,packed_layout)||
-           GuestTextureCache::CanUploadGpuSnapshot(packed,packed_layout,true))
-            throw std::runtime_error("R32-backed RGBA8 escaped its packing restriction");
+           !GuestTextureCache::CanTransferIndependentMultisample(packed,packed_layout)||
+           !GuestTextureCache::CanUploadGpuSnapshot(packed,packed_layout,true))
+            throw std::runtime_error("R32-backed RGBA8 lost its exact word transfer");
+        auto mismatched=packed_layout;mismatched.format=DXGI_FORMAT_R8G8B8A8_UINT;
+        if(GuestTextureCache::CanTransferIndependentMultisample(packed,mismatched)||
+           GuestTextureCache::CanUploadGpuSnapshot(packed,mismatched,true))
+            throw std::runtime_error("Raw RGBA8 accepted a non-R32 transfer layout");
         packed.data_format=4;
         if(!GuestTextureCache::CanTransferIndependentMultisample(packed,LayoutGuestTexture(packed)))
             throw std::runtime_error("Raw R32 lost its exact MSAA transfer");
@@ -263,7 +292,16 @@ int main(int argc,char** argv){try{
         RunMultisample<u8>(device.Get(),8,9,true,true,10);
         puts("PASS: independent R8/RG8/RGBA8 raw bytes, sRGB without gamma, byte tails and pressure restore");return 0;
     }
-    if(argc!=1)throw std::invalid_argument("Expected no arguments, --msaa, --msaa-pressure, --msaa-vector32, --msaa-vector16 or --msaa-vector8");
+    if(argc==2&&strcmp(argv[1],"--msaa-rawrgba8")==0){
+        RunMultisample<u8>(device.Get(),2,4,false,true,10,true,false);
+        RunMultisample<u8>(device.Get(),4,5,true,true,10,true,false);
+        RunMultisample<u8>(device.Get(),8,1,true,true,10,true,true);
+        RunMultisample<u8>(device.Get(),2,5,true,false,10,false,true);
+        RunMultisample<u8>(device.Get(),4,1,true,false,10,false,true);
+        RunMultisample<u8>(device.Get(),8,4,true,false,10,false,true);
+        puts("PASS: raw RGBA8 MSAA DWORD upload/readback, typed reinterpretation and pressure restore");return 0;
+    }
+    if(argc!=1)throw std::invalid_argument("Expected no arguments, --msaa, --msaa-pressure, --msaa-vector32, --msaa-vector16, --msaa-vector8 or --msaa-rawrgba8");
     Rasterizer renderer(device.Get());
     GuestTextureCache cache(device.Get());GuestTextureDesc desc;desc.address=0x40000;desc.width=desc.height=desc.pitch=8;
     desc.tile_mode=13;desc.data_format=4;desc.number_format=7;desc.writable=true;

@@ -20,6 +20,13 @@ ComPtr<ID3DBlob> Compile(std::string_view source,const char* target,const D3D_SH
 DXGI_FORMAT LinearFormat(DXGI_FORMAT format){
     return format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB?DXGI_FORMAT_R8G8B8A8_UNORM:format;
 }
+void ValidateRawRgba8Transfer(const GuestTextureDesc& d,const GuestTextureLayout& layout,DXGI_FORMAT backing){
+    if(d.data_format==10&&d.UsesRaw32()&&
+       (layout.format!=DXGI_FORMAT_R32_UINT||layout.bytes_per_pixel!=4||layout.HostBytesPerPixel()!=4||
+        layout.expanded_bytes_per_pixel||
+        (backing!=DXGI_FORMAT_R32_TYPELESS&&backing!=DXGI_FORMAT_R32_UINT)))
+        throw std::invalid_argument("Native raw RGBA8 MSAA needs R32 backing and layout");
+}
 DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if(d.depth_target)return LinearFormat(layout.format);
     if(d.data_format>=16&&d.data_format<=19)
@@ -33,7 +40,9 @@ DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& l
     case 5:return DXGI_FORMAT_R16G16_UINT;
     case 9:return layout.expanded_bytes_per_pixel==16?DXGI_FORMAT_R32G32B32A32_UINT:
         layout.format==DXGI_FORMAT_R32_UINT?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R10G10B10A2_UINT;
-    case 10:return DXGI_FORMAT_R8G8B8A8_UINT;
+    // Raw storage already packs RGBA into one DWORD. Match its R32 allocation
+    // for buffer, sample SRV and RTV access; no color conversion is needed.
+    case 10:return d.UsesRaw32()?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R8G8B8A8_UINT;
     case 11:return DXGI_FORMAT_R32G32_UINT;
     case 12:return DXGI_FORMAT_R16G16B16A16_UINT;
     case 13:return DXGI_FORMAT_R32G32B32A32_UINT;
@@ -71,6 +80,7 @@ uint64_t GuestMultisample::LinearBytes(const GuestTextureDesc& d,
 std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& texture,Resource& linear,
     const GuestTextureDesc& d,const GuestTextureLayout& layout,UINT layer,UINT plane,bool upload){
     const auto texture_desc=texture.handle->GetDesc(),buffer_desc=linear.handle->GetDesc();
+    ValidateRawRgba8Transfer(d,layout,texture_desc.Format);
     if(d.samples<2||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||plane>1||
        (plane&&!d.stencil_address)||texture_desc.SampleDesc.Count!=d.samples||
        texture_desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
@@ -290,6 +300,7 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
     Resource& source,Resource& destination,const GuestTextureDesc& d,
     const GuestTextureLayout& layout,UINT layer){
     const auto src=source.handle->GetDesc(),dst=destination.handle->GetDesc();
+    ValidateRawRgba8Transfer(d,layout,src.Format);
     if(d.depth_target||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||
        layout.block_extent!=1||src.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        dst.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||src.Width!=dst.Width||src.Height!=dst.Height||

@@ -77,9 +77,9 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
         (d.data_format==10&&d.number_format==9);
     return (d.samples==2||d.samples==4||d.samples==8)&&d.levels==1&&
         !d.depth_target&&!d.stencil_address&&!d.volume_depth&&!d.one_dimensional&&
-        // Raw RGBA8 uses an R32 allocation, but its MSAA transfer still binds
-        // RGBA8_UINT views. It needs a separate packing path, unlike raw R32.
-        !(d.data_format==10&&d.UsesRaw32())&&
+        // Raw RGBA8 moves its already-packed DWORD through R32_UINT views;
+        // ordinary RGBA8 retains its four-component integer transfer.
+        (!(d.data_format==10&&d.UsesRaw32())||layout.format==DXGI_FORMAT_R32_UINT)&&
         bytes&&number&&layout.block_extent==1&&layout.bytes_per_pixel==bytes&&
         layout.HostBytesPerPixel()==bytes&&!layout.expanded_bytes_per_pixel;
 }
