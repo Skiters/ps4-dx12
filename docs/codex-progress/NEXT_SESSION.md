@@ -1,5 +1,14 @@
 # Next session
 
+## Latest package — 2026-10-15
+
+Preview24 is built and installed at the user's subsequent request: source a3f1d5e plus
+packaged dirty patch, EXE SHA256 70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+Release compile/link and static package/discovery checks succeeded. No runtime tests,
+game or desktop automation; no new FPS. Selected core/settings and originals preserved.
+See SESSION_HANDOFF.md and eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Earlier source-only compilation/install statements below are historical.
+
 ## Active continuation — 2026-10-15: source work, execution deferred
 
 SESSION_HANDOFF.md is authoritative. The user stopped ALL test/game execution and

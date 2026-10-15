@@ -1,5 +1,32 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Latest installed package — 2026-10-15, preview24
+
+This update supersedes the earlier source-only build/install status below. The user
+subsequently requested the latest test core installed in PS4Desktop and confirmation
+of GitHub push. Build/install is authorized; tests, game and desktop automation remain
+deferred. Release core compiled/linked successfully in 39.367s with four build jobs.
+No core, regression fixture or game was launched after this build.
+
+- Installed name: **DX12 — перенос №24 — 15.10.2026**, status Experimental.
+- Package: C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89
+- Core SHA256: 70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf
+- Source: a3f1d5eb5e73b4a16eb70cc6062b1b25c85b2ea7 plus exact full dirty-source patch
+  in package provenance. This includes the PM4/backing/culling/MSAA/CMASK changes below.
+- Static verification: all76 manifest files, PE dependency closure, source identity;
+  installed desktop metadata-only --list-cores discovers this version with Error=null.
+- Separate profile and20 save files copied from selected preview23, original hashes
+  unchanged. Selected core/settings, old packages, installed desktop/Vulkan preserved.
+- In the app open «Версии ядра». If the dialog was already open, close and reopen that
+  dialog to refresh its list. The new package is installed, not selected automatically.
+- Build/provenance/install/discovery: F:/PS4Dev/handoff/eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+  Historical CHECKPOINT_FINAL.json and final-residual remain the earlier source checkpoint;
+  this follow-up changes documentation only. Installation.json records current follow-up HEAD.
+
+Compilation is now confirmed for production core sources; new standalone fixtures were
+not built/run. No new runtime, frame-rate or whole-port acceptance. Continue the same
+typed CMASK/source contract below while respecting the execution gate.
+
 ## Active continuation — 2026-10-15: source work, execution deferred
 
 This section supersedes older active priorities and test instructions below.
@@ -587,7 +614,8 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 ## NEXT CODEX SESSION — START HERE
 
 > Продолжи Skiters/ps4-dx12 на fix/mixed-cmask с актуального HEAD. Прочитай активный раздел
-> SESSION_HANDOFF.md за 2026-10-15 и eop-continuation-20261015/CHECKPOINT_FINAL.json.
+> SESSION_HANDOFF.md за 2026-10-15, CHECKPOINT_FINAL.json и preview24-installed/INSTALLATION.json.
+> Ядро №24 собрано и установлено; игровые/регрессионные проверки по-прежнему не запускать.
 > Сохрани dirty tree и22 staged удаления; не применяй архив поверх текущего дерева.
 > Пользователь запретил запуск тестов, игры и управление компьютером до окончания полного
 > переноса: продолжай production-код, не запускай проверки выполнения без изменения этого
