@@ -365,7 +365,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
                     const auto original=buffer.WriteRange();
                     return buffer.unordered_access&&buffer.address==desc.address&&original.address==desc.address&&
-                        original.size==buffer.size&&(!buffer.written||original.size==layout.guest_bytes);
+                        original.size&&original.size==buffer.size;
                 });
                 // GetArena in the pinned backend guarantees whole 4-GiB VA
                 // pages only through this reader's end. A later full writer
@@ -375,6 +375,21 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     pending[i].original_bytes<=UINT64_MAX-desc.address&&
                     ((desc.address+layout.guest_bytes-1)>>32)<=
                         ((desc.address+pending[i].original_bytes-1)>>32);
+                // Without a full-image writer, the reader must already select
+                // every image sparse block. Actual blocks are powers of two at
+                // least 16 KiB, so this minimum-block bound is sufficient.
+                const bool image_fits_reader_blocks=image_fits_reader_arena&&
+                    ((desc.address+layout.guest_bytes-1)>>14)<=
+                        ((desc.address+pending[i].original_bytes-1)>>14);
+                // Preserve the existing same-submit full-writer case. A longer
+                // writer may cover the image too, but must not require another
+                // arena page beyond the earlier reader's guaranteed capacity.
+                const bool covering_writer=image_fits_reader_arena&&std::ranges::any_of(requests,[&](const auto& buffer){
+                    return buffer.written&&buffer.address==desc.address&&buffer.size>=layout.guest_bytes&&
+                        buffer.size<=UINT64_MAX-desc.address&&
+                        ((desc.address+buffer.size-1)>>32)<=
+                            ((desc.address+pending[i].original_bytes-1)>>32);
+                });
                 const bool unique=std::ranges::none_of(textures->Entries(),[&](const auto& image){
                     return image.get()!=version&&image->gpu_owned&&image->buffer_alias_version&&
                         image->desc.address<desc.address+layout.guest_bytes&&
@@ -384,7 +399,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
                    (ordered_formatted_version&&ordered_formatted_version!=version)||!same_base_uavs||
                    !pending[i].original_bytes||pending[i].original_bytes!=requests[i].size||
-                   (reads_image&&!clean_small&&!image_fits_reader_arena)||
+                   (reads_image&&!clean_small&&(!image_fits_reader_arena||
+                    (!image_fits_reader_blocks&&!covering_writer)))||
                    textures->GetMetaInfo(desc.address)||!ownership||
                    !textures->CanRetainIndependentImage(ownership->desc,ownership->layout)||
                    native.SampleDesc.Count!=desc.samples||
@@ -392,7 +408,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    (layout.expanded_bytes_per_pixel&&(!HasExactPackedExpansion(desc,layout)||
                     !version->expanded_guest_backing.handle||!version->expanded_written_mask.handle||
                     !version->expanded_backing_bytes)))
-                    throw std::runtime_error("Ordered buffer/image aliases require exact-base reads, full-image writers and proven transfer capacity");
+                    throw std::runtime_error("Ordered buffer/image aliases require exact-base ranges and proven transfer capacity/residency");
                 ordered_formatted_writer=true;ordered_formatted_version=version;
                 requests[i].resident=true;
                 for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
@@ -420,6 +436,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 requests.push_back({version->desc.address,version->layout.guest_bytes,false,requests[i].unordered_access,true});
         }
     }
+    // A short writer does not prepare the whole retile destination by itself.
+    // Add only a readonly residency envelope after descriptor-order planning;
+    // original sharp bounds, write ranges and pending indices remain unchanged.
+    for(const auto& transfer:ordered_formatted_images)
+        if(std::ranges::none_of(requests,[&](const auto& buffer){
+            return buffer.unordered_access&&buffer.address==transfer.address&&buffer.size>=transfer.bytes;}))
+            requests.push_back({transfer.address,transfer.bytes,false,true,true});
     for(const auto& binding:pipeline.Layout().Bindings()) {
         if(binding.nv_clock||binding.amd_clock)continue;
         // Native capture/replay storage is supplied by the graphics callback,
