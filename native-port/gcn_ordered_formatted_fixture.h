@@ -41,7 +41,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         auto& program = gpu.GetCsRegs();
         program = {};
         program.address = reinterpret_cast<u64>(code.data()) >> 8;
-        // Exactly one invocation: both alias loads finish before the final store.
+        // Exactly one invocation: no inter-thread alias race enters the oracle.
         program.num_thread_x.full = program.num_thread_y.full = program.num_thread_z.full = 1;
         program.dim_x = program.dim_y = program.dim_z = 1;
         program.settings.num_user_regs = user_registers;
@@ -50,8 +50,20 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         return program;
     };
     const auto initial = [](u32 x, u32 y) { return 0x10203040u ^ (y << 12) ^ x; };
-    for (const bool small : {false, true}) for (const bool read_first : {true, false})
+    enum class Sequence { ReadWrite, WriteRead, RawWriteRead, ReadWriteRead };
+    for (const auto sequence : {Sequence::ReadWrite, Sequence::WriteRead,
+                               Sequence::RawWriteRead, Sequence::ReadWriteRead})
+    for (const bool small : {false, true})
     for (const bool clean : {false, true}) {
+        const bool read_first = sequence != Sequence::WriteRead;
+        const bool repeated = sequence == Sequence::RawWriteRead || sequence == Sequence::ReadWriteRead;
+        // The original eight cases already cover the size threshold. Keep the
+        // new store/reread cases focused on small private versus resident views.
+        if (repeated && !small) continue;
+        const bool early_formatted = sequence != Sequence::RawWriteRead;
+        const bool private_early = small && clean && read_first;
+        const bool image_tiled = read_first && early_formatted && !private_early;
+        const bool partial_output = small && clean && sequence == Sequence::ReadWriteRead;
         rasterizer.ReadMemory(base, AllocationBytes);
         rasterizer.InvalidateMemory(base, AllocationBytes);
         std::memset(memory, small ? 0xb6 : 0xa7, AllocationBytes);
@@ -92,10 +104,10 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         target.dst_sel_x = 4; target.dst_sel_y = 5; target.dst_sel_z = 6; target.dst_sel_w = 7;
         auto observation = target;
         observation.base_address = base + ObservationOffset;
-        // Full protected page permits deferred GPU ownership, even though only
-        // seven isolated DWORDs are written over the whole scenario.
+        // Seed/probe commands always use a full protected page. The last case
+        // gives the tested command a separate fresh, partial-page output below.
         observation.num_records = 4096 / 4;
-        const u64 identity = (u64(small) << 8) | (u64(read_first) << 1) | u64(clean);
+        const u64 identity = (u64(sequence) << 12) | (u64(small) << 8) | u64(clean);
         initialize(seed, {
             0x7e000280, 0x7e0202ff, BufferValue,
             0xe0700000, 0x80000100, // raw store v1, s[0:3]
@@ -146,56 +158,98 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         }
 
         // Resource discovery follows first live instruction use, not SGPR index.
-        // Put the FIRST used descriptor in s[4:7] in BOTH cases. The writer's raw
+        // Put the FIRST used descriptor in s[4:7] in every case. The writer's raw
         // load is observed, so it cannot disappear through dead-code removal.
         const u32 read_group = read_first ? 1 : 0, write_group = read_first ? 0 : 1;
-        const std::array<u32, 2> formatted_load{0xe0000000, 0x80000400 | (read_group << 16)};
+        const u32 output_group = repeated ? 3 : 2;
+        const u32 early_opcode = early_formatted ? 0xe0000000 : 0xe0300000;
+        auto command_output = observation;
+        if (partial_output) {
+            // Do not reuse the full-page observation's resident allocation:
+            // doing so could acquire ownership for a small sharp and hide the
+            // synchronous fallback. This page has no earlier GPU binding.
+            command_output.base_address = base + ObservationOffset + 4096;
+            command_output.num_records = 64 / 4;
+        }
+        const u64 command_output_offset = command_output.base_address - base;
+        const std::array<u32, 2> early_load{early_opcode, 0x80000400 | (read_group << 16)};
         const std::array<u32, 2> raw_load{0xe0300000, 0x80000500 | (write_group << 16)};
         std::vector<u32> words;
         const auto append = [&](const auto& pair) { words.insert(words.end(), pair.begin(), pair.end()); };
-        append(read_first ? formatted_load : raw_load);
-        append(read_first ? raw_load : formatted_load);
+        append(read_first ? early_load : raw_load);
+        append(read_first ? raw_load : early_load);
+        words.push_back(0xbf8c0000); // s_waitcnt before the actual store
+        if (repeated) {
+            words.insert(words.end(), {
+                0x7e1002ff, FinalValue, 0xe0700000, 0x80000800 | (write_group << 16),
+                0xbf8c0000,
+                // Reload the SAME early descriptor after W changed the arena.
+                // A private CPU snapshot stays B; a resident alias sees Final.
+                early_opcode, 0x80000600 | (read_group << 16),
+                0xe0000000, 0x80020700, // distinct late formatted R, s[8:11]
+                0xbf8c0000
+            });
+        }
         words.insert(words.end(), {
-            0xbf8c0000, // s_waitcnt: both values are captured before any store
-            0xe0700010, 0x80020400, 0xe0700014, 0x80020500,
-            0x7e0c02ff, FinalValue, 0xe0700000, 0x80000600 | (write_group << 16),
-            0xbf810000
+            0xe0700010, 0x80000400 | (output_group << 16),
+            0xe0700014, 0x80000500 | (output_group << 16)
         });
+        if (repeated) {
+            words.insert(words.end(), {
+                0xe0700018, 0x80000600 | (output_group << 16),
+                0xe070001c, 0x80000700 | (output_group << 16)
+            });
+        } else {
+            words.insert(words.end(), {
+                0x7e1002ff, FinalValue, 0xe0700000, 0x80000800 | (write_group << 16)
+            });
+        }
+        words.push_back(0xbf810000);
         initialize(ordered, words, 0x4f52444f52440000ULL + identity);
-        auto& ordered_program = bind(ordered, 12);
+        auto& ordered_program = bind(ordered, repeated ? 16 : 12);
         std::memcpy(ordered_program.user_data.data(), &target, sizeof(target));
         std::memcpy(ordered_program.user_data.data() + 4, &target, sizeof(target));
-        std::memcpy(ordered_program.user_data.data() + 8, &observation, sizeof(observation));
+        if (repeated) std::memcpy(ordered_program.user_data.data() + 8, &target, sizeof(target));
+        std::memcpy(ordered_program.user_data.data() + output_group * 4, &command_output, sizeof(command_output));
         const auto& stage = reflection.BuildCompute(gpu);
         if (!stage.info.images.empty() || stage.info.uses_dma)
             throw std::runtime_error("Ordered GCN command unexpectedly has image or DMA operands");
         std::vector<const Shader::BufferResource*> guest_buffers;
         for (const auto& buffer : stage.info.buffers)
             if (!buffer.IsSpecial()) guest_buffers.push_back(&buffer);
-        if (guest_buffers.size() != 3)
+        if (guest_buffers.size() != (repeated ? 4u : 3u))
             throw std::runtime_error("Ordered GCN descriptor collection unexpectedly merged or removed resources");
-        for (size_t index = 0; index < 3; ++index) {
+        for (size_t index = 0; index < guest_buffers.size(); ++index) {
             const auto& buffer = *guest_buffers[index];
             const auto sharp = buffer.GetSharp(stage.info);
-            const bool reader = index == (read_first ? 0u : 1u);
-            const auto address = index == 2 ? observation.base_address : target.base_address;
-            const auto bytes = index == 2 ? u64(4096) : layout.guest_bytes;
+            const bool early_reader = index == (read_first ? 0u : 1u);
+            const bool late_reader = repeated && index == 2;
+            const bool reader = early_reader || late_reader;
+            const bool formatted = late_reader || (early_reader && early_formatted);
+            const bool output = index == guest_buffers.size() - 1;
+            const auto address = output ? command_output.base_address : target.base_address;
+            const auto bytes = output ? command_output.GetSize() : layout.guest_bytes;
             if (sharp.base_address != address || sharp.GetSize() != bytes ||
-                buffer.is_written == reader || buffer.is_formatted != reader)
+                buffer.is_written == reader || buffer.is_formatted != formatted)
                 throw std::runtime_error("Actual translated buffer collection does not have the requested R/W order");
         }
-        const bool must_reject = small && clean && read_first;
-        bool rejected = false;
-        try {
-            rasterizer.DispatchDirect();
-        } catch (const std::runtime_error& error) {
-            if (!must_reject || std::string_view(error.what()) !=
-                "Ordered formatted buffer/image writers require a unique full-range resident compute alias")
-                throw;
-            rejected = true;
+        rasterizer.DispatchDirect();
+        const auto loaded = image_tiled ? ImageValue : BufferValue;
+        const auto next = image_tiled ? ImageNext : initial(1, 0);
+        expect_word(command_output_offset + 16, loaded);
+        expect_word(command_output_offset + 20, loaded);
+        if (repeated) {
+            expect_word(command_output_offset + 24, private_early ? BufferValue : FinalValue);
+            expect_word(command_output_offset + 28, FinalValue);
         }
-        if (rejected != must_reject)
-            throw std::runtime_error("Small clean R/W command did not preserve its explicit streaming boundary");
+        if (partial_output) {
+            // Without asking for a readback, the unowned output must already be
+            // CPU-visible when the synchronous dispatch fallback returns.
+            if (rasterizer.IsGpuBufferModified(command_output.base_address, command_output.GetSize()) ||
+                std::memcmp(backing + command_output_offset, expected.data() + command_output_offset,
+                            size_t(command_output.GetSize())))
+                throw std::runtime_error("Partial ordered-stream observation did not retire synchronously");
+        }
 
         // Read the image only AFTER the buffer writer invalidated its old entry.
         // The first pixel detects a stale image; the second detects lost retile.
@@ -208,25 +262,20 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::memcpy(after_program.user_data.data(), &image, sizeof(image));
         std::memcpy(after_program.user_data.data() + 8, &observation, sizeof(observation));
         rasterizer.DispatchDirect();
-        const auto loaded = read_first ? ImageValue : BufferValue;
-        const auto next = read_first ? ImageNext : initial(1, 0);
-        if (!must_reject) {
-            expect_word(ObservationOffset + 16, loaded);
-            expect_word(ObservationOffset + 20, loaded); // aliases share one resident arena
-            expect_word(ImageOffset + first, FinalValue);
-            if (read_first) expect_word(ImageOffset + second, ImageNext);
-        }
-        // A rejected command must leave I alive, B unchanged, and the tested
-        // observation DWORDs untouched. The later probe itself still executes.
-        expect_word(ObservationOffset + 32, must_reject ? ImageValue : FinalValue);
+        expect_word(ImageOffset + first, FinalValue);
+        if (image_tiled) expect_word(ImageOffset + second, ImageNext);
+        expect_word(ObservationOffset + 32, FinalValue);
         expect_word(ObservationOffset + 36, next);
         rasterizer.ReadMemory(base, AllocationBytes);
         rasterizer.Finish();
         if (std::memcmp(backing, expected.data(), AllocationBytes))
             throw std::runtime_error("Ordered GCN observation, final buffer, image reload or physical/padding oracle mismatch");
+        const char* sequence_name = sequence == Sequence::ReadWrite ? "R/W" :
+            sequence == Sequence::WriteRead ? "W/R" :
+            sequence == Sequence::RawWriteRead ? "rawR/W/formattedR" : "formattedR/W/formattedR";
         std::printf("PASS: ordered-formatted %s %s %s%s bytes=%llu; real GCN, full physical oracle\n",
             small ? "small" : "large", clean ? "CPU-clean" : "GPU-modified",
-            read_first ? "R/W" : "W/R", must_reject ? " rejected before mutation" : "",
+            sequence_name, partial_output ? " partial-output sync fallback" : "",
             static_cast<unsigned long long>(layout.guest_bytes));
     }
     rasterizer.Finish();

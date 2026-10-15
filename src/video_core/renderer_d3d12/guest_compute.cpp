@@ -108,7 +108,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
-    struct Pending {UINT reg;bool uav;u32 push_index,byte_adjust;bool formatted_read{};u64 original_bytes{};};
+    struct Pending {
+        UINT reg;bool uav;u32 push_index,byte_adjust;bool formatted_read{};u64 original_bytes{};
+        bool guest_read{};std::optional<size_t> stream_view;
+    };
     std::vector<Pending> pending;
     struct DmaPending {UINT reg;bool fault;};std::vector<DmaPending> dma_pending;
     const bool uses_dma=std::any_of(stages.begin(),stages.end(),[](const auto& stage){return stage.info&&stage.info->uses_dma;});
@@ -201,7 +204,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
         requests.push_back({address,size,source.is_written,uav,false,u8(adjust),original_bytes});
         pending.push_back({reg,uav,start.buffer+u32(index),adjust,
-            source.buffer_type==Shader::BufferType::Guest&&source.is_formatted&&!source.is_written,original_bytes});covered.emplace(reg,0);
+            source.buffer_type==Shader::BufferType::Guest&&source.is_formatted&&!source.is_written,original_bytes,
+            source.buffer_type==Shader::BufferType::Guest&&!source.is_written,{}});covered.emplace(reg,0);
     }
     u64 image_reg=u64(start.unified)+info.buffers.size();
     for(const auto& source:info.images) {
@@ -306,6 +310,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         VAddr address;u64 bytes;GuestTextureCache::Entry* image;Resource tiled;
     };
     std::vector<OrderedFormattedImage> ordered_formatted_images;
+    std::vector<size_t> ordered_stream_reads;
     GuestTextureCache::Entry* ordered_formatted_version{};
     bool ordered_formatted_writer=false;
     if(textures)for(size_t i=0;i<ordinary_count;++i)if(pending[i].formatted_read&&
@@ -317,12 +322,18 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
     }
     for(size_t i=0;i<ordinary_count;++i)if(separate_overlap(requests[i].address,requests[i].size)){
-        if(pending[i].formatted_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})){
-            const bool needs_sync=rasterizer.FormattedBufferNeedsImageSync(
+        if(pending[i].guest_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})){
+            const bool needs_sync=pending[i].formatted_read&&rasterizer.FormattedBufferNeedsImageSync(
                 requests[i].address+pending[i].byte_adjust,pending[i].original_bytes);
-            const bool overlaps_writer=std::ranges::any_of(requests,[&](const auto& buffer){
+            const auto request_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                 return buffer.written&&buffer.address<requests[i].address+requests[i].size&&
                     requests[i].address<buffer.address+buffer.size;});
+            const bool overlaps_writer=request_writer!=requests.end();
+            // Raw-only commands need the same early clean CPU stream, even when
+            // no formatted descriptor triggers image synchronization afterward.
+            if(!pending[i].formatted_read&&(!overlaps_writer||i>=size_t(request_writer-requests.begin())||
+               pending[i].original_bytes>16384||rasterizer.IsGpuBufferModified(
+                   requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)))continue;
             if(!needs_sync&&!overlaps_writer)continue;
             GuestTextureCache::Entry* version{};size_t candidates{};
             if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
@@ -342,15 +353,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 // Pinned BindBuffers visits descriptors in order. A prior writer
                 // makes this image GpuDirty; only reads before the first writer
                 // may tile the preceding image into the shared buffer arena.
-                const bool reads_image=i<size_t(first_writer-requests.begin());
+                const bool reads_image=pending[i].formatted_read&&i<size_t(first_writer-requests.begin());
                 const auto ownership=DescribeGuestImageOwnership(*version);
                 const auto& layout=version->layout;const auto& desc=version->desc;
                 // Earlier raw reads also stream a small clean CPU snapshot;
                 // a later formatted read must not turn them into arena aliases.
-                const bool reads_before_writer=std::any_of(requests.begin(),first_writer,[&](const auto& buffer){
-                    return !buffer.written&&buffer.address<desc.address+layout.guest_bytes&&
-                        desc.address<buffer.address+buffer.size;
-                });
+                const bool clean_small=layout.guest_bytes<=16384&&
+                    !rasterizer.IsGpuBufferModified(desc.address,layout.guest_bytes);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
                 const bool all_full_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
@@ -367,8 +376,6 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
                    (ordered_formatted_version&&ordered_formatted_version!=version)||!all_full_uavs||
                    pending[i].original_bytes!=layout.guest_bytes||
-                   (reads_before_writer&&layout.guest_bytes<=16384&&
-                    !rasterizer.IsGpuBufferModified(desc.address,layout.guest_bytes))||
                    textures->GetMetaInfo(desc.address)||!ownership||
                    !textures->CanRetainIndependentImage(ownership->desc,ownership->layout)||
                    native.SampleDesc.Count!=desc.samples||
@@ -379,7 +386,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     throw std::runtime_error("Ordered formatted buffer/image writers require a unique full-range resident compute alias");
                 ordered_formatted_writer=true;ordered_formatted_version=version;
                 requests[i].resident=true;
-                if(reads_image&&ordered_formatted_images.empty()){
+                if(clean_small)for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
+                    if(pending[j].guest_read&&requests[j].address<desc.address+layout.guest_bytes&&
+                       desc.address<requests[j].address+requests[j].size&&
+                       std::ranges::find(ordered_stream_reads,j)==ordered_stream_reads.end())
+                        ordered_stream_reads.push_back(j);
+                if(reads_image&&!clean_small&&ordered_formatted_images.empty()){
                     formatted_image_pins.push_back(textures->PinBinding(*version));
                     ordered_formatted_images.push_back({desc.address,layout.guest_bytes,version,{}});
                 }
@@ -419,6 +431,26 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(const auto& request:requests){
             (void)request.WriteRange();
             rasterizer.ValidateGpuBacking(request.address,request.size,request.written);
+        }
+        std::map<std::pair<VAddr,u64>,size_t> stream_views;
+        for(const auto index:ordered_stream_reads){
+            // Keep the guest requests unchanged for invalidation, write ranges
+            // and ordering. Only this descriptor's native binding is private.
+            const auto source=requests[index].WriteRange();
+            const auto key=std::pair{source.address,source.size};
+            if(const auto existing=stream_views.find(key);existing!=stream_views.end()){
+                pending[index].stream_view=existing->second;continue;
+            }
+            if(!rasterizer.ReadMemory(source.address,source.size))
+                throw std::out_of_range("Ordered CPU stream has no readable guest backing");
+            rasterizer.ValidateHostMemory(source.address,source.size);
+            const auto [address,capacity]=temporary.Make(source.size,reinterpret_cast<const void*>(source.address));
+            if(capacity<source.size)throw std::logic_error("Ordered CPU stream temporary is smaller than its sharp");
+            const auto view_index=requests.size();
+            // Reflected guest readonly buffers use UAV descriptors. Stage CPU
+            // bytes through the normal default-resource path, never an UPLOAD UAV.
+            requests.push_back({address,source.size,false,true,true});
+            stream_views.emplace(key,view_index);pending[index].stream_view=view_index;
         }
         for(auto& transfer:ordered_formatted_images){
             // Capture/ReserveMemory may Finish and consume a one-shot callback.
@@ -509,7 +541,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     auto& bindings=*bindings_lease;
     diagnostic.Stage("buffer-descriptors-and-constants");
     for(size_t i=0;i<ordinary_count;++i) {
-        const auto& view=views[i];const auto& target=pending[i];
+        const auto& target=pending[i];const auto& view=views[target.stream_view.value_or(i)];
         // Raw SRV/UAV base is aligned to 16 bytes; PS4 sub-dword offsets go
         // through the original compiler's PushData adjustment, never truncation.
         const auto base=view.offset&~u64(15);const auto delta=view.offset-base;
