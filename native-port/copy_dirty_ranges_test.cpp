@@ -34,10 +34,62 @@ void Run(ID3D12Device* device,bool overlap,bool retry,bool prior=false){
     }
     VirtualFree(memory,0,MEM_RELEASE);
 }
+void RunLargePacket(ID3D12Device* device) {
+    constexpr u32 Bytes=68*1024*1024+1;
+    constexpr u64 Destination=72*1024*1024+3,Neighbour=144*1024*1024,Total=Neighbour+65536;
+    auto* memory=static_cast<std::byte*>(VirtualAlloc(nullptr,SIZE_T(Total),MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    if(!memory)throw std::runtime_error("large copy VirtualAlloc");
+    const auto base=reinterpret_cast<VAddr>(memory);
+    try {
+        memset(memory,0xee,SIZE_T(Total));
+        for(u64 i=0;i<Bytes;++i)memory[1+i]=std::byte((i*17+(i>>12)*31+3)&255);
+        Rasterizer renderer(device);renderer.MapMemory(base,Total);
+        renderer.SetBufferOwnership([](VAddr,u64){return true;},[](VAddr dst,std::span<const std::byte> data){
+            memcpy(reinterpret_cast<void*>(dst),data.data(),data.size());return true;
+        },[](VAddr,u64){});
+        const auto neighbour=renderer.PrepareShaderBuffers(
+            std::array<Rasterizer::ShaderBufferRequest,1>{{{base+Neighbour,65536,false,true}}})[0];
+        const auto before=renderer.SubmittedFence();
+        const auto cold_cached=renderer.CachedBufferBytes();
+        // Zero-byte DMA and ordinary guarded DMA retain the CP's pending list.
+        renderer.CopyBuffer(0,0,0,false,false);
+        renderer.CopyBuffer(base+Destination,base+1,Bytes,false,false);
+        if(renderer.CachedBufferBytes()!=cold_cached||renderer.SubmittedFence()!=before)
+            throw std::runtime_error("cold large DMA allocated or submitted GPU storage");
+        if(memcmp(memory+Destination,memory+1,Bytes))throw std::runtime_error("cold large byte copy mismatch");
+        renderer.PrepareShaderBuffers(
+            std::array<Rasterizer::ShaderBufferRequest,1>{{{base,u64(Bytes)+4,true,true}}});
+        memset(memory+Destination,0xee,Bytes);
+        renderer.CopyBuffer(base+Destination,base+1,Bytes,false,false);
+        if(renderer.SubmittedFence()!=before)throw std::runtime_error("DMA submitted the pending guest list");
+        const auto retained=renderer.PrepareShaderBuffers(
+            std::array<Rasterizer::ShaderBufferRequest,1>{{{base+Neighbour,65536,false,true}}})[0];
+        if(retained.resource.Get()!=neighbour.resource.Get())
+            throw std::runtime_error("DMA discarded an unrelated resident backing");
+        renderer.ResolveGpuBuffers(base+Destination,Bytes);
+        if(memcmp(memory+Destination,memory+1,Bytes))throw std::runtime_error("large byte copy mismatch");
+        for(u64 i=Bytes+1;i<Destination;++i)if(memory[i]!=std::byte{0xee})
+            throw std::runtime_error("large DMA modified the gap");
+        for(u64 i=Destination+Bytes;i<Total;++i)if(memory[i]!=std::byte{0xee})
+            throw std::runtime_error("large DMA modified trailing padding or neighbour");
+        // GDS remains on the same real copy path, including odd byte counts.
+        const auto gds_before=renderer.SubmittedFence();
+        renderer.CopyBuffer(5,base+1,13,true,false);
+        renderer.CopyBuffer(base+Neighbour+1,5,13,false,true);
+        if(renderer.SubmittedFence()!=gds_before)throw std::runtime_error("GDS DMA drained the pending list");
+        u32 expected_gds{};memcpy(&expected_gds,memory+1,4);
+        if(renderer.ReadDataFromGds(5)!=expected_gds)throw std::runtime_error("GDS read did not resolve the real GPU write");
+        renderer.ResolveGpuBuffers(base+Neighbour,65536);renderer.Finish();
+        if(memcmp(memory+Neighbour+1,memory+1,13))throw std::runtime_error("byte GDS round trip mismatch");
+        renderer.ValidateDebugMessages();
+    } catch(...) {VirtualFree(memory,0,MEM_RELEASE);throw;}
+    VirtualFree(memory,0,MEM_RELEASE);
+}
 int main(){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     Run(device.Get(),false,false);Run(device.Get(),true,false);Run(device.Get(),false,true);
     Run(device.Get(),false,false,true);
+    RunLargePacket(device.Get());
     puts("PASS: exact GPU copy dirty union, preserved gaps/source and commit retry");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

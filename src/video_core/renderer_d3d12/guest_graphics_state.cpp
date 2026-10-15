@@ -83,6 +83,15 @@ D3D12_BLEND_OP BlendOp(AmdGpu::BlendControl::BlendFunc func) {
     case F::ReverseSubtract:return D3D12_BLEND_OP_REV_SUBTRACT;case F::Min:return D3D12_BLEND_OP_MIN;case F::Max:return D3D12_BLEND_OP_MAX;}
     throw std::invalid_argument("Invalid native guest blend operation");
 }
+void NormalizeMinMaxBlend(D3D12_BLEND_OP& op,D3D12_BLEND& src,D3D12_BLEND& dst,AmdGpu::NumberFormat format){
+    if(format!=AmdGpu::NumberFormat::Unorm&&format!=AmdGpu::NumberFormat::Srgb)return;
+    if(op!=D3D12_BLEND_OP_MIN&&op!=D3D12_BLEND_OP_MAX)return;
+    if((src!=D3D12_BLEND_ZERO&&src!=D3D12_BLEND_ONE)||
+       (dst!=D3D12_BLEND_ZERO&&dst!=D3D12_BLEND_ONE)||
+       (src!=D3D12_BLEND_ZERO&&dst!=D3D12_BLEND_ZERO))return;
+    if(op==D3D12_BLEND_OP_MIN)src=dst=D3D12_BLEND_ZERO;
+    op=D3D12_BLEND_OP_ADD;
+}
 D3D12_LOGIC_OP LogicOp(AmdGpu::ColorControl::LogicOp op) {
     using L=AmdGpu::ColorControl::LogicOp;
     switch(op) {
@@ -145,11 +154,18 @@ D3D12_STENCIL_OP StencilOp(AmdGpu::StencilFunc func,const AmdGpu::StencilRefMask
 }
 }
 GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
-    std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth,UINT patch_points,bool y_flipped,bool native_alpha_factor) {
+    std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth,UINT patch_points,bool native_alpha_factor) {
     if(targets.size()>8)throw std::invalid_argument("Native guest render-target slot count");
     GuestGraphicsState result;auto& p=result.pipeline;
     p.NumRenderTargets=UINT(targets.size());std::copy(targets.begin(),targets.end(),p.RTVFormats);
-    p.DSVFormat=depth;p.SampleDesc.Count=regs.aa_config.NumSamples();p.SampleMask=UINT_MAX;
+    p.DSVFormat=depth;p.SampleDesc.Count=depth!=DXGI_FORMAT_UNKNOWN?regs.depth_buffer.NumSamples():1;
+    UINT color_samples=0;bool same_color_samples=true;
+    for(size_t slot=0;slot<targets.size();++slot)if(targets[slot]!=DXGI_FORMAT_UNKNOWN){
+        const auto samples=regs.color_buffers[slot].NumSamples();
+        same_color_samples&=color_samples==0||color_samples==samples;color_samples=samples;
+    }
+    if(depth==DXGI_FORMAT_UNKNOWN&&same_color_samples&&color_samples)p.SampleDesc.Count=color_samples;
+    p.SampleMask=UINT_MAX;
     p.BlendState.IndependentBlendEnable=TRUE;
     const bool normal=regs.color_control.mode==AmdGpu::ColorControl::OperationMode::Normal;
     if(!normal&&regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable)
@@ -176,6 +192,15 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             rt.SrcBlendAlpha=Factor(source.separate_alpha_blend?source.alpha_src_factor:source.color_src_factor,true);
             rt.DestBlendAlpha=Factor(source.separate_alpha_blend?source.alpha_dst_factor:source.color_dst_factor,true);
             rt.BlendOpAlpha=BlendOp(source.separate_alpha_blend?source.alpha_func:source.color_func);
+            if(regs.color_buffers[i].GetDataFmt()==AmdGpu::DataFormat::Format32_32_32){
+                const auto rgb_destination_alpha=[](D3D12_BLEND factor){
+                    return factor==D3D12_BLEND_DEST_ALPHA?D3D12_BLEND_ONE:
+                        factor==D3D12_BLEND_INV_DEST_ALPHA||factor==D3D12_BLEND_SRC_ALPHA_SAT?
+                            D3D12_BLEND_ZERO:factor;
+                };
+                rt.SrcBlend=rgb_destination_alpha(rt.SrcBlend);
+                rt.DestBlend=rgb_destination_alpha(rt.DestBlend);
+            }
             // Match vk_graphics_pipeline: GCN supplies alpha=1 to color
             // blending when CB_SHADER_MASK suppresses the alpha export.
             // Native shaders can otherwise supply zero for that component.
@@ -187,6 +212,8 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
                 rt.SrcBlend=default_alpha(rt.SrcBlend);
                 rt.DestBlend=default_alpha(rt.DestBlend);
             }
+            NormalizeMinMaxBlend(rt.BlendOp,rt.SrcBlend,rt.DestBlend,regs.color_buffers[i].GetNumberFmt());
+            NormalizeMinMaxBlend(rt.BlendOpAlpha,rt.SrcBlendAlpha,rt.DestBlendAlpha,regs.color_buffers[i].GetNumberFmt());
         }
     }
     if(!native_alpha_factor&&needs_constant_color_rgb&&needs_constant_alpha_rgb)
@@ -202,7 +229,7 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         if(depth==DXGI_FORMAT_UNKNOWN)throw std::runtime_error("Native depth bounds need a depth attachment");
         if(!std::isfinite(regs.depth_bounds_min)||!std::isfinite(regs.depth_bounds_max))
             throw std::runtime_error("Non-finite guest depth bounds require explicit semantics");
-        result.discard=regs.depth_bounds_min>regs.depth_bounds_max;
+        result.rasterizer_discard=regs.depth_bounds_min>regs.depth_bounds_max;
         result.depth_bounds_min=regs.depth_bounds_min;
         result.depth_bounds_max=regs.depth_bounds_max;
     }
@@ -226,6 +253,11 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             AmdGpu::StencilFunc fail,AmdGpu::StencilFunc zfail,AmdGpu::StencilFunc pass,StencilReference& reference,UINT8& write_mask){
             using C=AmdGpu::CompareFunc;
             using F=AmdGpu::StencilFunc;
+            // The pinned renderer uses op_val for both comparison and every
+            // replacement when any of the face's original operations is ReplaceOp.
+            if(fail==F::ReplaceOp||zfail==F::ReplaceOp||pass==F::ReplaceOp)
+                ref.stencil_test_val=ref.stencil_op_val;
+            if(regs.depth_render_control.stencil_clear_enable)ref.stencil_write_mask=0;
             if(compare==C::Always)fail=F::Keep;
             if(compare==C::Never)zfail=pass=F::Keep;
             if(!z.DepthEnable||z.DepthFunc==D3D12_COMPARISON_FUNC_ALWAYS)zfail=F::Keep;
@@ -265,14 +297,11 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         if(result.dynamic_depth_bias)p.Flags=D3D12_PIPELINE_STATE_FLAGS(p.Flags|D3D12_PIPELINE_STATE_FLAG_DYNAMIC_DEPTH_BIAS);
         else {r.DepthBias=INT(bias);r.DepthBiasClamp=result.depth_bias_clamp;r.SlopeScaledDepthBias=result.slope_depth_bias;}
     }
-    // D3D12 has no point polygon fill or independent front/back fill modes.
-    // Follow the front-face guest mode and approximate point fill by its
-    // visible wireframe boundary so the command remains executable.
-    r.FillMode=poly.PolyMode()==AmdGpu::PolygonMode::Fill?D3D12_FILL_MODE_SOLID:D3D12_FILL_MODE_WIREFRAME;
+    r.FillMode=poly.PolyMode()==AmdGpu::PolygonMode::Line?D3D12_FILL_MODE_WIREFRAME:D3D12_FILL_MODE_SOLID;
     r.CullMode=poly.cull_front?D3D12_CULL_MODE_FRONT:poly.cull_back?D3D12_CULL_MODE_BACK:D3D12_CULL_MODE_NONE;
-    r.FrontCounterClockwise=(poly.front_face==AmdGpu::FrontFace::CounterClockwise)!=y_flipped;
+    r.FrontCounterClockwise=poly.front_face==AmdGpu::FrontFace::CounterClockwise;
     r.DepthClipEnable=!regs.clipper_control.clip_disable&&regs.clipper_control.ZclipEnable();r.MultisampleEnable=p.SampleDesc.Count>1;
-    result.discard|=regs.clipper_control.dx_rasterization_kill;
+    result.rasterizer_discard|=regs.clipper_control.dx_rasterization_kill;
     using P=AmdGpu::PrimitiveType;
     switch(regs.primitive_type) {
     case P::None:result.discard=true;break;
@@ -297,8 +326,15 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         p.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;result.topology=D3D_PRIMITIVE_TOPOLOGY(UINT(D3D_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST)+patch_points-1);break;
     default:throw std::runtime_error("Unknown native guest primitive topology");
     }
-    result.discard|=poly.cull_front&&poly.cull_back&&
+    const bool native_points=(regs.primitive_type==P::PointList&&
+        regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs)||
+        (regs.stage_enable.gs_en&&regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList);
+    result.rasterizer_discard|=!native_points&&poly.cull_front&&poly.cull_back&&
         (p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE||p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH);
+    if(native_points){r.FillMode=D3D12_FILL_MODE_SOLID;r.CullMode=D3D12_CULL_MODE_NONE;}
+    if(poly.PolyMode()==AmdGpu::PolygonMode::Point&&!native_points&&!result.rasterizer_discard&&!result.discard)
+        throw std::runtime_error("Guest point polygon fill requires native clipping and point rasterization");
+    if(result.rasterizer_discard)p.StreamOutput.RasterizedStream=D3D12_SO_NO_RASTERIZED_STREAM;
     if(regs.enable_primitive_restart) {
         if(result.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||result.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP){
             const bool narrow=regs.index_buffer_type.index_type==AmdGpu::IndexType::Index16;

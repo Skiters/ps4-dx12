@@ -42,6 +42,16 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     regs.color_target_mask.SetMask(0,15);
     regs.color_shader_mask.SetMask(0,15);
     regs.blend_control[0].enable=1;
+    const auto original_format=regs.color_buffers[0].info.format;
+    regs.color_buffers[0].info.format=u32(AmdGpu::DataFormat::Format32_32_32);
+    regs.blend_control[0].color_src_factor=AmdGpu::BlendControl::BlendFactor::DstAlpha;
+    regs.blend_control[0].color_dst_factor=AmdGpu::BlendControl::BlendFactor::OneMinusDstAlpha;
+    const DXGI_FORMAT rgb96_formats[]{DXGI_FORMAT_R32G32B32A32_FLOAT};
+    const auto rgb96_blend=BuildGuestGraphicsState(regs,rgb96_formats);
+    if(rgb96_blend.pipeline.BlendState.RenderTarget[0].SrcBlend!=D3D12_BLEND_ONE||
+       rgb96_blend.pipeline.BlendState.RenderTarget[0].DestBlend!=D3D12_BLEND_ZERO)
+        throw std::runtime_error("RGB96 guest destination alpha must remain one");
+    regs.color_buffers[0].info.format=original_format;
     regs.blend_control[0].color_src_factor=AmdGpu::BlendControl::BlendFactor::SrcAlpha;
     regs.blend_control[0].color_dst_factor=AmdGpu::BlendControl::BlendFactor::OneMinusSrcAlpha;
     const DXGI_FORMAT formats[]{DXGI_FORMAT_R8G8B8A8_UNORM};
@@ -128,8 +138,35 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     regs.polygon_control.enable_polygon_mode=1;
     regs.polygon_control.polygon_mode_front=AmdGpu::PolygonMode::Point;
     regs.polygon_control.polygon_mode_back=AmdGpu::PolygonMode::Fill;
-    if(BuildGuestGraphicsState(regs,formats).pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_WIREFRAME)
-        throw std::runtime_error("Guest point/per-face polygon compatibility mapping mismatch");
+    bool point_rejected=false;
+    try{BuildGuestGraphicsState(regs,formats);}catch(const std::runtime_error&){point_rejected=true;}
+    if(!point_rejected)throw std::runtime_error("Guest point polygons silently approximated before native rasterization integration");
+    const auto previous_primitive=regs.primitive_type;
+    regs.primitive_type=AmdGpu::PrimitiveType::PointList;
+    regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::Vs;
+    const auto unit_points=BuildGuestGraphicsState(regs,formats);
+    if(unit_points.topology!=D3D_PRIMITIVE_TOPOLOGY_POINTLIST||
+       unit_points.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID)
+        throw std::runtime_error("Native unit points were affected by polygon fill mode");
+    regs.vs_output_control.vs_out_misc_enable=regs.vs_output_control.use_vtx_point_size=1;
+    const auto sized_points=BuildGuestGraphicsState(regs,formats);
+    if(sized_points.topology!=D3D_PRIMITIVE_TOPOLOGY_POINTLIST||
+       sized_points.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID||
+       sized_points.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE)
+        throw std::runtime_error("Sized guest point state did not preserve point rasterization rules");
+    regs.vs_output_control.vs_out_misc_enable=regs.vs_output_control.use_vtx_point_size=0;
+    regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::EsGs;
+    regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+    regs.vgt_gs_out_prim_type.outprim_type=AmdGpu::GsOutputPrimitiveType::PointList;
+    regs.polygon_control.cull_front=regs.polygon_control.cull_back=1;
+    const auto geometry_points=BuildGuestGraphicsState(regs,formats);
+    if(geometry_points.topology!=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST||
+       geometry_points.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID||
+       geometry_points.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE||geometry_points.rasterizer_discard)
+        throw std::runtime_error("Guest GS point output inherited polygon culling/fill rules");
+    regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::Vs;
+    regs.polygon_control.cull_front=regs.polygon_control.cull_back=0;
+    regs.primitive_type=previous_primitive;
     regs.polygon_control.enable_polygon_mode=0;
     regs.primitive_type=AmdGpu::PrimitiveType::RectList;
     if(BuildGuestGraphicsState(regs,formats).topology!=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST)
@@ -246,7 +283,7 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
         }
     };
     if(native_alpha){
-        const auto state=BuildGuestGraphicsState(blend_regs,blend_formats,DXGI_FORMAT_UNKNOWN,0,false,true);
+        const auto state=BuildGuestGraphicsState(blend_regs,blend_formats,DXGI_FORMAT_UNKNOWN,0,true);
         if(state.blend_constant_alpha_rgb)throw std::runtime_error("Native alpha factor rewrote RGB constants");
         draw_blend(state,{{{{.3f,.4f,.5f,.5f}},{{.3f,.25f,.2f,.5f}}}});
         puts("PASS: native ALPHA_FACTOR and INV_ALPHA_FACTOR with simultaneous constant-color MRT blending");
