@@ -1421,7 +1421,8 @@ bool GuestRasterizer::ComputeImageOperation(const Shader::Info& info,const u32 (
         if(!dst||dst->layout.bytes_per_pixel*8!=AmdGpu::NumBitsPerBlock(bb.GetDataFmt())||
            (!GuestImageClearCompatible(*dst)&&!GuestStorageImageClearCompatible(*dst,values)&&
             !GuestMultisampleStorageClearCompatible(*dst,values)&&
-            !GuestConvertedStorageClearCompatible(*dst)))return false;
+             !GuestConvertedStorageClearCompatible(*dst)&&
+             !GuestConvertedMultisampleClearCompatible(*dst,values)))return false;
         if(!OwnImageClear(*dst))return false;
         // The cache may currently expose a different native sample backing.
         // Clear the complete guest resource, then let later backing changes

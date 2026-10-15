@@ -1,18 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/backend_factory.h"
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
+#include "video_core/renderer_d3d12/guest_image_operations.h"
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
 #include <cstdio>
 using namespace NativeDX12;
+struct RawRgba8Clear {
+    float color[4];
+    u8 packed[4];
+};
 template<class Component=u32>
 void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool writable,bool pressure=false,UINT data_format=4,
-    bool raw_source=false,bool raw_destination=false){
+    bool raw_source=false,bool raw_destination=false,const RawRgba8Clear* clear=nullptr){
     Rasterizer renderer(device);GuestTextureCache cache(device);GuestMultisample transfer(device);
     GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;desc.layers=2;
     desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=true;
     desc.native_raw32=raw_source;
+    if(clear){
+        if(!raw_source||!pressure||sizeof(Component)!=1)
+            throw std::invalid_argument("Converted clear fixture needs raw RGBA8 and pressure checks");
+        // HLE clears cover the complete image even when a narrow view first
+        // populated the cache. Both native array layers must change.
+        desc.first_layer=1;desc.view_layers=1;
+    }
     auto sampled=desc;sampled.writable=writable;sampled.tile_mode=10;
     sampled.native_raw32=raw_destination;
     if((raw_source||raw_destination)&&(data_format!=10||(raw_destination&&!writable)))
@@ -37,6 +49,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
     Resource gpu,upload,physical_readback,private_readback;
     std::vector<Resource> writes,linear,readbacks,requested_versions;
     std::vector<std::shared_ptr<GuestMultisample::Lease>> writer_leases,reader_leases;
+    std::weak_ptr<GuestPackedTransfer> clear_resources;
     // Keep cache/resources alive while retiring any commands on an exceptional
     // preparation exit as well as the successful comparison path.
     try{
@@ -130,12 +143,67 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
             writer_leases.back()->Record(renderer.RecordingList(),source.texture,buffer);
         }
         if(!cache.Own(source))throw std::runtime_error("MSAA source ownership acquisition failed");
-        if(pressure){
+        if(clear){
+            if(!GuestConvertedMultisampleClearCompatible(source,clear->color)||
+               GuestMultisampleStorageClearCompatible(source,clear->color))
+                throw std::runtime_error("Nonzero raw RGBA8 did not select the converted MSAA clear");
             const auto native=source.texture.handle.Get();const auto uid=source.image_uid;
             const auto allocation=source.allocation_bytes;
+            const auto reject=[&](float (&invalid)[4]){
+                if(GuestConvertedMultisampleClearCompatible(source,invalid))
+                    throw std::runtime_error("Converted MSAA clear accepted an inexact numeric value");
+                bool rejected{};
+                try{cache.ClearRawStorageImage(source,invalid,renderer.RecordingList(),renderer.CompletedFence());}
+                catch(const std::invalid_argument& error){
+                    rejected=strcmp(error.what(),"Incompatible converted guest storage image clear")==0;
+                }
+                if(!rejected||!source.format_transfers.empty()||source.format_retirement_bytes||
+                   source.allocation_bytes!=allocation||source.texture.handle.Get()!=native||source.image_uid!=uid)
+                    throw std::runtime_error("Rejected MSAA clear mutated the independent image");
+            };
+            float invalid[4];memcpy(invalid,clear->color,sizeof(invalid));
+            if(number_format==4){invalid[0]=std::bit_cast<float>(256u);reject(invalid);
+                invalid[0]=std::bit_cast<float>(UINT32_MAX);reject(invalid);}
+            else if(number_format==5){invalid[0]=std::bit_cast<float>(int32_t(128));reject(invalid);
+                invalid[0]=std::bit_cast<float>(int32_t(-129));reject(invalid);}
+            else{invalid[0]=std::bit_cast<float>(0x7fc12345u);reject(invalid);
+                invalid[0]=std::bit_cast<float>(0x7f800000u);reject(invalid);}
+            cache.ClearRawStorageImage(source,clear->color,renderer.RecordingList(),renderer.CompletedFence());
+            if(source.format_transfers.size()!=1||!source.format_retirement_bytes||
+               source.allocation_bytes!=allocation+source.format_retirement_bytes||
+               source.texture.handle.Get()!=native||source.image_uid!=uid||!source.pending||
+               !source.gpu_owned||!source.buffer_alias_version)
+                throw std::runtime_error("Converted MSAA clear lost resources, accounting or image ownership");
+            clear_resources=source.format_transfers.front();
+            cache.Collect(renderer.CompletedFence());
+            if(clear_resources.expired()||!source.format_retirement_bytes)
+                throw std::runtime_error("Pending MSAA clear released conversion resources");
+            std::vector<Component> values(old_pixels.size());
+            for(size_t i=0;i<values.size();++i)values[i]=static_cast<Component>(clear->packed[i%4]);
+            for(UINT layer=0;layer<desc.layers;++layer)
+                EncodeGuestSubresource(desc,layout,expected_private,std::as_bytes(std::span(values)),0,layer);
+            // A shader binding must refresh every previously stale sample plane
+            // from the cleared native image before a following storage writeback.
+            auto storage=cache.PrepareMultisampleStorage(source);
+            storage->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,false);
+            storage->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,true);
+        }
+        if(pressure){
+            const auto native=source.texture.handle.Get();const auto uid=source.image_uid;
+            const auto allocation=source.allocation_bytes-source.format_retirement_bytes;
             if(cache.RetireMultisampleStorage(source,renderer.CompletedFence()))
                 throw std::runtime_error("Pending MSAA storage was retired");
-            cache.Submitted(renderer.Flush());renderer.Finish();cache.Collect(renderer.CompletedFence());
+            cache.Submitted(renderer.Flush());
+            if(clear){
+                if(!source.fence)throw std::runtime_error("Converted MSAA clear was not submitted");
+                cache.Collect(source.fence-1);
+                if(clear_resources.expired()||!source.format_retirement_bytes)
+                    throw std::runtime_error("Uncompleted MSAA clear released descriptors or allocations");
+            }
+            renderer.Finish();cache.Collect(renderer.CompletedFence());
+            if(clear&&(!clear_resources.expired()||source.format_retirement_bytes||
+               source.allocation_bytes!=allocation))
+                throw std::runtime_error("Completed MSAA clear did not release its temporary allocations");
             if(!source.fence||cache.RetireMultisampleStorage(source,source.fence-1))
                 throw std::runtime_error("MSAA storage ignored its completion fence");
             auto pin=cache.PinBinding(source);
@@ -168,6 +236,22 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                 throw std::runtime_error("Completed MSAA storage could not be retired a second time");
             // The following existing private retile/alias conversion verifies
             // reconstructed bits, untouched tiled padding and physical memory.
+        }
+        if(clear){
+            // Converting a retired raw owner into ordinary sampled storage must
+            // clear the old lazy-restore marker even though no planes are needed.
+            auto ordinary=desc;ordinary.writable=false;ordinary.native_raw32=false;
+            const auto uid=source.image_uid;
+            auto& sampled_backing=cache.Upload(ordinary,physical,renderer.RecordingList(),renderer.CompletedFence());
+            if(&sampled_backing!=&source||sampled_backing.image_uid!=uid||sampled_backing.storage_retired||
+               !sampled_backing.storage_samples.empty()||sampled_backing.storage_linear.handle||
+               sampled_backing.desc.writable||transfers)
+                throw std::runtime_error("Packed conversion retained the retired writable sample domain");
+            auto& raw_backing=cache.Upload(desc,physical,renderer.RecordingList(),renderer.CompletedFence());
+            if(&raw_backing!=&source||raw_backing.image_uid!=uid||raw_backing.storage_retired||
+               raw_backing.storage_samples.size()!=samples||!raw_backing.storage_linear.handle||transfers)
+                throw std::runtime_error("Packed conversion did not publish replacement sample storage");
+            require_raw_storage(raw_backing);
         }
         if(samples==2&&number_format==4){
             auto mismatch=sampled;mismatch.samples=4;
@@ -220,7 +304,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(!private_exact)throw std::runtime_error("MSAA private retile changed padding or sample layout");
         if(!unchanged)throw std::runtime_error("MSAA transfer changed physical buffer domain/padding");
         if(!ownership)throw std::runtime_error("MSAA logical ownership transfer failed");
-        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u layers=2 exact\n",data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination));
+        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u clear=%u layers=2 exact\n",data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination),unsigned(clear!=nullptr));
     }catch(...){renderer.Finish();throw;}
 }
 int main(int argc,char** argv){try{
@@ -301,7 +385,20 @@ int main(int argc,char** argv){try{
         RunMultisample<u8>(device.Get(),8,4,true,false,10,false,true);
         puts("PASS: raw RGBA8 MSAA DWORD upload/readback, typed reinterpretation and pressure restore");return 0;
     }
-    if(argc!=1)throw std::invalid_argument("Expected no arguments, --msaa, --msaa-pressure, --msaa-vector32, --msaa-vector16, --msaa-vector8 or --msaa-rawrgba8");
+    if(argc==2&&strcmp(argv[1],"--msaa-rawrgba8-clear")==0){
+        const RawRgba8Clear uint_clear{{std::bit_cast<float>(1u),std::bit_cast<float>(127u),
+            std::bit_cast<float>(128u),std::bit_cast<float>(255u)},{1,127,128,255}};
+        const RawRgba8Clear sint_clear{{std::bit_cast<float>(int32_t(-128)),std::bit_cast<float>(int32_t(-1)),
+            std::bit_cast<float>(int32_t(1)),std::bit_cast<float>(int32_t(127))},{128,255,1,127}};
+        const RawRgba8Clear snorm_clear{{-2.f,-0.5f,0.5f,2.f},{129,192,64,127}};
+        const RawRgba8Clear unorm_clear{{0.f,0.25f,0.5f,1.f},{0,64,128,255}};
+        RunMultisample<u8>(device.Get(),2,4,false,true,10,true,false,&uint_clear);
+        RunMultisample<u8>(device.Get(),4,5,true,true,10,true,false,&sint_clear);
+        RunMultisample<u8>(device.Get(),8,1,true,true,10,true,true,&snorm_clear);
+        RunMultisample<u8>(device.Get(),2,0,false,true,10,true,false,&unorm_clear);
+        puts("PASS: nonzero raw RGBA8 MSAA converted clears, all samples/layers, numeric rejection, fence retirement and independent domains");return 0;
+    }
+    if(argc!=1)throw std::invalid_argument("Expected no arguments, --msaa, --msaa-pressure, --msaa-vector32, --msaa-vector16, --msaa-vector8, --msaa-rawrgba8 or --msaa-rawrgba8-clear");
     Rasterizer renderer(device.Get());
     GuestTextureCache cache(device.Get());GuestTextureDesc desc;desc.address=0x40000;desc.width=desc.height=desc.pitch=8;
     desc.tile_mode=13;desc.data_format=4;desc.number_format=7;desc.writable=true;
