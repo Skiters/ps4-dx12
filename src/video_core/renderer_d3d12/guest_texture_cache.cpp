@@ -65,13 +65,16 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
     if((d.samples!=2&&d.samples!=4&&d.samples!=8)||d.levels!=1||
        d.depth_target||d.stencil_address||d.volume_depth||d.one_dimensional||layout.block_extent!=1)return false;
     if(layout.expanded_bytes_per_pixel){
-        // Read-only signed packed10 retains original guest words plus exact
-        // written-byte coverage on upload/conversion. Retile consumes that
-        // backing, never the non-injective normalized float representation.
-        return d.data_format==9&&!d.writable&&!d.render_target&&
-            (d.number_format==1||d.number_format==5)&&HasExactPackedExpansion(d,layout)&&
-            layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==16&&
-            layout.format==(d.number_format==1?DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_R32G32B32A32_SINT);
+        // Read-only signed packed10 and packed19 retain original guest words
+        // plus exact written-byte coverage on upload/conversion. Retile uses
+        // that backing, never reconstruction from the expanded float values.
+        if(d.writable||d.render_target||!HasExactPackedExpansion(d,layout)||
+           layout.HostBytesPerPixel()!=16)return false;
+        if(d.data_format==9)return (d.number_format==1||d.number_format==5)&&
+            layout.bytes_per_pixel==4&&layout.format==(d.number_format==1?
+                DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_R32G32B32A32_SINT);
+        return d.data_format==19&&d.number_format==0&&layout.bytes_per_pixel==2&&
+            layout.format==DXGI_FORMAT_R32G32B32A32_FLOAT;
     }
     if(d.data_format==9){
         // Packed10 storage is either one raw R32 word or an exact four-lane
@@ -89,8 +92,15 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
         // Writable packed16 uses an R32 UINT plane holding the guest word in
         // its low half. Existing tiling stores exactly two bytes through masked
         // writes, preserving the neighbour, row tail, sample layout and padding.
-        return d.writable&&!d.render_target&&d.number_format==0&&
-            layout.format==DXGI_FORMAT_R32_UINT&&layout.bytes_per_pixel==2&&layout.HostBytesPerPixel()==4;
+        if(d.number_format!=0||layout.bytes_per_pixel!=2)return false;
+        const bool raw=d.writable&&!d.render_target&&
+            layout.format==DXGI_FORMAT_R32_UINT&&layout.HostBytesPerPixel()==4;
+        // Native 565/1555 sample loads recover their small UNORM integer codes
+        // through the existing PACKED_MODE1/2 transfer. Original18's rotation
+        // remains in the guest tiler. Native19 attachment support is separate.
+        const bool native=!d.writable&&d.data_format<=18&&layout.HostBytesPerPixel()==2&&
+            layout.format==(d.data_format==16?DXGI_FORMAT_B5G6R5_UNORM:DXGI_FORMAT_B5G5R5A1_UNORM);
+        return raw||native;
     }
     // These typeless 8/16/32-bit families have exact UINT buffer, MSAA SRV and
     // RTV transfers. Sub-DWORD texels use the tiler's byte-masked retile,
@@ -1143,7 +1153,9 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
     auto layout=LayoutGuestTexture(d);
-    const bool preserve_expanded=d.samples>1&&d.data_format==9&&HasExactPackedExpansion(d,layout);
+    const bool preserve_expanded=d.samples>1&&(d.data_format==9||d.data_format==19)&&
+        !d.writable&&!d.render_target&&!d.depth_target&&!d.stencil_address&&
+        HasExactPackedExpansion(d,layout);
     uint64_t expanded_snapshot_bytes{};
     if(preserve_expanded){
         for(const auto length:{layout.guest_bytes,GuestTiler::WrittenBytes(layout.guest_bytes)}){
@@ -1491,12 +1503,14 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             std::shared_ptr<GuestTiler::Lease> exact_detile,exact_retile;
             if(preserve_expanded){
                 // Reuse this slice's existing scratch before expanding it. The
-                // raw view copies original DWORDs and marks only logical texels;
-                // SNORM duplicate encodings and all guest padding stay exact.
+                // raw view copies original words and marks only logical texels;
+                // SNORM encodings, packed19 nibbles and padding stay exact.
                 auto raw_desc=d;raw_desc.writable=true;raw_desc.render_target=false;
-                raw_desc.native_packed10_raw=true;
+                raw_desc.native_packed10_raw=d.data_format==9;
                 const auto raw_layout=LayoutGuestTexture(raw_desc);
-                if(raw_layout.guest_bytes!=layout.guest_bytes)
+                if(raw_layout.guest_bytes!=layout.guest_bytes||
+                   raw_layout.bytes_per_pixel!=layout.bytes_per_pixel||
+                   raw_layout.format!=DXGI_FORMAT_R32_UINT||raw_layout.HostBytesPerPixel()!=4)
                     throw std::logic_error("Expanded snapshot changed its physical word layout");
                 auto raw_fp=fp;raw_fp.Footprint.Format=DXGI_FORMAT_R32_UINT;
                 exact_detile=tiler_->Prepare(entry->tiler_input_pool.at(plane),linear,linear,
