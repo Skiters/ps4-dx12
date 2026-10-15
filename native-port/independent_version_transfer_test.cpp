@@ -2,6 +2,7 @@
 #include "video_core/renderer_d3d12/backend_factory.h"
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "video_core/renderer_d3d12/guest_image_operations.h"
+#include "video_core/renderer_d3d12/guest_image_ownership.h"
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
@@ -14,7 +15,7 @@ struct RawMultisampleClear {
 };
 template<class Component=u32>
 void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool writable,bool pressure=false,UINT data_format=4,
-    bool raw_source=false,bool raw_destination=false,const RawMultisampleClear* clear=nullptr){
+    bool raw_source=false,bool raw_destination=false,const RawMultisampleClear* clear=nullptr,UINT view_data=0){
     Rasterizer renderer(device);GuestTextureCache cache(device);GuestMultisample transfer(device);
     GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;desc.layers=2;
     desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=true;
@@ -31,6 +32,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         desc.first_layer=1;desc.view_layers=1;
     }
     auto sampled=desc;sampled.writable=writable;sampled.tile_mode=10;
+    if(view_data)sampled.data_format=view_data;
     sampled.native_raw32=raw_destination&&data_format==10;
     sampled.native_packed10_raw=raw_destination&&data_format==9;
     if((raw_source||raw_destination)&&((data_format!=9&&data_format!=10)||(raw_destination&&!writable)))
@@ -42,6 +44,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:
             number_format==5&&data_format==10?9:0;
     if(data_format==9)sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:0;
+    if(sampled.data_format==6||sampled.data_format==34)sampled.number_format=7;
     if(packed16){
         if(sizeof(Component)!=2||number_format!=0)
             throw std::invalid_argument("Packed16 fixture requires UNORM guest halfword storage");
@@ -73,8 +76,13 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         void* mapped{};Check(upload.handle->Map(0,nullptr,&mapped));
         memcpy(mapped,physical.data(),physical.size());upload.handle->Unmap(0,nullptr);
         renderer.RecordingList()->CopyBufferRegion(gpu.handle.Get(),0,upload.handle.Get(),0,physical.size());
-        cache.SetBufferAliasRetention([](const auto&,const auto&){return true;});
-        const auto acquire=[](auto& image){image.buffer_alias_version=true;image.SetGpuOwned(true);return true;};
+        // RGB9E5 is a sampled alias, not a guest storage-write format. Require
+        // the same separate ownership witness used by the production rasterizer.
+        cache.SetBufferAliasRetention([](const auto& owner,const auto&){return owner.data_format!=34;});
+        const auto acquire=[&](auto& image){
+            const auto owner=DescribeGuestImageOwnership(image);
+            if(!owner||!cache.CanRetainBufferAlias(owner->desc,owner->layout))return false;
+            image.buffer_alias_version=true;image.SetGpuOwned(true);return true;};
         cache.SetOwnershipAcquirer(acquire);
         unsigned transfers{};
         cache.SetIndependentVersionTransfer([&](auto& image,u64 address,u64 size){
@@ -120,6 +128,21 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(packed16&&(source.layout.bytes_per_pixel!=2||source.layout.HostBytesPerPixel()!=4||
            source.texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_UINT||source.Uav(0).Format!=DXGI_FORMAT_R32_UINT))
             throw std::runtime_error("Packed16 did not use one low guest halfword per R32 plane texel");
+        if(data_format==6){
+            if(!source.texture.AllowsCast(DXGI_FORMAT_R11G11B10_FLOAT)||
+               !source.texture.AllowsCast(DXGI_FORMAT_R32_UINT))
+                throw std::runtime_error("Packed-float source lost its actual typed/raw view list");
+            for(const auto only_view:{DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R11G11B10_FLOAT}){
+                auto missing_view=source.texture;
+                missing_view.castable_formats=std::make_shared<const std::vector<DXGI_FORMAT>>(
+                    std::initializer_list<DXGI_FORMAT>{only_view});
+                bool rejected{};
+                try{transfer.Prepare(missing_view,gpu,desc,layout,0,0,false);}
+                catch(const std::runtime_error& error){
+                    rejected=strcmp(error.what(),"Native packed-float transfer needs declared typed and R32 UINT views")==0;}
+                if(!rejected)throw std::runtime_error("Packed-float transfer trusted an incomplete cast list");
+            }
+        }
         const auto fp=GuestMultisample::Footprint(desc,layout);
         const auto linear_bytes=GuestMultisample::LinearBytes(desc,fp);
         writes.reserve(desc.layers);writer_leases.reserve(desc.layers);
@@ -148,6 +171,14 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                         // distinguish an exact UINT transfer from a gamma pass.
                         static constexpr u8 edge8[]{0x80u,0x81u,0x7fu,0xffu,0x00u,0x0au,0xbcu};
                         if(sample==0&&y==0)value=edge8[(x+component)%7]^(layer?0x80u:0u);
+                    }
+                    if(data_format==6||sampled.data_format==34){
+                        // R11 special payloads and RGB9E5 zero mantissas with
+                        // distinct shared exponents must remain different words.
+                        // A numeric load/store round trip would canonicalize them.
+                        static constexpr u32 packed_float_edges[]{0x00000000u,0x08000000u,
+                            0xf8000000u,0x000007c1u,0x003e0801u,0x7fffff80u,0xffffffffu};
+                        value=packed_float_edges[x%7]^((layer*19u+sample*43u+y*11u)<<11);
                     }
                     if(data_format==9){
                         // Both SNORM -1 encodings (10-bit and two-bit alpha),
@@ -311,10 +342,33 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         const auto source_uid=source.image_uid;
         auto& converted=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence());
         if(raw_destination)require_raw_storage(converted);
+        if(sampled.data_format==6||sampled.data_format==34){
+            if(!converted.texture.AllowsCast(sampled_layout.format)||
+               !converted.texture.AllowsCast(DXGI_FORMAT_R32_UINT))
+                throw std::runtime_error("Packed-float snapshot lost typed/raw resource cast lists");
+            if(sampled.data_format==34){
+                auto invalid_usage=sampled;invalid_usage.writable=true;
+                if(GuestTextureCache::CanTransferIndependentMultisample(invalid_usage,sampled_layout))
+                    throw std::runtime_error("RGB9E5 transfer admitted guest storage writes");
+                invalid_usage=sampled;invalid_usage.render_target=true;
+                if(GuestTextureCache::CanTransferIndependentMultisample(invalid_usage,sampled_layout))
+                    throw std::runtime_error("RGB9E5 transfer admitted guest attachment writes");
+                const auto owner=DescribeGuestImageOwnership(converted);
+                if(!owner||owner->desc.data_format!=4||owner->desc.number_format!=4||
+                   !owner->desc.writable||converted.desc.writable||converted.desc.data_format!=34)
+                    throw std::runtime_error("RGB9E5 ownership changed actual sampled image usage");
+                auto mismatched=converted.layout;mismatched.mips[0].pitch+=1;
+                const auto original=converted.layout;converted.layout=std::move(mismatched);
+                const bool rejected=!DescribeGuestImageOwnership(converted);
+                converted.layout=original;
+                if(!rejected)throw std::runtime_error("Ownership accepted a mismatched guest mip layout");
+            }
+        }
         const bool ownership=transfers==1&&converted.image_uid!=source_uid&&converted.gpu_owned&&
             converted.buffer_alias_version&&!source.gpu_owned;
         const bool expanded=sampled_layout.expanded_bytes_per_pixel==16;
-        const bool exact_roundtrip=expanded||(packed16&&!sampled.writable);
+        const bool exact_roundtrip=expanded||(packed16&&!sampled.writable)||
+            sampled.data_format==6||sampled.data_format==34;
         if(exact_roundtrip){
             if(expanded&&(!converted.expanded_guest_backing.handle||!converted.expanded_written_mask.handle||
                !converted.expanded_backing_bytes||!converted.tiler))
@@ -426,7 +480,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(!private_exact)throw std::runtime_error("MSAA private retile changed padding or sample layout");
         if(!unchanged)throw std::runtime_error("MSAA transfer changed physical buffer domain/padding");
         if(!ownership)throw std::runtime_error("MSAA logical ownership transfer failed");
-        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u clear=%u layers=2 exact\n",data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination),unsigned(clear!=nullptr));
+        renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u view_data=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u clear=%u layers=2 exact\n",data_format,sampled.data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination),unsigned(clear!=nullptr));
     }catch(...){renderer.Finish();throw;}
 }
 int main(int argc,char** argv){try{
@@ -572,6 +626,15 @@ int main(int argc,char** argv){try{
         RunMultisample<u32>(device.Get(),4,0,true,true,9,false,true);
         RunMultisample<u32>(device.Get(),8,4,true,true,9,true,true);
         puts("PASS: packed10 raw/native UINT MSAA words, samples/layers, pressure and independent padding/domain");return 0;
+    }
+    if(argc==2&&strcmp(argv[1],"--msaa-packed-float")==0){
+        for(const UINT samples:{2u,4u,8u}){
+            RunMultisample<u32>(device.Get(),samples,7,false,true,6);
+            RunMultisample<u32>(device.Get(),samples,7,true,true,6);
+            RunMultisample<u32>(device.Get(),samples,7,false,true,6,false,false,nullptr,34);
+            RunMultisample<u32>(device.Get(),samples,4,false,true,4,false,false,nullptr,34);
+        }
+        puts("PASS: independent packed-float MSAA exact words, cast-list guards, readonly RGB9E5 ownership and pressure restore");return 0;
     }
     if(argc==2&&strcmp(argv[1],"--msaa-packed16-sampled")==0){
         for(const UINT format:{16u,17u,18u,19u})for(const UINT samples:{2u,4u,8u})

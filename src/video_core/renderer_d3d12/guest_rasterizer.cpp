@@ -8,6 +8,7 @@
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
+#include "guest_image_ownership.h"
 #include "guest_color_clear.h"
 #include "guest_raw_color_clear.h"
 #include "diagnostics.h"
@@ -178,9 +179,8 @@ bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
 bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     // A cached image can keep a version distinct from its physical/resident
     // buffer, including a read-only descriptor or ordinary owned attachment.
-    auto owner=image.desc;owner.writable=true;owner.render_target=false;
-    const auto layout=LayoutGuestTexture(owner);
-    if(layout.guest_bytes!=image.layout.guest_bytes||!textures_.CanRetainBufferAlias(owner,layout))return false;
+    const auto owner=DescribeGuestImageOwnership(image);
+    if(!owner||!textures_.CanRetainBufferAlias(owner->desc,owner->layout))return false;
     // Repeated image uses validate the physical owner, including a retained
     // read-only descriptor, without changing an overlapping buffer's guard.
     if(image.buffer_alias_version){image.SetGpuOwned(true);return true;}

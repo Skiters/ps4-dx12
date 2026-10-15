@@ -1,6 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_texture_cache.h"
+#include "guest_image_ownership.h"
 #include "guest_bc_decoder.h"
 #include "video_core/amdgpu/resource.h"
 #include "video_core/amdgpu/regs_color.h"
@@ -75,6 +76,22 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
                 DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_R32G32B32A32_SINT);
         return d.data_format==19&&d.number_format==0&&layout.bytes_per_pixel==2&&
             layout.format==DXGI_FORMAT_R32G32B32A32_FLOAT;
+    }
+    if(d.data_format==6){
+        // Packed float components must never round-trip through float loads:
+        // the allocation's explicit R32_UINT cast preserves every guest bit.
+        // Upload and GuestMultisample still validate actual format-list support,
+        // the resource's cast list and the requested sample/view capabilities.
+        return d.number_format==7&&layout.format==DXGI_FORMAT_R11G11B10_FLOAT&&
+            layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
+    }
+    if(d.data_format==34){
+        // PS4 RGB9E5 is sampled-only. Its independent snapshot keeps typed
+        // sampling while raw R32 views move the original shared-exponent word.
+        // Ownership is described separately; this does not permit IMAGE_WRITE.
+        return !d.writable&&!d.render_target&&d.number_format==7&&
+            layout.format==DXGI_FORMAT_R9G9B9E5_SHAREDEXP&&
+            layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
     }
     if(d.data_format==9){
         // Packed10 storage is either one raw R32 word or an exact four-lane
@@ -1367,6 +1384,9 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{layout.format};
             Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
             if(!(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET))throw std::runtime_error("Native guest color format lacks render-target support");
+            if(d.samples>1&&(d.data_format==6||d.data_format==34)&&
+               !(support.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD))
+                throw std::runtime_error("Native packed-float format lacks typed multisample loads");
             r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         }
         if(d.samples>1){
@@ -1587,10 +1607,9 @@ void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_a
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}
 Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
-    auto ownership_desc=image.desc;ownership_desc.writable=true;ownership_desc.render_target=false;
-    const auto ownership_layout=LayoutGuestTexture(ownership_desc);
-    if(!list||!image.gpu_owned||!image.buffer_alias_version||!CanRetainBufferAlias(ownership_desc,ownership_layout)||
-       ownership_layout.guest_bytes!=image.layout.guest_bytes||
+    const auto ownership=DescribeGuestImageOwnership(image);
+    if(!list||!image.gpu_owned||!image.buffer_alias_version||!ownership||
+       !CanRetainBufferAlias(ownership->desc,ownership->layout)||
        !initial.handle||initial.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
        initial.handle->GetDesc().Width<image.layout.guest_bytes)
         throw std::invalid_argument("Unsupported independent image formatted-buffer geometry");

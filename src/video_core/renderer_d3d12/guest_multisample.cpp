@@ -36,6 +36,17 @@ void ValidateRawPackedTransfer(const GuestTextureDesc& d,const GuestTextureLayou
         (backing!=DXGI_FORMAT_R32_TYPELESS&&backing!=DXGI_FORMAT_R32_UINT)))
         throw std::invalid_argument("Native raw packed MSAA needs its exact R32 word layout");
 }
+void ValidatePackedFloatTransfer(const Resource& texture,const GuestTextureDesc& d,
+    const GuestTextureLayout& layout){
+    if(d.depth_target||(d.data_format!=6&&d.data_format!=34))return;
+    const auto format=d.data_format==6?DXGI_FORMAT_R11G11B10_FLOAT:DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+    if(d.number_format!=7||layout.format!=format||layout.bytes_per_pixel!=4||
+       layout.HostBytesPerPixel()!=4||layout.expanded_bytes_per_pixel||
+       texture.handle->GetDesc().Format!=format)
+        throw std::invalid_argument("Native packed-float transfer needs its exact guest word layout");
+    if(!texture.AllowsCast(format)||!texture.AllowsCast(DXGI_FORMAT_R32_UINT))
+        throw std::runtime_error("Native packed-float transfer needs declared typed and R32 UINT views");
+}
 DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if(d.depth_target)return LinearFormat(layout.format);
     if(d.data_format>=16&&d.data_format<=19)
@@ -91,14 +102,13 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
     const auto texture_desc=texture.handle->GetDesc(),buffer_desc=linear.handle->GetDesc();
     ValidateRawRgba8Transfer(d,layout,texture_desc.Format);
     ValidateRawPackedTransfer(d,layout,texture_desc.Format);
+    ValidatePackedFloatTransfer(texture,d,layout);
     if(d.samples<2||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||plane>1||
        (plane&&!d.stencil_address)||texture_desc.SampleDesc.Count!=d.samples||
        texture_desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        buffer_desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||layout.block_extent!=1)
         throw std::invalid_argument("Invalid native guest MSAA transfer resources");
     const bool depth=d.depth_target,stencil=plane!=0;
-    if(!depth&&(d.data_format==6||d.data_format==34)&&!texture.AllowsCast(DXGI_FORMAT_R32_UINT))
-        throw std::runtime_error("Native packed-float MSAA texture has no raw integer view");
     const auto interpreted=stencil?DescribeGuestStencil(d):d;
     const auto physical=stencil?LayoutGuestTexture(interpreted):layout;
     const auto fp=Footprint(interpreted,physical);
@@ -274,6 +284,7 @@ std::shared_ptr<GuestMultisample::StorageLease> GuestMultisample::PrepareStorage
            desc.MipLevels!=1||desc.Format!=texture.handle->GetDesc().Format||
            !(desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
             throw std::invalid_argument("Native MSAA storage sample layout changed");
+        ValidatePackedFloatTransfer(sample,d,layout);
     }
     lease->reads.reserve(d.layers);lease->writes.reserve(d.layers);
     for(UINT layer=0;layer<d.layers;++layer){
@@ -312,6 +323,8 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
     const auto src=source.handle->GetDesc(),dst=destination.handle->GetDesc();
     ValidateRawRgba8Transfer(d,layout,src.Format);
     ValidateRawPackedTransfer(d,layout,src.Format);
+    ValidatePackedFloatTransfer(source,d,layout);
+    ValidatePackedFloatTransfer(destination,d,layout);
     if(d.depth_target||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||
        layout.block_extent!=1||src.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        dst.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||src.Width!=dst.Width||src.Height!=dst.Height||
@@ -319,9 +332,6 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
        !(dst.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||src.Format!=dst.Format)
         throw std::invalid_argument("Invalid native sample backing copy resources");
     const auto format=!d.writable&&d.data_format>=16&&d.data_format<=19?layout.format:TransferFormat(d,layout);
-    if((d.data_format==6||d.data_format==34)&&
-       (!source.AllowsCast(DXGI_FORMAT_R32_UINT)||!destination.AllowsCast(DXGI_FORMAT_R32_UINT)))
-        throw std::runtime_error("Native packed-float sample copy requires raw views on both resources");
     const bool source_msaa=src.SampleDesc.Count>1;
     auto& program=copy_programs_[{format,dst.SampleDesc.Count,source_msaa}];
     if(!program){
