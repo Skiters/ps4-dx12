@@ -20,6 +20,8 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     constexpr u64 AllocationBytes = 65536, ImageOffset = 16384, ObservationOffset = 57344;
     constexpr u32 BufferValue = 0x13579bdf, ImageValue = 0x2468ace0;
     constexpr u32 ImageNext = 0x6a5b4c3d, FinalValue = 0x4567a9cd;
+    constexpr u32 ImageFar = 0x3142a6b7, TailWrite = 0x5c6d7e8f;
+    constexpr u64 ShortBytes = 64, LongBytes = 20480;
     alignas(256) std::array<u32, 128> seed{}, before_probe{}, ordered{}, after_probe{};
     GuestShaderFrontend reflection(profile);
     struct Drain {
@@ -27,15 +29,16 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         bool armed = true;
         ~Drain() { if (armed) try { rasterizer.Finish(); } catch (...) {} }
     } drain{rasterizer};
-    const auto initialize = [](auto& program, const std::vector<u32>& words, u64 hash) {
-        if (words.size() > 32) throw std::runtime_error("Ordered GCN code overlaps binary metadata");
+    const auto initialize = [](auto& program, const std::vector<u32>& words, u64 hash, u32 metadata_word = 32) {
+        if (words.size() > metadata_word || metadata_word * sizeof(u32) + sizeof(AmdGpu::BinaryInfo) > sizeof(program))
+            throw std::runtime_error("Ordered GCN code overlaps binary metadata");
         program.fill(0);
         std::copy(words.begin(), words.end(), program.begin());
         AmdGpu::BinaryInfo binary{};
         binary.signature = binary.signature_ref;
         binary.length = u32(words.size() * sizeof(u32));
         binary.shader_hash = hash;
-        std::memcpy(program.data() + 32, &binary, sizeof(binary));
+        std::memcpy(program.data() + metadata_word, &binary, sizeof(binary));
     };
     const auto bind = [&](const auto& code, u32 user_registers) -> AmdGpu::ComputeProgram& {
         auto& program = gpu.GetCsRegs();
@@ -50,19 +53,28 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         return program;
     };
     const auto initial = [](u32 x, u32 y) { return 0x10203040u ^ (y << 12) ^ x; };
-    enum class Sequence { ReadWrite, WriteRead, RawWriteRead, ReadWriteRead };
+    enum class Sequence { ReadWrite, WriteRead, RawWriteRead, ReadWriteRead,
+        CleanShortDirtyTail, DirtyShort, CleanLong, MixedShortLong };
     for (const auto sequence : {Sequence::ReadWrite, Sequence::WriteRead,
-                               Sequence::RawWriteRead, Sequence::ReadWriteRead})
+                               Sequence::RawWriteRead, Sequence::ReadWriteRead,
+                               Sequence::CleanShortDirtyTail, Sequence::DirtyShort,
+                               Sequence::CleanLong, Sequence::MixedShortLong})
     for (const bool small : {false, true})
     for (const bool clean : {false, true}) {
+        const bool short_views = sequence >= Sequence::CleanShortDirtyTail;
+        const bool dirty_tail = sequence == Sequence::CleanShortDirtyTail;
+        const bool long_first = sequence == Sequence::CleanLong;
+        const bool mixed = sequence == Sequence::MixedShortLong;
+        if (short_views && (dirty_tail ? (small || !clean) :
+            sequence == Sequence::DirtyShort ? (!small || clean) : (!small || !clean))) continue;
         const bool read_first = sequence != Sequence::WriteRead;
-        const bool repeated = sequence == Sequence::RawWriteRead || sequence == Sequence::ReadWriteRead;
+        const bool repeated = short_views || sequence == Sequence::RawWriteRead || sequence == Sequence::ReadWriteRead;
         // The original eight cases already cover the size threshold. Keep the
         // new store/reread cases focused on small private versus resident views.
-        if (repeated && !small) continue;
+        if (!short_views && repeated && !small) continue;
         const bool early_formatted = sequence != Sequence::RawWriteRead;
-        const bool private_early = small && clean && read_first;
-        const bool image_tiled = read_first && early_formatted && !private_early;
+        const bool private_early = short_views ? (dirty_tail || mixed) : small && clean && read_first;
+        const bool image_tiled = mixed || (read_first && early_formatted && !private_early);
         const bool partial_output = small && clean && sequence == Sequence::ReadWriteRead;
         rasterizer.ReadMemory(base, AllocationBytes);
         rasterizer.InvalidateMemory(base, AllocationBytes);
@@ -86,11 +98,22 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             throw std::runtime_error("Ordered GCN fixture requires full page-aligned range and real tile padding");
         const auto first = GuestPixelOffset(desc, layout, 0, 0, 0, 0);
         const auto second = GuestPixelOffset(desc, layout, 0, 0, 1, 0);
+        const auto far = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
         if (first != 0 || second != 4)
             throw std::runtime_error("Ordered GCN fixture's fixed first two texels changed");
         for (u32 y = 0; y < desc.height; ++y) for (u32 x = 0; x < desc.width; ++x) {
             const auto value = initial(x, y);
             std::memcpy(memory + ImageOffset + GuestPixelOffset(desc, layout, 0, 0, x, y), &value, 4);
+        }
+        if (short_views && (far < ShortBytes || far + 4 > layout.guest_bytes))
+            throw std::runtime_error("Short-view fixture needs an image texel outside its readonly prefix");
+        if (long_first || mixed) {
+            if (layout.guest_bytes >= LongBytes || ImageOffset + LongBytes > ObservationOffset)
+                throw std::runtime_error("Long readonly fixture lost its non-image tail");
+            for (u64 offset = layout.guest_bytes; offset < LongBytes; offset += 4) {
+                const u32 value = 0x8d732100u ^ u32(offset);
+                std::memcpy(memory + ImageOffset + offset, &value, 4);
+            }
         }
         std::vector<std::byte> expected(backing, backing + AllocationBytes);
         const auto expect_word = [&](u64 offset, u32 value) {
@@ -108,14 +131,20 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         // gives the tested command a separate fresh, partial-page output below.
         observation.num_records = 4096 / 4;
         const u64 identity = (u64(sequence) << 12) | (u64(small) << 8) | u64(clean);
-        initialize(seed, {
+        std::vector<u32> seed_words{
             0x7e000280, 0x7e0202ff, BufferValue,
             0xe0700000, 0x80000100, // raw store v1, s[0:3]
             0x7e040280, 0x7e060280, 0x7e1002ff, ImageValue,
             0xf0200100, 0x00010802, // image_store v8, coordinates v[2:3], s[4:11]
             0x7e040281, 0x7e1002ff, ImageNext,
-            0xf0200100, 0x00010802, 0xbf810000
-        }, 0x4f52445345450000ULL + identity);
+            0xf0200100, 0x00010802
+        };
+        if (short_views) seed_words.insert(seed_words.end(), {
+            0x7e040280, 0x7e060288, 0x7e1002ff, ImageFar,
+            0xf0200100, 0x00010802
+        });
+        seed_words.push_back(0xbf810000);
+        initialize(seed, seed_words, 0x4f52445345450000ULL + identity);
         auto& seed_program = bind(seed, 12);
         std::memcpy(seed_program.user_data.data(), &target, sizeof(target));
         std::memcpy(seed_program.user_data.data() + 4, &image, sizeof(image));
@@ -156,6 +185,39 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 std::memcmp(backing, expected.data(), AllocationBytes))
                 throw std::runtime_error("Ordered GCN CPU read did not establish the clean B domain");
         }
+        if (dirty_tail) {
+            // A shifted, page-sized guest writer dirties only the second page.
+            // It cannot invalidate the independent image at a different base.
+            auto tail = target;
+            tail.base_address += 4096;
+            tail.num_records = 4096 / 4;
+            initialize(seed, {0x7e0202ff, TailWrite, 0xe0700000, 0x80000100, 0xbf810000},
+                0x4f52445441490000ULL + identity);
+            auto& tail_program = bind(seed, 4);
+            std::memcpy(tail_program.user_data.data(), &tail, sizeof(tail));
+            rasterizer.DispatchDirect();
+            if (rasterizer.IsGpuBufferModified(target.base_address, ShortBytes) ||
+                !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
+                throw std::runtime_error("Short-prefix fixture did not isolate GPU modification to the tail page");
+            // The prior independent image must survive the shifted writer.
+            auto& check_program = bind(before_probe, 16);
+            std::memcpy(check_program.user_data.data(), &target, sizeof(target));
+            std::memcpy(check_program.user_data.data() + 4, &image, sizeof(image));
+            std::memcpy(check_program.user_data.data() + 12, &observation, sizeof(observation));
+            rasterizer.DispatchDirect();
+            rasterizer.ReadMemory(observation.base_address, 4096);
+            rasterizer.Finish();
+            if (std::memcmp(backing, expected.data(), AllocationBytes) ||
+                rasterizer.IsGpuBufferModified(target.base_address, ShortBytes) ||
+                !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
+                throw std::runtime_error("Tail-only GPU write lost the image or polluted the clean prefix");
+        }
+        if (short_views) {
+            const u64 early_bytes = long_first ? LongBytes : ShortBytes;
+            if (rasterizer.IsGpuBufferModified(target.base_address, early_bytes) !=
+                (sequence == Sequence::DirtyShort))
+                throw std::runtime_error("Readonly original-size dirty precondition changed");
+        }
 
         // Resource discovery follows first live instruction use, not SGPR index.
         // Put the FIRST used descriptor in s[4:7] in every case. The writer's raw
@@ -163,6 +225,11 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         const u32 read_group = read_first ? 1 : 0, write_group = read_first ? 0 : 1;
         const u32 output_group = repeated ? 3 : 2;
         const u32 early_opcode = early_formatted ? 0xe0000000 : 0xe0300000;
+        auto early_sharp = target, late_sharp = target;
+        if (short_views) {
+            early_sharp.num_records = u32((long_first ? LongBytes : ShortBytes) / 4);
+            late_sharp.num_records = u32((mixed ? LongBytes : ShortBytes) / 4);
+        }
         auto command_output = observation;
         if (partial_output) {
             // Do not reuse the full-page observation's resident allocation:
@@ -177,6 +244,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::vector<u32> words;
         const auto append = [&](const auto& pair) { words.insert(words.end(), pair.begin(), pair.end()); };
         append(read_first ? early_load : raw_load);
+        if (mixed) words.insert(words.end(), {0xe0000000, 0x80020900}); // long resident R before W
         append(read_first ? raw_load : early_load);
         words.push_back(0xbf8c0000); // s_waitcnt before the actual store
         if (repeated) {
@@ -189,6 +257,21 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 0xe0000000, 0x80020700, // distinct late formatted R, s[8:11]
                 0xbf8c0000
             });
+        }
+        if (short_views) {
+            if (!long_first) words.insert(words.end(), {
+                // Offset64 is outside the unchanged short sharp, even though
+                // the common arena and retained image are larger. It reads0.
+                0xe0000040, 0x80000b00 | (read_group << 16)
+            });
+            if (long_first || mixed) {
+                const u32 long_group = mixed ? 2 : read_group;
+                words.insert(words.end(), {
+                    0x7e0002ff, u32(layout.guest_bytes),
+                    0xe0001000, 0x80000a00 | (long_group << 16)
+                });
+            }
+            words.push_back(0xbf8c0000);
         }
         words.insert(words.end(), {
             0xe0700010, 0x80000400 | (output_group << 16),
@@ -204,12 +287,21 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 0x7e1002ff, FinalValue, 0xe0700000, 0x80000800 | (write_group << 16)
             });
         }
+        if (short_views) {
+            if (mixed) words.insert(words.end(), {0xe0700028, 0x80000900 | (output_group << 16)});
+            if (long_first || mixed)
+                words.insert(words.end(), {0xe070002c, 0x80000a00 | (output_group << 16)});
+            if (!long_first)
+                words.insert(words.end(), {0xe0700030, 0x80000b00 | (output_group << 16)});
+        }
         words.push_back(0xbf810000);
-        initialize(ordered, words, 0x4f52444f52440000ULL + identity);
+        // Extended straight-line probes need more instruction words. The real
+        // BinaryInfo scanner supports this later metadata placement unchanged.
+        initialize(ordered, words, 0x4f52444f52440000ULL + identity, short_views ? 64 : 32);
         auto& ordered_program = bind(ordered, repeated ? 16 : 12);
-        std::memcpy(ordered_program.user_data.data(), &target, sizeof(target));
-        std::memcpy(ordered_program.user_data.data() + 4, &target, sizeof(target));
-        if (repeated) std::memcpy(ordered_program.user_data.data() + 8, &target, sizeof(target));
+        std::memcpy(ordered_program.user_data.data() + write_group * 4, &target, sizeof(target));
+        std::memcpy(ordered_program.user_data.data() + read_group * 4, &early_sharp, sizeof(early_sharp));
+        if (repeated) std::memcpy(ordered_program.user_data.data() + 8, &late_sharp, sizeof(late_sharp));
         std::memcpy(ordered_program.user_data.data() + output_group * 4, &command_output, sizeof(command_output));
         const auto& stage = reflection.BuildCompute(gpu);
         if (!stage.info.images.empty() || stage.info.uses_dma)
@@ -223,24 +315,36 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             const auto& buffer = *guest_buffers[index];
             const auto sharp = buffer.GetSharp(stage.info);
             const bool early_reader = index == (read_first ? 0u : 1u);
-            const bool late_reader = repeated && index == 2;
+            const bool late_reader = repeated && index == (mixed ? 1u : 2u);
             const bool reader = early_reader || late_reader;
             const bool formatted = late_reader || (early_reader && early_formatted);
             const bool output = index == guest_buffers.size() - 1;
             const auto address = output ? command_output.base_address : target.base_address;
-            const auto bytes = output ? command_output.GetSize() : layout.guest_bytes;
+            const auto bytes = output ? command_output.GetSize() : early_reader ? early_sharp.GetSize() :
+                late_reader ? late_sharp.GetSize() : layout.guest_bytes;
             if (sharp.base_address != address || sharp.GetSize() != bytes ||
                 buffer.is_written == reader || buffer.is_formatted != formatted)
                 throw std::runtime_error("Actual translated buffer collection does not have the requested R/W order");
         }
         rasterizer.DispatchDirect();
         const auto loaded = image_tiled ? ImageValue : BufferValue;
+        const auto early_loaded = private_early ? BufferValue : loaded;
         const auto next = image_tiled ? ImageNext : initial(1, 0);
-        expect_word(command_output_offset + 16, loaded);
+        expect_word(command_output_offset + 16, early_loaded);
         expect_word(command_output_offset + 20, loaded);
         if (repeated) {
             expect_word(command_output_offset + 24, private_early ? BufferValue : FinalValue);
             expect_word(command_output_offset + 28, FinalValue);
+        }
+        if (short_views) {
+            if (mixed) expect_word(command_output_offset + 40, ImageValue);
+            if (long_first || mixed) {
+                expect_word(command_output_offset + 44, 0x8d732100u ^ u32(layout.guest_bytes));
+                if (rasterizer.IsGpuBufferModified(target.base_address + layout.guest_bytes,
+                                                  LongBytes - layout.guest_bytes))
+                    throw std::runtime_error("Full-image writer incorrectly marked the readonly long tail modified");
+            }
+            if (!long_first) expect_word(command_output_offset + 48, 0);
         }
         if (partial_output) {
             // Without asking for a readback, the unowned output must already be
@@ -264,6 +368,8 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         rasterizer.DispatchDirect();
         expect_word(ImageOffset + first, FinalValue);
         if (image_tiled) expect_word(ImageOffset + second, ImageNext);
+        if (short_views && image_tiled) expect_word(ImageOffset + far, ImageFar);
+        if (dirty_tail) expect_word(ImageOffset + 4096, TailWrite);
         expect_word(ObservationOffset + 32, FinalValue);
         expect_word(ObservationOffset + 36, next);
         rasterizer.ReadMemory(base, AllocationBytes);
@@ -272,7 +378,11 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             throw std::runtime_error("Ordered GCN observation, final buffer, image reload or physical/padding oracle mismatch");
         const char* sequence_name = sequence == Sequence::ReadWrite ? "R/W" :
             sequence == Sequence::WriteRead ? "W/R" :
-            sequence == Sequence::RawWriteRead ? "rawR/W/formattedR" : "formattedR/W/formattedR";
+            sequence == Sequence::RawWriteRead ? "rawR/W/formattedR" :
+            sequence == Sequence::ReadWriteRead ? "formattedR/W/formattedR" :
+            dirty_tail ? "clean64-byteR/dirty-tail/fullW" :
+            sequence == Sequence::DirtyShort ? "dirty64-byteR/fullW" :
+            long_first ? "clean20KiBR/full-imageW" : "private64-byteR/resident20KiBR/fullW";
         std::printf("PASS: ordered-formatted %s %s %s%s bytes=%llu; real GCN, full physical oracle\n",
             small ? "small" : "large", clean ? "CPU-clean" : "GPU-modified",
             sequence_name, partial_output ? " partial-output sync fallback" : "",
