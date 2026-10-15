@@ -1,5 +1,115 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Active packed-float and RGB32 source checkpoint - 2026-10-15
+
+This is the authoritative continuation; older active/next-task statements below are historical.
+Repository F:/PS4Dev/work/shadps4-dx12-src, fix/mixed-cmask. Source commits 06536f2 and
+6ded358 are pushed to origin/fix/mixed-cmask. Final checkpoint HEAD, actual remote SHA,
+index equality and residual source hashes are recorded in F:/PS4Dev/handoff/packed-float-msaa-20261015/CHECKPOINT_FINAL.json.
+Immutable Vulkan reference remains e0a466753a1aacbc8db8253be685bf7ab4d9daae at
+F:/PS4Dev/work/shadps4-original-e0a46675.
+
+### Production changes, source-reviewed only
+
+- 06536f2: GuestTextureCache::CanTransferIndependentMultisample admits native R11G11B10
+  and sampled-only RGB9E5 for matching 2/4/8 samples, one mip, 2D/arrays. UINT word views
+  preserve finite/special payloads rather than doing a floating-point round trip.
+  Upload requires actual typed MULTISAMPLE_LOAD, render-target and sample-count support.
+  GuestMultisample::Prepare/PrepareCopy/PrepareStorage validate the exact typed native
+  resource and its retained typed plus R32_UINT format list. Both copy resources and all
+  storage planes are checked. A declared format list cannot manufacture typed RGB9E5
+  MSAA support on old hardware; unsupported-device emulation remains open.
+- guest_image_ownership.h::DescribeGuestImageOwnership separates physical ownership
+  from shader usage. Readonly RGB9E5 uses an ownership-only R32_UINT witness with exact
+  guest bytes, logical bytes, block extent and every mip pitch/height/offset/slice/thickness
+  checked. The actual Entry descriptor/layout/native views stay RGB9E5 and readonly.
+  Pinned Vulkan puts RGB9E5 and R32 in the same 32-bit compatibility class; this does not
+  authorize IMAGE_WRITE34. Existing expanded packed10/19 physical owners remain valid.
+- 6ded358: readonly RGB32 UINT/SINT/FLOAT independent MSAA versions use guest12/host16
+  storage. Existing UINT4 transfers preserve the three DWORDs; the generic tiler stores
+  only 12 guest bytes and leaves neighbouring texels/padding intact. Host alpha is
+  synthetic and the sampled view still supplies constant one. No original-word snapshot
+  is necessary because this expansion preserves all guest components exactly.
+- SetIndependentImageRetention/CanRetainIndependentImage now explicitly separate image
+  ownership from simultaneous writable buffer/image admission. GuestRasterizer shares
+  the real PageWatch, complete-page, backing, size and format guards between the two
+  callbacks. OwnIndependentImage and RetileBufferVersion use independent retention;
+  writable snapshots still use CanRetainBufferAlias. Readonly RGB32 ownership retains
+  its actual 96-bit geometry; it is never replaced by R32 or RGBA32 guest geometry.
+- GuestMultisample validates RGB32's matching typed layout, guest12/host16 stride and
+  actual RGBA32_TYPELESS native allocation in upload/readback, both copy ends and sample
+  storage. Native RGBA32 storage does not establish guest format13/14 alias compatibility:
+  pinned RGB32 is _96BIT, RGBA32 is _128BIT. Actual writable/RT13 MSAA stays excluded.
+  Earlier single-sample behavior is retained; no new guest write-format parity is claimed.
+
+No HLSL source changed: these blocks reuse existing production UINT transfers and tiler.
+The existing partial-progress upload exception model is unchanged; strong rollback is not
+proven. Whole independent MSAA image pressure eviction remains intentionally skipped, as
+in the pinned tiled GPU-modified GC policy; reconstructible sample scratch is separate.
+
+### Evidence, fixtures and execution boundary
+
+Evidence root: F:/PS4Dev/handoff/packed-float-msaa-20261015. Before/after copies, deltas and hashes are in reviewed-source/
+and rgb32/reviewed-source/. Bounded reference proofs: reference-and-cast-lifetime.md and
+rgb32-scope.md. Independent source reviews: SOURCE_REVIEW.md, FIXTURE_SOURCE_REVIEW.md,
+rgb32/SOURCE_REVIEW.md and rgb32/FIXTURE_SOURCE_REVIEW.md. The review found an obsolete
+--msaa-vector32 readonly13 rejection; it now rejects writable13 and preserves the existing
+16-sample negative case. No unresolved source-proven defect remains in these deltas.
+
+Authored/registered, NOT compiled or run:
+- --msaa-packed-float: 12 cases, 2/4/8 samples; 6 to readonly6/writable6/readonly34 and
+  R32UINT to readonly34. Exact special words, layers, physical/private padding, scratch
+  retirement/recreation, incomplete cast lists, geometry rejection and readonly usage.
+- --msaa-rgb32: 9 readonly13 cases, 2/4/8 samples times UINT/SINT/FLOAT. Internal UINT4
+  upload seeds an independent image with poisoned host alpha; it is not guest IMAGE_WRITE13.
+  Exact RGB words, synthetic destination alpha, whole physical/private allocations, fresh
+  seeded repeated retile after Collect, forbidden writable/RT13 and guest16 rejection.
+  This mode does not claim storage-pressure testing because readonly13 has no UAV planes.
+
+The user execution gate remains: no build/configure/package, fixtures/tests, GPU/game,
+XInput or desktop control without new applicable authorization. No such execution occurred.
+No new performance/FPS/image/control result exists. Source review and Git/JSON/preservation
+checks are not runtime acceptance. All129 registry groups remain partial/open.
+Historical suite326/346(native211/229) plus three later targeted passes remain separate old
+results. Last accepted Bloodborne world evidence remains fog/sky, G-buffer geometry and
+finite depth; no accepted current world controls/FPS milestone. EOP rejection cause remains
+unknown, and WAIT operand stabilization does not prove an EOP fix.
+
+### Installed build and preservation
+
+Latest installed core remains DX12 - перенос №24 - 15.10.2026, ID
+ dx12-20261015-full-port-preview-70eeeff04e89, source a3f1d5e plus its archived dirty patch.
+Path C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe;
+SHA256 70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+It does NOT contain later source commits. Selected core remains preview23. Package/PDB/MAP
+provenance remains in eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Original saves, Vulkan, settings, monitors and remote session were not touched.
+
+Broad accumulated dirty integration and22 original staged network deletions are preserved;
+old guest_depth_metadata.h deletion remains. Remote commits alone do not reconstruct that
+integration. Current final-residual contains full patches, nonignored residual source/assets
+and a manifest. Recover ONLY into a separate fresh checkout of manifest.head: apply staged
+patch with --index, then unstaged patch, then untracked ZIP entries. Never restore over this
+tree. Local .serena state remains in the workspace; previous handoff archives remain intact.
+
+### Next exact source task and prohibited repetition
+
+Continue guest_color_clear.h::DecodeGuestColorClear for selected original CMASK6/7 +INF,
+using rgb32/NEXT_SOURCE_TASK.md and the saved pinned clear proof. Finite RTZ is already
+implemented. Separate exponent31/mantissa0 infinity from NaN after the original Swizzle;
+confirm only the infinity storage rule, then use explicit float infinity and canonical
+UF11/UF10 infinity words. Merely deleting the guard is wrong: existing ldexp would turn
+exponent31 into a finite value. NaN payload/canonicalization stays open until established;
+raw bit-preserving MSAA transfer does not prove numeric clear conversion. Format34 clear
+usage/scale remains separate. Then resume the existing partial-alias/cache queue.
+
+Next action: in this repository run git rev-parse HEAD and git status --short, compare to
+CHECKPOINT_FINAL.json, then edit the named decoder and its focused authored fixtures.
+Do not repeat packed16 nibble-order, typed/raw cast lifetime, RGB32 geometry/class inventory,
+position-export/display-copy investigations or complete Vulkan audits without new evidence.
+
+
+
 ## Active packed-MSAA source checkpoint - 2026-10-15
 
 This section is authoritative and supersedes older active/next-priority statements below.
@@ -910,3 +1020,22 @@ core, run focused regressions and minimum isolated Bloodborne/XInput trials, com
 completed guest frames (no FG) against saved baseline, verify image/controls/stability,
 release the virtual device, and install a new core only as authorized. Keep the goal active;
 commit coherent WIP source work, push the configured upstream, and update this handoff.
+
+## NEXT CODEX SESSION - START HERE
+
+Continue Skiters/ps4-dx12 in F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask.
+Read the top active packed-float/RGB32 section of SESSION_HANDOFF.md, STATE.md and
+NEXT_SESSION.md; verify actual HEAD against packed-float-msaa-20261015/CHECKPOINT_FINAL.json.
+Preserve dirty integration and22 staged deletions; do not restore anything over this tree.
+06536f2/6ded358 implement packed-float MSAA and readonly RGB32 ownership/transfer in source
+only. Start the precise CMASK6/7 selected +INF decoder continuation in
+F:/PS4Dev/handoff/packed-float-msaa-20261015/rgb32/NEXT_SOURCE_TASK.md. Keep NaN unresolved
+until its conversion contract is established; reuse finite RTZ and saved Vulkan evidence.
+Do not repeat completed audits or invent writable13/34 parity. Continue real C++/HLSL work
+with PageWatch, physical/image separation, exact padding, barriers, fences and lifetime intact.
+The user's tests/game/GPU/XInput/desktop/build gate remains active. Once final execution is
+authorized, build incrementally, run affected regressions and minimal isolated Bloodborne
+trials through the existing copied profile/virtual XInput; compare completed guest frames
+without FG to the saved baseline and check image, controls and stability. Preview24 remains
+installed unchanged. Commit coherent source WIP, push configured upstream without force,
+and preserve the exact next step. The full-port goal stays active and unfinished.

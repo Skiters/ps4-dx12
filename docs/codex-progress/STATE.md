@@ -1,5 +1,19 @@
 # Native DX12 state
 
+## Current packed-float/RGB32 checkpoint - 2026-10-15
+
+SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
+06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
+readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate
+independent-image retention. Page/backing/fence/physical-domain guards remain. Source-reviewed
+only, NOT compiled/installed/run. All129 groups remain partial/open. Preview24 stays installed
+unchanged; no new FPS or game result. User execution gate remains active.
+Evidence and final HEAD/remote/residual recovery: F:/PS4Dev/handoff/packed-float-msaa-20261015/CHECKPOINT_FINAL.json.
+Next source task: CMASK6/7 selected +INF conversion in DecodeGuestColorClear; see
+rgb32/NEXT_SOURCE_TASK.md. Finite RTZ is done; NaN encoding and format34 clear stay open.
+
+
+
 ## Current packed-MSAA source checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's packed-MSAA section is authoritative; older sections are historical.

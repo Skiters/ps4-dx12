@@ -431,9 +431,33 @@
     },
     {
       "id": "native-packed-float-bit-transfers",
-      "upstream_paths": ["src/video_core/renderer_vulkan/vk_runtime.cpp", "src/video_core/texture_cache/image.cpp", "src/video_core/texture_cache/blit_helper.cpp"],
-      "upstream_symbols": ["SetBackingSamples", "CopyImageWithBuffer", "DownloadImage", "UploadImage", "CopyBetweenMsImages"],
-      "native_paths": ["src/video_core/renderer_d3d12/resources.h", "src/video_core/renderer_d3d12/memory_allocator.h", "src/video_core/renderer_d3d12/memory_allocator.cpp", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "src/video_core/renderer_d3d12/guest_multisample.cpp", "src/video_core/renderer_d3d12/guest_msaa_upload.hlsl", "src/video_core/renderer_d3d12/guest_msaa_readback.hlsl", "src/video_core/renderer_d3d12/guest_msaa_copy.hlsl", "native-port/packed_float_test.cpp", "native-port/run-gcn-frontend-test.ps1"],
+      "upstream_paths": [
+        "src/video_core/renderer_vulkan/vk_runtime.cpp",
+        "src/video_core/texture_cache/image.cpp",
+        "src/video_core/texture_cache/blit_helper.cpp"
+      ],
+      "upstream_symbols": [
+        "SetBackingSamples",
+        "CopyImageWithBuffer",
+        "DownloadImage",
+        "UploadImage",
+        "CopyBetweenMsImages"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/resources.h",
+        "src/video_core/renderer_d3d12/memory_allocator.h",
+        "src/video_core/renderer_d3d12/memory_allocator.cpp",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "src/video_core/renderer_d3d12/guest_msaa_upload.hlsl",
+        "src/video_core/renderer_d3d12/guest_msaa_readback.hlsl",
+        "src/video_core/renderer_d3d12/guest_msaa_copy.hlsl",
+        "native-port/packed_float_test.cpp",
+        "native-port/run-gcn-frontend-test.ps1",
+        "src/video_core/renderer_d3d12/guest_image_ownership.h",
+        "native-port/independent_version_transfer_test.cpp",
+        "native-port/CMakeLists.txt"
+      ],
       "contract": {
         "inputs": "Real R11G11B10/RGB9E5 guest words, layout/mips/layers/samples and actual D3D12 format-list and enhanced-barrier capabilities.",
         "outputs": "Native MSAA upload, readback and backing copies use R32_UINT views to preserve physical texel bits rather than converting through float.",
@@ -442,10 +466,16 @@
         "lifetime": "Placed texture leases retain heap ranges through all Resource copies. Cache accounting and backing retirement use the same actual cast-aware allocation sizes; MSAA descriptors, transfer programs and backing resources retain existing submission ownership.",
         "errors": "Missing format-list allocation interface/capabilities, invalid allocation info, unsupported original typed view/sample count or absent raw view on either copy resource reports an error. No float conversion is used as a purported bit-preserving fallback.",
         "verification_preparation": "Core and full-core fixture compiled/linked only. Prepared exact NaN/finite/shared-exponent physical words across linear/macro layouts, three layers/mips, one/four samples, warm uploads, CPU changes, sample-zero broadcast, untouched padding and retained backings. Active readback bytes are poisoned before comparison.",
-        "open_contracts": "Actual format-list/resource-state/descriptor/MSAA acceptance, writable packed-float paths and original sample/format capabilities, unsupported-device native emulation and complete alias/resolve equivalence remain open. Original typed backing blits and the retained native raw-bit extension need edge-case comparison."
+        "open_contracts": "Actual format-list/resource-state/descriptor/MSAA acceptance, writable packed-float paths and original sample/format capabilities, unsupported-device native emulation and complete alias/resolve equivalence remain open. Original typed backing blits and the retained native raw-bit extension need edge-case comparison.",
+        "packed_float_rgb32_continuation_20261015": "06536f2: independent2/4/8-sample one-mip2D/array format6 and readonly34 use actual typed native allocations with retained typed+R32_UINT format lists. Upload requires actual typed MSAA_LOAD/RTV/sample quality; Prepare, both PrepareCopy ends and every storage plane validate declared typed/raw views and exact guest4/host4 layout. Typed RGB9E5 MSAA remains optional; R32 base or an explicit list does not manufacture missing typed capability. Twelve authored cases cover exact special words, domains, padding, pressure restore and cast/usage/geometry guards. Not compiled or run."
       },
-      "implementation_status": "integrated_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary is still open."}
+      "implementation_status": "integrated_partial_review_pending",
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "date": "2026-10-15",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+      }
     },
     {
       "id": "common-original-videoout-cadence",
@@ -1094,7 +1124,8 @@
         "native-port/CMakeLists.txt",
         "src/video_core/renderer_d3d12/guest_multisample.cpp",
         "src/video_core/renderer_d3d12/guest_packed_transfer.cpp",
-        "src/video_core/renderer_d3d12/guest_image_operations.h"
+        "src/video_core/renderer_d3d12/guest_image_operations.h",
+        "src/video_core/renderer_d3d12/guest_image_ownership.h"
       ],
       "contract": {
         "inputs": "Simultaneous exact-base/full-range raw buffer and R32 float/uint/sint image writers, backed by complete protected 4-KiB pages. Full mip chain, one layer/sample, at most 64 MiB, with original linear-image readback policy disabled.",
@@ -1105,20 +1136,21 @@
         "continuation_20261015": "d7d9064: matching 2/4/8-sample one-mip 2D/array independent versions use exact UINT transfers for R/RG/RGBA8 and16 UNORM/SNORM/UINT/SINT (16 also FLOAT), RGBA8 SRGB and R/RG/RGBA32 UINT/SINT/FLOAT. Native/guest bytes must match; ad6808e additionally admits raw RGBA8 through matching R32_UINT word-transfer views. Prepare/PrepareCopy validate actual R32 backing and layout; ordinary RGBA8 retains RGBA8_UINT. Snapshot and private retile retain every sample/layer and seeded physical padding without committing the independent image to the physical buffer. Completed, unpinned, uniquely leased sample-UAV scratch can retire under pressure and recreate transactionally; the authoritative native MSAA image/UID/PageWatch owner remains. Whole native MSAA eviction, packed/depth/stencil/RGB32-expanded/16 samples/mismatched sample domains and complete partial-alias closure remain open. Prepared --msaa-pressure/vector32/vector16/vector8 and six-case --msaa-rawrgba8 fixtures are unrun. The later nonzero_raw_msaa_continuation_20261015 supersedes the original raw nonzero clear limitation for its admitted numeric inputs; shader pack/write semantics remain runtime-unverified.",
         "nonzero_raw_msaa_continuation_20261015": "e359447: nonzero raw RGBA8 2/4/8-sample clears reuse typed single-sample RGBA8 clear and existing packed transfer to a single raw R32 intermediate, then existing sample-copy broadcasts the exact word into every native sample/layer. UINT [0,255], SINT [-128,127] union-bit inputs and finite UNORM/SNORM are admitted; raw SRGB/nonfinite/out-of-range inputs keep shader fallback. Native image/UID and independent physical buffer remain. All descriptors/allocations/copy leases are prepared and retained before recording, intermediate bytes retire on the existing format-transfer fence. ConvertPackedBacking resets obsolete storage_retired when publishing replacement storage. Four --msaa-rawrgba8-clear cases are authored/registered only, not compiled or run.",
         "packed_msaa_continuation_20261015": "Post3fa1607 source extends matching2/4/8 samples to raw/native packed10 word representations and writable packed16 original16..19 guest2/host4 R32 storage. Readonly signed packed10 RGBA32 expanded snapshots retain original words+written-byte mask using raw detile/retile before expansion. Allocations are counted and leases retained; private retile overlays logical bytes onto the physical seed without resolving independent versions. Nonzero packed10/16 and finite rawSRGB clears reuse typed-single-sample conversion plus exact per-layer/all-sample broadcast. New fixture modes are authored/registered only. Readonly native packed16/expanded19, depth/stencil,16samples, complete partial aliases and whole-MSAA-image pressure remain open at this checkpoint.",
-        "packed16_sampled_msaa_continuation_20261015": "Supersedes the earlier sampled packed16 exclusion in this continuation: readonly native16/17/18 UNORM guest/host2 use existing PACKED_MODE1/2 sample-load integer-code recovery, with original18 rotation still in guest_tiler. Readonly expanded19 UNORM guest2/host16 retains exact guest words+two-byte mask before expansion using raw R32 guest2/host4 capture. Every layer/sample and private physical padding remain separate. Native19 attachment, mutable expanded images, depth/stencil/16samples and complete pressure/alias acceptance remain open. Twelve --msaa-packed16-sampled cases check native word ordering/expanded values and repeated private retile against fresh padding, authored/uncompiled/unrun."
+        "packed16_sampled_msaa_continuation_20261015": "Supersedes the earlier sampled packed16 exclusion in this continuation: readonly native16/17/18 UNORM guest/host2 use existing PACKED_MODE1/2 sample-load integer-code recovery, with original18 rotation still in guest_tiler. Readonly expanded19 UNORM guest2/host16 retains exact guest words+two-byte mask before expansion using raw R32 guest2/host4 capture. Every layer/sample and private physical padding remain separate. Native19 attachment, mutable expanded images, depth/stencil/16samples and complete pressure/alias acceptance remain open. Twelve --msaa-packed16-sampled cases check native word ordering/expanded values and repeated private retile against fresh padding, authored/uncompiled/unrun.",
+        "packed_float_rgb32_continuation_20261015": "06536f2/6ded358: matching2/4/8 samples admit exact native packed-float6 and readonly34 with actual typed/raw cast guards, plus readonly RGB32 number4/5/7 guest12/host16. New explicit independent retention callback shares PageWatch/backing/complete-page/size/format guards with writable buffer-alias retention, without making readonly image formats writable. Retile and independent ownership use it; actual writable snapshots keep the original buffer-alias callback. RGB32 preserves physical96-bit geometry and skips synthetic host alpha. Prepared12 packed-float+9 RGB32 cases are uncompiled/unrun. Whole authoritative MSAA eviction remains an intentional pinned GC-policy exclusion; full partial-alias/old-device/runtime acceptance remains open."
       },
       "implementation_status": "integrated_partial_review_pending",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
         "previous_checkpoint_verification": {
           "state": "partial_gpu_verified",
           "date": "2026-10-14",
           "reason": "Mixed NOACCESS/read-only guards and GPU-only incompatible single-sample image transfer PASS with distinct image/physical buffer/padding. Two observed loader blockers cleared; MSAA/partial/pressure/alias closure still open.",
           "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
       }
     },
     {
@@ -1213,18 +1245,45 @@
     },
     {
       "id": "native-independent-rgb32-native-expansion",
-      "upstream_paths": ["src/video_core/buffer_cache/buffer_cache.cpp", "src/video_core/texture_cache/texture_cache.cpp", "src/video_core/renderer_vulkan/vk_rasterizer.cpp"],
-      "upstream_symbols": ["SynchronizeMemoryFromImage", "ObtainBufferForImage", "RefreshImage", "BindResources", "BindTextures"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_rasterizer.cpp", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "src/video_core/renderer_d3d12/guest_tiler.cpp", "src/video_core/renderer_d3d12/guest_tiling.hlsl", "native-port/gcn_attachment_alias_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/buffer_cache/buffer_cache.cpp",
+        "src/video_core/texture_cache/texture_cache.cpp",
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+      ],
+      "upstream_symbols": [
+        "SynchronizeMemoryFromImage",
+        "ObtainBufferForImage",
+        "RefreshImage",
+        "BindResources",
+        "BindTextures"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_tiler.cpp",
+        "src/video_core/renderer_d3d12/guest_tiling.hlsl",
+        "native-port/gcn_attachment_alias_test.cpp",
+        "src/video_core/renderer_d3d12/guest_image_ownership.h",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/independent_version_transfer_test.cpp",
+        "native-port/CMakeLists.txt",
+        "src/video_core/renderer_d3d12/guest_texture_cache.h"
+      ],
       "contract": {
         "inputs": "Exact complete page-backed R32G32B32 FLOAT/UINT/SINT buffer/image domains with one sample and valid mip/array/volume geometry, <=64-MiB physical range.",
         "outputs": "Independent retention accepts RGB32 physical storage while native texture storage remains RGBA32. Actual copy footprints use sixteen native bytes per texel; the existing generic tiler writes only twelve guest bytes and skips native alpha. Prior buffer padding and every adjacent texel remain intact. Guest sampled alpha keeps the existing constant-one component mapping.",
         "ordering": "The same full-range watch/domain and accounted transfer lifetime apply to differing guest/native texel sizes. Preparation validates native footprint row size and all resources/descriptors before GPU recording; raw buffer stores retain the preceding extra guest components, whereas image stores clear absent RGB components according to pinned IR semantics.",
         "verification_prepared": "The actual full-core GCN fixture adds thirty-six basic and twenty-four divergent RGB32 cases over three numeric views and four warm values, one/two array layers and a two-slice volume base mip, totaling 288 basic/240 divergent cases. Every logical RGB channel is initialized. Complete physical bytes/padding compare exact twelve-byte output rather than the native sixteen-byte stride, including separate first/selected slices, raw first-DWORD versus full image-store component results and real protected CPU visibility after formatted transfer. Larger RGB cube/mip fixture shapes remain outside the fixed allocation. Compiled/linked only.",
-        "open_contracts": "Actual native/guest conversion, numeric/UAV/view semantics, GPU/fault/fence execution and broader cube/mip acceptance remain unverified. MSAA, packed/normalized/sub-DWORD formats, partial/concurrent geometry and linear pressure require adaptation. No semantic closure."
+        "open_contracts": "Actual native/guest conversion, numeric/UAV/view semantics, GPU/fault/fence execution and broader cube/mip acceptance remain unverified. MSAA, packed/normalized/sub-DWORD formats, partial/concurrent geometry and linear pressure require adaptation. No semantic closure.",
+        "packed_float_rgb32_continuation_20261015": "6ded358: readonly2/4/8-sample one-mip2D/array RGB32 UINT/SINT/FLOAT uses existing UInt4 transfer and exact12-byte generic retile from actual typelessRGBA32 backing. Dedicated independent retention preserves readonly96-bit owner geometry; writable/RT13 MSAA stays excluded. Original format13 is ImageRead-only and _96BIT; hostRGBA32 is not evidence of guest13/14 compatibility. Nine authored readonly13 cases poison host alpha, check exactRGB/padding/private domains, alpha one, repeated retile and invalid usage/stride. No original-word snapshot needed for injectiveRGB expansion. Earlier single-sample behavior remains; legacy writable-image fixtures are not new proof of original image-write support. Adapter/originalRGB32 MSAA support and runtime acceptance remain unverified."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "date": "2026-10-15",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+      }
     },
     {
       "id": "native-independent-rgba8-normalized-versions",
@@ -1412,18 +1471,43 @@
     },
     {
       "id": "native-independent-r11-packed-float-image-versions",
-      "upstream_paths": ["src/video_core/texture_cache/texture_cache.cpp", "src/video_core/buffer_cache/buffer_cache.cpp", "src/video_core/amdgpu/pixel_format.h", "src/shader_recompiler/ir/passes/lower_buffer_format_to_raw.cpp"],
-      "upstream_symbols": ["RefreshImage", "SynchronizeMemoryFromImage", "RemapDataFormat", "RemapSwizzle", "LoadBufferFormat"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_rasterizer.cpp", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "native-port/gcn_attachment_alias_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/texture_cache/texture_cache.cpp",
+        "src/video_core/buffer_cache/buffer_cache.cpp",
+        "src/video_core/amdgpu/pixel_format.h",
+        "src/shader_recompiler/ir/passes/lower_buffer_format_to_raw.cpp"
+      ],
+      "upstream_symbols": [
+        "RefreshImage",
+        "SynchronizeMemoryFromImage",
+        "RemapDataFormat",
+        "RemapSwizzle",
+        "LoadBufferFormat"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "native-port/gcn_attachment_alias_test.cpp",
+        "src/video_core/renderer_d3d12/guest_image_ownership.h",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/independent_version_transfer_test.cpp",
+        "native-port/CMakeLists.txt"
+      ],
       "contract": {
         "inputs": "Complete page-backed 10:11:11 and remapped 11:11:10 FLOAT independent image/buffer versions with one sample, supported mip/array/cube/volume geometry and actual native typed UAV load/store capability.",
         "outputs": "Retention accepts the canonical R11G11B10 guest format while preserving original channel remapping, typed float storage and generic four-byte native retile. Physical FLOAT sharps interpret the encoded unsigned-float components independently from buffer/image ownership.",
         "ordering": "Existing typed capability validation and resource-format-casting rules remain in force. Original data-format/swizzle mapping selects the physical 11-bit low red or remapped 10-bit high red. Capture, full-image resident helpers, formatted transfer and CPU invalidation follow existing independent-domain ordering.",
         "verification_prepared": "The full-core fixture adds 56 basic/48 divergent packed-float cases across both raw descriptor orders, totaling 1327 basic/1126 divergent. Independent unsigned-float exponent encodings cover quarter/half/one and warm zero/one/half/negative-clamped-zero, all RGB components and both red positions. Actual formatted FLOAT loads, full/short/long views, all mip/layer/face/Z subresources, protected CPU values and full allocation/padding remain prepared. Compile/link only.",
-        "open_contracts": "Actual typed UAV support, unsigned float/channel mapping, native/GCN conversions and shader/GPU/CPU/fault/fence execution remain unverified. Shared-exponent R9, old-device writable fallbacks, MSAA, packed16 volume, partial/shifted/concurrent/pressure and complete acceptance remain open. No semantic closure."
+        "open_contracts": "Actual typed UAV support, unsigned float/channel mapping, native/GCN conversions and shader/GPU/CPU/fault/fence execution remain unverified. Shared-exponent R9, old-device writable fallbacks, MSAA, packed16 volume, partial/shifted/concurrent/pressure and complete acceptance remain open. No semantic closure.",
+        "packed_float_rgb32_continuation_20261015": "06536f2: exact independent format6 MSAA and readonly34 aliases now preserve packed words through actual retained native typed/R32 cast lists. DescribeGuestImageOwnership validates complete physical mip geometry and uses only an R32 ownership witness for readonly34, retaining actual sampled usage. No IMAGE_WRITE34, numeric float round-trip, unsupported-device fallback or runtime parity is claimed. Twelve prepared cases are authored/uncompiled/unrun."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "date": "2026-10-15",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+      }
     },
     {
       "id": "native-independent-logical-partial-buffer-writes",
