@@ -358,15 +358,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto& layout=version->layout;const auto& desc=version->desc;
                 // Earlier raw reads also stream a small clean CPU snapshot;
                 // a later formatted read must not turn them into arena aliases.
-                const bool clean_small=layout.guest_bytes<=16384&&
-                    !rasterizer.IsGpuBufferModified(desc.address,layout.guest_bytes);
+                const bool clean_small=pending[i].original_bytes<=16384&&
+                    !rasterizer.IsGpuBufferModified(desc.address,pending[i].original_bytes);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
-                const bool all_full_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
+                const bool same_base_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
                     const auto original=buffer.WriteRange();
-                    return buffer.unordered_access&&buffer.address==desc.address&&buffer.size==layout.guest_bytes&&
-                        original.address==desc.address&&original.size==layout.guest_bytes;
+                    return buffer.unordered_access&&buffer.address==desc.address&&original.address==desc.address&&
+                        original.size==buffer.size&&(!buffer.written||original.size==layout.guest_bytes);
                 });
+                // GetArena in the pinned backend guarantees whole 4-GiB VA
+                // pages only through this reader's end. A later full writer
+                // cannot retroactively extend an earlier image-to-buffer copy.
+                const bool image_fits_reader_arena=layout.guest_bytes&&pending[i].original_bytes&&
+                    layout.guest_bytes<=UINT64_MAX-desc.address&&
+                    pending[i].original_bytes<=UINT64_MAX-desc.address&&
+                    ((desc.address+layout.guest_bytes-1)>>32)<=
+                        ((desc.address+pending[i].original_bytes-1)>>32);
                 const bool unique=std::ranges::none_of(textures->Entries(),[&](const auto& image){
                     return image.get()!=version&&image->gpu_owned&&image->buffer_alias_version&&
                         image->desc.address<desc.address+layout.guest_bytes&&
@@ -374,8 +382,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 });
                 if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
                    !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
-                   (ordered_formatted_version&&ordered_formatted_version!=version)||!all_full_uavs||
-                   pending[i].original_bytes!=layout.guest_bytes||
+                   (ordered_formatted_version&&ordered_formatted_version!=version)||!same_base_uavs||
+                   !pending[i].original_bytes||pending[i].original_bytes!=requests[i].size||
+                   (reads_image&&!clean_small&&!image_fits_reader_arena)||
                    textures->GetMetaInfo(desc.address)||!ownership||
                    !textures->CanRetainIndependentImage(ownership->desc,ownership->layout)||
                    native.SampleDesc.Count!=desc.samples||
@@ -383,12 +392,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    (layout.expanded_bytes_per_pixel&&(!HasExactPackedExpansion(desc,layout)||
                     !version->expanded_guest_backing.handle||!version->expanded_written_mask.handle||
                     !version->expanded_backing_bytes)))
-                    throw std::runtime_error("Ordered formatted buffer/image writers require a unique full-range resident compute alias");
+                    throw std::runtime_error("Ordered buffer/image aliases require exact-base reads, full-image writers and proven transfer capacity");
                 ordered_formatted_writer=true;ordered_formatted_version=version;
                 requests[i].resident=true;
-                if(clean_small)for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
+                for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
                     if(pending[j].guest_read&&requests[j].address<desc.address+layout.guest_bytes&&
                        desc.address<requests[j].address+requests[j].size&&
+                       pending[j].original_bytes<=16384&&
+                       !rasterizer.IsGpuBufferModified(requests[j].address,pending[j].original_bytes)&&
                        std::ranges::find(ordered_stream_reads,j)==ordered_stream_reads.end())
                         ordered_stream_reads.push_back(j);
                 if(reads_image&&!clean_small&&ordered_formatted_images.empty()){
