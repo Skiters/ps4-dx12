@@ -73,6 +73,16 @@ inline bool HasExactPackedExpansion(const GuestTextureDesc& d,const GuestTexture
 GuestTextureDesc DescribeGuestTexture(const AmdGpu::Image& image);
 GuestTextureDesc DescribeGuestColorBuffer(const AmdGpu::ColorBuffer&,AmdGpu::CbDbExtent);
 uint64_t GuestCmaskBytes(const AmdGpu::ColorBuffer&);
+struct GuestCmaskTile {uint32_t layer,x,y;uint64_t byte;uint32_t shift;};
+struct GuestColorClearPlan {
+    std::vector<uint32_t> uniform_layers;
+    std::vector<GuestCmaskTile> tiles;
+    bool Pending()const{return !uniform_layers.empty()||!tiles.empty();}
+};
+// Shared validation/address decoding for physical CPU materialization and
+// native attachment clears. Planning does not modify either guest plane.
+GuestColorClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,
+    const GuestTextureLayout&,std::span<const std::byte> cmask);
 bool GuestColorClearPending(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,
     const GuestTextureLayout&,std::span<const std::byte> cmask);
 bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,

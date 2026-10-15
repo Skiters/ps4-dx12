@@ -41,6 +41,8 @@ class GuestRasterizer : public GuestBufferAccess {
     bool HasGpuImageOverlap(VAddr,u64)const override;
     void ReleaseImageWatches(VAddr,u64) override;
     void DiscardImages(VAddr,u64);
+    bool MaterializeOwnedColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,
+        const GuestTextureLayout&,const GuestColorClearPlan&,std::span<std::byte> metadata);
     void MaterializeColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,const GuestTextureLayout&);
     void ResolveColorTargets();
     void Dispatch(const u32 (&groups)[3]);

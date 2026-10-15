@@ -377,12 +377,6 @@ uint64_t GuestCmaskBytes(const AmdGpu::ColorBuffer& b) {
     return (uint64_t(b.cmask_slice.tile_max)+1)*128*b.NumSlices();
 }
 namespace {
-struct CmaskTile { uint32_t layer,x,y; uint64_t byte; uint32_t shift; };
-struct CmaskClearPlan {
-    std::vector<uint32_t> uniform_layers;
-    std::vector<CmaskTile> tiles;
-    bool Pending() const {return !uniform_layers.empty()||!tiles.empty();}
-};
 struct CmaskLayout {
     GuestCmaskAddress address;
     explicit CmaskLayout(const AmdGpu::ColorBuffer& b,bool alt_tile)
@@ -393,14 +387,15 @@ struct CmaskLayout {
         if(address.slice_bytes!=(uint64_t(b.cmask_slice.tile_max)+1)*128)
             throw std::runtime_error("Native CMASK descriptor does not match padded metadata slice");
     }
-    CmaskTile At(uint32_t layer,uint32_t x,uint32_t y) const {
+    GuestCmaskTile At(uint32_t layer,uint32_t x,uint32_t y) const {
         const auto [byte,shift]=address.At(layer,x,y);
         return {layer,x,y,byte,shift};
     }
 };
-CmaskClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
+}
+GuestColorClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
     const GuestTextureLayout& l,std::span<const std::byte> cmask) {
-    CmaskClearPlan plan;
+    GuestColorClearPlan plan;
     if(!b.info.fast_clear||!b.cmask_base_address)return plan;
     if(b.info.compression||b.info.dcc_enable||l.block_extent!=1)
         throw std::runtime_error("Native CMASK requires uncompressed color");
@@ -425,7 +420,6 @@ CmaskClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextu
         }
     }
     return plan;
-}
 }
 bool GuestColorClearPending(const AmdGpu::ColorBuffer& b,const GuestTextureDesc& d,
     const GuestTextureLayout& l,std::span<const std::byte> cmask) {

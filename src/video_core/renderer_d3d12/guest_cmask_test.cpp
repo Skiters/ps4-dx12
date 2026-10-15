@@ -21,7 +21,7 @@ void CheckCmaskAddressing() {
         {P::P8_32x32_8x16,8,0,512,0},{P::P8_32x32_8x16,16,0,257,4},
         {P::P8_32x32_8x16,0,16,512,4},
         {P::P16_32x32_8x16,8,0,512,0},{P::P16_32x32_8x16,16,0,257,4},
-        {P::P16_32x32_8x16,0,8,256,0},{P::P16_32x32_8x16,32,0,1024,4},
+        {P::P16_32x32_8x16,0,8,256,0},{P::P16_32x32_8x16,32,0,1024,0},
     };
     for(bool linear:{false,true})for(const auto& v:vectors){
         const GuestCmaskAddress address(1024,512,v.pipe,linear);

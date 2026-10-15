@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <algorithm>
+#include <map>
 #ifdef SHADPS4_NATIVE_DX12_CORE
 #include "core/memory.h"
 #include "core/emulator_settings.h"
@@ -449,6 +450,87 @@ void GuestRasterizer::CaptureDisplayCandidates(VAddr address,uint64_t id,Resourc
         DisplayCapture::Save(id,stage,bytes,info.str()+" row_bytes="+std::to_string(transfer.row_bytes));
     }
 }
+bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
+    const GuestTextureDesc& d,const GuestTextureLayout& l,const GuestColorClearPlan& plan,
+    std::span<std::byte> metadata) {
+    // This path updates an existing physical image owner, never an independent
+    // buffer/image version. Keep every other case on the exact raw-word CPU
+    // materializer until it has an equivalent native format/ownership path.
+    if(!page_watch_||!d.render_target||d.depth_target||d.stencil_address||d.writable||
+       d.one_dimensional||d.volume_depth||d.levels!=1||d.first_mip||
+       d.data_format!=10||d.number_format!=0||l.format!=DXGI_FORMAT_R8G8B8A8_UNORM||
+       l.bytes_per_pixel!=4||l.expanded_bytes_per_pixel||l.block_extent!=1||
+       b.info.comp_swap!=AmdGpu::ColorBuffer::SwapMode::Standard||
+       b.info.cmask_addr_type||b.info.compression||b.info.dcc_enable||
+       !has_backing_(d.address,l.guest_bytes))return false;
+    const auto meta_bytes=GuestCmaskBytes(b),slice_bytes=meta_bytes/b.NumSlices();
+    if(metadata.size()!=meta_bytes||d.first_layer>=b.NumSlices()||!d.view_layers||
+       d.view_layers>b.NumSlices()-d.first_layer||
+       Overlap(d.address,l.guest_bytes,b.CmaskAddress(),meta_bytes))return false;
+    if(!plan.Pending())return false;
+    GuestTextureCache::Entry* image{};
+    for(auto& entry:textures_.Entries())if(entry->gpu_owned&&ImageOverlap(d.address,l.guest_bytes,*entry)){
+        // A competing alias is not evidence that this image is the last
+        // writer. Let the existing reconciliation path determine ownership.
+        if(image||entry->buffer_alias_version||entry->layout.guest_bytes!=l.guest_bytes||
+           !CompatibleGuestAttachmentStorage(entry->desc,d))return false;
+        image=entry.get();
+    }
+    if(!image||!image->texture.handle)return false;
+    const auto native=image->texture.handle->GetDesc();
+    if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.Width!=d.width||native.Height!=d.height||
+       native.MipLevels!=1||native.DepthOrArraySize!=d.layers||native.SampleDesc.Count!=d.samples||
+       !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))return false;
+    // Use exactly the CPU materializer's validated tile plan. Rectangles are
+    // clipped at logical edges; expanded tiles are not included in mixed layers.
+    std::map<UINT,std::vector<D3D12_RECT>> regions;
+    for(const auto layer:plan.uniform_layers)
+        regions[layer].push_back({0,0,LONG(d.width),LONG(d.height)});
+    for(const auto& tile:plan.tiles)
+        regions[tile.layer].push_back({LONG(tile.x),LONG(tile.y),
+            LONG(std::min(tile.x+8,d.width)),LONG(std::min(tile.y+8,d.height))});
+    ComPtr<ID3D12DescriptorHeap> heap;D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
+    heap_desc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;heap_desc.NumDescriptors=UINT(regions.size());
+    Check(DX12_API_CALL(device_->CreateDescriptorHeap(&heap_desc,IID_PPV_ARGS(&heap))));
+    const auto step=device_->GetDescriptorHandleIncrementSize(heap_desc.Type);
+    auto handle=heap->GetCPUDescriptorHandleForHeapStart();
+    for(const auto& region:regions){
+        auto view=d;view.first_layer=region.first;view.view_layers=1;
+        const auto rtv=image->Rtv(view);
+        DX12_API_CALL(device_->CreateRenderTargetView(image->texture.handle.Get(),&rtv,handle));handle.ptr+=step;
+    }
+    // For identity-swizzled RGBA8 UNORM only, each raw CB byte is exactly the quantized value
+    // produced by byte/255. Integer, sRGB and float-word clears are not inferred
+    // from this conversion. RTV clear writes all samples of each selected layer.
+    float clear[4];for(UINT component=0;component<4;++component)
+        clear[component]=float((b.clear_word0>>(component*8))&255)/255.f;
+    auto pin=textures_.PinBinding(*image);
+    // Begin may collect older submissions; do it before publishing this
+    // recording's pending ownership, then use that same list throughout.
+    auto* list=RecordingList();
+    RetainUntilFinish([heap,resource=image->texture.handle,allocation=image->texture.allocation,pin](u64){
+        (void)heap;(void)resource;(void)allocation;(void)pin;
+    });
+    // Stamp the submitted fence before old retirements run. A completion
+    // callback must not relabel newer pending texture work with an old fence.
+    NotifyOnSubmission([this](u64 fence){textures_.Submitted(fence);});
+    image->pending=true;
+    image->texture.Transition(list,D3D12_RESOURCE_STATE_RENDER_TARGET);
+    handle=heap->GetCPUDescriptorHandleForHeapStart();
+    for(const auto& region:regions){
+        const auto& rectangles=region.second;
+        DX12_API_CALL(list->ClearRenderTargetView(handle,clear,UINT(rectangles.size()),rectangles.data()));handle.ptr+=step;
+    }
+    image->diagnostic_writer=image->diagnostic_vs=image->diagnostic_ps=0;
+    // Color pages stay guarded and GPU-owned. ResolveImage later merges these
+    // logical texels into existing backing, preserving padding/untouched layers.
+    // Publish expanded metadata only after the color writes are in queue order.
+    for(const auto layer:plan.uniform_layers)
+        std::fill_n(metadata.begin()+size_t(slice_bytes*layer),size_t(slice_bytes),std::byte{0xff});
+    for(const auto& tile:plan.tiles)metadata[tile.byte]|=std::byte(15u<<tile.shift);
+    InvalidateMemory(b.CmaskAddress(),meta_bytes);
+    return true;
+}
 void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     const GuestTextureDesc& d,const GuestTextureLayout& l) {
     if(!b.info.fast_clear||!b.cmask_base_address)return;
@@ -459,9 +541,9 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     if(!ReadMemory(b.CmaskAddress(),meta_bytes))
         throw std::runtime_error("Native CMASK backing is not mapped");
     ValidateHostMemory(b.CmaskAddress(),meta_bytes,true);
-    bool pending{};
+    GuestColorClearPlan plan;
     try {
-        pending=GuestColorClearPending(b,d,l,
+        plan=PlanGuestColorClear(b,d,l,
             {reinterpret_cast<const std::byte*>(b.CmaskAddress()),size_t(meta_bytes)});
     } catch(...) {
         // Opt-in, bounded reproduction data; keep the original failure intact.
@@ -483,7 +565,9 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
         }
         throw;
     }
-    if(!pending)return;
+    if(!plan.Pending())return;
+    if(MaterializeOwnedColorClear(b,d,l,plan,
+        {reinterpret_cast<std::byte*>(b.CmaskAddress()),size_t(meta_bytes)}))return;
     if(!ReadMemory(d.address,l.guest_bytes))
         throw std::runtime_error("Native color backing is not mapped");
     ValidateHostMemory(d.address,l.guest_bytes,true);
@@ -1307,7 +1391,10 @@ bool GuestRasterizer::ComputeImageOperation(const Shader::Info& info,const u32 (
         }
         textures_.SetBackingSamples(*src,src->desc.samples,RecordingList());
         textures_.SetBackingSamples(*dst,dst->desc.samples,RecordingList());
-        RecordGuestImageCopy(*src,*dst,RecordingList(),true);copied=true;
+        auto* list=RecordingList();
+        NotifyOnSubmission([this](u64 fence){textures_.Submitted(fence);});
+        src->pending=dst->pending=true;
+        RecordGuestImageCopy(*src,*dst,list,true);copied=true;
     }else if(!a.is_formatted&&!a.is_written&&b.is_formatted&&b.is_written&&ba.GetSize()==16&&
         u64(groups[0])*128*(AmdGpu::NumBitsPerBlock(bb.GetDataFmt())/8)==bb.GetSize()){
         if(!ReadMemory(ba.base_address,16))return false;
@@ -1326,19 +1413,26 @@ bool GuestRasterizer::ComputeImageOperation(const Shader::Info& info,const u32 (
         // Clear the complete guest resource, then let later backing changes
         // copy from that authoritative cleared sample count.
         textures_.SetBackingSamples(*dst,dst->desc.samples,RecordingList());
+        // Begin can collect prior submissions. Publish this pending write only
+        // after its recording list exists, and stamp it at actual submission.
+        auto* list=RecordingList();
+        NotifyOnSubmission([this](u64 fence){textures_.Submitted(fence);});
+        dst->pending=true;
         if(GuestStorageImageClearCompatible(*dst,values)){
-            auto lease=RecordGuestStorageImageClear(device_.Get(),*dst,RecordingList(),values);
+            auto lease=RecordGuestStorageImageClear(device_.Get(),*dst,list,values);
             RetainUntilFinish([lease=std::move(lease)](u64){});
         }else if(GuestMultisampleStorageClearCompatible(*dst,values)){
-            RecordGuestMultisampleStorageClear(device_.Get(),textures_,*dst,RecordingList(),values);
+            RecordGuestMultisampleStorageClear(device_.Get(),textures_,*dst,list,values);
         }else if(GuestImageClearCompatible(*dst)){
-            auto heap=RecordGuestImageClear(device_.Get(),*dst,RecordingList(),values);
+            auto heap=RecordGuestImageClear(device_.Get(),*dst,list,values);
             RetainUntilFinish([heap=std::move(heap)](u64){});
         }else{
-            textures_.ClearRawStorageImage(*dst,values,RecordingList(),CompletedFence());
+            textures_.ClearRawStorageImage(*dst,values,list,CompletedFence());
         }
     }else return false;
-    RetainUntilFinish([this](u64 fence){if(fence){textures_.Submitted(fence);textures_.Collect(fence);}});
+    // Retirement may run after a later list has begun recording. It can free
+    // completed leases, but must not relabel newer pending work with this fence.
+    RetainUntilFinish([this](u64 fence){if(fence)textures_.Collect(fence);});
     static u64 copies{},clears{};const auto count=copied?++copies:++clears;
     if(count<=8||count%1024==0){fprintf(stderr,"DX12 native image %s count=%llu shader=%llx bytes=%llu\n",
         copied?"copy":"clear",(unsigned long long)count,(unsigned long long)info.pgm_hash,
