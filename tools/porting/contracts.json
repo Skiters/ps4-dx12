@@ -30,14 +30,15 @@
         "ordering": "Existing shared memory mutex covers extent planning and stores. GPU completion waits remain. Ordinary RELEASE_MEM/WRITE_DATA guest stores retain PageWatch callbacks; EOP/EOS retain physical backing writes. No invented acknowledgement on failed writes.",
         "source_difference": "Pinned TryWriteBacking itself can report success after writing only a physically backed prefix and dereferences an end iterator. Native complete-range planning corrects that boundary instead of copying the defect. No historical EOP crash cause is inferred.",
         "verification_prepared": "Split physical/VMA ranges, exact map end, unsupported/gapped/empty backing, arithmetic overflow and physical alias ordering fixtures prepared but not compiled/run.",
-        "open_contracts": "Historical failed EOP address and mapping lifetime unknown; pre/post packet mutation not observed. Runtime memory visibility, concurrent unmap/remap, IRQ ordering and full PM4/EOS/GDS coverage remain unverified. Tests/game/UI deferred by user instruction."
+        "open_contracts": "Historical failed EOP address and mapping lifetime unknown; pre/post packet mutation not observed. Runtime memory visibility, concurrent unmap/remap, IRQ ordering and full PM4/EOS/GDS coverage remain unverified. Tests/game/UI deferred by user instruction.",
+        "source_continuation_20261015": "35b5de4: graphics and compute WAIT_REG_MEM snapshot the packet by value before coroutine yields/WaitVoLabel. Predicate memory/register reads remain live, while address/ref/mask/function cannot mutate through the borrowed command stream. REWIND polling remains dynamic. Pinned EOS GDS transfer is one word with byte offset, Finish then read/store; no unsupported multiword/IRQ semantics added. Historical EOP false-return cause remains unknown."
       },
       "implementation_status": "partial_implemented_unverified",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+        "reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015"
       }
     },
     {
@@ -587,9 +588,36 @@
     },
     {
       "id": "native-render-state-and-rasterizer-discard",
-      "upstream_paths": ["src/video_core/renderer_vulkan/liverpool_to_vk.cpp", "src/video_core/renderer_vulkan/vk_rasterizer.cpp", "src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp"],
-      "upstream_symbols": ["StencilOp", "BlendFactor", "BlendOp", "NormalizeMinMaxBlend", "LogicOp", "UpdateDepthStencilState", "UpdatePrimitiveState", "UpdateColorBlendingState"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_graphics_state.cpp", "src/video_core/renderer_d3d12/guest_graphics_state.h", "src/video_core/renderer_d3d12/guest_rasterizer.cpp", "src/video_core/renderer_d3d12/graphics_submission.cpp", "src/video_core/renderer_d3d12/shader_pipeline.cpp", "src/video_core/renderer_d3d12/resource_bindings.cpp", "src/video_core/renderer_d3d12/guest_pipeline_cache.cpp", "src/video_core/renderer_d3d12/guest_pipeline_persistence.cpp", "native-port/graphics_contract_test.cpp", "native-port/stencil_lowering_test.cpp", "native-port/gcn_winding_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/renderer_vulkan/liverpool_to_vk.cpp",
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+        "src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp"
+      ],
+      "upstream_symbols": [
+        "StencilOp",
+        "BlendFactor",
+        "BlendOp",
+        "NormalizeMinMaxBlend",
+        "LogicOp",
+        "UpdateDepthStencilState",
+        "UpdatePrimitiveState",
+        "UpdateColorBlendingState"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_graphics_state.cpp",
+        "src/video_core/renderer_d3d12/guest_graphics_state.h",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/graphics_submission.cpp",
+        "src/video_core/renderer_d3d12/shader_pipeline.cpp",
+        "src/video_core/renderer_d3d12/resource_bindings.cpp",
+        "src/video_core/renderer_d3d12/guest_pipeline_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_pipeline_persistence.cpp",
+        "native-port/graphics_contract_test.cpp",
+        "native-port/stencil_lowering_test.cpp",
+        "native-port/gcn_winding_test.cpp",
+        "src/video_core/renderer_d3d12/shader_pipeline_test.cpp",
+        "native-port/CMakeLists.txt"
+      ],
       "contract": {
         "inputs": "Original color/depth/stencil registers, typed physical attachment formats, blend factors, per-face references, masks, culling and rasterizer-discard state.",
         "outputs": "Real native fixed-function blending, logic, depth/stencil and raster state. UNORM/SRGB MIN/MAX zero/one normalization matches the pinned helper for RGB and alpha independently.",
@@ -602,20 +630,21 @@
         "original_limitations": "Pinned bitwise stencil operations warn and use KEEP; Ones warns and uses REPLACE. Existing native representable bitwise lowering remains an extension and is not credited as original coverage. Pinned scaled MIN/MAX, BrushXor and QuadStrip have explicit approximation warnings. Pinned PolygonControl::PolyMode uses the front polygon mode and ignores the independent back mode; independent back fill is not credited as original implemented behavior.",
         "native_unit_points": "A direct VS PointList without PointSize export uses native one-pixel points regardless of polygon point-fill control. This control affects polygons; it does not require polygon-to-point clipping for an already assembled point list. Prepared state coverage checks native point topology and retains rejection for sized-point polygon mode. Compilation only; no acceptance run.",
         "open_contracts": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim.",
-        "continuation_20261015": "Native cull-both classification uses final GS output and tessellation isolines; RectList retains pinned Vulkan cull exemption. Shader side effects are preserved. Source corrections to CB sRGB encoding and dual-face fixture oracle retain expected bytes; no runtime result for this delta."
+        "continuation_20261015": "Native cull-both classification uses final GS output and tessellation isolines; RectList retains pinned Vulkan cull exemption. Shader side effects are preserved. Source corrections to CB sRGB encoding and dual-face fixture oracle retain expected bytes; no runtime result for this delta.",
+        "color_write_mask_20261015": "d7d9064: valid guest CB color write masks use original Swizzle().ApplyMask scatter, matching pinned vk_pipeline_cache.cpp independently of shader export gather. Native-only callers with absent guest CB format keep explicit mask. Existing format19 transfer handles packed nibble layout; no extra color swizzle. Prepared 1152 format/swap/mask combinations plus disabled/hole/native-only boundaries are unrun. Standalone backend now links pixel_format.cpp and its existing fixture diagnostic sink."
       },
       "implementation_status": "partial_integrated",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure.",
+        "reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure.",
         "previous_checkpoint_verification": {
           "state": "partial_gpu_verified",
           "date": "2026-10-14",
           "reason": "Partial position exports corrected in native Mesa. Production RectList old compiler FAIL/new64pixelsPASS in both viewport orientations; SRGB minmax/dual-face baseline failures remain. No whole-group closure.",
           "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015"
       }
     },
     {
@@ -658,9 +687,33 @@
     },
     {
       "id": "guest-surface-metadata",
-      "upstream_paths": ["src/video_core/texture_cache/texture_cache.h", "src/video_core/texture_cache/texture_cache.cpp", "src/video_core/renderer_vulkan/vk_rasterizer.cpp"],
-      "upstream_symbols": ["GetMetaInfo", "IsMeta", "IsMetaCleared", "ClearMeta", "TouchMeta", "RegisterMeta", "UnregisterMeta", "FindRenderTarget", "FindDepthTarget", "IsComputeMetaClear", "EliminateFastClear"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_texture_cache.h", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "src/video_core/renderer_d3d12/guest_cmask_address.h", "src/video_core/renderer_d3d12/guest_rasterizer.cpp"],
+      "upstream_paths": [
+        "src/video_core/texture_cache/texture_cache.h",
+        "src/video_core/texture_cache/texture_cache.cpp",
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+      ],
+      "upstream_symbols": [
+        "GetMetaInfo",
+        "IsMeta",
+        "IsMetaCleared",
+        "ClearMeta",
+        "TouchMeta",
+        "RegisterMeta",
+        "UnregisterMeta",
+        "FindRenderTarget",
+        "FindDepthTarget",
+        "IsComputeMetaClear",
+        "EliminateFastClear"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_texture_cache.h",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_cmask_address.h",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/guest_color_clear.h",
+        "src/video_core/renderer_d3d12/guest_raw_color_clear.h",
+        "src/video_core/renderer_d3d12/guest_cmask_test.cpp"
+      ],
       "contract": {
         "inputs": "Live CB/DB owner identity, CMASK/FMASK/HTile address, guest sample count, base slice, shader buffer metadata and XOR analysis.",
         "state": "Metadata is registered inside the existing image cache with a monotonic image UID. Rebinding preserves masks only for the same type and owner; replacement or deletion removes stale ownership. Attachment slice views share a physical cache allocation and explicit RTV/DSV view ranges.",
@@ -668,18 +721,19 @@
         "ordering": "Metadata clear detection excludes metadata readers and XOR address encoders, following the pinned heuristic. CMASK writers execute to retain physical metadata bytes; HTile/FMASK use the original tracked clear behavior. Registration occurs with the actual live attachment entry.",
         "errors": "Registration rejects non-live owners. Metadata lookup validates owner identity and address. Unmap removes metadata ranges; cache eviction removes the deleted owner's metadata.",
         "open_contracts": "TC-compatible FMASK-derived CMASK addressing, compressed CB/FMASK/DCC runtime activation and final mixed-code/sample/Neo/alias/lifetime acceptance remain open. Raw mixed CMASK addressing is a retained native extension; the pinned original uses tracked fast-clear elimination. This group does not claim a raw FMASK decoder: the pinned original FMASK operation invokes fast-clear elimination and its shader reads use the existing common identity substitution. Prepared address vectors, bijection/slice/padding and partial-surface fixtures are compiled only.",
-        "continuation_20261015": "Existing validated CMASK plan is shared between CPU and GPU. Unique ordinary GPU-owned RGBA8 UNORM attachments with standard component mapping accept uniform selected-layer and mixed 0/F logical-tile native clears, preserving all samples, untouched regions/layers and physical padding. Metadata consumption matches CPU exactly. Typed/raw other formats, independent domains, competing owners, remapped samples and TC/compressed/DCC cases retain existing fallback/rejection. Source only; fixture P16 x32/y0 golden nibble corrected 4 to 0 from independent AddrLib equations. No new PASS."
+        "continuation_20261015": "d7d9064: DecodeGuestColorClear shares original CB numeric decoding and component mapping between physical materialization and existing unique ordinary GPU-owned clears. Includes R/RG/RGBA8/16/32 admitted numeric classes, packed10 UNORM/UINT and packed16 formats16-19 UNORM. Exact raw uint RTV shader handles arbitrary R32 integer/F32 and F16 special bits on matching typeless families. Uniform/mixed validated CMASK plan, layers/samples/padding, pending fences and PageWatch ownership remain. Numeric sRGB quantization and typed device behavior await runtime verification. Independent owners, competing overlaps, remapped samples, TC/compression/DCC, packed float/shared exponent and ambiguous signed packed clear semantics remain open. Format19 already repacks guest nibbles during texture transfer; no second host swizzle.",
+        "packed_float_continuation_20261015": "440dd53: original CMASK formats6/7 now decode finite values exactly representable after original component mapping in native UF11/UF11/UF10. Packed subnormal widening and even-mantissa narrowing retain exact bits. Odd-mantissa narrowing, overflow and INF/NaN retain historical fallback without a parity claim. Format34 pinned clear uses scale2^(E-10) and is ImageRead-only; no native RTV/shared-exponent re-encoder contract was invented. Prepared fixed word/swizzle/CPU-padding examples remain unrun."
       },
       "implementation_status": "partial_integrated",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure.",
+        "reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure.",
         "previous_checkpoint_verification": {
           "state": "not_run",
           "reason": "Full implementation boundary is still open."
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015"
       }
     },
     {
@@ -948,29 +1002,63 @@
     },
     {
       "id": "native-independent-buffer-image-versions",
-      "upstream_paths": ["src/video_core/buffer_cache/buffer_cache.cpp", "src/video_core/texture_cache/texture_cache.cpp", "src/video_core/renderer_vulkan/vk_rasterizer.cpp"],
-      "upstream_symbols": ["BindBuffers", "BindResources", "ReadMemory", "ObtainBuffer", "ObtainBufferForImage", "SynchronizeMemoryFromImage", "FindTexture", "RefreshImage", "InvalidateMemoryFromGPU", "InvalidateMemory", "DownloadImage", "RunGarbageCollector"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_compute.cpp", "src/video_core/renderer_d3d12/guest_texture_cache.h", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "src/video_core/renderer_d3d12/guest_buffer_access.h", "src/video_core/renderer_d3d12/guest_rasterizer.h", "src/video_core/renderer_d3d12/guest_rasterizer.cpp", "src/video_core/renderer_d3d12/rasterizer.h", "src/video_core/renderer_d3d12/page_watch.h", "native-port/page_watch_test.cpp", "native-port/gcn_attachment_alias_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/buffer_cache/buffer_cache.cpp",
+        "src/video_core/texture_cache/texture_cache.cpp",
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+      ],
+      "upstream_symbols": [
+        "BindBuffers",
+        "BindResources",
+        "ReadMemory",
+        "ObtainBuffer",
+        "ObtainBufferForImage",
+        "SynchronizeMemoryFromImage",
+        "FindTexture",
+        "RefreshImage",
+        "InvalidateMemoryFromGPU",
+        "InvalidateMemory",
+        "DownloadImage",
+        "RunGarbageCollector"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_compute.cpp",
+        "src/video_core/renderer_d3d12/guest_texture_cache.h",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_buffer_access.h",
+        "src/video_core/renderer_d3d12/guest_rasterizer.h",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "src/video_core/renderer_d3d12/rasterizer.h",
+        "src/video_core/renderer_d3d12/page_watch.h",
+        "native-port/page_watch_test.cpp",
+        "native-port/gcn_attachment_alias_test.cpp",
+        "native-port/independent_version_transfer_test.cpp",
+        "native-port/CMakeLists.txt",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "src/video_core/renderer_d3d12/guest_packed_transfer.cpp",
+        "src/video_core/renderer_d3d12/guest_image_operations.h"
+      ],
       "contract": {
         "inputs": "Simultaneous exact-base/full-range raw buffer and R32 float/uint/sint image writers, backed by complete protected 4-KiB pages. Full mip chain, one layer/sample, at most 64 MiB, with original linear-image readback policy disabled.",
         "outputs": "The prewrite buffer contents initialize a separate writable image before both shader writes. The resulting image remains logically owned independently of physical buffer bytes. Raw buffer/CPU reads reconcile only the buffer result and retain the image version behind read-only CPU page watches. CPU write faults invalidate the image; GPU buffer writes invalidate exact-base image versions as in the original. PageWatch forwards the actual read/write fault kind. Exact protected read-only to no-access handoff preserves original page protection and generation state.",
         "ordering": "Prewrite capture precedes buffer ownership and image execution. Image descriptors and placed allocations retain binding leases. A GPU buffer write discards only the logical image identity; CPU writes retire prior GPU uses before invalidation. Destruction/remap/protection changes resolve buffers before discarding independent image versions. No arbitrary last-writer physical reconciliation.",
         "verification_prepared": "The full-core separate-buffer-image-owned GCN fixture compiles/links real simultaneous vertex buffer zero and image quarter stores, then pixel image loads. Twelve cases combine four warm bit patterns, including negative float bits, with R32 float/uint/sint views and compare the entire 64-KiB physical backing/padding. Pixel export supplies float-one alpha independently of integer image alpha. Actual protected CPU reads expose the buffer without destroying the image quarter; CPU writes and subsequent exact-base buffer writes invalidate it. The guest mapping and callbacks use two physical views. Fault-kind cases distinguish real reads and injected writes. Compile/link only.",
         "open_contracts": "Formatted readonly buffer synchronization, domain-preserving pressure eviction/incompatible views, original queued linear-image readbacks, other formats/layouts/mips/layers/samples, partial/sub-DWORD aliases and atomic writers remain open or explicitly rejected. GPU contents, real CPU fault behavior and lifetime acceptance are unverified. No semantic closure.",
-        "continuation_20261015": "GPU-only reinterpretation now includes R32 UINT/SINT/FLOAT2/4/8-sample, one-mip 2D/array domains with matching sample counts. Existing GuestMultisample sample/layer extraction and GuestTiler retile preserve a private physical-seeded version and all padding. No physical buffer commit/resolve. Depth/stencil, other MSAA formats,16 samples, mismatched counts and complete pressure/partial alias closure remain open. Prepared18-case --msaa mode unrun."
+        "continuation_20261015": "d7d9064: matching 2/4/8-sample one-mip 2D/array independent versions use exact UINT transfers for R/RG/RGBA8 and16 UNORM/SNORM/UINT/SINT (16 also FLOAT), RGBA8 SRGB and R/RG/RGBA32 UINT/SINT/FLOAT. Native/guest bytes must match; ad6808e additionally admits raw RGBA8 through matching R32_UINT word-transfer views. Prepare/PrepareCopy validate actual R32 backing and layout; ordinary RGBA8 retains RGBA8_UINT. Snapshot and private retile retain every sample/layer and seeded physical padding without committing the independent image to the physical buffer. Completed, unpinned, uniquely leased sample-UAV scratch can retire under pressure and recreate transactionally; the authoritative native MSAA image/UID/PageWatch owner remains. Whole native MSAA eviction, packed/depth/stencil/RGB32-expanded/16 samples/mismatched sample domains and complete partial-alias closure remain open. Prepared --msaa-pressure/vector32/vector16/vector8 and six-case --msaa-rawrgba8 fixtures are unrun. The later nonzero_raw_msaa_continuation_20261015 supersedes the original raw nonzero clear limitation for its admitted numeric inputs; shader pack/write semantics remain runtime-unverified.",
+        "nonzero_raw_msaa_continuation_20261015": "e359447: nonzero raw RGBA8 2/4/8-sample clears reuse typed single-sample RGBA8 clear and existing packed transfer to a single raw R32 intermediate, then existing sample-copy broadcasts the exact word into every native sample/layer. UINT [0,255], SINT [-128,127] union-bit inputs and finite UNORM/SNORM are admitted; raw SRGB/nonfinite/out-of-range inputs keep shader fallback. Native image/UID and independent physical buffer remain. All descriptors/allocations/copy leases are prepared and retained before recording, intermediate bytes retire on the existing format-transfer fence. ConvertPackedBacking resets obsolete storage_retired when publishing replacement storage. Four --msaa-rawrgba8-clear cases are authored/registered only, not compiled or run."
       },
       "implementation_status": "integrated_partial_review_pending",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure.",
+        "reason": "Post-preview24 source changes reviewed only, not compiled/installed/executed. Existing historical compiled fixtures do not verify this delta. User execution gate remains; no whole-group closure.",
         "previous_checkpoint_verification": {
           "state": "partial_gpu_verified",
           "date": "2026-10-14",
           "reason": "Mixed NOACCESS/read-only guards and GPU-only incompatible single-sample image transfer PASS with distinct image/physical buffer/padding. Two observed loader blockers cleared; MSAA/partial/pressure/alias closure still open.",
           "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015/raw-rgba8-msaa-clear"
       }
     },
     {
@@ -1360,18 +1448,38 @@
     },
     {
       "id": "native-raw-rgba8-converted-image-clears",
-      "upstream_paths": ["src/video_core/renderer_vulkan/vk_rasterizer.cpp", "src/video_core/renderer_vulkan/vk_runtime.cpp"],
-      "upstream_symbols": ["IsComputeImageClear", "ClearImage"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_image_operations.h", "src/video_core/renderer_d3d12/guest_packed_transfer.cpp", "src/video_core/renderer_d3d12/guest_texture_cache.h", "src/video_core/renderer_d3d12/guest_rasterizer.cpp", "native-port/page_owned_gpu_test.cpp", "native-port/gcn_attachment_alias_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+        "src/video_core/renderer_vulkan/vk_runtime.cpp"
+      ],
+      "upstream_symbols": [
+        "IsComputeImageClear",
+        "ClearImage"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_image_operations.h",
+        "src/video_core/renderer_d3d12/guest_packed_transfer.cpp",
+        "src/video_core/renderer_d3d12/guest_texture_cache.h",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "native-port/page_owned_gpu_test.cpp",
+        "native-port/gcn_attachment_alias_test.cpp",
+        "native-port/independent_version_transfer_test.cpp"
+      ],
       "contract": {
-        "inputs": "Compatible cached writable single-sample raw R32 storage of RGBA8 UNORM/SNORM/UINT/SINT, complete resource clear vector and native typed UAV store capability.",
+        "inputs": "Compatible cached writable single-sample raw R32 storage of RGBA8 UNORM/SNORM/UINT/SINT, complete resource clear vector and native typed UAV store capability. Later e359447 also admits the bounded matching 2/4/8-sample one-level 2D/array raw domain described below.",
         "outputs": "Clear a temporary native RGBA8 image with native numeric/union-bit semantics, retile/detile its texels into the existing R32 image, retain that image identity/guest layout and leave independent physical/resident buffer versions unchanged.",
         "ordering": "Validate device dimensional/store capability and actual temporary texture/scratch allocation budget before recording. Preallocate both clear descriptor heaps and complete transfer resources; retain them in the pending image's fence-retired format transfer list before recording. Clear all mips/layers/volume slices, UAV-order then transfer to existing image. CPU quantization and physical-buffer fill are absent.",
         "verification_prepared": "Twelve additional API numeric/array/1D/volume cases require full exact RGBA8 output, unchanged 0xa6 padding, unchanged existing image resource identity/descriptor, temporary memory accounting and fence retirement. Actual GCN HLE zero/nonzero clear coverage adds 336 RGBA8 shapes to 84 R32 FLOAT shapes, requiring image observations and independent raw resident/physical buffer zero before formatted sync. Compile/link only; no execution.",
-        "open_contracts": "Device clear rounding/narrowing, original/native format equivalence, failure/budget paths, complete retile footprints, buffer/image ownership/fences and performance require runtime acceptance. SRGB, packed16/signed packed10, read-only/non-UAV promotion and full migration remain open. No semantic closure."
+        "open_contracts": "Device clear rounding/narrowing, original/native format equivalence, failure/budget paths, complete retile footprints, buffer/image ownership/fences and performance require runtime acceptance. SRGB, packed16/signed packed10, read-only/non-UAV promotion and full migration remain open. No semantic closure.",
+        "nonzero_raw_msaa_continuation_20261015": "e359447: nonzero raw RGBA8 2/4/8-sample clears reuse typed single-sample RGBA8 clear and existing packed transfer to a single raw R32 intermediate, then existing sample-copy broadcasts the exact word into every native sample/layer. UINT [0,255], SINT [-128,127] union-bit inputs and finite UNORM/SNORM are admitted; raw SRGB/nonfinite/out-of-range inputs keep shader fallback. Native image/UID and independent physical buffer remain. All descriptors/allocations/copy leases are prepared and retained before recording, intermediate bytes retire on the existing format-transfer fence. ConvertPackedBacking resets obsolete storage_retired when publishing replacement storage. Four --msaa-rawrgba8-clear cases are authored/registered only, not compiled or run."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Post-preview24 source changes reviewed only, not compiled/installed/executed. Existing historical compiled fixtures do not verify this delta. User execution gate remains; no whole-group closure.",
+        "date": "2026-10-15",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015/raw-rgba8-msaa-clear"
+      }
     },
     {
       "id": "native-packed16-sampled-volumes",
@@ -1690,18 +1798,38 @@
     },
     {
       "id": "native-multisample-storage-uav-image-clears",
-      "upstream_paths": ["src/video_core/renderer_vulkan/vk_rasterizer.cpp", "src/video_core/renderer_vulkan/vk_runtime.cpp"],
-      "upstream_symbols": ["IsComputeImageClear", "ClearImage"],
-      "native_paths": ["src/video_core/renderer_d3d12/guest_image_operations.h", "src/video_core/renderer_d3d12/guest_texture_cache.h", "src/video_core/renderer_d3d12/guest_texture_cache.cpp", "src/video_core/renderer_d3d12/guest_rasterizer.cpp", "native-port/page_owned_gpu_test.cpp"],
+      "upstream_paths": [
+        "src/video_core/renderer_vulkan/vk_rasterizer.cpp",
+        "src/video_core/renderer_vulkan/vk_runtime.cpp"
+      ],
+      "upstream_symbols": [
+        "IsComputeImageClear",
+        "ClearImage"
+      ],
+      "native_paths": [
+        "src/video_core/renderer_d3d12/guest_image_operations.h",
+        "src/video_core/renderer_d3d12/guest_texture_cache.h",
+        "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
+        "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
+        "native-port/page_owned_gpu_test.cpp",
+        "src/video_core/renderer_d3d12/guest_packed_transfer.cpp",
+        "native-port/independent_version_transfer_test.cpp"
+      ],
       "contract": {
         "inputs": "Writable supported MSAA color image, existing single-sample storage planes, full-resource compute image clear and restricted array-layer sampled view.",
         "outputs": "Each existing storage sample plane is cleared with its typed UAV semantics, then the existing multisample transfer writes every cleared sample/layer into the original MSAA backing. R32 uint/sint and float/raw-float views preserve VkClearValue integer union bits and independent preceding raw buffer ownership.",
         "ordering": "All clear descriptors and transfer resources are prepared and retained by the pending cache entry before the first clear command; collection releases them only after its submission fence. HLE restores the declared native sample backing before recording. Eligibility does not weaken existing storage/format/capability guards.",
         "verification_prepared": "24 GPU API cases cover R32 uint/sint/float/raw-float, 2/4/8 samples and linear/tiled physical layouts, two consecutive quarter-bit/negative-zero clears, every sample/layer and padding, restricted layer one, unchanged resource/descriptor and post-fence clear-lease release. Existing full-core HLE fixtures compile only. No execution.",
-        "open_contracts": "Actual GCN HLE multisample source domains and transitions, narrow/packed/read-only/attachment clear formats, independent MSAA retirement/pressure/compact paths, capability/failure and full original/native GPU/runtime differential acceptance remain open. No semantic closure."
+        "open_contracts": "Actual GCN HLE multisample source domains and transitions, narrow/packed/read-only/attachment clear formats, independent MSAA retirement/pressure/compact paths, capability/failure and full original/native GPU/runtime differential acceptance remain open. No semantic closure.",
+        "nonzero_raw_msaa_continuation_20261015": "e359447: nonzero raw RGBA8 2/4/8-sample clears reuse typed single-sample RGBA8 clear and existing packed transfer to a single raw R32 intermediate, then existing sample-copy broadcasts the exact word into every native sample/layer. UINT [0,255], SINT [-128,127] union-bit inputs and finite UNORM/SNORM are admitted; raw SRGB/nonfinite/out-of-range inputs keep shader fallback. Native image/UID and independent physical buffer remain. All descriptors/allocations/copy leases are prepared and retained before recording, intermediate bytes retire on the existing format-transfer fence. ConvertPackedBacking resets obsolete storage_retired when publishing replacement storage. Four --msaa-rawrgba8-clear cases are authored/registered only, not compiled or run."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "reason": "Post-preview24 source changes reviewed only, not compiled/installed/executed. Existing historical compiled fixtures do not verify this delta. User execution gate remains; no whole-group closure.",
+        "date": "2026-10-15",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015/raw-rgba8-msaa-clear"
+      }
     },
     {
       "id": "native-exported-vs-point-size-geometry",

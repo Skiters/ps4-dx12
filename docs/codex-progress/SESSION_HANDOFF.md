@@ -1,5 +1,149 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Active source continuation - 2026-10-15, complete-port checkpoint
+
+This section supersedes the active-priority statements below; older sections remain evidence.
+Source commits: `35b5de4`, `d7d9064`, `440dd53`, `ad6808e` and `e359447`,
+pushed to `origin/fix/mixed-cmask`. The repository remains
+`F:/PS4Dev/work/shadps4-dx12-src`. Reference is read-only
+`F:/PS4Dev/work/shadps4-original-e0a46675` at `e0a466753a1aacbc8db8253be685bf7ab4d9daae`.
+
+**Execution gate:** the user is using the PC and prohibited tests, game/GPU execution,
+XInput and desktop automation. This continuation has performed source edits/review and
+Git checks only. No new configuration, build, package, runtime fixture or game launch.
+The one-time preview24 build authorization was already used. Preview24 remains installed
+and unchanged; NONE of the post-preview24 source commits below are in that executable.
+Do not ask to run tests while independent source work remains. Do not claim runtime parity.
+
+### Completed source changes, pending compilation and acceptance
+
+- `35b5de4`, `Liverpool::ProcessGraphics/ProcessCompute`: snapshot WAIT_REG_MEM packets
+  before coroutine yields/WaitVoLabel. Packet operands are stable; predicate reads still
+  read live guest memory/registers. REWIND remains dynamic. Pinned EOS/GDS is one u32 at
+  a byte offset after Finish; no invented multiword/IRQ extension. EOP cause is not fixed.
+- `d7d9064`, `guest_color_clear.h::DecodeGuestColorClear`: shared original CB clear
+  decoding/component mapping for CPU materialization and ordinary GPU-owned CMASK.
+  Admitted R/RG/RGBA8/16/32 numeric formats, packed10 UNORM/UINT, packed16 formats16-19
+  UNORM. Includes narrow integer rules, SNORM canonical minimum, sRGB conversion,
+  absent-alpha mapping and exact raw float/integer lanes. Undefined packed negative
+  narrow SINT and unproved numeric formats retain existing fallback.
+- `guest_raw_color_clear.h::GuestRawColorClear`: UINT RTV draw writes raw 16/32-bit
+  component storage when float ClearRenderTargetView cannot preserve integer precision,
+  denormals or special float bits. Cached PSO/root/descriptor/resource leases are retained
+  through submission; native support is queried by the runtime path, not assumed.
+- `GuestRasterizer::MaterializeOwnedColorClear` and `MaterializeGuestColorClear`: use the
+  same codec and validated uniform/mixed CMASK tile plan. Logical rectangles, selected
+  layers/all samples, padding, unique ordinary owner, PageWatch and fences remain guarded.
+  Independent versions, competing owners, remapped sample backing, TC/compression/DCC
+  are still outside this owned path. Raw shader/typed rounding have not executed.
+- `GuestTextureCache::CanTransferIndependentMultisample`: matching 2/4/8-sample one-mip
+  2D/array independent image transfer now admits R/RG/RGBA8/16/32 exact UINT storage
+  families; UNORM/SNORM/UINT/SINT, 16/32 FLOAT, RGBA8 SRGB as applicable. All samples and
+  private physical-seeded padding are retained, with no physical buffer reconciliation.
+- `RetireMultisampleStorage/EnsureMultisampleStorage`: reclaim only completed unpinned
+  uniquely leased reconstructible sample-UAV scratch, then allocate a whole replacement
+  before publishing it. Authoritative MSAA image, UID and CPU-write ownership stay live.
+  Normal compute and HLE paths restore scratch before use. Whole native MSAA eviction
+  is still open; do not describe scratch reclamation as full pressure parity.
+- `BuildGuestGraphicsState`: guest color masks now use the pinned `Swizzle().ApplyMask`
+  scatter, independently of shader export gather. Absent guest CB format keeps explicit
+  native-only masks. Standalone target wiring includes the shared pixel-format table.
+  Format19 already repacks physical nibbles in existing texture transfer: no extra swizzle.
+
+### Prepared verification and evidence
+
+No test in this continuation was compiled or run. New fixture coverage is authored only:
+CMASK format/swizzle/physical padding/layers/sample cases and raw UINT RTV readback;
+independent `--msaa-pressure`, `--msaa-vector32`, `--msaa-vector16`, `--msaa-vector8`;
+1152 color-mask combinations and three state boundaries. Main core build, fixture
+builds, GPU validation and Bloodborne correctness/FPS remain pending authorization.
+
+Source review and `git diff --check` succeeded for the committed delta. These are not
+runtime tests. Historical full suite326/346 (native211/229) and three subsequent targeted
+passes remain separate old results. Historical world still shows fog/sky while G-buffer
+has geometry; no accepted new world controls/FPS/speedup. No new measurements to compare.
+
+Evidence root: `F:/PS4Dev/handoff/complete-port-20261015`:
+`pm4`, `cmask-before`, `cmask-reference.md`, `cmask-fixtures`, `cmask-packed16`,
+`msaa-pressure`, `msaa-formats`, `msaa-formats16`, `msaa-formats8`, `color-write-mask`,
+`format19-continuation.md`, source-batch committed patch and original index snapshot.
+These hold before/after sources, deltas, hashes and bounded reference proofs, not test PASS.
+The final checkpoint manifest will record final HEAD/upstream and residual archive hashes.
+
+The broad pre-existing integration is still dirty and must be preserved, including exactly
+22 pre-existing staged network deletions and one old unstaged deletion. New commits do
+not silently absorb those changes. A fresh residual source archive preserves current
+tracked patches, untracked source and the original index split. `.serena` is local state,
+not runtime source. Do not restore an archive over the current dirty tree.
+
+### Current continuation and unresolved boundaries
+
+The bounded follow-ups are now also committed and pushed:
+
+- `440dd53`: original CMASK6/7 finite values exactly representable after component
+  mapping in UF11/UF11/UF10. Packed subnormal widening/even-mantissa narrowing is exact.
+  Odd-mantissa rounding, overflow and INF/NaN still use historical fallback, not claimed
+  as parity. Format34's pinned scale2^(E-10) and ImageRead-only use are an explicit blocker.
+- `ad6808e`: raw RGBA8 MSAA transfers now select R32_UINT for their already packed DWORD
+  backing, with actual R32 resource/layout validation in Prepare/PrepareCopy. Ordinary
+  RGBA8 retains its four-component view. Six new `--msaa-rawrgba8` cases cover raw/ordinary
+  versions, layers/samples/padding and pressure restoration; registered but unrun.
+
+Evidence: `raw-rgba8-msaa/SOURCE_IMPLEMENTATION.md` and
+`cmask-packed-float/source-contract.md`, with before/after sources, deltas and hashes.
+The earlier d7d9064 raw-RGBA8 exclusion is superseded by ad6808e.
+
+- `e359447`: nonzero raw RGBA8 MSAA HLE clear reuses typed single-sample RGBA8
+  clear, existing packed conversion to raw R32 and single-to-MSAA copy across every
+  sample/layer. UINT0..255/SINT-128..127 union-bit inputs and finite UNORM/SNORM are
+  admitted. Raw sRGB/nonfinite/out-of-range values retain shader fallback. The image
+  resource/UID/physical buffer stay intact. Intermediate budget and all descriptor,
+  resource and copy leases are retained before recording and retired on the existing
+  fence. `ConvertPackedBacking` resets obsolete `storage_retired` on replacement.
+  Four `--msaa-rawrgba8-clear` cases cover numeric rejection, lifetime/accounting,
+  scratch refresh/pressure, format replacement, padding and physical-domain identity.
+  They are authored/registered only. Independent source review found no proven defect;
+  this is not compilation, GPU acceptance or performance evidence.
+
+The e359447 checkpoint also preserves the **related pre-existing** generic clear helpers
+in `guest_image_operations.h` and the previously untracked `guest_packed_transfer.cpp`.
+Do not attribute that entire file history to this new clear delta. Exact before files,
+original worktree patches and isolated new `own-*.patch` are in `raw-rgba8-msaa-clear`;
+`SOURCE_IMPLEMENTATION.md` and `SOURCE_REVIEW.md` distinguish the change and limitations.
+
+Next concrete source task: domain-preserving independent packed10/packed16 MSAA
+reinterpretation. Start at `GuestTextureCache::CanTransferIndependentMultisample`,
+`RetileBufferVersion`, `GuestMultisample::TransferFormat/Prepare` and the now preserved
+`GuestPackedTransfer`. Reuse existing exact packed transfer/tiler handling, admitting
+only format/sample combinations with a demonstrated complete read/write contract.
+Do not generalize the current raw-component predicate by byte width alone. Preserve
+expanded original guest words/written masks, all samples, metadata and private padding.
+Raw sRGB HLE clear, UF11-to-UF10 rounding/specials, shared-exponent clear, depth/stencil,
+RGB32 expansion,16 samples, final scene-color/ROP and EOP runtime attribution remain open.
+Whole independent native MSAA eviction remains a separate native pressure extension;
+the pinned GC itself skips tiled GPU-modified images, so do not invent a missing Vulkan
+capability from that skip or call scratch-only reclamation full native eviction.
+
+Exact restart action (read-only, no re-audit):
+
+```powershell
+Set-Location 'F:\PS4Dev\work\shadps4-dx12-src'
+git rev-parse HEAD
+git status --short
+Get-Content 'F:\PS4Dev\handoff\complete-port-20261015\raw-rgba8-msaa-clear\SOURCE_IMPLEMENTATION.md'
+```
+
+`tools/porting/contracts.json` remains the existing129-group registry; none of these
+source changes closes a complete group or constitutes game acceptance.
+
+Do not repeat general parity inventory, format19 host swizzle investigation, resolved
+position-export/display-copy attribution or old identical game runs without new evidence.
+After source work, preserve the delta, local checkpoint and upstream push without force.
+When final execution is explicitly allowed, build affected targets first, run minimal
+relevant fixtures and then the existing copied-profile/virtual-XInput Bloodborne path.
+Measure completed guest frames without FG, retaining old baselines and original saves.
+
+
 ## Latest installed package — 2026-10-15, preview24
 
 This update supersedes the earlier source-only build/install status below. The user
@@ -611,19 +755,25 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 > удалённую сессию, оригинальные сохранения/Vulkan. Продолжай production C++/HLSL,
 > сохраняй и push проверенные commits, не повторяй общие аудиты.
 
-## NEXT CODEX SESSION — START HERE
+## NEXT CODEX SESSION - START HERE
 
-> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask с актуального HEAD. Прочитай активный раздел
-> SESSION_HANDOFF.md за 2026-10-15, CHECKPOINT_FINAL.json и preview24-installed/INSTALLATION.json.
-> Ядро №24 собрано и установлено; игровые/регрессионные проверки по-прежнему не запускать.
-> Сохрани dirty tree и22 staged удаления; не применяй архив поверх текущего дерева.
-> Пользователь запретил запуск тестов, игры и управление компьютером до окончания полного
-> переноса: продолжай production-код, не запускай проверки выполнения без изменения этого
-> указания. Новые completion/backing/culling/MSAA/CMASK изменения пока непроверены исполнением.
-> Используй существующие Vulkan/DX12 данные и реестр contracts.json, не повторяй общий аудит.
-> Продолжай точный перенос raw CB clear words для следующих числовых форматов в
-> MaterializeOwnedColorClear, сохрани общий CMASK plan и lifetime; затем MSAA/alias/cache.
-> Исторический EOP false return и неправильный scene-color/ROP остаются открытыми: новый
-> 155.76s прогон остановлен пользователем до доказательства причины; FPS не принят.
-> Не объявляй частичный перенос завершённым. Сохраняй WIP отдельно от проверенных результатов,
-> локальные коммиты и push текущего upstream без force. Оригинальные saves/Vulkan/сессию не меняй.
+> Continue Skiters/ps4-dx12 at F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask.
+> Read the active complete-port section of SESSION_HANDOFF.md and
+> F:/PS4Dev/handoff/complete-port-20261015/CHECKPOINT_FINAL.json, then verify actual HEAD.
+> Preserve the broad dirty integration and22 original staged network deletions; use
+> final-residual only for recovery into a separate clean checkout, never over this tree.
+> Source commits35b5de4/d7d9064/440dd53/ad6808e/e359447 cover WAIT snapshot, typed/raw CMASK,
+> independent MSAA transfer/scratch pressure, color masks, exact packed-float clears and
+> raw RGBA8 MSAA transfer/nonzero clear. They are source-reviewed only, not compiled or installed. Preview24
+> remains installed and unchanged. The user still prohibits tests/game/GPU/UI/XInput;
+> do not request execution while independent source work remains. Start the concrete
+> independent packed10/packed16 MSAA reinterpretation continuation documented above,
+> preserving raw guest words/masks/private padding and existing cache/MSAA contracts. Reuse saved Vulkan/DX12 measurements and129-group contracts.json;
+> do not repeat complete audits, format19 swizzle or solved position-export investigations.
+> Preserve PageWatch, separate memory domains, padding, barriers, fences and resource
+> lifetime. Do real production C++/HLSL work and update the current parity boundaries.
+> Once final execution is explicitly allowed, build and run affected regressions first,
+> then minimally verify Bloodborne with the existing copied profile/virtual XInput,
+> comparing completed guest frames (without FG) with saved baseline. Do not touch original
+> saves/Vulkan/session. Commit coherent WIP, push configured upstream without force,
+> and checkpoint exact continuation. Full parity/world acceptance remains unfinished.

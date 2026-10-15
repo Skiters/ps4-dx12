@@ -1,5 +1,33 @@
 # Vulkan / native D3D12 parity audit
 
+## Current source checkpoint - 2026-10-15, after preview24
+
+SESSION_HANDOFF.md's complete-port section is authoritative. Source commits35b5de4,
+d7d9064,440dd53,ad6808e and e359447 are pushed: stable WAIT_REG_MEM operands, shared typed/raw CMASK clears,
+8/16/32-bit independent MSAA transfers with scratch pressure retirement/recreation,
+pinned color-write-mask mapping, exact packed-float CMASK6/7, raw RGBA8 MSAA transfer
+and nonzero clear with retained resources/fences; stale storage_retired reset on conversion.
+Current changes are NOT compiled/installed/run.
+Preview24 remains the latest installed executable; no new game/FPS or test results.
+The user execution gate remains active. Evidence and pending source follow-ups:
+F:/PS4Dev/handoff/complete-port-20261015. Preserve the broad dirty integration and
+22 pre-existing staged deletions. Existing129 contract groups remain partial/open.
+Next source task: independent packed10/packed16 MSAA reinterpretation through existing
+transfer/tiler contracts, with raw guest words/masks and private padding preserved.
+Final HEAD/upstream and residual hashes: complete-port-20261015/CHECKPOINT_FINAL.json.
+
+| Contract delta | Source state | Runtime state |
+| --- | --- | --- |
+| Typed/shared raw CMASK, numeric and component mapping | Implemented bounded formats | Unrun; ownership/numeric boundaries remain |
+| Independent MSAA component transfers | Extended exact8/16/32 families | Unrun; unsupported domains remain |
+| MSAA pressure | Scratch retire/recreate only | Unrun; whole-image eviction open |
+| Packed-float CMASK6/7 | Exact finite representable domain | Unrun; rounding/specials/34 open |
+| Raw RGBA8 MSAA transfer | R32 word views integrated | Six prepared cases unrun |
+| Raw RGBA8 MSAA nonzero clear | Typed conversion and sample broadcast | Four prepared cases unrun; sRGB/nonfinite/overflow open |
+| PM4 WAIT predicate snapshot | Graphics and compute changed | Unrun; EOP cause unknown |
+| CB color-write-mask scatter | Pinned mapping integrated |1152+3 cases prepared, unrun |
+
+
 ## Latest package — 2026-10-15
 
 Preview24 is built and installed at the user's subsequent request: source a3f1d5e plus
