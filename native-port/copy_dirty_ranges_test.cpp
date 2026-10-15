@@ -57,8 +57,11 @@ void RunLargePacket(ID3D12Device* device) {
         if(renderer.CachedBufferBytes()!=cold_cached||renderer.SubmittedFence()!=before)
             throw std::runtime_error("cold large DMA allocated or submitted GPU storage");
         if(memcmp(memory+Destination,memory+1,Bytes))throw std::runtime_error("cold large byte copy mismatch");
+        // The raw shader view must cover source offset 1 with a dword-aligned
+        // extent. The DMA packet itself retains its odd offset and byte count.
+        constexpr u64 SourceEnvelope=(u64(Bytes)+1+3)&~u64(3);
         renderer.PrepareShaderBuffers(
-            std::array<Rasterizer::ShaderBufferRequest,1>{{{base,u64(Bytes)+4,true,true}}});
+            std::array<Rasterizer::ShaderBufferRequest,1>{{{base,SourceEnvelope,true,true}}});
         memset(memory+Destination,0xee,Bytes);
         renderer.CopyBuffer(base+Destination,base+1,Bytes,false,false);
         if(renderer.SubmittedFence()!=before)throw std::runtime_error("DMA submitted the pending guest list");

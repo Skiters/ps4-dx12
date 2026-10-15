@@ -6,6 +6,7 @@
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/elf_info.h"
+#include "core/backing_write_plan.h"
 #include "core/emulator_settings.h"
 #include "core/file_sys/fs.h"
 #include "core/libraries/kernel/memory.h"
@@ -168,35 +169,21 @@ bool MemoryManager::TryWriteBacking(void* address, const void* data, u64 size) {
     ASSERT_MSG(IsValidMapping(virtual_addr, size), "Attempted to access invalid address {:#x}",
                virtual_addr);
 
-    std::vector<VirtualMemoryArea> vmas_to_write;
-    auto current_vma = FindVMA(virtual_addr);
-    while (current_vma->second.Overlaps(virtual_addr, size)) {
-        if (!HasPhysicalBacking(current_vma->second)) {
-            break;
-        }
-        vmas_to_write.emplace_back(current_vma->second);
-        current_vma++;
-    }
-
-    if (vmas_to_write.empty()) {
+    const auto writes = PlanBackingWrite(vma_map, virtual_addr, size,
+                                        [this](const auto& vma) { return HasPhysicalBacking(vma); });
+    if (!writes) {
+        const auto& vma = FindVMA(virtual_addr)->second;
+        LOG_ERROR(Kernel_Vmm,
+                  "Backing write rejected: address={:#x} size={:#x} vma=[{:#x},{:#x}) "
+                  "type={} prot={:#x} physical_areas={} name={}",
+                  virtual_addr, size, vma.base, vma.base + vma.size, u32(vma.type),
+                  u32(vma.prot), vma.phys_areas.size(), vma.name);
         return false;
     }
 
-    for (auto& vma : vmas_to_write) {
-        auto start_in_vma = std::max<VAddr>(virtual_addr, vma.base) - vma.base;
-        auto phys_handle = std::prev(vma.phys_areas.upper_bound(start_in_vma));
-        for (; phys_handle != vma.phys_areas.end(); phys_handle++) {
-            if (!size) {
-                break;
-            }
-            const u64 start_in_dma =
-                std::max<u64>(start_in_vma, phys_handle->first) - phys_handle->first;
-            u8* backing = impl.BackingBase() + phys_handle->second.base + start_in_dma;
-            u64 copy_size = std::min<u64>(size, phys_handle->second.size - start_in_dma);
-            memcpy(backing, data, copy_size);
-            data = static_cast<const u8*>(data) + copy_size;
-            size -= copy_size;
-        }
+    for (const auto& write : *writes) {
+        memcpy(impl.BackingBase() + write.physical_offset,
+               static_cast<const u8*>(data) + write.source_offset, write.size);
     }
 
     return true;

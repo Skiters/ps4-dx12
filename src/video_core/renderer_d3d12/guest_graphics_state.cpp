@@ -326,13 +326,24 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         p.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;result.topology=D3D_PRIMITIVE_TOPOLOGY(UINT(D3D_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST)+patch_points-1);break;
     default:throw std::runtime_error("Unknown native guest primitive topology");
     }
-    const bool native_points=(regs.primitive_type==P::PointList&&
-        regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs)||
-        (regs.stage_enable.gs_en&&regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList);
-    result.rasterizer_discard|=!native_points&&poly.cull_front&&poly.cull_back&&
-        (p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE||p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH);
-    if(native_points){r.FillMode=D3D12_FILL_MODE_SOLID;r.CullMode=D3D12_CULL_MODE_NONE;}
-    if(poly.PolyMode()==AmdGpu::PolygonMode::Point&&!native_points&&!result.rasterizer_discard&&!result.discard)
+    // Culling/fill apply to primitives reaching rasterization, not the IA
+    // input. A GS may emit lines from triangles.
+    // Vulkan leaves this distinction to fixed-function rasterization; our
+    // cull-both emulation must classify the final output before discarding.
+    const bool polygon_input=p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE||
+        p.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+    bool rasterizes_polygons=polygon_input;
+    if(regs.stage_enable.gs_en)
+        rasterizes_polygons=regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::TriangleStrip;
+    else if(regs.stage_enable.hs_en&&regs.tess_config.type==AmdGpu::TessellationType::Isoline)
+        rasterizes_polygons=false;
+    // Match LiverpoolToVK::IsPrimitiveCulled: screen-aligned RectList is
+    // never culled, even though its native expansion uses triangle patches.
+    const bool cullable=polygon_input&&regs.primitive_type!=P::RectList&&rasterizes_polygons;
+    result.rasterizer_discard|=cullable&&poly.cull_front&&poly.cull_back;
+    if(!cullable)r.CullMode=D3D12_CULL_MODE_NONE;
+    if(!rasterizes_polygons)r.FillMode=D3D12_FILL_MODE_SOLID;
+    if(poly.PolyMode()==AmdGpu::PolygonMode::Point&&rasterizes_polygons&&!result.rasterizer_discard&&!result.discard)
         throw std::runtime_error("Guest point polygon fill requires native clipping and point rasterization");
     if(result.rasterizer_discard)p.StreamOutput.RasterizedStream=D3D12_SO_NO_RASTERIZED_STREAM;
     if(regs.enable_primitive_restart) {

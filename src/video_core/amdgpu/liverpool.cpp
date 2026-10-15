@@ -161,6 +161,7 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
 
         const auto* header = reinterpret_cast<const PM4Header*>(ccb.data());
         const u32 type = header->type;
+        const u32 packet_words = header->type3.NumWords() + 1;
         if (type != 3) {
             // No other types of packets were spotted so far
             UNREACHABLE_MSG("Invalid PM4 type {}", type);
@@ -213,7 +214,7 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
             UNREACHABLE_MSG("Unknown PM4 type 3 opcode {:#x} with count {}",
                             static_cast<u32>(opcode), count);
         }
-        ccb = NextPacket(ccb, header->type3.NumWords() + 1);
+        ccb = NextPacket(ccb, packet_words);
     }
 
     FIBER_EXIT;
@@ -676,33 +677,40 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 break;
             }
             case PM4ItOpcode::EventWriteEos: {
-                const auto* event_eos = reinterpret_cast<const PM4CmdEventWriteEos*>(header);
+                // Decode before retiring work: OnFence can block and write back guest memory,
+                // including memory occupied by the command stream.
+                const auto event_eos = *reinterpret_cast<const PM4CmdEventWriteEos*>(header);
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }
-                event_eos->SignalFence([](void* address, u64 data, u32 num_bytes) {
+                event_eos.SignalFence([](void* address, u64 data, u32 num_bytes) {
                     auto* memory = Core::Memory::Instance();
                     ASSERT(memory->TryWriteBacking(address, &data, num_bytes));
                 });
-                if (event_eos->command == PM4CmdEventWriteEos::Command::GdsStore) {
-                    ASSERT(event_eos->size == 1);
+                if (event_eos.command == PM4CmdEventWriteEos::Command::GdsStore) {
+                    ASSERT(event_eos.size == 1);
                     if (rasterizer) {
                         rasterizer->Finish();
-                        const u32 value = rasterizer->ReadDataFromGds(event_eos->gds_index);
-                        *event_eos->Address() = value;
+                        const u32 value = rasterizer->ReadDataFromGds(event_eos.gds_index);
+                        *event_eos.Address() = value;
                     }
                 }
                 break;
             }
             case PM4ItOpcode::EventWriteEop: {
-                const auto* event_eop = reinterpret_cast<const PM4CmdEventWriteEop*>(header);
+                const auto event_eop = *reinterpret_cast<const PM4CmdEventWriteEop*>(header);
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }
-                event_eop->SignalFence(
-                    [](void* address, u64 data, u32 num_bytes) {
+                event_eop.SignalFence(
+                    [&](void* address, u64 data, u32 num_bytes) {
                         auto* memory = Core::Memory::Instance();
-                        ASSERT(memory->TryWriteBacking(address, &data, num_bytes));
+                        ASSERT_MSG(memory->TryWriteBacking(address, &data, num_bytes),
+                                   "EOP write failed: address={:#x} bytes={} value={:#x} "
+                                   "packet={:#x} event={:#x} control={:#x} packet_value={:#x}",
+                                   reinterpret_cast<uintptr_t>(address), num_bytes, data,
+                                   reinterpret_cast<uintptr_t>(header), event_eop.event_control,
+                                   event_eop.data_control, event_eop.DataQWord());
                     },
                     [] { Platform::IrqC::Instance()->Signal(Platform::InterruptId::GfxEop); });
                 break;
@@ -750,10 +758,12 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 const u32 data_size = (header->type3.count.Value() - 2) * 4;
                 u64* address = write_data->Address<u64*>();
                 if (!write_data->wr_one_addr.Value()) {
+                    const boost::container::small_vector<u32, 64> payload{
+                        write_data->data, write_data->data + data_size / sizeof(u32)};
                     if (rasterizer) {
                         rasterizer->OnFence();
                     }
-                    std::memcpy(address, write_data->data, data_size);
+                    std::memcpy(address, payload.data(), data_size);
                 } else {
                     UNREACHABLE();
                 }
@@ -860,7 +870,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 const auto skip = *cond_exec->Address() == false;
                 if (skip) {
                     dcb = NextPacket(dcb,
-                                     header->type3.NumWords() + 1 + cond_exec->exec_count.Value());
+                                     count + 1 + cond_exec->exec_count.Value());
                     continue;
                 }
                 break;
@@ -869,7 +879,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 UNREACHABLE_MSG("Unknown PM4 type 3 opcode {:#x} with count {}",
                                 static_cast<u32>(opcode), count);
             }
-            dcb = NextPacket(dcb, header->type3.NumWords() + 1);
+            // Completion writes/IRQs may make this packet's guest storage reusable.
+            dcb = NextPacket(dcb, count + 1);
             break;
         }
     }
@@ -1090,10 +1101,13 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
             ASSERT(write_data->dst_sel.Value() == 2 || write_data->dst_sel.Value() == 5);
             const u32 data_size = (header->type3.count.Value() - 2) * 4;
             if (!write_data->wr_one_addr.Value()) {
+                auto* address = write_data->Address<void*>();
+                const boost::container::small_vector<u32, 64> payload{
+                    write_data->data, write_data->data + data_size / sizeof(u32)};
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }
-                std::memcpy(write_data->Address<void*>(), write_data->data, data_size);
+                std::memcpy(address, payload.data(), data_size);
             } else {
                 UNREACHABLE();
             }
@@ -1120,16 +1134,25 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
             break;
         }
         case PM4ItOpcode::ReleaseMem: {
-            const auto* release_mem = reinterpret_cast<const PM4CmdReleaseMem*>(header);
+            const auto release_mem = *reinterpret_cast<const PM4CmdReleaseMem*>(header);
             if (rasterizer) {
                 rasterizer->OnFence();
             }
-            release_mem->SignalFence(
+            release_mem.SignalFence(
+                [](void* address, u64 data, u32 num_bytes) {
+                    // Preserve ordinary guest stores and their CPU-write/PageWatch callbacks.
+                    // A physical alias write here would bypass invalidation of cached readers.
+                    std::memcpy(address, &data, num_bytes);
+                },
                 [pipe_id = queue.pipe_id] {
                     Platform::IrqC::Instance()->Signal(static_cast<Platform::InterruptId>(pipe_id));
                 },
                 [this](VAddr dst, u16 gds_index, u16 num_dwords) {
+                    ASSERT(rasterizer);
                     rasterizer->CopyBuffer(dst, gds_index, num_dwords * sizeof(u32), false, true);
+                    // The write-confirm interrupt follows visibility of this copy, not merely
+                    // completion of commands recorded before RELEASE_MEM.
+                    rasterizer->Finish();
                 });
             break;
         }

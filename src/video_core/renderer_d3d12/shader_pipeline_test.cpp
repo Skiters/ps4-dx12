@@ -164,6 +164,26 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
        geometry_points.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID||
        geometry_points.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE||geometry_points.rasterizer_discard)
         throw std::runtime_error("Guest GS point output inherited polygon culling/fill rules");
+    regs.vgt_gs_out_prim_type.outprim_type=AmdGpu::GsOutputPrimitiveType::LineStrip;
+    const auto geometry_lines=BuildGuestGraphicsState(regs,formats);
+    if(geometry_lines.discard||geometry_lines.rasterizer_discard||
+       geometry_lines.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE||
+       geometry_lines.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID)
+        throw std::runtime_error("Guest GS lines inherited triangle input culling/fill rules");
+    regs.vgt_gs_out_prim_type.outprim_type=AmdGpu::GsOutputPrimitiveType::TriangleStrip;
+    const auto geometry_triangles=BuildGuestGraphicsState(regs,formats);
+    if(geometry_triangles.discard||!geometry_triangles.rasterizer_discard||
+       geometry_triangles.pipeline.StreamOutput.RasterizedStream!=D3D12_SO_NO_RASTERIZED_STREAM)
+        throw std::runtime_error("Guest GS triangles escaped dual-face culling");
+    regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::LsHs;
+    regs.primitive_type=AmdGpu::PrimitiveType::PatchPrimitive;
+    regs.tess_config.type=AmdGpu::TessellationType::Isoline;
+    regs.tess_config.topology=AmdGpu::TessellationTopology::Line;
+    const auto tessellation_lines=BuildGuestGraphicsState(regs,formats,DXGI_FORMAT_UNKNOWN,3);
+    if(tessellation_lines.discard||tessellation_lines.rasterizer_discard||
+       tessellation_lines.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE||
+       tessellation_lines.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID)
+        throw std::runtime_error("Guest tessellation isolines inherited polygon culling/fill rules");
     regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::Vs;
     regs.polygon_control.cull_front=regs.polygon_control.cull_back=0;
     regs.primitive_type=previous_primitive;
@@ -174,10 +194,23 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     regs.primitive_type=AmdGpu::PrimitiveType::QuadList;
     if(BuildGuestGraphicsState(regs,formats).topology!=D3D_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST)
         throw std::runtime_error("Guest quad patch topology mismatch");
+    regs.primitive_type=AmdGpu::PrimitiveType::RectList;
+    for(unsigned faces=1;faces<4;++faces){
+        regs.polygon_control.cull_front=faces&1;regs.polygon_control.cull_back=(faces>>1)&1;
+        const auto rectangle=BuildGuestGraphicsState(regs,formats);
+        if(rectangle.discard||rectangle.rasterizer_discard||
+           rectangle.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE)
+            throw std::runtime_error("Guest screen-aligned rectangles inherited polygon culling");
+    }
     regs.polygon_control.cull_front=regs.polygon_control.cull_back=1;regs.primitive_type=AmdGpu::PrimitiveType::LineList;
-    if(BuildGuestGraphicsState(regs,formats).discard)throw std::runtime_error("Guest polygon culling incorrectly killed lines");
+    const auto culled_lines=BuildGuestGraphicsState(regs,formats);
+    if(culled_lines.discard||culled_lines.rasterizer_discard)
+        throw std::runtime_error("Guest polygon culling incorrectly killed lines");
     regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
-    if(!BuildGuestGraphicsState(regs,formats).discard)throw std::runtime_error("Guest dual-face culling failed to discard triangles");
+    const auto culled_triangles=BuildGuestGraphicsState(regs,formats);
+    if(culled_triangles.discard||!culled_triangles.rasterizer_discard||
+       culled_triangles.pipeline.StreamOutput.RasterizedStream!=D3D12_SO_NO_RASTERIZED_STREAM)
+        throw std::runtime_error("Guest dual-face culling must retain shaders and discard only rasterization");
     ShaderPipeline pipeline(device.Get(),argv[1],{vertex.bytecode,pixel.bytecode},fixed);
     ResourceBindings bindings(device.Get(),pipeline.Layout());
     ComPtr<ID3D12CommandQueue> queue;D3D12_COMMAND_QUEUE_DESC q{};

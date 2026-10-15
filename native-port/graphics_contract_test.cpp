@@ -63,7 +63,11 @@ float4 main():SV_Target0{return float4(1,0,1,0);}
     AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
     regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     regs.color_target_mask.raw=regs.color_shader_mask.raw=15;regs.color_buffers[0].info.format=10;
-    regs.color_buffers[0].info.number_type=u32(srgb?AmdGpu::NumberFormat::Srgb:AmdGpu::NumberFormat::Unorm);
+    // CB_COLOR_INFO uses encoding 6 for sRGB; T#'s Srgb=9 would truncate
+    // to Snorm in this three-bit field and exercise the wrong blend rules.
+    regs.color_buffers[0].info.number_type=u32(srgb?AmdGpu::NumberFormat::SnormNz:AmdGpu::NumberFormat::Unorm);
+    if(regs.color_buffers[0].GetNumberFmt()!=(srgb?AmdGpu::NumberFormat::Srgb:AmdGpu::NumberFormat::Unorm))
+        throw std::runtime_error("Guest color-buffer number format does not match the target");
     regs.clipper_control.dx_rasterization_kill=discard;regs.polygon_control.cull_front=regs.polygon_control.cull_back=cull;
     const std::array<DXGI_FORMAT,1> formats{format};const auto fallback=BuildGuestViewports(regs);
     const D3D12_VIEWPORT viewport=empty_viewport?fallback.viewports[0]:D3D12_VIEWPORT{0,0,8,8,0,1};
