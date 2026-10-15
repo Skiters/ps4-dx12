@@ -806,19 +806,21 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 break;
             }
             case PM4ItOpcode::WaitRegMem: {
-                const auto* wait_reg_mem = reinterpret_cast<const PM4CmdWaitRegMem*>(header);
-                // ASSERT(wait_reg_mem->engine.Value() == PM4CmdWaitRegMem::Engine::Me);
+                // Decode the predicate once; yielding or a video-out wait can let guest
+                // memory change. Test still reads the live target memory/register value.
+                const auto wait_reg_mem = *reinterpret_cast<const PM4CmdWaitRegMem*>(header);
+                // ASSERT(wait_reg_mem.engine.Value() == PM4CmdWaitRegMem::Engine::Me);
                 // Optimization: VO label waits are special because the emulator
                 // will write to the label when presentation is finished. So if
                 // there are no other submits to yield to we can sleep the thread
                 // instead and allow other tasks to run.
-                const u64* wait_addr = wait_reg_mem->Address<u64*>();
+                const u64* wait_addr = wait_reg_mem.Address<u64*>();
                 if (vo_port->IsVoLabel(wait_addr) &&
                     num_submits == mapped_queues[GfxQueueId].submits.size()) {
-                    vo_port->WaitVoLabel([&] { return wait_reg_mem->Test(regs.reg_array); });
+                    vo_port->WaitVoLabel([&] { return wait_reg_mem.Test(regs.reg_array); });
                     break;
                 }
-                while (!wait_reg_mem->Test(regs.reg_array)) {
+                while (!wait_reg_mem.Test(regs.reg_array)) {
                     YIELD_GFX();
                 }
                 break;
@@ -1126,9 +1128,9 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
             break;
         }
         case PM4ItOpcode::WaitRegMem: {
-            const auto* wait_reg_mem = reinterpret_cast<const PM4CmdWaitRegMem*>(header);
-            ASSERT(wait_reg_mem->engine.Value() == PM4CmdWaitRegMem::Engine::Me);
-            while (!wait_reg_mem->Test(regs.reg_array)) {
+            const auto wait_reg_mem = *reinterpret_cast<const PM4CmdWaitRegMem*>(header);
+            ASSERT(wait_reg_mem.engine.Value() == PM4CmdWaitRegMem::Engine::Me);
+            while (!wait_reg_mem.Test(regs.reg_array)) {
                 YIELD_ASC(vqid);
             }
             break;
