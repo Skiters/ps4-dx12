@@ -1,5 +1,16 @@
 # Benchmarks
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+No measurements were performed for d4b70f9,4210e31 or4ef80fc.16 ordered GCN scenarios
+are authored only; no PASS may be inferred from source/whitespace/archive review.
+No new FPS, frame-time, CPU/GPU wait, validation, image or controls result exists.
+Historical326/346(native211/229) plus three later targeted passes are unchanged old
+results, not acceptance of these commits. Installed preview24 is unchanged. Use existing
+Vulkan/DX12 baselines only after authorization to execute; count completed guest frames
+and exclude frame generation. Evidence index: F:/PS4Dev/handoff/ordered-stream-20261015/EVIDENCE_INDEX.md.
+
+
 ## Current CMASK and ordered-buffer checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.

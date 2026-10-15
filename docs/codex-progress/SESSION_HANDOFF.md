@@ -1,5 +1,113 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+This section is authoritative; earlier current/next statements are historical.
+Source commits d4b70f9,4210e31 and4ef80fc are pushed on fix/mixed-cmask.
+No build/configure/package, test/fixture execution, GPU/game, XInput, profiling or UI
+operation occurred. All129 registry groups remain partial/open. Source reviews and
+Git/archive checks do not establish runtime correctness or performance.
+
+### Production continuation
+
+- d4b70f9: ExecuteGuestResources preserves every early clean readonly buffer as an
+  immutable CPU snapshot before overlapping writer invalidation. This includes raw
+  readers with no later formatted descriptor. Guest requests, write ranges and ordinal
+  remain unchanged; only native descriptor binding selects an appended private view.
+  Snapshots use original byte sizes and normal default-resource UAV preparation;
+  temporary storage and prepared resources retain their existing submission lifetime.
+- 4210e31: NativeStorageBufferUavs adds Aliased20 to every native SSBO variable and
+  removes direct Restrict19 plus prior NonWritable24. Existing direct/grouped Aliased,
+  other qualifiers, images/UBOs and actual instructions remain. Legacy grouped
+  BufferBlock is recognized. Affected grouped Restrict/NonWritable is explicitly
+  unsupported rather than silently rewriting unrelated resources. Both standalone and
+  linked native conversion use this helper; the shared/Vulkan emitter is untouched.
+- Mesa's GLSL450 SSBO default ACCESS_RESTRICT is the confirmed source-level mismatch.
+  No GPU optimizer miscompile was observed. GuestShaderCache's native cache version
+  is now native-dxil-cache-20261015-ssbo-alias-v2 so future compute/graphics compilation
+  cannot reuse the old disk entries. No existing cache files were removed or changed.
+  Only this one line was committed from that historically dirty cache source file.
+- 4ef80fc: readonly exact-base sharps can be shorter or longer than the retained image;
+  every overlapping writer still covers the complete image. Each reader uses its own
+  original size and GPU-modified query for the16KiB stream decision. A clean prefix can
+  stream privately while a dirty/large formatted reader causes one full-image retile.
+  Private captures precede retile and original-range NotifyGpuBufferWrite. Shader bounds
+  and long tails remain original; full-image transfer never widens a writer's dirty span.
+- An early resident formatted reader must prove full-image capacity inside its selected
+  4GiB VA arena pages. This is distinct from sparse physical residency. Pinned full-writer
+  residency plus SubmitPendingArenaBinds covers the earlier copy only with the same arena
+  and no intervening submission. Pressure/migration/intermediate submission equivalence
+  remains open; independent ownership alone does not prove earlier sparse residency.
+
+### Authored acceptance and measured state
+
+The existing ordered-formatted-owned helper now contains16 authored real-GCN cases:
+original large/small x clean/dirty x R/W-or-W/R; four small raw/formatted R/W/R cases;
+and four short/long cases. The latter cover clean64-byte prefix with a dirty tail page,
+dirty64-byte prefix, clean20KiB read over a4KiB image, and mixed private64-byte/resident20KiB
+reads. They assert frontend descriptor order and original extents, same-sharp rereads,
+short OOB bounds, preserved long tails, post-write image reload before CPU reconciliation,
+and whole64KiB allocation/padding. One original case exercises the unowned output's
+synchronous fallback. All16 are authored only, not compiled/run. Their minimal integration
+remains in the historical untracked gcn_attachment_alias_test.cpp; prior own integration
+patch and complete integrated file remain preserved, not swept into source commits.
+
+No new FPS/frame-time, image, controls, GPU-validation or stability evidence exists.
+Historical326/346(native211/229) and three later targeted passes remain separate old
+results. Last accepted Bloodborne world evidence remains fog/sky, G-buffer geometry and
+finite depth; no current gameplay/FPS acceptance. Historical EOP rejection cause remains
+unknown. Earlier CMASK INF/NaN and transfer fixes retain their prior source-only status.
+
+### Preservation and recovery
+
+Evidence root F:/PS4Dev/handoff/ordered-stream-20261015 contains production/, fixtures/,
+shader-alias/, short-views/, SHORT_VIEW_SOURCE_PROOF.md and NEXT_PARTIAL_WRITER_SOURCE_PROOF.md.
+CHECKPOINT_FINAL.json records final HEAD/upstream, commit list, source hashes, original
+index comparison and final-residual archive hash. final-residual preserves all nonignored
+historical source/assets, binary patches and deletion manifest. Do not restore it over
+this dirty tree; use its README in a separate checkout of manifest.head. Original22 staged
+network deletions stay separate. Historical unknown-origin edits remain unmodified.
+Previous complete checkpoint/evidence: F:/PS4Dev/handoff/cmask-exceptions-20261015.
+
+Installed latest remains preview24, ID dx12-20261015-full-port-preview-70eeeff04e89,
+C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe,
+SHA25670eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+Its source is a3f1d5e plus archived dirty integration, not these later commits. Selected
+core remains preview23. Installation/PDB/MAP/runtime provenance remains
+F:/PS4Dev/handoff/eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Vulkan, saves, settings, monitoring, current processes and remote desktop are untouched.
+
+### Exact next source task
+
+Read NEXT_PARTIAL_WRITER_SOURCE_PROOF.md; do not repeat the buffer/CMASK/format audit.
+In guest_compute.cpp::ExecuteGuestResources, adapt exact-base DWORD-sized short writers
+under the existing one-stage/no-images/no-DMA/unique-version boundary. Keep original
+WriteRange and dirty spans. Only a scheduled prewriter image retile may add a readonly
+full-image residency envelope. Start with full readers or images inside the reader's
+minimum16KiB sparse block; do not infer general sparse residency from the4GiB capacity
+check. W-before-R must invalidate the whole old image even for a one-DWORD writer.
+Author the focused oracle: after resident R then short W, GPU image tail may be I while
+physical CPU tail remains B. Preserve earlier private snapshots and common-buffer aliases.
+Broader non-base/sub-DWORD simultaneous writers, metadata ordering, image operands,
+multiple image identities, cross-stage ordering and pressure/device-loss remain open.
+
+Next exact read command (source review only):
+`Get-Content -LiteralPath 'F:\PS4Dev\handoff\ordered-stream-20261015\NEXT_PARTIAL_WRITER_SOURCE_PROOF.md'`
+
+### NEXT CODEX SESSION — START HERE
+
+Continue Skiters/ps4-dx12 in F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask.
+Read the authoritative top of SESSION_HANDOFF.md and CHECKPOINT_FINAL.json, verify actual
+HEAD/upstream and preserve the dirty tree/index. Reuse saved Vulkan/DX12 evidence and
+NEXT_PARTIAL_WRITER_SOURCE_PROOF.md; do not repeat completed audits. Continue the exact-base
+short-writer production C++ task with precise dirty ranges and conditional readonly retile
+envelope, then source-review and checkpoint/push. Keep all execution deferred until new
+specific user authorization. Once authorized, build affected targets, run the focused
+regressions, then only minimal existing-XInput game checks and compare completed guest
+frames (without FG) against the saved baseline. Do not claim full parity or current FPS
+from old results. Preserve source, evidence and exact continuation before ending.
+
+
 ## Current CMASK and ordered-buffer source checkpoint - 2026-10-15
 
 This top section is authoritative; older active/next-task statements below are historical.

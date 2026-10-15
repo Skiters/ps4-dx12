@@ -1,5 +1,25 @@
 # Checkpoints
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+This section is authoritative; earlier current/next statements are historical.
+Source commits d4b70f9,4210e31 and4ef80fc are pushed on fix/mixed-cmask.
+No build/configure/package, test/fixture execution, GPU/game, XInput, profiling or UI
+operation occurred. All129 registry groups remain partial/open. Source reviews and
+Git/archive checks do not establish runtime correctness or performance.
+
+- d4b70f9: early CPU snapshots and12 authored ordered GCN cases.
+- 4210e31: native SSBO Aliased contract and compute/linked cache invalidation.
+- 4ef80fc: original short/long readonly extents with full-image writers.
+- df8b741: four additional short/long GCN scenarios,16 total; authored only.
+- The final documentation checkpoint SHA is in CHECKPOINT_FINAL.json.
+
+Evidence and all before/after/deltas: F:/PS4Dev/handoff/ordered-stream-20261015.
+Final residual archive preserves historical integration and original22 staged deletions.
+Cache-source checkpoint used a separate index and committed only its version line.
+Previous checkpoint30f5d19 and evidence cmask-exceptions-20261015 remain intact.
+
+
 ## Current CMASK and ordered-buffer checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.

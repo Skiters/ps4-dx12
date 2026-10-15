@@ -1,5 +1,24 @@
 # Next session
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+This section is authoritative; earlier current/next statements are historical.
+Source commits d4b70f9,4210e31 and4ef80fc are pushed on fix/mixed-cmask.
+No build/configure/package, test/fixture execution, GPU/game, XInput, profiling or UI
+operation occurred. All129 registry groups remain partial/open. Source reviews and
+Git/archive checks do not establish runtime correctness or performance.
+
+Start with SESSION_HANDOFF.md's top section and verify HEAD/upstream against
+F:/PS4Dev/handoff/ordered-stream-20261015/CHECKPOINT_FINAL.json. Read the saved
+NEXT_PARTIAL_WRITER_SOURCE_PROOF.md, then modify ExecuteGuestResources short-writer
+admission and conditional readonly full-image retile envelope. Keep exact WriteRange,
+whole-image invalidation at W, prewriter CPU snapshots and native SSBO Aliased metadata.
+Use the proof's full-reader/minimum16KiB-block residency bound; the4GiB capacity test
+alone is insufficient. Author the GPU-I-tail/physical-B-tail oracle. Existing partial
+write range contracts and all prior16 cases are reused, not re-audited. Execution remains
+deferred until specifically authorized. Checkpoint/push source and preserve old index.
+
+
 ## Current CMASK and ordered-buffer checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.

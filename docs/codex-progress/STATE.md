@@ -1,5 +1,22 @@
 # Native DX12 state
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+This section is authoritative; earlier current/next statements are historical.
+Source commits d4b70f9,4210e31 and4ef80fc are pushed on fix/mixed-cmask.
+No build/configure/package, test/fixture execution, GPU/game, XInput, profiling or UI
+operation occurred. All129 registry groups remain partial/open. Source reviews and
+Git/archive checks do not establish runtime correctness or performance.
+
+Early clean reads now keep immutable private CPU snapshots. Native compiler SSBO alias
+permissions and cache version are corrected. Ordered readonly short/long extents keep
+original shader bounds; writers still cover a full image.16 GCN cases are authored only.
+Same-arena/same-submit sparse backing is conditional; no runtime closure. Installed
+preview24 and selected preview23 are unchanged. Next source task: exact-base short writer,
+with original dirty ranges and a readonly retile envelope only when needed.
+Authoritative recovery: SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-stream-20261015/CHECKPOINT_FINAL.json.
+
+
 ## Current CMASK and ordered-buffer checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.

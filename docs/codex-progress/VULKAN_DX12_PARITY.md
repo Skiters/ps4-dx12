@@ -1,5 +1,26 @@
 # Vulkan / native D3D12 parity audit
 
+## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
+
+This section is authoritative; earlier current/next statements are historical.
+Source commits d4b70f9,4210e31 and4ef80fc are pushed on fix/mixed-cmask.
+No build/configure/package, test/fixture execution, GPU/game, XInput, profiling or UI
+operation occurred. All129 registry groups remain partial/open. Source reviews and
+Git/archive checks do not establish runtime correctness or performance.
+
+| Contract | Current source boundary | Acceptance |
+|---|---|---|
+| Early clean readonly R before W | Original-size immutable CPU snapshots, raw and formatted | Uncompiled/unrun |
+| Native SSBO alias declarations | Aliased on every native SSBO; old disk keys bypassed after rebuild | Source review only |
+| Short/long readonly R with full W | Exact base/original bounds, per-reader source, one retained retile |16 authored cases, unrun |
+| Arena capacity/residency | Checked4GiB capacity; same-arena/same-submit sparse backing conditional | Pressure/migration open |
+| Short simultaneous writer | Saved precise next production task; original dirty intervals required | Not implemented in ordered path |
+
+All129 registry groups stay partial/open. Metadata/image operands, cross-stage ordering,
+multiple versions and broader offset/pressure/device-loss contracts remain open.
+Current source/evidence and exact continuation are in SESSION_HANDOFF.md's top section.
+
+
 ## Current CMASK and ordered-buffer checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.
