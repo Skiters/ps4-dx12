@@ -27,6 +27,15 @@ void ValidateRawRgba8Transfer(const GuestTextureDesc& d,const GuestTextureLayout
         (backing!=DXGI_FORMAT_R32_TYPELESS&&backing!=DXGI_FORMAT_R32_UINT)))
         throw std::invalid_argument("Native raw RGBA8 MSAA needs R32 backing and layout");
 }
+void ValidateRawPackedTransfer(const GuestTextureDesc& d,const GuestTextureLayout& layout,DXGI_FORMAT backing){
+    const bool packed10=d.data_format==9&&d.UsesRawPacked10();
+    const bool packed16=d.data_format>=16&&d.data_format<=19&&d.writable;
+    if((packed10||packed16)&&
+       (layout.format!=DXGI_FORMAT_R32_UINT||layout.bytes_per_pixel!=(packed16?2u:4u)||
+        layout.HostBytesPerPixel()!=4||layout.expanded_bytes_per_pixel||
+        (backing!=DXGI_FORMAT_R32_TYPELESS&&backing!=DXGI_FORMAT_R32_UINT)))
+        throw std::invalid_argument("Native raw packed MSAA needs its exact R32 word layout");
+}
 DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if(d.depth_target)return LinearFormat(layout.format);
     if(d.data_format>=16&&d.data_format<=19)
@@ -81,6 +90,7 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
     const GuestTextureDesc& d,const GuestTextureLayout& layout,UINT layer,UINT plane,bool upload){
     const auto texture_desc=texture.handle->GetDesc(),buffer_desc=linear.handle->GetDesc();
     ValidateRawRgba8Transfer(d,layout,texture_desc.Format);
+    ValidateRawPackedTransfer(d,layout,texture_desc.Format);
     if(d.samples<2||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||plane>1||
        (plane&&!d.stencil_address)||texture_desc.SampleDesc.Count!=d.samples||
        texture_desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
@@ -301,6 +311,7 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
     const GuestTextureLayout& layout,UINT layer){
     const auto src=source.handle->GetDesc(),dst=destination.handle->GetDesc();
     ValidateRawRgba8Transfer(d,layout,src.Format);
+    ValidateRawPackedTransfer(d,layout,src.Format);
     if(d.depth_target||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||
        layout.block_extent!=1||src.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        dst.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||src.Width!=dst.Width||src.Height!=dst.Height||

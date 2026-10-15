@@ -6,35 +6,47 @@
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 using namespace NativeDX12;
-struct RawRgba8Clear {
+struct RawMultisampleClear {
     float color[4];
     u8 packed[4];
 };
 template<class Component=u32>
 void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool writable,bool pressure=false,UINT data_format=4,
-    bool raw_source=false,bool raw_destination=false,const RawRgba8Clear* clear=nullptr){
+    bool raw_source=false,bool raw_destination=false,const RawMultisampleClear* clear=nullptr){
     Rasterizer renderer(device);GuestTextureCache cache(device);GuestMultisample transfer(device);
     GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;desc.layers=2;
     desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=true;
-    desc.native_raw32=raw_source;
+    desc.native_raw32=raw_source&&data_format==10;
+    desc.native_packed10_raw=raw_source&&data_format==9;
+    const bool packed16=data_format>=16&&data_format<=19;
     if(clear){
-        if(!raw_source||!pressure||sizeof(Component)!=1)
-            throw std::invalid_argument("Converted clear fixture needs raw RGBA8 and pressure checks");
+        const bool raw_word=raw_source&&((data_format==10&&sizeof(Component)==1)||
+            (data_format==9&&sizeof(Component)==4));
+        if(!pressure||(!raw_word&&!(packed16&&sizeof(Component)==2)))
+            throw std::invalid_argument("Converted clear fixture needs raw guest words and pressure checks");
         // HLE clears cover the complete image even when a narrow view first
         // populated the cache. Both native array layers must change.
         desc.first_layer=1;desc.view_layers=1;
     }
     auto sampled=desc;sampled.writable=writable;sampled.tile_mode=10;
-    sampled.native_raw32=raw_destination;
-    if((raw_source||raw_destination)&&(data_format!=10||(raw_destination&&!writable)))
-        throw std::invalid_argument("Raw RGBA8 fixture needs data10 and a writable raw destination");
+    sampled.native_raw32=raw_destination&&data_format==10;
+    sampled.native_packed10_raw=raw_destination&&data_format==9;
+    if((raw_source||raw_destination)&&((data_format!=9&&data_format!=10)||(raw_destination&&!writable)))
+        throw std::invalid_argument("Raw packed fixture needs data9/10 and a writable raw destination");
     sampled.number_format=number_format==4?5:number_format==5?7:4;
     if constexpr(sizeof(Component)==2)
         sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:number_format==5?7:0;
     if constexpr(sizeof(Component)==1)
         sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:
             number_format==5&&data_format==10?9:0;
+    if(data_format==9)sampled.number_format=number_format==0?1:number_format==1?4:number_format==4?5:0;
+    if(packed16){
+        if(!writable||sizeof(Component)!=2||number_format!=0)
+            throw std::invalid_argument("Packed16 fixture requires raw writable low-halfword storage");
+        sampled.number_format=0;
+    }
     const auto layout=LayoutGuestTexture(desc),sampled_layout=LayoutGuestTexture(sampled);
     if(!GuestTextureCache::CanTransferIndependentMultisample(desc,layout)||
        !GuestTextureCache::CanTransferIndependentMultisample(sampled,sampled_layout))
@@ -46,7 +58,8 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
     for(UINT layer=0;layer<desc.layers;++layer)
         EncodeGuestSubresource(desc,layout,physical,std::as_bytes(std::span(old_pixels)),0,layer);
     auto expected_private=physical;
-    Resource gpu,upload,physical_readback,private_readback;
+    Resource gpu,upload,physical_readback,private_readback,expanded_version,expanded_readback;
+    std::vector<std::byte> expanded_expected;
     std::vector<Resource> writes,linear,readbacks,requested_versions;
     std::vector<std::shared_ptr<GuestMultisample::Lease>> writer_leases,reader_leases;
     std::weak_ptr<GuestPackedTransfer> clear_resources;
@@ -86,21 +99,27 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
             if(image.layout.format!=DXGI_FORMAT_R32_UINT||
                image.texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_TYPELESS||
                image.storage_samples.size()!=image.desc.samples||image.Uav(0).Format!=DXGI_FORMAT_R32_UINT)
-                throw std::runtime_error("Raw RGBA8 did not retain R32 native/storage views");
+                throw std::runtime_error("Raw packed DWORD did not retain R32 native/storage views");
             for(const auto& plane:image.storage_samples)
                 if(plane.handle->GetDesc().Format!=DXGI_FORMAT_R32_TYPELESS)
-                    throw std::runtime_error("Raw RGBA8 storage plane changed its allocation family");
+                    throw std::runtime_error("Raw packed DWORD storage plane changed its allocation family");
         };
         if(raw_source)require_raw_storage(source);
         if(raw_destination&&!raw_source){
-            auto invalid=desc;invalid.native_raw32=true;
+            auto invalid=desc;
+            if(data_format==9)invalid.native_packed10_raw=true;else invalid.native_raw32=true;
             bool rejected{};
             try{transfer.Prepare(source.texture,gpu,invalid,LayoutGuestTexture(invalid),0,0,false);}
             catch(const std::invalid_argument& error){
-                rejected=strcmp(error.what(),"Native raw RGBA8 MSAA needs R32 backing and layout")==0;
+                rejected=strcmp(error.what(),data_format==9?
+                    "Native raw packed MSAA needs its exact R32 word layout":
+                    "Native raw RGBA8 MSAA needs R32 backing and layout")==0;
             }
-            if(!rejected)throw std::runtime_error("Raw RGBA8 accepted an ordinary RGBA allocation");
+            if(!rejected)throw std::runtime_error("Raw packed DWORD accepted an ordinary packed allocation");
         }
+        if(packed16&&(source.layout.bytes_per_pixel!=2||source.layout.HostBytesPerPixel()!=4||
+           source.texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_UINT||source.Uav(0).Format!=DXGI_FORMAT_R32_UINT))
+            throw std::runtime_error("Packed16 did not use one low guest halfword per R32 plane texel");
         const auto fp=GuestMultisample::Footprint(desc,layout);
         const auto linear_bytes=GuestMultisample::LinearBytes(desc,fp);
         writes.reserve(desc.layers);writer_leases.reserve(desc.layers);
@@ -130,14 +149,31 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                         static constexpr u8 edge8[]{0x80u,0x81u,0x7fu,0xffu,0x00u,0x0au,0xbcu};
                         if(sample==0&&y==0)value=edge8[(x+component)%7]^(layer?0x80u:0u);
                     }
+                    if(data_format==9){
+                        // Both SNORM -1 encodings (10-bit and two-bit alpha),
+                        // signed endpoints and arbitrary packed words must keep
+                        // their exact bits through raw and native UINT views.
+                        static constexpr u32 packed_edges[]{0x20080200u,0x20180601u,0x7fffffffu,
+                            0x80000000u,0xc0000000u,0xffffffffu,0x00000001u};
+                        value=packed_edges[x%7]^((layer*17u+sample*31u+y*7u)<<10);
+                    }
                     values[((sample*desc.height+y)*desc.width+x)*components+component]=static_cast<Component>(value);
                 }
             EncodeGuestSubresource(desc,layout,expected_private,std::as_bytes(std::span(values)),0,layer);
             writes.push_back(Buffer(device,linear_bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ));
             auto& buffer=writes.back();Check(buffer.handle->Map(0,nullptr,&mapped));memset(mapped,0xdc,size_t(linear_bytes));
-            for(UINT sample=0;sample<samples;++sample)for(UINT y=0;y<desc.height;++y)
-                memcpy(static_cast<std::byte*>(mapped)+(sample*desc.height+y)*fp.Footprint.RowPitch,
-                    values.data()+(sample*desc.height+y)*desc.width*components,desc.width*layout.bytes_per_pixel);
+            for(UINT sample=0;sample<samples;++sample)for(UINT y=0;y<desc.height;++y){
+                auto* row=static_cast<std::byte*>(mapped)+(sample*desc.height+y)*fp.Footprint.RowPitch;
+                const auto* pixels=values.data()+(sample*desc.height+y)*desc.width*components;
+                if(packed16){
+                    for(UINT x=0;x<desc.width;++x){
+                        // The high half is host-only storage. Retile must discard
+                        // it rather than corrupt the adjacent guest halfword.
+                        const u32 word=u32(pixels[x])|0x5a5a0000u;
+                        memcpy(row+x*4,&word,4);
+                    }
+                }else memcpy(row,pixels,desc.width*layout.bytes_per_pixel);
+            }
             buffer.handle->Unmap(0,nullptr);
             writer_leases.push_back(transfer.Prepare(source.texture,buffer,desc,layout,layer,0,true));
             writer_leases.back()->Record(renderer.RecordingList(),source.texture,buffer);
@@ -146,7 +182,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(clear){
             if(!GuestConvertedMultisampleClearCompatible(source,clear->color)||
                GuestMultisampleStorageClearCompatible(source,clear->color))
-                throw std::runtime_error("Nonzero raw RGBA8 did not select the converted MSAA clear");
+                throw std::runtime_error("Nonzero packed word did not select the converted MSAA clear");
             const auto native=source.texture.handle.Get();const auto uid=source.image_uid;
             const auto allocation=source.allocation_bytes;
             const auto reject=[&](float (&invalid)[4]){
@@ -162,10 +198,17 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                     throw std::runtime_error("Rejected MSAA clear mutated the independent image");
             };
             float invalid[4];memcpy(invalid,clear->color,sizeof(invalid));
-            if(number_format==4){invalid[0]=std::bit_cast<float>(256u);reject(invalid);
-                invalid[0]=std::bit_cast<float>(UINT32_MAX);reject(invalid);}
-            else if(number_format==5){invalid[0]=std::bit_cast<float>(int32_t(128));reject(invalid);
-                invalid[0]=std::bit_cast<float>(int32_t(-129));reject(invalid);}
+            if(number_format==4){const auto maximum=data_format==9?1023u:255u;
+                invalid[0]=std::bit_cast<float>(maximum+1);reject(invalid);
+                invalid[0]=std::bit_cast<float>(UINT32_MAX);reject(invalid);
+                if(data_format==9){memcpy(invalid,clear->color,sizeof(invalid));
+                    invalid[3]=std::bit_cast<float>(4u);reject(invalid);}}
+            else if(number_format==5){const int32_t limit=data_format==9?512:128;
+                invalid[0]=std::bit_cast<float>(limit);reject(invalid);
+                invalid[0]=std::bit_cast<float>(-limit-1);reject(invalid);
+                if(data_format==9){memcpy(invalid,clear->color,sizeof(invalid));
+                    invalid[3]=std::bit_cast<float>(int32_t(2));reject(invalid);
+                    invalid[3]=std::bit_cast<float>(int32_t(-3));reject(invalid);}}
             else{invalid[0]=std::bit_cast<float>(0x7fc12345u);reject(invalid);
                 invalid[0]=std::bit_cast<float>(0x7f800000u);reject(invalid);}
             cache.ClearRawStorageImage(source,clear->color,renderer.RecordingList(),renderer.CompletedFence());
@@ -179,7 +222,8 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
             if(clear_resources.expired()||!source.format_retirement_bytes)
                 throw std::runtime_error("Pending MSAA clear released conversion resources");
             std::vector<Component> values(old_pixels.size());
-            for(size_t i=0;i<values.size();++i)values[i]=static_cast<Component>(clear->packed[i%4]);
+            for(size_t i=0;i<values.size();++i)
+                memcpy(&values[i],clear->packed+(i%components)*sizeof(Component),sizeof(Component));
             for(UINT layer=0;layer<desc.layers;++layer)
                 EncodeGuestSubresource(desc,layout,expected_private,std::as_bytes(std::span(values)),0,layer);
             // A shader binding must refresh every previously stale sample plane
@@ -237,7 +281,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
             // The following existing private retile/alias conversion verifies
             // reconstructed bits, untouched tiled padding and physical memory.
         }
-        if(clear){
+        if(clear&&data_format==10){
             // Converting a retired raw owner into ordinary sampled storage must
             // clear the old lazy-restore marker even though no planes are needed.
             auto ordinary=desc;ordinary.writable=false;ordinary.native_raw32=false;
@@ -269,6 +313,21 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(raw_destination)require_raw_storage(converted);
         const bool ownership=transfers==1&&converted.image_uid!=source_uid&&converted.gpu_owned&&
             converted.buffer_alias_version&&!source.gpu_owned;
+        const bool expanded=sampled_layout.expanded_bytes_per_pixel==16;
+        if(expanded){
+            if(!converted.expanded_guest_backing.handle||!converted.expanded_written_mask.handle||
+               !converted.expanded_backing_bytes||!converted.tiler)
+                throw std::runtime_error("Expanded snapshot discarded exact packed backing or mask");
+            expanded_expected=physical;
+            for(UINT layer=0;layer<sampled.layers;++layer){
+                const auto words=DecodeGuestSubresource(sampled,sampled_layout,expected_private,0,layer);
+                EncodeGuestSubresource(sampled,sampled_layout,expanded_expected,words,0,layer);
+            }
+            expanded_version=cache.RetileBufferVersion(converted,gpu,renderer.RecordingList(),renderer.CompletedFence());
+            expanded_readback=Buffer(device,sampled_layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            expanded_version.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            renderer.RecordingList()->CopyBufferRegion(expanded_readback.handle.Get(),0,expanded_version.handle.Get(),0,sampled_layout.guest_bytes);
+        }
         const auto result_fp=GuestMultisample::Footprint(sampled,sampled_layout);
         if(sampled_layout.format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB&&
            result_fp.Footprint.Format!=DXGI_FORMAT_R8G8B8A8_UNORM)
@@ -289,12 +348,60 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         for(UINT layer=0;layer<desc.layers;++layer){
             const auto expected=DecodeGuestSubresource(sampled,sampled_layout,expected_private,0,layer);
             Check(readbacks[layer].handle->Map(0,nullptr,&mapped));bool equal=true;
-            for(UINT sample=0;sample<samples;++sample)for(UINT y=0;y<desc.height;++y)
-                equal&=memcmp(static_cast<const std::byte*>(mapped)+(sample*desc.height+y)*result_fp.Footprint.RowPitch,
-                    expected.data()+size_t(sample*desc.height+y)*desc.width*sampled_layout.bytes_per_pixel,
-                    desc.width*sampled_layout.bytes_per_pixel)==0;
+            for(UINT sample=0;sample<samples;++sample)for(UINT y=0;y<desc.height;++y){
+                const auto* row=static_cast<const std::byte*>(mapped)+(sample*desc.height+y)*result_fp.Footprint.RowPitch;
+                const auto* pixels=expected.data()+size_t(sample*desc.height+y)*desc.width*sampled_layout.bytes_per_pixel;
+                if(expanded){
+                    for(UINT x=0;x<desc.width;++x){u32 guest{};memcpy(&guest,pixels+x*4,4);
+                        for(UINT component=0;component<4;++component){
+                            const UINT bits=component==3?2:10,raw=(guest>>(component*10))&((1u<<bits)-1);
+                            const int32_t expected_value=int32_t(raw)-((raw&(1u<<(bits-1)))?int32_t(1u<<bits):0);
+                            u32 actual{};memcpy(&actual,row+x*16+component*4,4);
+                            if(sampled.number_format==5)equal&=actual==std::bit_cast<u32>(expected_value);
+                            else{const float expected_value_f=std::max(float(expected_value)/float((1u<<(bits-1))-1),-1.f);
+                                const float actual_f=std::bit_cast<float>(actual);
+                                equal&=std::isfinite(actual_f)&&std::abs(actual_f-expected_value_f)<=0.000001f;}
+                        }
+                    }
+                }else if(packed16){
+                    for(UINT x=0;x<desc.width;++x){u16 guest{};u32 actual{};
+                        memcpy(&guest,pixels+x*2,2);memcpy(&actual,row+x*4,4);
+                        equal&=actual==guest;
+                    }
+                }else equal&=memcmp(row,pixels,desc.width*sampled_layout.bytes_per_pixel)==0;
+            }
             readbacks[layer].handle->Unmap(0,nullptr);
             if(!equal)throw std::runtime_error("MSAA reinterpret lost sample/layer/format bits");
+        }
+        if(expanded){
+            Check(expanded_readback.handle->Map(0,nullptr,&mapped));
+            const bool exact=memcmp(mapped,expanded_expected.data(),size_t(sampled_layout.guest_bytes))==0;
+            expanded_readback.handle->Unmap(0,nullptr);
+            if(!exact)throw std::runtime_error("Expanded MSAA snapshot lost original packed words or padding");
+            // After transient upload leases retire, merge into a fresh physical
+            // version with a different padding sentinel. The retained mask must
+            // copy logical words only, including duplicate SNORM -1 encodings.
+            std::vector<std::byte> seed(size_t(sampled_layout.guest_bytes),std::byte{0x3c});
+            auto expected=seed;
+            for(UINT layer=0;layer<sampled.layers;++layer){
+                const auto words=DecodeGuestSubresource(sampled,sampled_layout,expected_private,0,layer);
+                EncodeGuestSubresource(sampled,sampled_layout,expected,words,0,layer);
+            }
+            writes.push_back(Buffer(device,seed.size(),D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ));
+            Check(writes.back().handle->Map(0,nullptr,&mapped));memcpy(mapped,seed.data(),seed.size());
+            writes.back().handle->Unmap(0,nullptr);
+            requested_versions.push_back(Buffer(device,seed.size(),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST));
+            auto& fresh=requested_versions.back();
+            renderer.RecordingList()->CopyBufferRegion(fresh.handle.Get(),0,writes.back().handle.Get(),0,seed.size());
+            auto second=cache.RetileBufferVersion(converted,fresh,renderer.RecordingList(),renderer.CompletedFence());
+            requested_versions.push_back(second);
+            second.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            renderer.RecordingList()->CopyBufferRegion(expanded_readback.handle.Get(),0,second.handle.Get(),0,seed.size());
+            cache.Submitted(renderer.Flush());renderer.Finish();cache.Collect(renderer.CompletedFence());
+            Check(expanded_readback.handle->Map(0,nullptr,&mapped));
+            const bool repeated=memcmp(mapped,expected.data(),expected.size())==0;
+            expanded_readback.handle->Unmap(0,nullptr);
+            if(!repeated)throw std::runtime_error("Completed expanded snapshot lost exact words or copied stale padding");
         }
         Check(private_readback.handle->Map(0,nullptr,&mapped));
         const bool private_exact=memcmp(mapped,expected_private.data(),size_t(layout.guest_bytes))==0;
@@ -335,9 +442,10 @@ int main(int argc,char** argv){try{
         puts("PASS: independent RG32/RGBA32 raw sample components, pressure restore and unchanged physical domain");return 0;
     }
     if(argc==2&&strcmp(argv[1],"--msaa-vector16")==0){
-        GuestTextureDesc rejected;rejected.samples=2;rejected.data_format=9;rejected.number_format=0;
-        if(GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
-            throw std::runtime_error("Packed image acquired unsupported raw-component MSAA ownership");
+        GuestTextureDesc rejected;rejected.samples=2;rejected.data_format=9;rejected.number_format=1;
+        auto invalid=LayoutGuestTexture(rejected);invalid.expanded_bytes_per_pixel=8;
+        if(GuestTextureCache::CanTransferIndependentMultisample(rejected,invalid))
+            throw std::runtime_error("Expanded signed packed image accepted a mismatched host footprint");
         rejected.data_format=2;rejected.number_format=0;rejected.depth_target=true;
         if(GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
             throw std::runtime_error("Depth image acquired color MSAA ownership");
@@ -386,19 +494,85 @@ int main(int argc,char** argv){try{
         puts("PASS: raw RGBA8 MSAA DWORD upload/readback, typed reinterpretation and pressure restore");return 0;
     }
     if(argc==2&&strcmp(argv[1],"--msaa-rawrgba8-clear")==0){
-        const RawRgba8Clear uint_clear{{std::bit_cast<float>(1u),std::bit_cast<float>(127u),
+        const RawMultisampleClear uint_clear{{std::bit_cast<float>(1u),std::bit_cast<float>(127u),
             std::bit_cast<float>(128u),std::bit_cast<float>(255u)},{1,127,128,255}};
-        const RawRgba8Clear sint_clear{{std::bit_cast<float>(int32_t(-128)),std::bit_cast<float>(int32_t(-1)),
+        const RawMultisampleClear sint_clear{{std::bit_cast<float>(int32_t(-128)),std::bit_cast<float>(int32_t(-1)),
             std::bit_cast<float>(int32_t(1)),std::bit_cast<float>(int32_t(127))},{128,255,1,127}};
-        const RawRgba8Clear snorm_clear{{-2.f,-0.5f,0.5f,2.f},{129,192,64,127}};
-        const RawRgba8Clear unorm_clear{{0.f,0.25f,0.5f,1.f},{0,64,128,255}};
+        const RawMultisampleClear snorm_clear{{-2.f,-0.5f,0.5f,2.f},{129,192,64,127}};
+        const RawMultisampleClear unorm_clear{{0.f,0.25f,0.5f,1.f},{0,64,128,255}};
+        // Authored linear-to-sRGB golden; execution remains deferred with the
+        // rest of this fixture. Alpha remains linear and all samples must match.
+        const RawMultisampleClear srgb_clear{{0.25f,0.5f,0.f,1.f},{137,188,0,255}};
         RunMultisample<u8>(device.Get(),2,4,false,true,10,true,false,&uint_clear);
         RunMultisample<u8>(device.Get(),4,5,true,true,10,true,false,&sint_clear);
         RunMultisample<u8>(device.Get(),8,1,true,true,10,true,true,&snorm_clear);
         RunMultisample<u8>(device.Get(),2,0,false,true,10,true,false,&unorm_clear);
+        RunMultisample<u8>(device.Get(),2,9,false,true,10,true,false,&srgb_clear);
+        RunMultisample<u8>(device.Get(),4,9,true,true,10,true,false,&srgb_clear);
         puts("PASS: nonzero raw RGBA8 MSAA converted clears, all samples/layers, numeric rejection, fence retirement and independent domains");return 0;
     }
-    if(argc!=1)throw std::invalid_argument("Expected no arguments, --msaa, --msaa-pressure, --msaa-vector32, --msaa-vector16, --msaa-vector8, --msaa-rawrgba8 or --msaa-rawrgba8-clear");
+    if(argc==2&&strcmp(argv[1],"--msaa-packed-clear")==0){
+        // Fixed guest packed words, authored independently of the transfer path.
+        // They cover packed10 signed fields and each packed16 component layout.
+        const RawMultisampleClear uint_clear{{std::bit_cast<float>(1u),std::bit_cast<float>(127u),
+            std::bit_cast<float>(1023u),std::bit_cast<float>(3u)},{0x01,0xfc,0xf1,0xff}};
+        const RawMultisampleClear sint_clear{{std::bit_cast<float>(int32_t(-512)),std::bit_cast<float>(int32_t(-1)),
+            std::bit_cast<float>(int32_t(1)),std::bit_cast<float>(int32_t(-2))},{0x00,0xfe,0x1f,0x80}};
+        const RawMultisampleClear snorm_clear{{-1.f,0.f,1.f,-1.f},{0x01,0x02,0xf0,0xdf}};
+        const RawMultisampleClear unorm_clear{{1.f,0.f,0.f,1.f},{0xff,0x03,0x00,0xc0}};
+        RunMultisample<u32>(device.Get(),2,4,true,true,9,true,true,&uint_clear);
+        RunMultisample<u32>(device.Get(),4,5,true,true,9,true,true,&sint_clear);
+        RunMultisample<u32>(device.Get(),8,1,true,true,9,true,true,&snorm_clear);
+        RunMultisample<u32>(device.Get(),2,0,true,true,9,true,true,&unorm_clear);
+        const RawMultisampleClear packed16[]{
+            {{1.f,0.f,0.f,1.f},{0x00,0xf8,0,0}},
+            {{1.f,0.f,0.f,1.f},{0x00,0xfc,0,0}},
+            {{1.f,0.f,0.f,1.f},{0x01,0xf8,0,0}},
+            {{1.f,0.f,0.f,1.f},{0xff,0x00,0,0}}};
+        for(UINT format=16;format<=19;++format)for(const UINT samples:{2u,4u,8u})
+            RunMultisample<u16>(device.Get(),samples,0,true,true,format,false,false,&packed16[format-16]);
+        puts("PASS: nonzero packed10/16 MSAA clears, narrow integer guards, all samples/layers and private padding");return 0;
+    }
+    if(argc==2&&strcmp(argv[1],"--msaa-packed10-expanded")==0){
+        for(const UINT samples:{2u,4u,8u}){
+            // UNORM->SNORM and UINT->SINT interpretations exercise the same raw
+            // DWORDs, including both normalized encodings of minus one.
+            RunMultisample<u32>(device.Get(),samples,0,false,true,9,true,false);
+            RunMultisample<u32>(device.Get(),samples,4,false,true,9,true,false);
+        }
+        puts("PASS: signed packed10 expanded MSAA snapshots, exact retained words/masks, repeated private retile and new padding");return 0;
+    }
+    if(argc==2&&strcmp(argv[1],"--msaa-packed10")==0){
+        GuestTextureDesc rejected;rejected.samples=2;rejected.data_format=9;rejected.number_format=1;
+        if(!GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
+            throw std::runtime_error("Signed packed sampled expansion lost its retained exact-word contract");
+        rejected.writable=true;
+        auto invalid=LayoutGuestTexture(rejected);invalid.format=DXGI_FORMAT_R10G10B10A2_UINT;
+        if(GuestTextureCache::CanTransferIndependentMultisample(rejected,invalid))
+            throw std::runtime_error("Raw packed10 accepted native R10 transfer metadata");
+        RunMultisample<u32>(device.Get(),2,0,true,true,9,true,true);
+        RunMultisample<u32>(device.Get(),4,1,true,true,9,true,false);
+        RunMultisample<u32>(device.Get(),8,4,true,true,9,false,true);
+        RunMultisample<u32>(device.Get(),2,5,true,true,9,true,true);
+        RunMultisample<u32>(device.Get(),4,0,true,true,9,false,true);
+        RunMultisample<u32>(device.Get(),8,4,true,true,9,true,true);
+        puts("PASS: packed10 raw/native UINT MSAA words, samples/layers, pressure and independent padding/domain");return 0;
+    }
+    if(argc==2&&strcmp(argv[1],"--msaa-packed16-raw")==0){
+        for(const UINT format:{16u,17u,18u,19u}){
+            GuestTextureDesc rejected;rejected.samples=2;rejected.data_format=format;rejected.number_format=0;
+            if(GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
+                throw std::runtime_error("Packed16 sampled representation was implicitly admitted as raw storage");
+            rejected.writable=true;
+            auto invalid=LayoutGuestTexture(rejected);invalid.format=DXGI_FORMAT_R16_UINT;
+            if(GuestTextureCache::CanTransferIndependentMultisample(rejected,invalid))
+                throw std::runtime_error("Packed16 raw storage accepted an R16 host footprint");
+            for(const UINT samples:{2u,4u,8u})
+                RunMultisample<u16>(device.Get(),samples,0,true,true,format);
+        }
+        puts("PASS: writable packed16 low-word MSAA storage, host high-half discard, samples/layers and private padding");return 0;
+    }
+    if(argc!=1)throw std::invalid_argument("Expected no arguments or an existing --msaa mode, --msaa-packed10, --msaa-packed16-raw or --msaa-packed-clear");
     Rasterizer renderer(device.Get());
     GuestTextureCache cache(device.Get());GuestTextureDesc desc;desc.address=0x40000;desc.width=desc.height=desc.pitch=8;
     desc.tile_mode=13;desc.data_format=4;desc.number_format=7;desc.writable=true;

@@ -128,7 +128,10 @@ void GuestTextureCache::ClearRawStorageImage(Entry& entry,const float (&color)[4
     if(packed){clear_desc.data_format=14;
         clear_desc.number_format=packed10&&(desc.number_format==4||desc.number_format==5)?desc.number_format:7;}
     const auto clear_layout=LayoutGuestTexture(clear_desc);
-    auto layout=packed?entry.layout:clear_layout;
+    // The synthetic packed clear source has the single-sample guest layout.
+    // Reusing the destination MSAA slice size here would retile layers into a
+    // different allocation before broadcasting the resulting word.
+    auto layout=packed?destination_layout:clear_layout;
     if(packed){layout.format=clear_layout.format;layout.expanded_bytes_per_pixel=16;}
     auto destination=entry.texture.handle->GetDesc();
     if(broadcast){destination.SampleDesc={1,0};destination.Alignment=0;

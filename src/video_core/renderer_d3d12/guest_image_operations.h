@@ -109,20 +109,33 @@ inline bool GuestConvertedStorageClearCompatible(const GuestTextureCache::Entry&
 }
 inline bool GuestConvertedMultisampleClearCompatible(const GuestTextureCache::Entry& e,
                                                      const float (&color)[4]){
-    // Clear one ordinary RGBA8 image through the shared typed conversion, then
-    // broadcast its exact R32 word to every native sample. Narrow integer UAV
-    // clears are only exact in range; leave saturation cases to the guest shader.
-    if(e.desc.data_format!=10||!e.desc.UsesRaw32()||
+    // Clear one typed single-sample image, pack its guest word, and broadcast
+    // that exact R32 word to every native sample. Packed16 keeps only its low
+    // guest halfword; its host R32 representation has zero high bits.
+    // SRGB uses the existing linear-color RTV conversion before this broadcast,
+    // preserving encoded RGB and linear alpha. Narrow integer inputs must fit
+    // their guest components; leave undefined overflow cases to the guest shader.
+    const bool rgba8=e.desc.data_format==10&&e.desc.UsesRaw32();
+    const bool packed10=e.desc.data_format==9&&e.desc.UsesRawPacked10();
+    const bool packed16=e.desc.data_format>=16&&e.desc.data_format<=19&&
+        e.desc.writable&&!e.desc.render_target&&e.desc.number_format==0;
+    if((!rgba8&&!packed10&&!packed16)||
        !GuestTextureCache::CanTransferIndependentMultisample(e.desc,e.layout)||!e.texture.handle)
         return false;
     const auto native=e.texture.handle->GetDesc();
-    if(native.SampleDesc.Count!=e.desc.samples||native.Format!=DXGI_FORMAT_R32_TYPELESS||
+    if(native.SampleDesc.Count!=e.desc.samples||
+       (native.Format!=DXGI_FORMAT_R32_TYPELESS&&native.Format!=DXGI_FORMAT_R32_UINT)||
        !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))return false;
-    for(const float value:color){
-        if(e.desc.number_format==4){if(std::bit_cast<uint32_t>(value)>255)return false;}
-        else if(e.desc.number_format==5){const auto integer=std::bit_cast<int32_t>(value);
-            if(integer< -128||integer>127)return false;}
-        else if(e.desc.number_format==0||e.desc.number_format==1){
+    for(uint32_t component=0;component<4;++component){
+        const float value=color[component];
+        const auto bits=packed10?(component==3?2u:10u):8u;
+        if(e.desc.number_format==4){
+            if(std::bit_cast<uint32_t>(value)>((1u<<bits)-1u))return false;
+        }else if(e.desc.number_format==5){
+            const auto integer=std::bit_cast<int32_t>(value),limit=int32_t(1u<<(bits-1));
+            if(integer< -limit||integer>=limit)return false;
+        }else if(e.desc.number_format==0||e.desc.number_format==1||
+                 (rgba8&&e.desc.number_format==9)){
             if((std::bit_cast<uint32_t>(value)&0x7f800000u)==0x7f800000u)return false;
         }else return false;
     }

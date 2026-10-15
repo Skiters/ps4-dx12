@@ -281,6 +281,14 @@ add_test(NAME native_independent_msaa_rawrgba8_transfer COMMAND native-independe
 set_tests_properties(native_independent_msaa_rawrgba8_transfer PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_rawrgba8_clear COMMAND native-independent-version-transfer-test --msaa-rawrgba8-clear)
 set_tests_properties(native_independent_msaa_rawrgba8_clear PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_packed10_transfer COMMAND native-independent-version-transfer-test --msaa-packed10)
+set_tests_properties(native_independent_msaa_packed10_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_packed10_expanded COMMAND native-independent-version-transfer-test --msaa-packed10-expanded)
+set_tests_properties(native_independent_msaa_packed10_expanded PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_packed16_raw_transfer COMMAND native-independent-version-transfer-test --msaa-packed16-raw)
+set_tests_properties(native_independent_msaa_packed16_raw_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_packed_clear COMMAND native-independent-version-transfer-test --msaa-packed-clear)
+set_tests_properties(native_independent_msaa_packed_clear PROPERTIES TIMEOUT 180)
 add_executable(dx12-memory-surface-provider-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider_test.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider.cpp")

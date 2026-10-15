@@ -62,6 +62,36 @@ std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
 }
 }
 bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc& d,const GuestTextureLayout& layout){
+    if((d.samples!=2&&d.samples!=4&&d.samples!=8)||d.levels!=1||
+       d.depth_target||d.stencil_address||d.volume_depth||d.one_dimensional||layout.block_extent!=1)return false;
+    if(layout.expanded_bytes_per_pixel){
+        // Read-only signed packed10 retains original guest words plus exact
+        // written-byte coverage on upload/conversion. Retile consumes that
+        // backing, never the non-injective normalized float representation.
+        return d.data_format==9&&!d.writable&&!d.render_target&&
+            (d.number_format==1||d.number_format==5)&&HasExactPackedExpansion(d,layout)&&
+            layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==16&&
+            layout.format==(d.number_format==1?DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_R32G32B32A32_SINT);
+    }
+    if(d.data_format==9){
+        // Packed10 storage is either one raw R32 word or an exact four-lane
+        // R10G10B10A2 UINT transfer. Never reconstruct signed sampled expansion
+        // from normalized values; that path needs its original words and mask.
+        const bool raw=d.UsesRawPacked10()&&layout.format==DXGI_FORMAT_R32_UINT&&
+            (d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5);
+        const bool native=!d.UsesRawPacked10()&&
+            ((d.number_format==0&&layout.format==DXGI_FORMAT_R10G10B10A2_UNORM)||
+             ((d.number_format==4||(d.render_target&&d.number_format==5))&&
+              layout.format==DXGI_FORMAT_R10G10B10A2_UINT));
+        return (raw||native)&&layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
+    }
+    if(d.data_format>=16&&d.data_format<=19){
+        // Writable packed16 uses an R32 UINT plane holding the guest word in
+        // its low half. Existing tiling stores exactly two bytes through masked
+        // writes, preserving the neighbour, row tail, sample layout and padding.
+        return d.writable&&!d.render_target&&d.number_format==0&&
+            layout.format==DXGI_FORMAT_R32_UINT&&layout.bytes_per_pixel==2&&layout.HostBytesPerPixel()==4;
+    }
     // These typeless 8/16/32-bit families have exact UINT buffer, MSAA SRV and
     // RTV transfers. Sub-DWORD texels use the tiler's byte-masked retile,
     // preserving neighbouring texels and row padding. sRGB transfers use UINT
@@ -75,13 +105,10 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
     const bool number=d.number_format==4||d.number_format==5||(!bytes8&&d.number_format==7)||
         ((bytes8||bytes16)&&(d.number_format==0||d.number_format==1))||
         (d.data_format==10&&d.number_format==9);
-    return (d.samples==2||d.samples==4||d.samples==8)&&d.levels==1&&
-        !d.depth_target&&!d.stencil_address&&!d.volume_depth&&!d.one_dimensional&&
-        // Raw RGBA8 moves its already-packed DWORD through R32_UINT views;
-        // ordinary RGBA8 retains its four-component integer transfer.
-        (!(d.data_format==10&&d.UsesRaw32())||layout.format==DXGI_FORMAT_R32_UINT)&&
-        bytes&&number&&layout.block_extent==1&&layout.bytes_per_pixel==bytes&&
-        layout.HostBytesPerPixel()==bytes&&!layout.expanded_bytes_per_pixel;
+    // Raw RGBA8 moves its already-packed DWORD through R32_UINT views;
+    // ordinary RGBA8 retains its four-component integer transfer.
+    return (!(d.data_format==10&&d.UsesRaw32())||layout.format==DXGI_FORMAT_R32_UINT)&&
+        bytes&&number&&layout.bytes_per_pixel==bytes&&layout.HostBytesPerPixel()==bytes;
 }
 void GuestTextureCache::ValidateWritableFormat(DXGI_FORMAT format){
     if(writable_formats_.contains(format))return;
@@ -1116,6 +1143,20 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
     auto layout=LayoutGuestTexture(d);
+    const bool preserve_expanded=d.samples>1&&d.data_format==9&&HasExactPackedExpansion(d,layout);
+    uint64_t expanded_snapshot_bytes{};
+    if(preserve_expanded){
+        for(const auto length:{layout.guest_bytes,GuestTiler::WrittenBytes(layout.guest_bytes)}){
+            D3D12_RESOURCE_DESC buffer{};buffer.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
+            buffer.Width=(length+3)&~uint64_t(3);buffer.Height=buffer.DepthOrArraySize=buffer.MipLevels=1;
+            buffer.SampleDesc.Count=1;buffer.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            buffer.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+            const auto allocation=device_->GetResourceAllocationInfo(0,1,&buffer).SizeInBytes;
+            if(!allocation||allocation==UINT64_MAX||expanded_snapshot_bytes>UINT64_MAX-allocation)
+                throw std::overflow_error("Invalid exact expanded snapshot backing allocation");
+            expanded_snapshot_bytes+=allocation;
+        }
+    }
     if(gpu_snapshot){
         if(!guest_snapshot||!gpu_snapshot->handle||!CanUploadGpuSnapshot(d,layout,writable_snapshot)||
             gpu_snapshot->handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
@@ -1360,7 +1401,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             (d.stencil_address?GuestTiler::WrittenBytes(stencil_layout.guest_bytes):0);
         if(d.writable||d.render_target||d.depth_target)
             new_entry->readback_reserve_bytes=transfer_bytes+(gpu_detile?physical_bytes*2+masks*2:0);
-        const uint64_t required=new_entry->allocation_bytes+
+        const uint64_t required=new_entry->allocation_bytes+expanded_snapshot_bytes+
             (immutable_view&&!gpu_snapshot?layout.guest_bytes+(d.stencil_address?stencil_layout.guest_bytes:0):0)+
             transfer_bytes+(gpu_detile?physical_bytes:0)+new_entry->readback_reserve_bytes;
         ReserveMemory(required,completed);
@@ -1377,7 +1418,16 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         }
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}
     SetBackingSamples(*entry,d.samples,list,false);
-    entry->expanded_guest_backing={};entry->expanded_written_mask={};entry->expanded_backing_bytes=0;
+    if(preserve_expanded){
+        // An immutable GPU snapshot owns exact packed bits independently of the
+        // expanded texture. Allocate the complete retained pair before replacing
+        // old completed backing or recording any new upload commands.
+        ReserveMemory(expanded_snapshot_bytes,completed,entry);
+        auto original=GuestTiler::Scratch(device_.Get(),layout.guest_bytes);
+        auto written=GuestTiler::Scratch(device_.Get(),GuestTiler::WrittenBytes(layout.guest_bytes));
+        entry->expanded_guest_backing=std::move(original);entry->expanded_written_mask=std::move(written);
+        entry->expanded_backing_bytes=expanded_snapshot_bytes;
+    }else{entry->expanded_guest_backing={};entry->expanded_written_mask={};entry->expanded_backing_bytes=0;}
     entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();
     const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target&&!gpu_detile;
     entry->pending=true;
@@ -1390,7 +1440,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         entry->tiler=tiler_;entry->tiler_leases.clear();
         entry->multisample=multisample_;entry->multisample_leases.clear();
         const auto planes=d.stencil_address?2u:1u;
-        entry->tiler_leases.reserve(size_t(planes)*d.layers*d.levels);
+        entry->tiler_leases.reserve(size_t(planes)*d.layers*d.levels*(preserve_expanded?3u:1u));
         entry->tiler_input_pool.reserve(planes);
         entry->tiler_output_pool.reserve(size_t(planes)*d.layers*d.levels);
         entry->multisample_leases.reserve(size_t(planes)*d.layers);
@@ -1438,10 +1488,31 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             if(linear.handle->GetDesc().Width<total)throw std::logic_error("Native linear tiling pool mismatch");
             auto tiling=tiler_->Prepare(entry->tiler_input_pool.at(plane),linear,linear,
                 interpreted,physical,mip,d.volume_depth?0:layer,fp,uint32_t(row_bytes/width),false);
+            std::shared_ptr<GuestTiler::Lease> exact_detile,exact_retile;
+            if(preserve_expanded){
+                // Reuse this slice's existing scratch before expanding it. The
+                // raw view copies original DWORDs and marks only logical texels;
+                // SNORM duplicate encodings and all guest padding stay exact.
+                auto raw_desc=d;raw_desc.writable=true;raw_desc.render_target=false;
+                raw_desc.native_packed10_raw=true;
+                const auto raw_layout=LayoutGuestTexture(raw_desc);
+                if(raw_layout.guest_bytes!=layout.guest_bytes)
+                    throw std::logic_error("Expanded snapshot changed its physical word layout");
+                auto raw_fp=fp;raw_fp.Footprint.Format=DXGI_FORMAT_R32_UINT;
+                exact_detile=tiler_->Prepare(entry->tiler_input_pool.at(plane),linear,linear,
+                    raw_desc,raw_layout,mip,layer,raw_fp,4,false);
+                exact_retile=tiler_->Prepare(linear,entry->expanded_guest_backing,entry->expanded_written_mask,
+                    raw_desc,raw_layout,mip,layer,raw_fp,4,true,plane==0&&layer==0&&mip==0);
+                entry->tiler_leases.push_back(exact_detile);entry->tiler_leases.push_back(exact_retile);
+            }
             entry->tiler_leases.push_back(tiling);
             if(d.samples>1){
                 auto transfer=multisample_->Prepare(entry->texture,linear,d,layout,layer,plane,true);
                 entry->multisample_leases.push_back(transfer);
+                if(exact_detile){
+                    exact_detile->Record(list,entry->tiler_input_pool.at(plane),linear,linear);
+                    exact_retile->Record(list,linear,entry->expanded_guest_backing,entry->expanded_written_mask);
+                }
                 tiling->Record(list,entry->tiler_input_pool.at(plane),linear,linear);
                 transfer->Record(list,entry->texture,linear);continue;
             }
