@@ -2,6 +2,45 @@
   "upstream_revision": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
   "groups": [
     {
+      "id": "common-pm4-completion-and-backing-writes",
+      "upstream_paths": [
+        "src/core/memory.cpp",
+        "src/core/memory.h",
+        "src/video_core/amdgpu/liverpool.cpp",
+        "src/video_core/amdgpu/pm4_cmds.h"
+      ],
+      "upstream_symbols": [
+        "MemoryManager::TryWriteBacking",
+        "Liverpool::ProcessGraphics",
+        "Liverpool::ProcessCompute",
+        "Liverpool::ProcessCeUpdate",
+        "PM4CmdEventWriteEop::SignalFence",
+        "PM4CmdReleaseMem::SignalFence"
+      ],
+      "native_paths": [
+        "src/core/backing_write_plan.h",
+        "src/core/memory.cpp",
+        "src/video_core/amdgpu/liverpool.cpp",
+        "src/video_core/amdgpu/pm4_cmds.h",
+        "native-port/backing_write_plan_test.cpp"
+      ],
+      "contract": {
+        "inputs": "Borrowed PM4 command streams, EOP/EOS/RELEASE_MEM destinations/values, WRITE_DATA payloads, VMA map and physical extents.",
+        "outputs": "Complete mapped backing writes or failure before mutation; decoded packet operands and lengths survive blocking completion and command-memory writes. RELEASE_MEM GDS-copy completion precedes write-confirm IRQ.",
+        "ordering": "Existing shared memory mutex covers extent planning and stores. GPU completion waits remain. Ordinary RELEASE_MEM/WRITE_DATA guest stores retain PageWatch callbacks; EOP/EOS retain physical backing writes. No invented acknowledgement on failed writes.",
+        "source_difference": "Pinned TryWriteBacking itself can report success after writing only a physically backed prefix and dereferences an end iterator. Native complete-range planning corrects that boundary instead of copying the defect. No historical EOP crash cause is inferred.",
+        "verification_prepared": "Split physical/VMA ranges, exact map end, unsupported/gapped/empty backing, arithmetic overflow and physical alias ordering fixtures prepared but not compiled/run.",
+        "open_contracts": "Historical failed EOP address and mapping lifetime unknown; pre/post packet mutation not observed. Runtime memory visibility, concurrent unmap/remap, IRQ ordering and full PM4/EOS/GDS coverage remain unverified. Tests/game/UI deferred by user instruction."
+      },
+      "implementation_status": "partial_implemented_unverified",
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-15",
+        "reason": "User deferred all test/game execution until full transfer end; source review only.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+      }
+    },
+    {
       "id": "native-texture-binding-lifetime",
       "upstream_paths": ["src/video_core/texture_cache/texture_cache.cpp", "src/video_core/renderer_vulkan/vk_rasterizer.cpp"],
       "upstream_symbols": ["FindImage", "CreateImage", "FreeImage", "RunGarbageCollector", "BindTextures", "BindResources"],
@@ -562,10 +601,22 @@
         "verification_preparation": "Compiled-only GPU fixtures cover RGB/alpha MIN/MAX zero/one combinations, UNORM/SRGB, actual vertex UAV effects under discard and both-face culling, real bounded 16/32-bit IBV reads, cold/warm contents and untouched padding. Stencil preparation includes conflicting and unreachable ReplaceOp selection and post-clear write suppression.",
         "original_limitations": "Pinned bitwise stencil operations warn and use KEEP; Ones warns and uses REPLACE. Existing native representable bitwise lowering remains an extension and is not credited as original coverage. Pinned scaled MIN/MAX, BrushXor and QuadStrip have explicit approximation warnings. Pinned PolygonControl::PolyMode uses the front polygon mode and ignores the independent back mode; independent back fill is not credited as original implemented behavior.",
         "native_unit_points": "A direct VS PointList without PointSize export uses native one-pixel points regardless of polygon point-fill control. This control affects polygons; it does not require polygon-to-point clipping for an already assembled point list. Prepared state coverage checks native point topology and retains rejection for sized-point polygon mode. Compilation only; no acceptance run.",
-        "open_contracts": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim."
+        "open_contracts": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim.",
+        "continuation_20261015": "Native cull-both classification uses final GS output and tessellation isolines; RectList retains pinned Vulkan cull exemption. Shader side effects are preserved. Source corrections to CB sRGB encoding and dual-face fixture oracle retain expected bytes; no runtime result for this delta."
       },
       "implementation_status": "partial_integrated",
-      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Partial position exports corrected in native Mesa. Production RectList old compiler FAIL/new64pixelsPASS in both viewport orientations; SRGB minmax/dual-face baseline failures remain. No whole-group closure.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-15",
+        "reason": "Current source delta not compiled or executed; user deferred all tests/game/UI until end.",
+        "previous_checkpoint_verification": {
+          "state": "partial_gpu_verified",
+          "date": "2026-10-14",
+          "reason": "Partial position exports corrected in native Mesa. Production RectList old compiler FAIL/new64pixelsPASS in both viewport orientations; SRGB minmax/dual-face baseline failures remain. No whole-group closure.",
+          "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
+        },
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+      }
     },
     {
       "id": "native-compute-wave-size",
@@ -616,10 +667,20 @@
         "contents": "Native CMASK retains the existing physical partial-clear implementation. Uniform and per-tile uncompressed MSAA clears materialize every sample while preserving untouched texels and padding. Non-TC CMASK addresses use the original base/alternate tile-mode pipe tables and pinned AMD AddrLib equations for P2, both base P8 schemes and Neo P16, including distinct linear/tiled cache alignment and per-slice padding. The effective texture descriptor's Neo selection also controls metadata addressing. HTile is registered only when the DB metadata surface is enabled, and consumes the original 32-slice clear mask. Recreated depth from a compatible cached color backing starts with the original no-clear mask.",
         "ordering": "Metadata clear detection excludes metadata readers and XOR address encoders, following the pinned heuristic. CMASK writers execute to retain physical metadata bytes; HTile/FMASK use the original tracked clear behavior. Registration occurs with the actual live attachment entry.",
         "errors": "Registration rejects non-live owners. Metadata lookup validates owner identity and address. Unmap removes metadata ranges; cache eviction removes the deleted owner's metadata.",
-        "open_contracts": "TC-compatible FMASK-derived CMASK addressing, compressed CB/FMASK/DCC runtime activation and final mixed-code/sample/Neo/alias/lifetime acceptance remain open. Raw mixed CMASK addressing is a retained native extension; the pinned original uses tracked fast-clear elimination. This group does not claim a raw FMASK decoder: the pinned original FMASK operation invokes fast-clear elimination and its shader reads use the existing common identity substitution. Prepared address vectors, bijection/slice/padding and partial-surface fixtures are compiled only."
+        "open_contracts": "TC-compatible FMASK-derived CMASK addressing, compressed CB/FMASK/DCC runtime activation and final mixed-code/sample/Neo/alias/lifetime acceptance remain open. Raw mixed CMASK addressing is a retained native extension; the pinned original uses tracked fast-clear elimination. This group does not claim a raw FMASK decoder: the pinned original FMASK operation invokes fast-clear elimination and its shader reads use the existing common identity substitution. Prepared address vectors, bijection/slice/padding and partial-surface fixtures are compiled only.",
+        "continuation_20261015": "Existing validated CMASK plan is shared between CPU and GPU. Unique ordinary GPU-owned RGBA8 UNORM attachments with standard component mapping accept uniform selected-layer and mixed 0/F logical-tile native clears, preserving all samples, untouched regions/layers and physical padding. Metadata consumption matches CPU exactly. Typed/raw other formats, independent domains, competing owners, remapped samples and TC/compressed/DCC cases retain existing fallback/rejection. Source only; fixture P16 x32/y0 golden nibble corrected 4 to 0 from independent AddrLib equations. No new PASS."
       },
       "implementation_status": "partial_integrated",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary is still open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-15",
+        "reason": "Current source delta uncompiled/unexecuted; user deferred all tests/game/UI until final transfer testing.",
+        "previous_checkpoint_verification": {
+          "state": "not_run",
+          "reason": "Full implementation boundary is still open."
+        },
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+      }
     },
     {
       "id": "host-fsr-and-post-process",
@@ -895,10 +956,22 @@
         "outputs": "The prewrite buffer contents initialize a separate writable image before both shader writes. The resulting image remains logically owned independently of physical buffer bytes. Raw buffer/CPU reads reconcile only the buffer result and retain the image version behind read-only CPU page watches. CPU write faults invalidate the image; GPU buffer writes invalidate exact-base image versions as in the original. PageWatch forwards the actual read/write fault kind. Exact protected read-only to no-access handoff preserves original page protection and generation state.",
         "ordering": "Prewrite capture precedes buffer ownership and image execution. Image descriptors and placed allocations retain binding leases. A GPU buffer write discards only the logical image identity; CPU writes retire prior GPU uses before invalidation. Destruction/remap/protection changes resolve buffers before discarding independent image versions. No arbitrary last-writer physical reconciliation.",
         "verification_prepared": "The full-core separate-buffer-image-owned GCN fixture compiles/links real simultaneous vertex buffer zero and image quarter stores, then pixel image loads. Twelve cases combine four warm bit patterns, including negative float bits, with R32 float/uint/sint views and compare the entire 64-KiB physical backing/padding. Pixel export supplies float-one alpha independently of integer image alpha. Actual protected CPU reads expose the buffer without destroying the image quarter; CPU writes and subsequent exact-base buffer writes invalidate it. The guest mapping and callbacks use two physical views. Fault-kind cases distinguish real reads and injected writes. Compile/link only.",
-        "open_contracts": "Formatted readonly buffer synchronization, domain-preserving pressure eviction/incompatible views, original queued linear-image readbacks, other formats/layouts/mips/layers/samples, partial/sub-DWORD aliases and atomic writers remain open or explicitly rejected. GPU contents, real CPU fault behavior and lifetime acceptance are unverified. No semantic closure."
+        "open_contracts": "Formatted readonly buffer synchronization, domain-preserving pressure eviction/incompatible views, original queued linear-image readbacks, other formats/layouts/mips/layers/samples, partial/sub-DWORD aliases and atomic writers remain open or explicitly rejected. GPU contents, real CPU fault behavior and lifetime acceptance are unverified. No semantic closure.",
+        "continuation_20261015": "GPU-only reinterpretation now includes R32 UINT/SINT/FLOAT2/4/8-sample, one-mip 2D/array domains with matching sample counts. Existing GuestMultisample sample/layer extraction and GuestTiler retile preserve a private physical-seeded version and all padding. No physical buffer commit/resolve. Depth/stencil, other MSAA formats,16 samples, mismatched counts and complete pressure/partial alias closure remain open. Prepared18-case --msaa mode unrun."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "partial_gpu_verified", "date": "2026-10-14", "reason": "Mixed NOACCESS/read-only guards and GPU-only incompatible single-sample image transfer PASS with distinct image/physical buffer/padding. Two observed loader blockers cleared; MSAA/partial/pressure/alias closure still open.", "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-15",
+        "reason": "Current source delta not compiled or executed; user deferred all tests/game/UI until end.",
+        "previous_checkpoint_verification": {
+          "state": "partial_gpu_verified",
+          "date": "2026-10-14",
+          "reason": "Mixed NOACCESS/read-only guards and GPU-only incompatible single-sample image transfer PASS with distinct image/physical buffer/padding. Two observed loader blockers cleared; MSAA/partial/pressure/alias closure still open.",
+          "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
+        },
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+      }
     },
     {
       "id": "native-independent-formatted-buffer-sync",
@@ -1225,10 +1298,20 @@
         "outputs": "The hash-specific physical CPU fill is removed. A compatible cached image uses GPU image clear; exact positive-zero vectors additionally support whole canonical writable single-sample UAV images with complete mip/layer selection and no expanded format. Native integer/raw versus floating clears match storage. Incompatible candidates decline to ordinary GCN dispatch. Zero cannot bypass image candidate/ownership validation or clear physical guest padding with memset; negative-zero float bits do not take the positive-zero shortcut.",
         "ordering": "Read/validate the clear vector, require matching image size/physical bits and clear compatibility, then acquire image ownership. Original BindResources checks IsComputeImageClear before ordinary buffer binding, so this operation does not implicitly create a buffer-domain writer. Prepare both UAV heaps before recording; retain both heaps and GPU image through retirement; mark image pending and order zero clears with a UAV barrier. Existing RTV clear and native ownership remain authoritative.",
         "verification_prepared": "Pinned IsComputeImageClear has no separate zero CPU fill. Twelve prepared actual GCN two-buffer clear shapes use the old hash after independent R32 FLOAT buffer/image writes, require first/next sampled texels zero while warm physical buffer/padding bytes persist, then recreate the ordinary quarter scenario with an exact-base writer. Current core/checks/all-ten full-core fixtures compile/link, no non-deprecation diagnostics or whitespace errors; no execution.",
-        "open_contracts": "Actual zero/nonzero shader recognition, existing cached sampled/storage/attachment image clear, no-image/incompatible-image fallback, physical padding, independent buffer result, dirty flags/fence/CPU coherence and performance remain unverified. Broader native image ownership and full acceptance remain open. No semantic closure."
+        "open_contracts": "Actual zero/nonzero shader recognition, existing cached sampled/storage/attachment image clear, no-image/incompatible-image fallback, physical padding, independent buffer result, dirty flags/fence/CPU coherence and performance remain unverified. Broader native image ownership and full acceptance remain open. No semantic closure.",
+        "continuation_20261015": "ComputeImageOperation copy/clear publishes texture fences at NotifyOnSubmission, before older retirements; completion only collects. Recording opens before pending publication. Existing clear/copy format and domain guards are unchanged. This source delta has not been built or executed."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-15",
+        "reason": "Current source delta uncompiled/unexecuted; user deferred all tests/game/UI until final transfer testing.",
+        "previous_checkpoint_verification": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        },
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+      }
     },
     {
       "id": "native-image-clear-complete-subresources-padding",

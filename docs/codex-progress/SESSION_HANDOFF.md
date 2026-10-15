@@ -1,4 +1,122 @@
-# SESSION HANDOFF — active full-port checkpoint, 2026-10-14
+# SESSION HANDOFF — active full-port checkpoint, 2026-10-15
+
+## Active continuation — 2026-10-15: source work, execution deferred
+
+This section supersedes older active priorities and test instructions below.
+The user explicitly stopped ALL test/game execution and desktop automation on 2026-10-15
+while using the PC. Continue source integration; defer runtime verification until the end
+of the full transfer unless the user changes this instruction. No new compilation has
+been performed after that instruction either. Do not launch tests to fill this report.
+
+Full Vulkan/D3D12 parity and correct Bloodborne world remain incomplete. The earlier
+326/346 full-suite result and later targeted PASS remain historical, unchanged.
+New changes below have source review only, no compile/runtime acceptance.
+
+Production changes:
+- Core::PlanBackingWrite and MemoryManager::TryWriteBacking validate the complete virtual
+  and physical extent before any copy. Gaps/unsupported VMAs/overflow/end-of-map reject
+  without a written prefix; source offsets and physical alias traversal are preserved.
+  Existing mapping mutex stays held through validation and stores. This closes a
+  source-proven partial-success bug shared with pinned Vulkan; it does NOT establish
+  the cause of the historical EOP false return. A focused fixture is prepared, unrun.
+- Liverpool decodes EOP/EOS/RELEASE_MEM values and WRITE_DATA payloads before OnFence;
+  graphics/CE packet advancement retains the decoded length across writes/yields/IRQs.
+  RELEASE_MEM scalar stores retain ordinary guest-memory/PageWatch access; its GDS copy
+  now finishes before write-confirm IRQ. All prior synchronization/assertions remain.
+- Guest graphics state preserves RectList's pinned Vulkan cull exemption and classifies
+  GS line/point output and tessellation isolines before emulating cull-both. Shader stages
+  still execute when rasterization is discarded. Prepared state checks are unrun.
+- Three historical fixture failures have source-level corrections only: CB sRGB uses
+  its 3-bit encoding6 (not T# encoding9); cull-both expects rasterizer discard with shader
+  side effects; the odd-size DMA case requests a DWORD-aligned view envelope while
+  preserving its original odd copy and exact padding checks. No new PASS is claimed.
+
+- GuestTextureCache now transfers independent R32 UINT/SINT/FLOAT MSAA domains
+  with matching2/4/8 samples. GuestMultisample extracts every sample/layer, then the
+  existing GuestTiler retiles into a private physical-seeded GPU buffer. It does not
+  resolve/average samples or overwrite the physical buffer domain. Source leases,
+  descriptors and allocations remain fence-retained; scratch UAV allocation is counted.
+  Depth/stencil, other MSAA formats,16 samples and mismatched sample/backing counts
+  remain explicitly rejected. The prepared --msaa fixture has18 cases and is unrun.
+
+Before the stop instruction, diagnostic core3c26133c61fdaaf79a3c354c87e1ea29f37075fafdfb7e45fd2289781b5ca683
+was compiled (raw log command-20261015-170256-69832.log) and ran155.76s, exit0 by requested
+normal close. Offline title menu was visually captured; no gameplay input was sent.
+EOP rejection did not recur before stop, so its failed address/mapping lifetime remains
+unknown. Controller neutral/stopped/device_removed=true; all20 original seed save hashes
+unchanged. See F:/PS4Dev/handoff/eop-continuation-20261015/diagnostic-game/RESULT.json.
+That EXE predates the new production changes. Installed preview23/selected core remain
+unchanged. No current-build/runtime-success or valid world FPS claim.
+
+Preservation: F:/PS4Dev/handoff/eop-continuation-20261015 contains before patches/index,
+exact touched-file baselines, new deltas and checkpoint metadata. Source baselines are
+separate WIP commits from this session's changes. Original22 staged network deletions
+remain separate and unchanged. .serena/ is local navigation metadata, not source parity.
+Do not restore an archive over the current dirty tree, reset/clean, or force-push.
+
+Next source work follows the CMASK typed-clear contract below and existing registry;
+do not reopen the closed position-export/empty-depth hypotheses. EOP crash and real
+scene-color/ROP attribution stay open pending eventual authorized runtime evidence.
+
+
+Source commits:756359c0a410 (preserved pre-existing touched-file integration),
+9960b080783a (complete backing writes/packet snapshots/culling),
+f1e68d4 (independent R32 MSAA transfer). All are WIP; runtime verification deferred.
+The checkpoint JSON records final documentation HEAD and remote identity.
+
+CMASK production continuation (source only):
+- The CPU materializer and owned GPU path share the existing validated clear plan.
+  Uniform selected layers and mixed 0/F tiles are cleared on the existing unique
+  ordinary GPU-owned RGBA8 UNORM attachment. Per-layer rectangles clip to logical
+  texels; every native sample is written. Already-expanded/unselected regions remain.
+  Uniform metadata slices and individual mixed-tile nibbles are consumed exactly as
+  in the CPU path, after commands are recorded. No color-plane CPU readback occurs
+  on this path; later guest readback still overlays physical-seeded bytes, preserving
+  padding. Resource/allocation/descriptor/cache-pin leases survive the submission.
+- Other numeric/component mappings, independent buffer/image versions, competing
+  image owners, mismatched sample backing and TC/compressed/DCC metadata retain the
+  existing fallback/rejection. No FMASK/compression semantics were guessed.
+- ComputeImageOperation copy/clear and the CMASK path publish texture fences with
+  NotifyOnSubmission. Retirement callbacks only retain/release/collect; they cannot
+  stamp newer pending image work with an older completed fence. Recording opens
+  before pending publication. This is source-reviewed, not runtime-accepted.
+- The P16_32x32_8x16 (x32,y0) fixture golden nibble was corrected from 4 to 0;
+  byte1024 is unchanged. Both AMD AddrLib and production equations establish this
+  source result. Other expected pixels/samples/padding and production addressing
+  remain unchanged. The old generic assertion does not prove its executed location.
+
+CMASK source commit: 479064d93bd2064a6cf642e3fdfe2e92e7ff2eae. Its separate baseline commit preserves the existing
+address fixtures; see cmask-source-commits.json. No source delta from this continuation
+has been compiled or run after the user's stop instruction. Current installed core
+is still preview23; do not install or label these source commits as a tested core.
+
+Deferred acceptance (only at the final testing stage): exercise MaterializeOwnedColorClear
+through the real GuestRasterizer after a GPU color writer, with uniform/mixed tiles,
+clipped edges, multiple/untouched layers, per-sample data, metadata padding, competing
+aliases and independent domains. Check physical color bytes stay unchanged until guest
+readback and compare all logical/padding bytes afterwards. Existing standalone CMASK
+materializer tests alone do not establish this new owned-GPU branch. Exercise older-fence
+retirement while a newer image list is pending. Current source review found no MSAA
+transfer delta defect; that independent review is not execution evidence.
+
+Next source task: extend MaterializeOwnedColorClear beyond the exact RGBA8 UNORM
+standard component mapping using raw CB_CLEAR_WORD0/1 packing and existing native
+typed/packed clear helpers. Start with exact-format eligibility in guest_rasterizer.cpp
+and guest_image_operations.h, keeping the shared plan, partial regions, sample count,
+independent-domain exclusions, padding and submission lifetime rules. Integer/float/
+sRGB/component-swap conversions must match pinned ColorBufferClearValue and physical
+encoding; retain fallback whenever equivalence is not established. Independent MSAA
+pressure/retirement and remaining contracts.json boundaries follow; no new broad audit.
+Historical EOP failed address and scene-color/ROP cause still need eventual runtime
+evidence, which remains deferred by the user. Do not reopen closed position/depth claims.
+
+Preservation/proof: cmask-next-source.md, cmask-fixture-before/PROOF.md,
+image-fence-source.md and the mixed-CMASK delta under this session's archive.
+final-residual/ holds current remaining source files, working/staged patches, original
+stage split and checksums. CHECKPOINT_FINAL.json records exact HEAD/upstream and archive
+identity. The pushed WIP commits alone do not reconstruct the broad pre-existing dirty
+integration; retain this tree or restore the residual archive only into a separate
+clean checkout of its recorded HEAD. Never overlay it onto this working tree.
 
 ## Active black-frame continuation — 2026-10-14
 
@@ -468,23 +586,16 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 
 ## NEXT CODEX SESSION — START HERE
 
-> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask. Прочитай актуальный SESSION_HANDOFF.md и
-> F:/PS4Dev/handoff/black-continuation-20261014/CHECKPOINT_FINAL.json; проверь текущий HEAD.
-> Сохрани dirty tree и22 чужих staged удаления; восстановление только в отдельном checkout.
-> Меню восстановлено: Mesa partial SV_Position, PageWatch mixed guards, GPU independent image transfer,
-> depth mip/DSV исправлены; не открывай закрытую ImageWrite LOD-гипотезу. Полный suite326/346,
-> native211/229 до трёх поздних targeted PASS; полного повторного suite не было.
-> AvPlayerQueue/Source race952234f: old AV/new queue PASS. Последний игровой прогон падает в
-> EventWriteEop::SignalFence/TryWriteBacking (liverpool.cpp705), до мира/ROP capture.
-> Сначала запиши адрес/ширину failed EOP write и исправь доказанный backing/unmap/fence lifetime контракт,
-> используя avplayer-fixed-game/RESULT.json/stdout, без игнорирования write/assertion или отключения PageWatch.
-> Итоговый мир пока fog/sky; G-buffer показывает персонажа. Используй сохранённые Vulkan/DX12
-> данные и producer-graph-game/display-capture/PRODUCER_GRAPH_SUMMARY.json, реальные SPV/DXIL/outputs.
-> ROP target-before extension подготовлен, но не захвачен в игре — два следующих запуска прерваны раньше.
-> Не повторяй завершённые исследования. Найди первый неверный scene-color producer/ROP или binding;
-> PS8c читает почти чёрный bloom, depth конечный0.98016..1 — эти факты сами не доказывают root cause.
-> Исправь конкретный production C++/shader contract, собери ядро, проверь relevant GPU regressions.
-> Проведи только необходимый изолированный XInput-прогон, проверь реальную сцену и ввод, neutral/release.
-> Сравни FPS с сохранённым baseline лишь при сопоставимом корректном мире, без FG/black throughput.
-> Продолжай полноценный порт с последнего checkpoint; сохраняй локальные commits и push upstream без force.
-> Не трогай удалённую сессию, оригинальный Vulkan, пользовательские saves и постоянный HUD/monitor.
+> Продолжи Skiters/ps4-dx12 на fix/mixed-cmask с актуального HEAD. Прочитай активный раздел
+> SESSION_HANDOFF.md за 2026-10-15 и eop-continuation-20261015/CHECKPOINT_FINAL.json.
+> Сохрани dirty tree и22 staged удаления; не применяй архив поверх текущего дерева.
+> Пользователь запретил запуск тестов, игры и управление компьютером до окончания полного
+> переноса: продолжай production-код, не запускай проверки выполнения без изменения этого
+> указания. Новые completion/backing/culling/MSAA/CMASK изменения пока непроверены исполнением.
+> Используй существующие Vulkan/DX12 данные и реестр contracts.json, не повторяй общий аудит.
+> Продолжай точный перенос raw CB clear words для следующих числовых форматов в
+> MaterializeOwnedColorClear, сохрани общий CMASK plan и lifetime; затем MSAA/alias/cache.
+> Исторический EOP false return и неправильный scene-color/ROP остаются открытыми: новый
+> 155.76s прогон остановлен пользователем до доказательства причины; FPS не принят.
+> Не объявляй частичный перенос завершённым. Сохраняй WIP отдельно от проверенных результатов,
+> локальные коммиты и push текущего upstream без force. Оригинальные saves/Vulkan/сессию не меняй.

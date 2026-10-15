@@ -1,5 +1,18 @@
 # Native DX12 state
 
+## Active continuation — 2026-10-15: source work, execution deferred
+
+SESSION_HANDOFF.md is authoritative. The user stopped ALL test/game execution and
+desktop automation until the full transfer is ready for final testing. New backing-write,
+PM4 completion, culling, R32 MSAA, shared mixed/uniform CMASK GPU clears and fence changes
+are WIP, source-reviewed only; no build/tests after that instruction. Historical326/346
+and subsequent targeted results are unchanged. Full parity/world correctness remain open.
+Original22 staged deletions retained; source/provenance at
+F:/PS4Dev/handoff/eop-continuation-20261015. CMASK source commit 479064d93bd2.
+Next: exact raw CB clear-word mapping for more numeric formats/component swaps;
+then remaining MSAA/alias/cache contracts. Preserve user execution gate; no new audit.
+
+
 ## Active black-frame continuation — 2026-10-14
 
 SESSION_HANDOFF.md active section is authoritative; older priorities/results below are historical.
