@@ -39,12 +39,16 @@ inline std::optional<GuestColorClearValue> DecodeGuestColorClear(
             std::array<uint32_t, 4>{(word & 0x3ff) << 1, (word >> 10) & 0x7ff,
                 (word >> 21) & 0x7ff, 0x3c0};
         values = buffer.Swizzle().Apply(values);
-        // Do not invent a NaN payload or cross-width rounding oracle. Only
-        // finite values exactly representable by the final UF11/UF11/UF10
-        // lanes enter this common CPU/RTV codec. Other cases keep fallback.
+        // Exceptional source values still need a separate payload contract.
         for (uint32_t i = 0; i < 3; ++i)
             if ((values[i] >> 6) == 31) return std::nullopt;
-        if (values[2] & 1) return std::nullopt;
+        // Choose deterministic toward-zero UF11 -> UF10 storage conversion
+        // (D3D11.3 section 3.2.2, also permitted by Vulkan format conversion).
+        // Dropping the one excess mantissa bit handles subnormals and maps
+        // the finite UF11 maximum to the finite UF10 maximum, never infinity.
+        // Prequantize the RTV input as well, so CPU/native writes agree even
+        // when a driver uses a different permitted floating-format tie mode.
+        values[2] &= ~1u;
         GuestColorClearValue clear;
         clear.data_format = 6; clear.number_format = number; clear.pixel_bytes = 4;
         for (uint32_t i = 0; i < 3; ++i) {

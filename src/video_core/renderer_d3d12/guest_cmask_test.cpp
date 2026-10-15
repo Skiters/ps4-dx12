@@ -228,12 +228,40 @@ void CheckPackedFloatColorClearCodec(){
     Require(clear.rtv[2]==64512.f);
     CheckClearPixel("original6 zero",ClearBuffer(6,7,0),{0,0,0,0});
 
-    // These are explicit open cases, not a claim that historical fallback
-    // already implements reference rounding or exceptional-value semantics.
-    Require(!DecodeGuestColorClear(ClearBuffer(6,7,1,0,ClearSwap::StandardReverse)));
-    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x3c1,0,ClearSwap::StandardReverse)));
-    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7bf,0,ClearSwap::StandardReverse)));
-    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x00200801,0,ClearSwap::StandardReverse)));
+    // Fixed RTZ storage vectors, not a nearest-even or Vulkan-driver oracle.
+    // Native inputs are prequantized to these exact destination values too.
+    clear=CheckClearPixel("original6 RTZ smallest subnormal midpoint",
+        ClearBuffer(6,7,1,0,ClearSwap::StandardReverse),{0,0,0,0});
+    Require(clear.rtv[2]==0.f);
+    clear=CheckClearPixel("original6 RTZ odd subnormal midpoint",
+        ClearBuffer(6,7,3,0,ClearSwap::StandardReverse),{0,0,0x40,0});
+    Require(clear.rtv[2]==0x1p-19f);
+    clear=CheckClearPixel("original6 RTZ stays subnormal at normal boundary",
+        ClearBuffer(6,7,0x3f,0,ClearSwap::StandardReverse),{0,0,0xc0,7});
+    Require(clear.rtv[2]==31.f*0x1p-19f);
+    clear=CheckClearPixel("original6 RTZ normal midpoint even lower",
+        ClearBuffer(6,7,0x3c1,0,ClearSwap::StandardReverse),{0,0,0,0x78});
+    Require(clear.rtv[2]==1.f);
+    clear=CheckClearPixel("original6 RTZ normal midpoint odd lower",
+        ClearBuffer(6,7,0x3c3,0,ClearSwap::StandardReverse),{0,0,0x40,0x78});
+    Require(clear.rtv[2]==1.03125f);
+    clear=CheckClearPixel("original6 RTZ does not carry exponent",
+        ClearBuffer(6,7,0x3ff,0,ClearSwap::StandardReverse),{0,0,0xc0,0x7f});
+    Require(clear.rtv[2]==1.96875f);
+    clear=CheckClearPixel("original6 RTZ finite overflow saturates",
+        ClearBuffer(6,7,0x7bf,0,ClearSwap::StandardReverse),{0,0,0xc0,0xf7});
+    Require(clear.rtv[2]==64512.f);
+    CheckClearPixel("original6 RTZ AlternateReverse keeps initialized alpha",
+        ClearBuffer(6,7,0x3c3,0,ClearSwap::AlternateReverse),{0xc0,3,0x40,0x78});
+    clear=CheckClearPixel("original7 RTZ uses original upper UF11 field",
+        ClearBuffer(7,7,0x00200801,0,ClearSwap::StandardReverse),{2,0x10,0,0});
+    Require(clear.rtv[0]==0x1p-19f&&clear.rtv[1]==0x1p-19f&&clear.rtv[2]==0.f);
+    clear=CheckClearPixel("original6 odd UF11 red retains precision",
+        ClearBuffer(6,7,0x3c3),{0xc3,3,0,0});
+    Require(clear.rtv[0]==1.046875f);
+
+    // These remain explicit open cases; historical fallback is not claimed
+    // to implement exceptional-value payload or format34 clear semantics.
     Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c0)));
     Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c1)));
     Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x3e0)));
@@ -279,6 +307,10 @@ void CheckColorClearCpuIntegration(){
     CheckCpuClearPixel(ClearBuffer(6,7,0x882003e0,0,ClearSwap::StandardReverse),{0x40,4,0x20,0x7c});
     CheckCpuClearPixel(ClearBuffer(7,7,0x881001f0,0,ClearSwap::Alternate),{0xc0,3,0x20,0x7c});
     CheckCpuClearPixel(ClearBuffer(7,7,0x00200801),{1,0x10,0x40,0});
+    CheckCpuClearPixel(ClearBuffer(6,7,0x3c3,0,ClearSwap::StandardReverse),{0,0,0x40,0x78});
+    CheckCpuClearPixel(ClearBuffer(6,7,0x3f,0,ClearSwap::StandardReverse),{0,0,0xc0,7});
+    CheckCpuClearPixel(ClearBuffer(6,7,0x7bf,0,ClearSwap::StandardReverse),{0,0,0xc0,0xf7});
+    CheckCpuClearPixel(ClearBuffer(7,7,0x00200801,0,ClearSwap::StandardReverse),{2,0x10,0,0});
 }
 void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
     struct Case {
