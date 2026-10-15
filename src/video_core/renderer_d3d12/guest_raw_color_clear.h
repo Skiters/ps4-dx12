@@ -11,8 +11,9 @@
 
 namespace NativeDX12 {
 // Numeric RTV clears cannot preserve arbitrary R32 integers, F32 denormals or
-// F16/F32 NaN payloads. A uint output through the matching typeless family writes
-// the decoded storage bits directly, including every sample of a covered pixel.
+// F16/F32 NaN payloads or a chosen packed-float NaN encoding. A uint output
+// through a matching typeless family or actual declared cast view writes the
+// decoded storage bits directly, including every sample of a covered pixel.
 class GuestRawColorClear {
 public:
     struct Program {
@@ -35,13 +36,22 @@ private:
     }
 public:
     explicit GuestRawColorClear(ID3D12Device* device) : device_(device) {}
-    std::shared_ptr<Program> Prepare(const D3D12_RESOURCE_DESC& desc, uint32_t data_format) {
+    std::shared_ptr<Program> Prepare(const Resource& resource, uint32_t data_format) {
+        if (!resource.handle) return {};
+        const auto desc = resource.handle->GetDesc();
         DXGI_FORMAT family{}, format{};
         switch (data_format) {
         case 2: family = DXGI_FORMAT_R16_TYPELESS; format = DXGI_FORMAT_R16_UINT; break;
         case 5: family = DXGI_FORMAT_R16G16_TYPELESS; format = DXGI_FORMAT_R16G16_UINT; break;
         case 12: family = DXGI_FORMAT_R16G16B16A16_TYPELESS; format = DXGI_FORMAT_R16G16B16A16_UINT; break;
         case 4: family = DXGI_FORMAT_R32_TYPELESS; format = DXGI_FORMAT_R32_UINT; break;
+        case 6:
+            // R11G11B10 has no ordinary typeless UINT family. Only an actual
+            // format-list allocation declaring both views permits this raw
+            // packed-word RTV; checking a description or byte size is not enough.
+            if (!resource.AllowsCast(DXGI_FORMAT_R11G11B10_FLOAT) ||
+                !resource.AllowsCast(DXGI_FORMAT_R32_UINT)) return {};
+            family = DXGI_FORMAT_R11G11B10_FLOAT; format = DXGI_FORMAT_R32_UINT; break;
         case 11: family = DXGI_FORMAT_R32G32_TYPELESS; format = DXGI_FORMAT_R32G32_UINT; break;
         case 14: family = DXGI_FORMAT_R32G32B32A32_TYPELESS; format = DXGI_FORMAT_R32G32B32A32_UINT; break;
         default: return {};

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 
 namespace NativeDX12 {
@@ -39,9 +40,18 @@ inline std::optional<GuestColorClearValue> DecodeGuestColorClear(
             std::array<uint32_t, 4>{(word & 0x3ff) << 1, (word >> 10) & 0x7ff,
                 (word >> 21) & 0x7ff, 0x3c0};
         values = buffer.Swizzle().Apply(values);
-        // Exceptional source values still need a separate payload contract.
-        for (uint32_t i = 0; i < 3; ++i)
-            if ((values[i] >> 6) == 31) return std::nullopt;
+        GuestColorClearValue clear;
+        // Numeric format conversion preserves infinity and the NaN class, not
+        // a particular NaN payload. Choose a quiet packed NaN for every selected
+        // NaN lane and require the raw GPU clear to write that same CPU word.
+        // Canonicalize before UF11 -> UF10 narrowing: dropping the sole low
+        // payload bit of an arbitrary NaN would incorrectly produce infinity.
+        for (uint32_t i = 0; i < 3; ++i) {
+            if ((values[i] >> 6) == 31 && (values[i] & 63)) {
+                values[i] = 0x7e0;
+                clear.rtv_compatible = false;
+            }
+        }
         // Choose deterministic toward-zero UF11 -> UF10 storage conversion
         // (D3D11.3 section 3.2.2, also permitted by Vulkan format conversion).
         // Dropping the one excess mantissa bit handles subnormals and maps
@@ -49,13 +59,14 @@ inline std::optional<GuestColorClearValue> DecodeGuestColorClear(
         // Prequantize the RTV input as well, so CPU/native writes agree even
         // when a driver uses a different permitted floating-format tie mode.
         values[2] &= ~1u;
-        GuestColorClearValue clear;
         clear.data_format = 6; clear.number_format = number; clear.pixel_bytes = 4;
         for (uint32_t i = 0; i < 3; ++i) {
             const uint32_t exponent = values[i] >> 6, mantissa = values[i] & 63;
             // Even the smallest packed subnormal is normal in F32, so the
             // numeric RTV input does not encounter F32 denormal flushing.
-            clear.rtv[i] = exponent ? std::ldexp(float(64 + mantissa), int(exponent) - 21) :
+            clear.rtv[i] = exponent == 31 ? (mantissa ?
+                std::numeric_limits<float>::quiet_NaN() : std::numeric_limits<float>::infinity()) :
+                exponent ? std::ldexp(float(64 + mantissa), int(exponent) - 21) :
                 std::ldexp(float(mantissa), -20);
         }
         const uint32_t packed = values[0] | (values[1] << 11) | ((values[2] >> 1) << 22);

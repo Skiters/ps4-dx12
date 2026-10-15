@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <iterator>
 #include <string>
 using namespace NativeDX12;
 void Require(bool b){if(!b)throw std::runtime_error("CMASK test assertion failed");}
@@ -191,6 +192,33 @@ void CheckPacked16ColorClearCodec(){
     Require(!DecodeGuestColorClear(ClearBuffer(18,4,0xa28b)));
     Require(!DecodeGuestColorClear(ClearBuffer(19,4,0x4321)));
 }
+struct PackedFloatExceptionCase {
+    uint32_t format, infinity, smallest_nan, largest_nan;
+    std::array<uint32_t,4> infinity_pixels,nan_pixels,selected,ones;
+};
+// Authored words from original UF11/UF10 fields and the four pinned component
+// mappings. Selected NaNs canonicalize to UF11 0x7e0 / UF10 0x3f0; discarded
+// exceptions cannot replace initialized alpha or force the raw clear path.
+constexpr PackedFloatExceptionCase packed_float_exceptions[]{
+    {6,0x000007c0,0x000007c1,0x000007ff,
+        {0x000007c0,0x780007c0,0xf8000000,0xf80003c0},
+        {0x000007e0,0x780007e0,0xfc000000,0xfc0003c0},{1,1,4,4},{0,4,0,1}},
+    {6,0x003e0000,0x003e0800,0x003ff800,
+        {0x003e0000,0x783e0000,0x003e0000,0x003e03c0},
+        {0x003f0000,0x783f0000,0x003f0000,0x003f03c0},{2,2,2,2},{0,4,0,1}},
+    {6,0xf8000000,0xf8400000,0xffc00000,
+        {0xf8000000,0x78000000,0x000007c0,0x000003c0},
+        {0xfc000000,0x78000000,0x000007e0,0x000003c0},{4,0,1,0},{0,4,0,1}},
+    {7,0x000003e0,0x000003e1,0x000003ff,
+        {0xf8000000,0xf80003c0,0x000007c0,0x780007c0},
+        {0xfc000000,0xfc0003c0,0x000007e0,0x780007e0},{4,4,1,1},{0,1,0,4}},
+    {7,0x001f0000,0x001f0400,0x001ffc00,
+        {0x003e0000,0x003e03c0,0x003e0000,0x783e0000},
+        {0x003f0000,0x003f03c0,0x003f0000,0x783f0000},{2,2,2,2},{0,1,0,4}},
+    {7,0xf8000000,0xf8200000,0xffe00000,
+        {0x000007c0,0x000003c0,0xf8000000,0x78000000},
+        {0x000007e0,0x000003c0,0xfc000000,0x78000000},{1,0,4,0},{0,1,0,4}},
+};
 void CheckPackedFloatColorClearCodec(){
     // Original6 fields encode [1.5,2,4]. Original7 has the same logical
     // fields with UF10 first, then UF11/UF11; its remap swaps R/B afterward.
@@ -260,12 +288,36 @@ void CheckPackedFloatColorClearCodec(){
         ClearBuffer(6,7,0x3c3),{0xc3,3,0,0});
     Require(clear.rtv[0]==1.046875f);
 
-    // These remain explicit open cases; historical fallback is not claimed
-    // to implement exceptional-value payload or format34 clear semantics.
-    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c0)));
-    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c1)));
-    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x3e0)));
-    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x3e1)));
+    for(const auto& c:packed_float_exceptions)for(uint32_t swap=0;swap<4;++swap)
+    for(uint32_t kind=0;kind<3;++kind){
+        const bool nan=kind!=0;const auto word=kind==0?c.infinity:kind==1?c.smallest_nan:c.largest_nan;
+        const auto pixel=nan?c.nan_pixels[swap]:c.infinity_pixels[swap];
+        const auto actual=CheckClearPixel("packed float fixed exceptional lane",
+            ClearBuffer(c.format,7,word,0xdeadbeef,ClearSwap(swap)),
+            {uint8_t(pixel),uint8_t(pixel>>8),uint8_t(pixel>>16),uint8_t(pixel>>24)},
+            !nan||!c.selected[swap]);
+        Require(actual.data_format==6&&actual.number_format==7);
+        for(uint32_t channel=0;channel<3;++channel){
+            if(c.selected[swap]&(1u<<channel)){
+                if(nan)Require(std::isnan(actual.rtv[channel]));
+                else Require(std::isinf(actual.rtv[channel])&&!std::signbit(actual.rtv[channel]));
+            }else Require(actual.rtv[channel]==((c.ones[swap]&(1u<<channel))?1.f:0.f));
+        }
+    }
+    CheckClearPixel("packed6 all positive infinity",ClearBuffer(6,7,0xf83e07c0),
+        {0xc0,7,0x3e,0xf8});
+    CheckClearPixel("packed6 all NaNs canonical",ClearBuffer(6,7,0xffffffff),
+        {0xe0,7,0x3f,0xfc},false);
+    clear=CheckClearPixel("packed6 mixed NaN infinity finite",ClearBuffer(6,7,0x783e07c1),
+        {0xe0,7,0x3e,0x78},false);
+    Require(std::isnan(clear.rtv[0])&&std::isinf(clear.rtv[1])&&clear.rtv[1]>0.f&&clear.rtv[2]==1.f);
+    clear=CheckClearPixel("packed6 mixed NaN infinity RTZ",ClearBuffer(6,7,0xf87e03c3,0,ClearSwap::StandardReverse),
+        {0xe0,7,0x7e,0x78},false);
+    Require(std::isnan(clear.rtv[0])&&std::isinf(clear.rtv[1])&&clear.rtv[1]>0.f&&clear.rtv[2]==1.03125f);
+    clear=CheckClearPixel("packed7 mixed infinity finite NaN",ClearBuffer(7,7,0xf80f0fe1),
+        {0xc0,0x1f,0x1e,0xfc},false);
+    Require(std::isinf(clear.rtv[0])&&clear.rtv[0]>0.f&&clear.rtv[1]==1.046875f&&std::isnan(clear.rtv[2]));
+    // Format34 clear semantics remain outside this original6/7 contract.
     Require(!DecodeGuestColorClear(ClearBuffer(6,4,0x882003e0)));
     Require(!DecodeGuestColorClear(ClearBuffer(34,7,1)));
 }
@@ -311,10 +363,23 @@ void CheckColorClearCpuIntegration(){
     CheckCpuClearPixel(ClearBuffer(6,7,0x3f,0,ClearSwap::StandardReverse),{0,0,0xc0,7});
     CheckCpuClearPixel(ClearBuffer(6,7,0x7bf,0,ClearSwap::StandardReverse),{0,0,0xc0,0xf7});
     CheckCpuClearPixel(ClearBuffer(7,7,0x00200801,0,ClearSwap::StandardReverse),{2,0x10,0,0});
+    for(const auto& c:packed_float_exceptions)for(uint32_t swap=0;swap<4;++swap)
+    for(uint32_t kind=0;kind<3;++kind){
+        const auto word=kind==0?c.infinity:kind==1?c.smallest_nan:c.largest_nan;
+        const auto pixel=kind==0?c.infinity_pixels[swap]:c.nan_pixels[swap];
+        CheckCpuClearPixel(ClearBuffer(c.format,7,word,0,ClearSwap(swap)),
+            {uint8_t(pixel),uint8_t(pixel>>8),uint8_t(pixel>>16),uint8_t(pixel>>24)});
+    }
+    CheckCpuClearPixel(ClearBuffer(6,7,0xf83e07c0),{0xc0,7,0x3e,0xf8});
+    CheckCpuClearPixel(ClearBuffer(6,7,0xffffffff),{0xe0,7,0x3f,0xfc});
+    CheckCpuClearPixel(ClearBuffer(6,7,0x783e07c1),{0xe0,7,0x3e,0x78});
+    CheckCpuClearPixel(ClearBuffer(6,7,0xf87e03c3,0,ClearSwap::StandardReverse),{0xe0,7,0x7e,0x78});
+    CheckCpuClearPixel(ClearBuffer(7,7,0xf80f0fe1),{0xc0,0x1f,0x1e,0xfc});
 }
 void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
     struct Case {
         const char* name;AmdGpu::ColorBuffer buffer;std::array<uint8_t,16> pixel;uint32_t bytes;
+        bool typed{};
     };
     const Case cases[]={
         {"R32_FLOAT NaN payload",ClearBuffer(4,7,0x7fc01234),{0x34,0x12,0xc0,0x7f},4},
@@ -323,8 +388,21 @@ void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
         {"R32_SINT minimum",ClearBuffer(4,5,0x80000000),{0,0,0,0x80},4},
         {"RGBA16_FLOAT raw special values",ClearBuffer(12,7,0x7e018001,0x80007c00),
             {1,0x80,1,0x7e,0,0x7c,0,0x80},8},
+        {"packed6 red positive infinity typed",ClearBuffer(6,7,0x000007c0),{0xc0,7,0,0},4,true},
+        {"packed6 green positive infinity typed",ClearBuffer(6,7,0x003e0000),{0,0,0x3e,0},4,true},
+        {"packed7 UF10 positive infinity typed blue",ClearBuffer(7,7,0x000003e0),{0,0,0,0xf8},4,true},
+        {"packed6 smallest red NaN raw canonical",ClearBuffer(6,7,0x000007c1),{0xe0,7,0,0},4},
+        {"packed6 largest green NaN raw canonical",ClearBuffer(6,7,0x003ff800),{0,0,0x3f,0},4},
+        {"packed7 smallest UF10 NaN raw canonical blue",ClearBuffer(7,7,0x000003e1),{0,0,0,0xfc},4},
+        {"packed7 discarded NaN initialized alpha typed",ClearBuffer(7,7,0xf8200000,0,ClearSwap::Alternate),
+            {0xc0,3,0,0},4,true},
+        {"packed6 all NaNs raw canonical",ClearBuffer(6,7,0xffffffff),{0xe0,7,0x3f,0xfc},4},
+        {"packed6 mixed NaN infinity RTZ raw",ClearBuffer(6,7,0xf87e03c3,0,ClearSwap::StandardReverse),
+            {0xe0,7,0x7e,0x78},4},
+        {"packed7 mixed infinity finite NaN raw",ClearBuffer(7,7,0xf80f0fe1),{0xc0,0x1f,0x1e,0xfc},4},
     };
     GuestRawColorClear raw_clear(device);
+    PlacedTextureAllocator format_capabilities(device);
     for(const auto& c:cases)for(const UINT samples:{1u,4u}){
         GuestTextureDesc desc;desc.address=0x100000;desc.width=19;desc.height=11;desc.pitch=32;
         desc.storage_height=16;desc.layers=desc.view_layers=2;desc.samples=samples;
@@ -332,7 +410,9 @@ void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
         desc.render_target=true;desc.tile_mode=8;
         const auto layout=LayoutGuestTexture(desc);
         const auto raw_format=desc.data_format==12?DXGI_FORMAT_R16G16B16A16_UINT:DXGI_FORMAT_R32_UINT;
-        bool supported=true;
+        // Packed raw/MSAA views must come from the actual format-list-aware
+        // cache allocation. A numeric single-sample RTV clear needs no cast.
+        bool supported=desc.data_format!=6||(c.typed&&samples==1)||format_capabilities.SupportsFormatCasting();
         for(const auto format:{layout.format,raw_format}){
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{format};
             Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
@@ -342,16 +422,17 @@ void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
                     format,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
                 Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality))));
                 supported&=quality.NumQualityLevels!=0;
-                if(format==raw_format)supported&=bool(support.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD);
+                if(format==raw_format||desc.data_format==6)
+                    supported&=bool(support.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD);
             }
         }
         if(!supported){
-            if(samples==1)throw std::runtime_error(std::string("Raw CMASK clear required format unsupported: ")+c.name);
-            fprintf(stderr,"SKIP: raw CMASK clear %s at 4 samples: adapter format capability\n",c.name);
+            if(samples==1&&desc.data_format!=6)throw std::runtime_error(std::string("Raw CMASK clear required format unsupported: ")+c.name);
+            fprintf(stderr,"SKIP: CMASK clear %s at %u samples: adapter format/cast capability\n",c.name,samples);
             continue;
         }
         const auto clear=DecodeGuestColorClear(c.buffer);
-        Require(clear&&clear->pixel_bytes==c.bytes&&!clear->rtv_compatible);
+        Require(clear&&clear->pixel_bytes==c.bytes&&clear->rtv_compatible==c.typed);
         for(UINT byte=0;byte<c.bytes;++byte)Require(clear->pixel[byte]==std::byte(c.pixel[byte]));
         ComPtr<ID3D12CommandAllocator> allocator;
         Check(DX12_API_CALL(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&allocator))));
@@ -359,20 +440,32 @@ void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
         Check(DX12_API_CALL(device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,allocator.Get(),nullptr,IID_PPV_ARGS(&list))));
         std::vector<std::byte> initial(layout.guest_bytes,std::byte{0xee}),expected=initial;
         GuestTextureCache cache(device);auto& image=cache.Upload(desc,initial,list.Get(),0);
-        const auto program=raw_clear.Prepare(image.texture.handle->GetDesc(),desc.data_format);
-        if(!program)throw std::runtime_error(std::string("Raw CMASK clear program unavailable: ")+c.name);
+        if(desc.data_format==6&&!c.typed){
+            Require(image.texture.AllowsCast(DXGI_FORMAT_R11G11B10_FLOAT)&&image.texture.AllowsCast(DXGI_FORMAT_R32_UINT));
+            auto missing=image.texture;missing.castable_formats.reset();Require(!raw_clear.Prepare(missing,6));
+            missing.castable_formats=std::make_shared<const std::vector<DXGI_FORMAT>>(
+                std::initializer_list<DXGI_FORMAT>{DXGI_FORMAT_R32_UINT});
+            Require(!raw_clear.Prepare(missing,6));
+            missing.castable_formats=std::make_shared<const std::vector<DXGI_FORMAT>>(
+                std::initializer_list<DXGI_FORMAT>{DXGI_FORMAT_R11G11B10_FLOAT});
+            Require(!raw_clear.Prepare(missing,6));
+        }
+        const auto program=c.typed?std::shared_ptr<GuestRawColorClear::Program>{}:
+            raw_clear.Prepare(image.texture,desc.data_format);
+        if(!c.typed&&!program)throw std::runtime_error(std::string("Raw CMASK clear program unavailable: ")+c.name);
         ComPtr<ID3D12DescriptorHeap> heap;D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
         heap_desc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;heap_desc.NumDescriptors=1;
         Check(DX12_API_CALL(device->CreateDescriptorHeap(&heap_desc,IID_PPV_ARGS(&heap))));
         auto view_desc=desc;view_desc.first_layer=1;view_desc.view_layers=1;
-        auto rtv=image.Rtv(view_desc);rtv.Format=program->format;
+        auto rtv=image.Rtv(view_desc);if(program)rtv.Format=program->format;
         const auto handle=heap->GetCPUDescriptorHandleForHeapStart();
         DX12_API_CALL(device->CreateRenderTargetView(image.texture.handle.Get(),&rtv,handle));
         // One interior rectangle and one clipped logical edge on layer 1.
         // Layer 0, every other pixel and physical padding retain the sentinel.
         const D3D12_RECT rectangles[]={{3,2,13,7},{16,8,19,11}};
         image.texture.Transition(list.Get(),D3D12_RESOURCE_STATE_RENDER_TARGET);
-        GuestRawColorClear::Record(list.Get(),*program,handle,desc.width,desc.height,rectangles,*clear);
+        if(c.typed)DX12_API_CALL(list->ClearRenderTargetView(handle,clear->rtv.data(),UINT(std::size(rectangles)),rectangles));
+        else GuestRawColorClear::Record(list.Get(),*program,handle,desc.width,desc.height,rectangles,*clear);
         image.pending=true;
         for(UINT sample=0;sample<samples;++sample)
         for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x)
@@ -382,8 +475,13 @@ void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
             }
         GuestImageReadback readback(device,image,list.Get());
         Check(DX12_API_CALL(list->Close()));Timeline timeline(device);
-        const auto fence=timeline.Submit(queue,list.Get());cache.Submitted(fence);readback.Submitted(fence);
-        timeline.Wait(fence);auto restored=initial;readback.Resolve(timeline.Completed(),restored);
+        // Keep cache, views, programs and readback alive even when submission
+        // or the first wait throws after commands have reached this queue.
+        try{
+            const auto fence=timeline.Submit(queue,list.Get());cache.Submitted(fence);readback.Submitted(fence);
+            timeline.Wait(fence);
+        }catch(...){timeline.Wait(timeline.Signal(queue));throw;}
+        auto restored=initial;readback.Resolve(timeline.Completed(),restored);
         if(restored!=expected)throw std::runtime_error(std::string("Raw CMASK clear exact regions/samples/layers: ")+c.name+
             " samples="+std::to_string(samples));
     }

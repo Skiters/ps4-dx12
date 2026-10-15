@@ -492,7 +492,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     std::shared_ptr<GuestRawColorClear::Program> raw_program;
     if(!clear->rtv_compatible){
         if(!raw_color_clear_)raw_color_clear_=std::make_unique<GuestRawColorClear>(device_.Get());
-        raw_program=raw_color_clear_->Prepare(native,d.data_format);
+        raw_program=raw_color_clear_->Prepare(image->texture,d.data_format);
         if(!raw_program)return false;
     }
     // Use exactly the CPU materializer's validated tile plan. Rectangles are
