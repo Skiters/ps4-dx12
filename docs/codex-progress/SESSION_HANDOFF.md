@@ -1,5 +1,122 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Active packed-MSAA source checkpoint - 2026-10-15
+
+This section is authoritative and supersedes older active/next-priority statements below.
+Repo F:/PS4Dev/work/shadps4-dx12-src, branch fix/mixed-cmask; immutable reference
+F:/PS4Dev/work/shadps4-original-e0a46675 at e0a466753a1aacbc8db8253be685bf7ab4d9daae.
+New source commits: 1f43d43 (finite CMASK6/7 RTZ), 59fdc53 (packed MSAA versions/clears),
+fe51ce4 (sampled native16-18 and expanded19). All are WIP source changes;
+final checkpoint HEAD/actual remote SHA and residual hashes are recorded externally in
+F:/PS4Dev/handoff/packed-msaa-20261015/CHECKPOINT_FINAL.json.
+
+### Execution boundary and installed core
+
+The user still prohibits tests, fixture execution, GPU/game launches, XInput and desktop
+control while using the PC. No new build/configure/package was authorized or performed.
+Source review and Git checks are NOT runtime acceptance. No new FPS, frame timing, image
+or control result exists. The one-time preview24 build authorization is already consumed.
+Latest installed core stays DX12 - перенос №24 - 15.10.2026, ID
+dx12-20261015-full-port-preview-70eeeff04e89, at
+C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe.
+EXE SHA256 70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+It contains a3f1d5e plus the saved package dirty patch, NOT these later source changes.
+Selected core remains preview23; settings, original saves, installed Vulkan, monitors and
+remote desktop session were not touched. Package/PDB/MAP provenance remains in
+F:/PS4Dev/handoff/eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+
+### Implemented production C++ in this continuation
+
+- guest_color_clear.h::DecodeGuestColorClear: all finite original CMASK6/7 values now
+  use deterministic toward-zero UF11-to-UF10 conversion after the original Swizzle.
+  CPU packing and RTV use the same prequantized B value; finite max65024 becomes64512.
+  This is specification-permitted native rounding, NOT a proven saved-Vulkan-driver
+  rounding match. Exceptional INF/NaN and original34 still need separate contracts.
+- guest_texture_cache.cpp::CanTransferIndependentMultisample: matching2/4/8 samples,
+  one-mip2D/arrays admit exact raw/native packed10, writable packed16 guest2/host4 R32,
+  native sampled16/17/18 UNORM guest/host2, readonly expanded signed10 and packed19.
+  Native16/17/18 use existing PACKED_MODE1/2 sample code recovery; original18 rotation
+  stays in the tiler. Native19 attachments and mutable expanded views stay outside this
+  contract. Actual capability/sample support checks remain in native resource paths.
+- GuestTextureCache::Upload: readonly expanded10/19 MSAA snapshots retain original
+  guest words and exact written-byte masks. Existing expanded linear scratch first
+  performs raw detile/retile, then normal expansion. Original19 capture uses guest2/
+  host4 raw words without swapping nibbles. Buffers have real allocation accounting;
+  leases and barriers precede uses; RetileBufferVersion merges logical bytes over a
+  separately seeded physical version. Duplicate SNORM -1 encodings and padding are
+  never reconstructed from expanded floats. CPU and GPU upload paths are covered in
+  source; a separate CPU-upload runtime case is still needed when execution is allowed.
+- guest_multisample.cpp validates raw packed native R32 backing and exact guest/host
+  layout before views. No bpp-only admission, hardware resolve or physical-buffer write
+  substitutes for an independent image version.
+- GuestConvertedMultisampleClearCompatible/ClearRawStorageImage: nonzero raw packed10,
+  packed16 and finite rawRGBA8 SRGB MSAA clears now use existing typed single-sample
+  clear/packing followed by per-layer/all-sample exact R32 broadcast. Synthetic packed
+  clear layout is single-sample before broadcast, including layer slice sizes. Packed10
+  integer bounds are RGB10/A2; normalized inputs must be finite. Existing budgets,
+  descriptors, copy leases, format-transfer retirement and authoritative image UID stay.
+
+No new HLSL file was edited in this continuation: these paths reuse the production
+packed tiler/MSAA shaders. No algorithm is claimed verified merely because it is authored.
+
+### Evidence, verification and known limits
+
+Evidence root F:/PS4Dev/handoff/packed-msaa-20261015 contains before/after copies,
+isolated deltas, hashes, source proofs and independent review notes. Important subsets:
+cmask-rounding/, srgb-msaa-clear/, packed-msaa-clear/, packed16-sampled/,
+source-review-expanded.md, source-review-fixture.md and stage1/stage2 snapshots.
+Static source reviews and git diff --check found no remaining concrete blocker in the
+committed deltas. Upload retains its existing partial-progress exception model; strong
+rollback/fault injection has NOT been established.
+
+Authored/registered only, NOT compiled or run: --msaa-packed10(6),
+--msaa-packed10-expanded(6), --msaa-packed16-raw(12),
+--msaa-packed16-sampled(12), --msaa-packed-clear(16); rawRGBA8 clear expanded4->6
+with SRGB2/4. Cases include all samples/layers, bounded integer rejection, actual host
+representations, private guest bytes/padding, unchanged physical buffers, scratch
+pressure/fence retirement, and repeated retile after Collect with fresh padding.
+CMASK RTZ fixed vectors include subnormal/normal/exponent/overflow and component swaps.
+
+Historical runtime results remain unchanged: full suite326/346(native211/229) at the
+older boundary plus three later targeted passes, not a new aggregate. Bloodborne menus
+recovered historically; last accepted world evidence is fog/sky with G-buffer geometry
+and finite depth. No accepted current world FPS/control milestone. EOP backing-write
+rejection cause remains unknown; WAIT packet operand stabilization is not an EOP fix.
+All129 existing registry groups remain partial/open; no overall parity/percentage claim.
+
+### Next concrete source work
+
+Continue existing packed-float independent MSAA contracts in guest_texture_cache.cpp
+CanTransferIndependentMultisample/Upload and guest_multisample.cpp Prepare/PrepareCopy:
+format6/34 exact R32 transfer requires the actual retained castable native format set.
+Use existing PackedFloatCasts and Resource::AllowsCast guards; do not admit by four-byte
+size alone or approximate packed floats via a numeric resolve. Then continue the existing
+partial-alias/cache contract queue using saved reference and measurements. Whole native
+MSAA independent-image pressure eviction is a separate extension: current ReserveMemory
+intentionally skips such victims, matching the pinned tiled-GPU-modified GC exclusion.
+Do not call that skip a missing Vulkan feature or resolve into the physical buffer to
+free memory. Existing reconstructible sample-storage retirement is already implemented.
+
+Next action: verify actual HEAD/status against CHECKPOINT_FINAL.json, then inspect only
+those named functions and native-independent-r11-packed-float-image-versions in
+ tools/porting/contracts.json. No new broad audit or repeated Vulkan baseline run.
+Do not rerun resolved position-export/display-copy investigations, prior format19
+nibble-order audit, or completed exact8/16/32 transfer inventory without new evidence.
+
+### Preservation
+
+The broad accumulated integration remains dirty intentionally. Original22 staged network
+deletions are preserved separately from new commits; old unstaged guest_depth_metadata.h
+deletion remains. No reset/clean/force-push, original-save write or deletion was performed.
+The remote commits alone do not reconstruct that historical integration: use this source
+workspace or final-residual/manifest.json + source-files.zip + staged/unstaged patches.
+Recovery is ONLY into a separate fresh checkout of manifest.head: apply staged.patch with
+--index, then unstaged.patch; restore only untracked ZIP entries. Never apply over this tree.
+Previous archives complete-port-20261015, eop-continuation-20261015 and
+black-continuation-20261014 remain intact. Exact final staged equality and ZIP hashes are
+recorded in CHECKPOINT_FINAL.json; .serena local state remains in the original workspace.
+
+
 ## Active source continuation - 2026-10-15, complete-port checkpoint
 
 This section supersedes the active-priority statements below; older sections remain evidence.
@@ -777,3 +894,19 @@ this tree, force-push, replace installed Vulkan, mutate original saves or delete
 > comparing completed guest frames (without FG) with saved baseline. Do not touch original
 > saves/Vulkan/session. Commit coherent WIP, push configured upstream without force,
 > and checkpoint exact continuation. Full parity/world acceptance remains unfinished.
+
+## NEXT CODEX SESSION — START HERE (packed-MSAA checkpoint, 2026-10-15)
+
+Continue Skiters/ps4-dx12 in F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask.
+Read the top packed-MSAA section of SESSION_HANDOFF.md, STATE.md and NEXT_SESSION.md;
+verify actual HEAD and residual state against F:/PS4Dev/handoff/packed-msaa-20261015/CHECKPOINT_FINAL.json.
+Preserve broad dirty integration and22 staged deletions. Restore nothing over this tree.
+Continue source porting from exact packed-float independent MSAA formats6/34 using
+CanTransferIndependentMultisample, PackedFloatCasts and GuestMultisample actual cast guards,
+then the existing partial-alias/cache queue. Use saved Vulkan/DX12 evidence; do not repeat
+completed audits. Current tests/game/GPU/XInput/desktop/build gate remains until expressly
+lifted. After source completion and authorized final verification, build the incremental
+core, run focused regressions and minimum isolated Bloodborne/XInput trials, compare real
+completed guest frames (no FG) against saved baseline, verify image/controls/stability,
+release the virtual device, and install a new core only as authorized. Keep the goal active;
+commit coherent WIP source work, push the configured upstream, and update this handoff.

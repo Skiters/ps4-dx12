@@ -1,5 +1,28 @@
 # Vulkan / native D3D12 parity audit
 
+## Current packed-MSAA source checkpoint - 2026-10-15
+
+SESSION_HANDOFF.md's packed-MSAA section is authoritative; older sections are historical.
+Source1f43d43 adds finite CMASK6/7 deterministic RTZ,59fdc53 adds packed MSAA independent
+versions/retained signed10 words and nonzero packed/sRGB clears; fe51ce4 extends
+native sampled16-18 and retained expanded19. Source review only: NOT built/installed/run.
+All129 contracts remain partial/open. Preview24 EXE70eeeff04e89 remains installed unchanged;
+no new FPS/test/game result. The user test/GPU/game/UI gate remains active.
+Evidence/provenance: F:/PS4Dev/handoff/packed-msaa-20261015; final HEAD/remote/residual
+recovery hashes are in CHECKPOINT_FINAL.json. Broad dirty integration and22 staged
+network deletions remain preserved. Next source task: exact packed-float independent
+MSAA format6/34 with actual native castable-format contracts, then existing partial-alias
+queue. Do not infer a missing Vulkan feature from its intentional whole-MSAA GC skip.
+
+| Added contract | Source state | Runtime state |
+| --- | --- | --- |
+| CMASK6/7 finite rounding | RTZ CPU/RTV policy implemented | Driver tie parity unverified |
+| Independent packed10 MSAA | Raw/native words + retained signed expansion | Authored cases unrun |
+| Independent packed16 MSAA | Raw16, native16-18, retained expanded19 | Authored cases unrun |
+| Nonzero packed/sRGB MSAA clear | Typed clear, exact word, all-sample broadcast | Numeric/device acceptance unrun |
+| Whole independent MSAA eviction | Existing skip retained | Separate extension, no closure |
+
+
 ## Current source checkpoint - 2026-10-15, after preview24
 
 SESSION_HANDOFF.md's complete-port section is authoritative. Source commits35b5de4,
