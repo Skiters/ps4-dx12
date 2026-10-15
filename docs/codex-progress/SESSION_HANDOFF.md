@@ -1,5 +1,143 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Current CMASK and ordered-buffer source checkpoint - 2026-10-15
+
+This top section is authoritative; older active/next-task statements below are historical.
+Repository F:/PS4Dev/work/shadps4-dx12-src, branch fix/mixed-cmask. CMASK source commit
+e43ebdc and ordered-buffer source commit cbfe500 are pushed. Final source/checkpoint commits, actual remote SHA, original index
+comparison and residual hashes are recorded in this checkpoint's CHECKPOINT_FINAL.json.
+Immutable Vulkan reference remains e0a466753a1aacbc8db8253be685bf7ab4d9daae at
+F:/PS4Dev/work/shadps4-original-e0a46675. Reuse the saved evidence; no general audit restart.
+
+### CMASK production changes
+
+- guest_color_clear.h::DecodeGuestColorClear preserves original6/7 extraction and Swizzle.
+  Selected exponent31/mantissa0 stays positive infinity. Selected NaN is canonical quiet
+  UF11 0x7e0 before B narrowing to quiet UF10 0x3f0; even the smallest input payload cannot
+  become infinity. CPU materialization packs the same final mapped word. Discarded NaNs
+  do not force raw output; initialized alpha and previous finite RTZ behavior remain.
+- guest_raw_color_clear.h::GuestRawColorClear::Prepare accepts the actual Resource and
+  checks its native description and retained R11G11B10_FLOAT plus R32_UINT cast list
+  before cache reuse. Numeric RTV clears handle infinity. Raw integer RTV clears retain
+  the explicitly chosen NaN word. Missing cast capability declines the owned fast path
+  before clear commands/metadata changes and keeps the existing resolved CPU path.
+- guest_rasterizer.cpp::MaterializeOwnedColorClear passes the real texture. Existing
+  unique ordinary owner, CMASK rectangle/layer/sample, PageWatch, backing, pending-fence
+  and retained resource/heap checks remain. No independent-owner fast-clear claim.
+- Chosen all-INF word is0xf83e07c0; all canonical NaN is0xfc3f07e0. Canonical NaN is an
+  explicit permitted native policy, NOT measured Vulkan-driver/PS4 payload equality.
+  Format34 clear usage/scale remains separate; sampled RGB9E5 does not authorize RTV34.
+
+### Ordered formatted-buffer production continuation
+
+- cbfe500: guest_compute.cpp::ExecuteGuestResources retains request ordinal. A formatted
+  reader before the first overlapping writer captures/retile-copies the still-valid image
+  into a private Resource. Writer invalidation then runs with original sharp ranges; the
+  retained result is installed into the final common UAV arena before dispatch. A writer
+  before the reader schedules no old-image transfer. Repeated readers use one transfer.
+- The admitted case is one compute stage, no image operands/DMA/graphics auxiliary
+  buffers, one unique overlapping independent image, and exact-base/full-range original
+  sharps with real UAV reflection. Existing exact transfer/ownership rules apply across
+  admitted formats; no arbitrary new R32 production whitelist was introduced.
+- Every early overlapping readonly descriptor, including a raw reader before W then
+  formatted R, must be resident: >16KiB or actually IsGpuBufferModified. Small clean early
+  CPU-stream snapshots remain explicitly rejected; small W-before-R needs no stale image.
+- Preflight precedes captures/invalidation. Capture happens before final native views.
+  Cache pins, pending leases and actual submission callbacks cover retained transfer
+  resources, pressure-triggered Finish, and partial-recording exceptions. A pointer pin
+  alone does not retain logical image eligibility. Existing normal synchronous fallback
+  remains valid for unrelated small/unowned output buffers; no forced all-output ownership.
+- Existing no-writer formatted full/short views and metadata precedence remain. General
+  per-stage buffer/image interleaving, metadata writers, partial simultaneous aliases,
+  multiple independent identities and strong allocation/device-loss rollback remain open.
+
+### Evidence and execution boundary
+
+Evidence root: F:/PS4Dev/handoff/cmask-exceptions-20261015. EVIDENCE_INDEX.md links the
+saved primary conversion proof, final CMASK source review, before/after sources and hashes.
+NEXT_SOURCE_TASK.md records the exact pinned ordered-buffer proof, not a request to redo it.
+ordered-formatted/ contains the subsequent source/fixture/review evidence.
+
+guest_cmask_test.cpp adds77 fixed codec and77 CPU materialization cases, plus ten GPU
+case definitions at samples1/4 (20 variants). These cover single and mixed INF/NaN, all
+swaps, smallest/largest NaN payloads, nonzero selected layers, complete padding and
+idempotence. Actual resource cast-list negatives and submission-drain lifetime coverage
+are authored. Device capability, RTV/PSO acceptance and device-loss handling are unproven.
+
+66a94bd: native-port/gcn_ordered_formatted_fixture.h adds eight authored real-GCN scenarios:
+large/small x GPU-modified/CPU-clean x R/W or W/R. Seven expect normal ordered behavior;
+small clean R/W expects the exact guard before mutation. Seed/probe commands distinguish
+B from I. The tested dispatch has one invocation, buffers only, observed loads before
+store, and an asserted actual frontend descriptor order with deliberately reversed SGPR
+placement. Post-write image reload precedes target CPU readback; a complete64KiB oracle
+includes padding, untouched bytes and rejection state. No repeated-reader/pressure/device-
+loss or nondeferred-output runtime acceptance is claimed.
+
+The helper is a new task source. Its minimal mode/include integration is in the pre-existing
+untracked native-port/gcn_attachment_alias_test.cpp; do NOT sweep that broad historical
+file into this task's commit. Exact before/after, own patch and hashes are under
+ordered-formatted/fixtures/, and final-residual preserves the integrated file. No new
+CTest registration/configuration was performed. Authored mode: ordered-formatted-owned.
+
+No build/configure/package, fixtures/tests, GPU/game, profiling, XInput or UI control was
+performed. The user execution gate remains active until new specific authorization.
+Source/manual/static review, Git/JSON and archive checks are not runtime acceptance.
+All129 registry groups remain partial/open. No new FPS, frame time, image, controls or
+stability result exists. Historical326/346(native211/229) plus three later targeted passes
+remain old, separate results. Last accepted Bloodborne world evidence remains fog/sky,
+G-buffer geometry and finite depth. EOP rejection cause is unknown; WAIT operand
+stabilization does not establish an EOP fix.
+
+### Installed build and preservation
+
+Latest installed core remains DX12 - перенос №24 - 15.10.2026, ID
+ dx12-20261015-full-port-preview-70eeeff04e89, source a3f1d5e plus its archived dirty patch.
+C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe
+SHA25670eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+Current source changes are not installed. Selected core remains preview23. Original saves,
+Vulkan, settings, monitors and remote session are untouched. PDB/MAP/runtime provenance:
+F:/PS4Dev/handoff/eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+
+Broad residual integration and22 original staged network deletions remain preserved;
+old guest_depth_metadata.h deletion remains. Remote commits alone do not reconstruct
+this accumulated integration. final-residual/ contains full patches, nonignored residual
+source/assets and an exact-byte manifest. Recover ONLY into a separate fresh checkout of
+manifest.head: staged.patch with --index, then unstaged.patch, then untracked ZIP entries.
+Never restore over this workspace. .serena remains local; previous archives stay intact.
+
+### Next exact source task
+
+Continue the early clean-small snapshot mechanism in guest_compute.cpp at
+reads_before_writer, using ordered-formatted/NEXT_SOURCE_TASK.md. Preserve original
+logical sharp address/size/ordinal separately from private native binding storage. Early
+readonly <=16KiB clean sharps must bind their own CPU-byte snapshot; the writer and later
+reads retain the common arena. Reuse existing TemporaryMemory/retirement only after
+checking compatible default-resource/UAV storage and original metadata/write semantics.
+Do not bind an UPLOAD resource as a UAV or turn an early CPU stream into an image retile.
+Then extend the authored GCN fixture, source-review and checkpoint normally.
+
+Do not repeat completed CMASK finite/INF/NaN classification or packed-float/RGB32 transfer
+audits. Do not treat native RGBA32 storage as guest13/14 alias compatibility or sampled
+RGB9E5 as writable/RT34. Non-base image sync is asserted in pinned Vulkan. Reuse existing
+measurements; no tests/game/desktop control until specifically authorized.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue Skiters/ps4-dx12 from the top of docs/codex-progress/SESSION_HANDOFF.md. Verify
+current HEAD/upstream and preserve the dirty integration/index; restore only from the
+saved checkpoint into a separate checkout if needed. Reuse the pinned Vulkan proofs and
+saved measurements. Resume guest_compute.cpp early clean-small readonly binding snapshots
+from F:/PS4Dev/handoff/cmask-exceptions-20261015/ordered-formatted/NEXT_SOURCE_TASK.md;
+large/dirty descriptor ordering and CMASK6/7 exceptional clears are already source work.
+Make production C++ changes, author focused fixtures without running them, review and
+checkpoint/push. Do not repeat completed audits or launch build/tests/game/XInput/UI while
+the execution gate remains active. After specific execution authorization, build, run the
+minimal relevant regressions, use existing isolated XInput for necessary game checks, and
+compare completed guest frames without FG to the saved baseline. Never call source review
+or an older binary current runtime acceptance.
+
+
+
 ## Active packed-float and RGB32 source checkpoint - 2026-10-15
 
 This is the authoritative continuation; older active/next-task statements below are historical.

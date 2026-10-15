@@ -1,5 +1,26 @@
 # Benchmarks
 
+## Current CMASK and ordered-buffer checkpoint - 2026-10-15
+
+SESSION_HANDOFF.md's top section is authoritative; older next-task statements are historical.
+Pushed source: e43ebdc (CMASK6/7 INF and canonical NaN, actual raw/typed cast-list checks)
+and cbfe500 (one-stage full-range resident formatted reader/writer descriptor ordering).
+Read-before-write retains image-to-buffer transfer before invalidation; write-before-read
+keeps the buffer version. Early clean-small readonly snapshots remain guarded, including
+raw readers preceding the writer. Existing transfer/ownership/fence checks remain.
+Source-reviewed only: no build, configure, install, tests, GPU/game/XInput/UI or measurements.
+All129 groups remain partial/open. Installed preview24 and selected preview23 are unchanged.
+Eight real-GCN cases are authored only; the helper is new, its minimal integration into the
+historical untracked attachment fixture is preserved separately and in final-residual.
+Evidence/final remote HEAD/index/archive: F:/PS4Dev/handoff/cmask-exceptions-20261015/CHECKPOINT_FINAL.json.
+Next production task: guest_compute.cpp early clean-small CPU-byte snapshots retaining
+original logical sharp identity and separate native storage; use ordered-formatted/NEXT_SOURCE_TASK.md.
+Do not rerun completed format/cache audits. The user execution gate remains active.
+
+No new performance result exists. Source admission is not a measured speedup. Historical executable/scenario/FPS evidence remains unchanged.
+
+
+
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
