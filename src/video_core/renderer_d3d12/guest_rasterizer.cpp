@@ -8,6 +8,8 @@
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
+#include "guest_color_clear.h"
+#include "guest_raw_color_clear.h"
 #include "diagnostics.h"
 #include "display_capture.h"
 #include "texture_resources.h"
@@ -134,8 +136,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     textures_.SetBufferAliasRetention([this](const auto& desc,const auto& layout){
         return page_watch_&&desc.writable&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
             !desc.one_dimensional&&(desc.samples==1||
-                (desc.samples>1&&desc.samples<=8&&desc.data_format==4&&
-                 (desc.number_format==4||desc.number_format==5||desc.number_format==7)))&&
+                GuestTextureCache::CanTransferIndependentMultisample(desc,layout))&&
             ((desc.data_format==6&&desc.number_format==7)||
              ((desc.data_format==9)&&(desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5))||
              ((desc.data_format>=16&&desc.data_format<=19)&&desc.number_format==0)||
@@ -454,13 +455,14 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     const GuestTextureDesc& d,const GuestTextureLayout& l,const GuestColorClearPlan& plan,
     std::span<std::byte> metadata) {
     // This path updates an existing physical image owner, never an independent
-    // buffer/image version. Keep every other case on the exact raw-word CPU
-    // materializer until it has an equivalent native format/ownership path.
+    // buffer/image version. Decode the original CB numeric type/component map
+    // with the same codec as physical materialization, before changing planes.
+    const auto clear=DecodeGuestColorClear(b);
     if(!page_watch_||!d.render_target||d.depth_target||d.stencil_address||d.writable||
        d.one_dimensional||d.volume_depth||d.levels!=1||d.first_mip||
-       d.data_format!=10||d.number_format!=0||l.format!=DXGI_FORMAT_R8G8B8A8_UNORM||
-       l.bytes_per_pixel!=4||l.expanded_bytes_per_pixel||l.block_extent!=1||
-       b.info.comp_swap!=AmdGpu::ColorBuffer::SwapMode::Standard||
+       !clear||d.UsesRaw32()||
+       d.data_format!=clear->data_format||d.number_format!=clear->number_format||
+       l.bytes_per_pixel!=clear->pixel_bytes||l.expanded_bytes_per_pixel||l.block_extent!=1||
        b.info.cmask_addr_type||b.info.compression||b.info.dcc_enable||
        !has_backing_(d.address,l.guest_bytes))return false;
     const auto meta_bytes=GuestCmaskBytes(b),slice_bytes=meta_bytes/b.NumSlices();
@@ -481,6 +483,12 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.Width!=d.width||native.Height!=d.height||
        native.MipLevels!=1||native.DepthOrArraySize!=d.layers||native.SampleDesc.Count!=d.samples||
        !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))return false;
+    std::shared_ptr<GuestRawColorClear::Program> raw_program;
+    if(!clear->rtv_compatible){
+        if(!raw_color_clear_)raw_color_clear_=std::make_unique<GuestRawColorClear>(device_.Get());
+        raw_program=raw_color_clear_->Prepare(native,d.data_format);
+        if(!raw_program)return false;
+    }
     // Use exactly the CPU materializer's validated tile plan. Rectangles are
     // clipped at logical edges; expanded tiles are not included in mixed layers.
     std::map<UINT,std::vector<D3D12_RECT>> regions;
@@ -496,20 +504,17 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     auto handle=heap->GetCPUDescriptorHandleForHeapStart();
     for(const auto& region:regions){
         auto view=d;view.first_layer=region.first;view.view_layers=1;
-        const auto rtv=image->Rtv(view);
+        auto rtv=image->Rtv(view);if(raw_program)rtv.Format=raw_program->format;
         DX12_API_CALL(device_->CreateRenderTargetView(image->texture.handle.Get(),&rtv,handle));handle.ptr+=step;
     }
-    // For identity-swizzled RGBA8 UNORM only, each raw CB byte is exactly the quantized value
-    // produced by byte/255. Integer, sRGB and float-word clears are not inferred
-    // from this conversion. RTV clear writes all samples of each selected layer.
-    float clear[4];for(UINT component=0;component<4;++component)
-        clear[component]=float((b.clear_word0>>(component*8))&255)/255.f;
+    // RTV clear writes all samples of each selected layer. Unsupported raw
+    // integer/F32 values never reach the float-based native clear API.
     auto pin=textures_.PinBinding(*image);
     // Begin may collect older submissions; do it before publishing this
     // recording's pending ownership, then use that same list throughout.
     auto* list=RecordingList();
-    RetainUntilFinish([heap,resource=image->texture.handle,allocation=image->texture.allocation,pin](u64){
-        (void)heap;(void)resource;(void)allocation;(void)pin;
+    RetainUntilFinish([heap,resource=image->texture.handle,allocation=image->texture.allocation,pin,raw_program](u64){
+        (void)heap;(void)resource;(void)allocation;(void)pin;(void)raw_program;
     });
     // Stamp the submitted fence before old retirements run. A completion
     // callback must not relabel newer pending texture work with an old fence.
@@ -519,7 +524,9 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     handle=heap->GetCPUDescriptorHandleForHeapStart();
     for(const auto& region:regions){
         const auto& rectangles=region.second;
-        DX12_API_CALL(list->ClearRenderTargetView(handle,clear,UINT(rectangles.size()),rectangles.data()));handle.ptr+=step;
+        if(raw_program)GuestRawColorClear::Record(list,*raw_program,handle,d.width,d.height,rectangles,*clear);
+        else DX12_API_CALL(list->ClearRenderTargetView(handle,clear->rtv.data(),UINT(rectangles.size()),rectangles.data()));
+        handle.ptr+=step;
     }
     image->diagnostic_writer=image->diagnostic_vs=image->diagnostic_ps=0;
     // Color pages stay guarded and GPU-owned. ResolveImage later merges these
@@ -1404,6 +1411,13 @@ bool GuestRasterizer::ComputeImageOperation(const Shader::Info& info,const u32 (
         // a physical CPU fill would change the separate buffer/image domains
         // and guest padding that an image clear does not write.
         auto* dst=find(bb.base_address,bb.GetSize());
+        if(dst&&dst->storage_retired){
+            // Pressure can retire reconstructible sample-UAV scratch while
+            // retaining the authoritative image. Restore its guest sample
+            // backing before recreating scratch, as normal compute binds do.
+            textures_.SetBackingSamples(*dst,dst->desc.samples,RecordingList());
+            textures_.EnsureMultisampleStorage(*dst);
+        }
         if(!dst||dst->layout.bytes_per_pixel*8!=AmdGpu::NumBitsPerBlock(bb.GetDataFmt())||
            (!GuestImageClearCompatible(*dst)&&!GuestStorageImageClearCompatible(*dst,values)&&
             !GuestMultisampleStorageClearCompatible(*dst,values)&&

@@ -178,6 +178,10 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         if(i>=targets.size()||targets[i]==DXGI_FORMAT_UNKNOWN)continue;
         rt.RenderTargetWriteMask=normal?UINT8(regs.color_target_mask.GetMask(i)):0;
         if(!rt.RenderTargetWriteMask)continue;
+        // Match the pinned CB mask scatter independently of the shader export's
+        // component gather. Native-only callers can omit the guest CB format.
+        if(regs.color_buffers[i].info.format)
+            rt.RenderTargetWriteMask=UINT8(regs.color_buffers[i].Swizzle().ApplyMask(rt.RenderTargetWriteMask));
         const bool logic=regs.color_control.rop3!=AmdGpu::ColorControl::LogicOp::Copy;
         rt.LogicOpEnable=logic;rt.LogicOp=LogicOp(regs.color_control.rop3);
         const auto& source=regs.blend_control[i];rt.BlendEnable=!logic&&source.enable&&!regs.color_buffers[i].info.blend_bypass;

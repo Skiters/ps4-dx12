@@ -7,6 +7,7 @@
 #include "guest_buffer_access.h"
 namespace NativeDX12 {
 class NativePointCapturePass;
+class GuestRawColorClear;
 // Actual Liverpool dispatch entry points, distinct from the isolated probe's
 // buffer-only rasterizer. Unsupported guest states fail before GPU submission.
 class GuestRasterizer : public GuestBufferAccess {
@@ -17,6 +18,7 @@ class GuestRasterizer : public GuestBufferAccess {
     GuestPipelineCache pipelines_;
     GuestTextureCache textures_;
     std::unique_ptr<NativePointCapturePass> point_capture_;
+    std::unique_ptr<GuestRawColorClear> raw_color_clear_;
     bool native_alpha_factor_{};
     std::function<bool(VAddr,std::span<std::byte>)> read_backing_;
     std::function<bool(VAddr,std::span<const std::byte>)> write_backing_;

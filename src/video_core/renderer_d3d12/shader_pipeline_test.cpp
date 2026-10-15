@@ -12,8 +12,63 @@
 using namespace NativeDX12;
 namespace DXIL=Shader::Backend::DX12;
 static ComPtr<ID3D12InfoQueue> debug_queue;
+static void CheckGuestColorWriteMasks(){
+    // Independent singleton-mask oracle for the pinned ApplyMask scatter.
+    // Constant selectors retain their source bit through CompMapping::Map;
+    // the four-component format19 rotation is deliberately not its inverse.
+    using SwapMasks=std::array<std::array<u8,4>,4>;
+    const SwapMasks single{{{1,2,4,8},{2,2,4,8},{4,2,4,8},{1,2,4,8}}};
+    const SwapMasks dual{{{1,2,4,8},{1,8,4,8},{2,1,4,8},{8,1,4,8}}};
+    const SwapMasks triple{{{1,2,4,8},{1,2,8,8},{4,2,1,8},{8,2,1,8}}};
+    const SwapMasks triple_rb{{{4,2,1,8},{8,2,1,8},{1,2,4,8},{1,2,8,8}}};
+    const SwapMasks rgba{{{1,2,4,8},{4,2,1,8},{8,4,2,1},{8,1,2,4}}};
+    const SwapMasks rgba_reverse{{{8,4,2,1},{8,1,2,4},{1,2,4,8},{4,2,1,8}}};
+    const SwapMasks rgba_rb{{{4,2,1,8},{1,2,4,8},{2,4,8,1},{2,1,8,4}}};
+    const SwapMasks rgba_rotate{{{2,4,8,1},{2,1,8,4},{4,2,1,8},{1,2,4,8}}};
+    struct Case {u32 format;DXGI_FORMAT host;const SwapMasks* masks;};
+    const Case cases[]{
+        {1,DXGI_FORMAT_R8_UNORM,&single},{2,DXGI_FORMAT_R16_UNORM,&single},
+        {3,DXGI_FORMAT_R8G8_UNORM,&dual},{4,DXGI_FORMAT_R32_FLOAT,&single},
+        {5,DXGI_FORMAT_R16G16_UNORM,&dual},{6,DXGI_FORMAT_R11G11B10_FLOAT,&triple},
+        {7,DXGI_FORMAT_R11G11B10_FLOAT,&triple_rb},{8,DXGI_FORMAT_R10G10B10A2_UNORM,&rgba_reverse},
+        {9,DXGI_FORMAT_R10G10B10A2_UNORM,&rgba},{10,DXGI_FORMAT_R8G8B8A8_UNORM,&rgba},
+        {11,DXGI_FORMAT_R32G32_FLOAT,&dual},{12,DXGI_FORMAT_R16G16B16A16_UNORM,&rgba},
+        {13,DXGI_FORMAT_R32G32B32A32_FLOAT,&triple},{14,DXGI_FORMAT_R32G32B32A32_FLOAT,&rgba},
+        {16,DXGI_FORMAT_B5G6R5_UNORM,&triple_rb},{17,DXGI_FORMAT_B5G5R5A1_UNORM,&rgba_rb},
+        {18,DXGI_FORMAT_B5G5R5A1_UNORM,&rgba},{19,DXGI_FORMAT_B4G4R4A4_UNORM,&rgba_rotate},
+    };
+    AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+    regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+    regs.color_shader_mask.SetMask(0,15);
+    for(const auto& c:cases)for(u32 swap=0;swap<4;++swap)for(u32 mask=0;mask<16;++mask){
+        regs.color_buffers[0].info.format=c.format;
+        regs.color_buffers[0].info.comp_swap=static_cast<decltype(regs.color_buffers[0].info.comp_swap)>(swap);
+        regs.color_target_mask.SetMask(0,mask);
+        u8 expected{};for(u32 bit=0;bit<4;++bit)if(mask&(1u<<bit))expected|=(*c.masks)[swap][bit];
+        const std::array<DXGI_FORMAT,1> formats{c.host};
+        const auto state=BuildGuestGraphicsState(regs,formats);
+        if(state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask!=expected)
+            throw std::runtime_error("Guest color write-mask scatter mismatch: format="+std::to_string(c.format)+
+                " swap="+std::to_string(swap)+" mask="+std::to_string(mask));
+    }
+    const std::array<DXGI_FORMAT,2> formats{DXGI_FORMAT_UNKNOWN,DXGI_FORMAT_B4G4R4A4_UNORM};
+    regs.color_buffers[1].info.format=19;regs.color_target_mask.SetMask(0,15);regs.color_target_mask.SetMask(1,1);
+    auto state=BuildGuestGraphicsState(regs,formats);
+    if(state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask||
+       state.pipeline.BlendState.RenderTarget[1].RenderTargetWriteMask!=2)
+        throw std::runtime_error("Guest color write-mask changed an attachment hole or wrong MRT slot");
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Disable;
+    if(BuildGuestGraphicsState(regs,formats).pipeline.BlendState.RenderTarget[1].RenderTargetWriteMask)
+        throw std::runtime_error("Disabled guest color writes survived component mapping");
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+    regs.color_buffers[1].info.format=0;regs.color_target_mask.SetMask(1,5);
+    if(BuildGuestGraphicsState(regs,formats).pipeline.BlendState.RenderTarget[1].RenderTargetWriteMask!=5)
+        throw std::runtime_error("Native-only target without guest CB format lost its explicit mask");
+}
 int wmain(int argc,wchar_t** argv) {try {
     if(argc!=2)throw std::invalid_argument("usage: native-pipeline-test dxcompiler.dll");
+    CheckGuestColorWriteMasks();
     ComPtr<ID3D12Debug> debug;
     if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
     auto vertex=DXIL::CompileDxil(argv[1],R"(

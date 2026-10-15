@@ -100,6 +100,11 @@ native_mesa_runtime(shadps4_native_d3d12)
 include("${PORT_ROOT}/native-port/Host-Passes.cmake")
 native_host_passes(shadps4_native_d3d12)
 target_sources(shadps4_native_d3d12 PRIVATE "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_graphics_state.cpp")
+# Guest CB component/write-mask mapping needs the shared format table even in
+# standalone targets that do not link the texture-cache fixture library.
+target_sources(shadps4_native_d3d12 PRIVATE
+    "${PORT_ROOT}/src/video_core/amdgpu/pixel_format.cpp"
+    "${PORT_ROOT}/src/shader_recompiler/backend/dxil/tests/ir_test_diagnostics.cpp")
 add_executable(native-stencil-lowering-test stencil_lowering_test.cpp)
 target_link_libraries(native-stencil-lowering-test PRIVATE shadps4_native_d3d12)
 add_test(NAME native_stencil_bitwise_lowering COMMAND native-stencil-lowering-test)
@@ -264,6 +269,14 @@ target_link_libraries(native-independent-version-transfer-test PRIVATE shadps4_n
 add_test(NAME native_independent_image_version_transfer COMMAND native-independent-version-transfer-test)
 add_test(NAME native_independent_msaa_image_version_transfer COMMAND native-independent-version-transfer-test --msaa)
 set_tests_properties(native_independent_msaa_image_version_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_storage_pressure COMMAND native-independent-version-transfer-test --msaa-pressure)
+set_tests_properties(native_independent_msaa_storage_pressure PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_vector32_transfer COMMAND native-independent-version-transfer-test --msaa-vector32)
+set_tests_properties(native_independent_msaa_vector32_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_vector16_transfer COMMAND native-independent-version-transfer-test --msaa-vector16)
+set_tests_properties(native_independent_msaa_vector16_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_vector8_transfer COMMAND native-independent-version-transfer-test --msaa-vector8)
+set_tests_properties(native_independent_msaa_vector8_transfer PROPERTIES TIMEOUT 180)
 add_executable(dx12-memory-surface-provider-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider_test.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider.cpp")

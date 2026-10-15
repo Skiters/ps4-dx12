@@ -2,13 +2,307 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_image_readback.h"
 #include "guest_cmask_address.h"
+#include "guest_color_clear.h"
+#include "guest_raw_color_clear.h"
 #include "video_core/amdgpu/regs_color.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include <dxgi1_6.h>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
+#include <string>
 using namespace NativeDX12;
 void Require(bool b){if(!b)throw std::runtime_error("CMASK test assertion failed");}
+using ClearSwap=AmdGpu::ColorBuffer::SwapMode;
+AmdGpu::ColorBuffer ClearBuffer(uint32_t format,uint32_t number,uint32_t word0,uint32_t word1=0,
+    ClearSwap swap=ClearSwap::Standard){
+    AmdGpu::ColorBuffer b{};b.info.format=format;b.info.number_type=number;
+    b.info.comp_swap=swap;b.clear_word0=word0;b.clear_word1=word1;return b;
+}
+GuestColorClearValue CheckClearPixel(const char* name,const AmdGpu::ColorBuffer& b,
+    std::initializer_list<uint8_t> expected,bool rtv_compatible=true){
+    const auto clear=DecodeGuestColorClear(b);
+    if(!clear||clear->pixel_bytes!=expected.size()||clear->rtv_compatible!=rtv_compatible)
+        throw std::runtime_error(std::string("CMASK codec classification: ")+name);
+    size_t offset{};
+    for(const auto value:expected)if(clear->pixel[offset++]!=std::byte(value))
+        throw std::runtime_error(std::string("CMASK codec fixed pixel: ")+name);
+    return *clear;
+}
+void CheckColorClearCodec(){
+    // Fixed bytes derived from the pinned original-format clear and component
+    // tables, never from the decoder under test. Numeric inputs are checked
+    // separately from byte packing and GPU-path eligibility.
+    CheckClearPixel("RGBA8 Standard",ClearBuffer(10,0,0x80402010),{0x10,0x20,0x40,0x80});
+    CheckClearPixel("RGBA8 Alternate",ClearBuffer(10,0,0x80402010,0,ClearSwap::Alternate),
+        {0x40,0x20,0x10,0x80});
+    CheckClearPixel("RGBA8 StandardReverse",ClearBuffer(10,0,0x80402010,0,ClearSwap::StandardReverse),
+        {0x80,0x40,0x20,0x10});
+    CheckClearPixel("RGBA8 AlternateReverse",ClearBuffer(10,0,0x80402010,0,ClearSwap::AlternateReverse),
+        {0x80,0x10,0x20,0x40});
+    auto clear=CheckClearPixel("RG16 Alternate alpha",ClearBuffer(5,0,0x24681357,0,ClearSwap::Alternate),
+        {0x57,0x13,0xff,0xff});
+    Require(clear.rtv[1]==1.f);
+    clear=CheckClearPixel("RGBA16 UNORM",ClearBuffer(12,0,0xffff0000,0x12348000),
+        {0,0,0xff,0xff,0,0x80,0x34,0x12});
+    Require(clear.rtv[0]==0.f&&clear.rtv[1]==1.f&&std::abs(clear.rtv[2]-0.5000076295f)<1.e-7f);
+    clear=CheckClearPixel("RGBA8 SNORM canonical minimum",ClearBuffer(10,1,0x7f008180),
+        {0x81,0x81,0,0x7f});
+    Require(clear.rtv[0]==-1.f&&clear.rtv[1]==-1.f&&clear.rtv[2]==0.f&&clear.rtv[3]==1.f);
+    clear=CheckClearPixel("RG16 SNORM canonical minimum",ClearBuffer(5,1,0x7fff8000),
+        {1,0x80,0xff,0x7f});
+    Require(clear.rtv[0]==-1.f&&clear.rtv[1]==1.f);
+
+    clear=CheckClearPixel("R8 UINT narrows before RTV",ClearBuffer(1,4,0x101),{1});
+    Require(clear.rtv[0]==1.f);
+    clear=CheckClearPixel("R16 UINT narrows before RTV",ClearBuffer(2,4,0x12348001),{1,0x80});
+    Require(clear.rtv[0]==32769.f);
+    clear=CheckClearPixel("R8 sign-extended SINT",ClearBuffer(1,5,0xffffffff),{0xff});
+    Require(clear.rtv[0]==-1.f);
+    clear=CheckClearPixel("R16 sign-extended SINT minimum",ClearBuffer(2,5,0xffff8000),{0,0x80});
+    Require(clear.rtv[0]==-32768.f);
+    CheckClearPixel("RG8 defined SINT",ClearBuffer(3,5,0x7f01),{1,0x7f});
+    Require(!DecodeGuestColorClear(ClearBuffer(1,5,0xff)));
+    Require(!DecodeGuestColorClear(ClearBuffer(3,5,0xff7f)));
+    Require(!DecodeGuestColorClear(ClearBuffer(4,0,0x12345678)));
+
+    clear=CheckClearPixel("R32 exact UINT above 2^24",ClearBuffer(4,4,0x01000002),{2,0,0,1});
+    Require(clear.rtv[0]==16777218.f);
+    CheckClearPixel("R32 inexact UINT retained",ClearBuffer(4,4,0x01000001),{1,0,0,1},false);
+    CheckClearPixel("R32 UINT maximum retained",ClearBuffer(4,4,0xffffffff),{0xff,0xff,0xff,0xff},false);
+    CheckClearPixel("R32 SINT negative boundary",ClearBuffer(4,5,0xff000000),{0,0,0,0xff});
+    CheckClearPixel("R32 large negative SINT retained",ClearBuffer(4,5,0xfe000000),{0,0,0,0xfe},false);
+    CheckClearPixel("R32 SINT minimum retained",ClearBuffer(4,5,0x80000000),{0,0,0,0x80},false);
+    CheckClearPixel("RG32 preserves both integer words",ClearBuffer(11,4,0x01234567,0xfedcba98),
+        {0x67,0x45,0x23,1,0x98,0xba,0xdc,0xfe},false);
+    CheckClearPixel("RGBA32 replication then swap",ClearBuffer(14,4,2,9,ClearSwap::AlternateReverse),
+        {9,0,0,0,2,0,0,0,2,0,0,0,2,0,0,0});
+
+    clear=CheckClearPixel("RGBA16 finite half incl subnormal and negative zero",
+        ClearBuffer(12,7,0xbc003c00,0x80000001),{0,0x3c,0,0xbc,1,0,0,0x80});
+    Require(clear.rtv[0]==1.f&&clear.rtv[1]==-1.f&&clear.rtv[2]==0x1p-24f);
+    Require(clear.rtv[3]==0.f&&std::signbit(clear.rtv[3]));
+    clear=CheckClearPixel("R16 maximum finite half",ClearBuffer(2,7,0x7bff),{0xff,0x7b});
+    Require(clear.rtv[0]==65504.f);
+    CheckClearPixel("R16 half infinity raw fallback",ClearBuffer(2,7,0x7c00),{0,0x7c},false);
+    CheckClearPixel("R16 half NaN payload raw fallback",ClearBuffer(2,7,0x7e01),{1,0x7e},false);
+    clear=CheckClearPixel("RG32 float negative zero and one",ClearBuffer(11,7,0x80000000,0x3f800000),
+        {0,0,0,0x80,0,0,0x80,0x3f});
+    Require(clear.rtv[0]==0.f&&std::signbit(clear.rtv[0])&&clear.rtv[1]==1.f);
+    CheckClearPixel("R32 smallest normal float",ClearBuffer(4,7,0x00800000),{0,0,0x80,0});
+    CheckClearPixel("R32 float denormal raw fallback",ClearBuffer(4,7,1),{1,0,0,0},false);
+    CheckClearPixel("R32 float NaN payload raw fallback",ClearBuffer(4,7,0x7fc01234),{0x34,0x12,0xc0,0x7f},false);
+    CheckClearPixel("R32 float infinity raw fallback",ClearBuffer(4,7,0x7f800000),{0,0,0x80,0x7f},false);
+
+    // CB sRGB encoding is 6, not the generic NumberFormat::Srgb value 9.
+    // Fixed ideal transfer values: linear byte 1 -> 13, 32 -> 99, 64 -> 137.
+    // CPU packing uses these exact bytes; this is not a GPU sRGB rounding oracle.
+    clear=CheckClearPixel("RGBA8 SRGB reference conversion",ClearBuffer(10,6,0x80402001),
+        {13,99,137,128});
+    Require(clear.number_format==9&&std::abs(clear.rtv[0]-0.0039215686f)<1.e-8f&&
+        std::abs(clear.rtv[1]-0.1254901961f)<1.e-7f&&
+        std::abs(clear.rtv[2]-0.2509803922f)<1.e-7f&&
+        std::abs(clear.rtv[3]-0.5019607843f)<1.e-7f);
+    CheckClearPixel("RGBA8 SRGB swap before transfer",ClearBuffer(10,6,0x80402001,0,ClearSwap::Alternate),
+        {137,99,13,128});
+    CheckClearPixel("RGBA8 SRGB zero",ClearBuffer(10,6,0),{0,0,0,0});
+    CheckClearPixel("RGBA8 SRGB one",ClearBuffer(10,6,0xffffffff),{255,255,255,255});
+}
+void CheckPackedColorClearCodec(){
+    CheckClearPixel("original8 UINT moves low A2 to native high A2",ClearBuffer(8,4,1),{0,0,0,0x40});
+    auto clear=CheckClearPixel("original9 UINT narrows swizzled alpha",ClearBuffer(9,4,4,0,ClearSwap::StandardReverse),
+        {0,0,0,0});
+    Require(clear.rtv[3]==0.f);
+    // Original9 fields are [1023,0,341,1]. UNORM conversion therefore starts
+    // from [1,0,1/3,1/3]; the final A2/R10 widths apply AFTER each fixed swap.
+    CheckClearPixel("original9 UNORM Standard",ClearBuffer(9,0,0x555003ff),{0xff,3,0x50,0x55});
+    CheckClearPixel("original9 UNORM Alternate",ClearBuffer(9,0,0x555003ff,0,ClearSwap::Alternate),
+        {0x55,1,0xf0,0x7f});
+    clear=CheckClearPixel("original9 UNORM StandardReverse",ClearBuffer(9,0,0x555003ff,0,ClearSwap::StandardReverse),
+        {0x55,0x55,5,0xc0});
+    Require(std::abs(clear.rtv[0]-0.3333333333f)<1.e-7f&&clear.rtv[3]==1.f);
+    CheckClearPixel("original9 UNORM AlternateReverse",ClearBuffer(9,0,0x555003ff,0,ClearSwap::AlternateReverse),
+        {0x55,0xfd,0x0f,0x40});
+    // Original8 fields are [1,341,0,1023], with original widths [2,10,10,10].
+    // These constants also detect decoding the remapped format a second time.
+    CheckClearPixel("original8 UNORM Standard",ClearBuffer(8,0,0xffc00555),{0xff,3,0x50,0x55});
+    CheckClearPixel("original8 UNORM Alternate",ClearBuffer(8,0,0xffc00555,0,ClearSwap::Alternate),
+        {0xff,0x57,0x55,0x15});
+    CheckClearPixel("original8 UNORM StandardReverse",ClearBuffer(8,0,0xffc00555,0,ClearSwap::StandardReverse),
+        {0x55,0x55,5,0xc0});
+    CheckClearPixel("original8 UNORM AlternateReverse",ClearBuffer(8,0,0xffc00555,0,ClearSwap::AlternateReverse),
+        {0,0x54,0x55,0xd5});
+}
+void CheckPacked16ColorClearCodec(){
+    // Original16 fields [5/31,17/63,23/31,1]. The native/Vulkan physical
+    // offsets are R11/G5/B0; Alternate selects the initialized alpha as R.
+    CheckClearPixel("original16 UNORM Standard",ClearBuffer(16,0,0xba25),{0x25,0xba});
+    auto clear=CheckClearPixel("original16 UNORM Alternate",ClearBuffer(16,0,0xba25,0,ClearSwap::Alternate),
+        {0x25,0xfa});
+    Require(clear.rtv[0]==1.f&&std::abs(clear.rtv[1]-17.f/63.f)<1.e-7f);
+    CheckClearPixel("original16 UNORM StandardReverse",ClearBuffer(16,0,0xba25,0,ClearSwap::StandardReverse),
+        {0x37,0x2a});
+    CheckClearPixel("original16 UNORM AlternateReverse",ClearBuffer(16,0,0xba25,0,ClearSwap::AlternateReverse),
+        {0x3f,0x2a});
+    // Original17 fields [5/31,10/31,20/31,1]. Reversed swaps move values
+    // across 1/5-bit channels, so quantization must follow the component map.
+    CheckClearPixel("original17 UNORM Standard",ClearBuffer(17,0,0xd145),{0x45,0xd1});
+    CheckClearPixel("original17 UNORM Alternate",ClearBuffer(17,0,0xd145,0,ClearSwap::Alternate),
+        {0x54,0x95});
+    clear=CheckClearPixel("original17 UNORM StandardReverse",ClearBuffer(17,0,0xd145,0,ClearSwap::StandardReverse),
+        {0x9f,0x2a});
+    Require(clear.rtv[2]==1.f&&std::abs(clear.rtv[3]-5.f/31.f)<1.e-7f);
+    CheckClearPixel("original17 UNORM AlternateReverse",ClearBuffer(17,0,0xd145,0,ClearSwap::AlternateReverse),
+        {0xbf,0xa8});
+    // Original18 fields [1,5/31,10/31,20/31]. The original clear/swizzle
+    // is retained even though attachment storage is remapped to original17.
+    clear=CheckClearPixel("original18 UNORM Standard",ClearBuffer(18,0,0xa28b),{0xaa,0xfc});
+    Require(clear.data_format==17&&clear.rtv[0]==1.f);
+    CheckClearPixel("original18 UNORM Alternate",ClearBuffer(18,0,0xa28b,0,ClearSwap::Alternate),
+        {0xbf,0xa8});
+    CheckClearPixel("original18 UNORM StandardReverse",ClearBuffer(18,0,0xa28b,0,ClearSwap::StandardReverse),
+        {0x45,0xd1});
+    CheckClearPixel("original18 UNORM AlternateReverse",ClearBuffer(18,0,0xa28b,0,ClearSwap::AlternateReverse),
+        {0xe5,0x53});
+    // Original19 guest packing is A0/R4/G8/B12. The native transfer reverses
+    // physical nibbles, so the RTV tuple remains the pinned logical RGBA.
+    clear=CheckClearPixel("original19 UNORM Standard",ClearBuffer(19,0,0x4321),{0x21,0x43});
+    Require(std::abs(clear.rtv[0]-2.f/15.f)<1.e-7f&&
+        std::abs(clear.rtv[1]-3.f/15.f)<1.e-7f&&
+        std::abs(clear.rtv[2]-4.f/15.f)<1.e-7f&&
+        std::abs(clear.rtv[3]-1.f/15.f)<1.e-7f);
+    CheckClearPixel("original19 UNORM Alternate",ClearBuffer(19,0,0x4321,0,ClearSwap::Alternate),
+        {0x23,0x41});
+    CheckClearPixel("original19 UNORM StandardReverse",ClearBuffer(19,0,0x4321,0,ClearSwap::StandardReverse),
+        {0x34,0x12});
+    CheckClearPixel("original19 UNORM AlternateReverse",ClearBuffer(19,0,0x4321,0,ClearSwap::AlternateReverse),
+        {0x14,0x32});
+    // Preserve the reference's distinct high-word rules: format16 takes an
+    // unmasked uint8_t U5 input, format17 tests all high bits for alpha,
+    // while format18 masks its upper five-bit field explicitly.
+    CheckClearPixel("original16 upper U5 saturates",ClearBuffer(16,0,0x10000),{0,0xf8});
+    CheckClearPixel("original17 high word alpha",ClearBuffer(17,0,0x10000),{0,0x80});
+    CheckClearPixel("original18 upper U5 masks",ClearBuffer(18,0,0x10000),{0,0});
+    CheckClearPixel("original19 upper U4 saturates",ClearBuffer(19,0,0x10000),{0,0xf0});
+    CheckClearPixel("original19 upper U4 truncates to uint8",ClearBuffer(19,0,0x100000),{0,0});
+    Require(!DecodeGuestColorClear(ClearBuffer(16,4,0xba25)));
+    Require(!DecodeGuestColorClear(ClearBuffer(17,1,0xd145)));
+    Require(!DecodeGuestColorClear(ClearBuffer(18,4,0xa28b)));
+    Require(!DecodeGuestColorClear(ClearBuffer(19,4,0x4321)));
+}
+void CheckCpuClearPixel(AmdGpu::ColorBuffer b,std::initializer_list<uint8_t> pixel){
+    b.base_address=0x10000;b.cmask_base_address=0x20000;b.info.fast_clear=1;
+    b.attrib.tile_mode_index=AmdGpu::TileMode(13);b.pitch.tile_max=63;b.slice.tile_max=2047;
+    b.view.slice_start=1;b.view.slice_max=2;b.cmask_slice.tile_max=15;
+    AmdGpu::CbDbExtent extent{};extent.width=17;extent.height=9;
+    const auto desc=DescribeGuestColorBuffer(b,extent);const auto layout=LayoutGuestTexture(desc);
+    Require(pixel.size()==layout.bytes_per_pixel);
+    std::vector<std::byte> color(layout.guest_bytes,std::byte{0xee}),expected=color;
+    std::vector<std::byte> metadata(GuestCmaskBytes(b),std::byte{0xff});
+    std::fill(metadata.begin()+2048,metadata.begin()+4096,std::byte{0});
+    for(uint32_t y=0;y<desc.height;++y)for(uint32_t x=0;x<desc.width;++x){
+        auto offset=GuestPixelOffset(desc,layout,0,1,x,y);
+        for(auto value:pixel)expected[offset++]=std::byte(value);
+    }
+    Require(MaterializeGuestColorClear(b,desc,layout,color,metadata)&&color==expected);
+    Require(std::all_of(metadata.begin(),metadata.end(),[](auto value){return value==std::byte{0xff};}));
+    Require(!MaterializeGuestColorClear(b,desc,layout,color,metadata));
+}
+void CheckColorClearCpuIntegration(){
+    CheckCpuClearPixel(ClearBuffer(5,0,0x24681357,0,ClearSwap::Alternate),{0x57,0x13,0xff,0xff});
+    CheckCpuClearPixel(ClearBuffer(5,1,0x7fff8000),{1,0x80,0xff,0x7f});
+    CheckCpuClearPixel(ClearBuffer(4,4,0x01000001),{1,0,0,1});
+    CheckCpuClearPixel(ClearBuffer(4,7,1),{1,0,0,0});
+    CheckCpuClearPixel(ClearBuffer(10,6,0x80402001),{13,99,137,128});
+    // Undefined narrow SINT reference inputs retain the historical raw fallback.
+    CheckCpuClearPixel(ClearBuffer(3,5,0xff7f),{0x7f,0xff});
+    CheckCpuClearPixel(ClearBuffer(8,4,1),{0,0,0,0x40});
+    CheckCpuClearPixel(ClearBuffer(9,4,4,0,ClearSwap::StandardReverse),{0,0,0,0});
+    CheckCpuClearPixel(ClearBuffer(8,0,0xffc00555,0,ClearSwap::Alternate),{0xff,0x57,0x55,0x15});
+    CheckCpuClearPixel(ClearBuffer(16,0,0xba25,0,ClearSwap::Alternate),{0x25,0xfa});
+    CheckCpuClearPixel(ClearBuffer(17,0,0xd145,0,ClearSwap::StandardReverse),{0x9f,0x2a});
+    CheckCpuClearPixel(ClearBuffer(18,0,0xa28b),{0xaa,0xfc});
+    CheckCpuClearPixel(ClearBuffer(16,0,0x10000),{0,0xf8});
+    CheckCpuClearPixel(ClearBuffer(19,0,0x4321,0,ClearSwap::Alternate),{0x23,0x41});
+    CheckCpuClearPixel(ClearBuffer(19,0,0x10000),{0,0xf0});
+}
+void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
+    struct Case {
+        const char* name;AmdGpu::ColorBuffer buffer;std::array<uint8_t,16> pixel;uint32_t bytes;
+    };
+    const Case cases[]={
+        {"R32_FLOAT NaN payload",ClearBuffer(4,7,0x7fc01234),{0x34,0x12,0xc0,0x7f},4},
+        {"R32_FLOAT denormal",ClearBuffer(4,7,1),{1,0,0,0},4},
+        {"R32_UINT maximum",ClearBuffer(4,4,0xffffffff),{0xff,0xff,0xff,0xff},4},
+        {"R32_SINT minimum",ClearBuffer(4,5,0x80000000),{0,0,0,0x80},4},
+        {"RGBA16_FLOAT raw special values",ClearBuffer(12,7,0x7e018001,0x80007c00),
+            {1,0x80,1,0x7e,0,0x7c,0,0x80},8},
+    };
+    GuestRawColorClear raw_clear(device);
+    for(const auto& c:cases)for(const UINT samples:{1u,4u}){
+        GuestTextureDesc desc;desc.address=0x100000;desc.width=19;desc.height=11;desc.pitch=32;
+        desc.storage_height=16;desc.layers=desc.view_layers=2;desc.samples=samples;
+        desc.data_format=uint32_t(c.buffer.GetDataFmt());desc.number_format=uint32_t(c.buffer.GetNumberFmt());
+        desc.render_target=true;desc.tile_mode=8;
+        const auto layout=LayoutGuestTexture(desc);
+        const auto raw_format=desc.data_format==12?DXGI_FORMAT_R16G16B16A16_UINT:DXGI_FORMAT_R32_UINT;
+        bool supported=true;
+        for(const auto format:{layout.format,raw_format}){
+            D3D12_FEATURE_DATA_FORMAT_SUPPORT support{format};
+            Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
+            supported&=bool(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET);
+            if(samples>1){
+                D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{
+                    format,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
+                Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality))));
+                supported&=quality.NumQualityLevels!=0;
+                if(format==raw_format)supported&=bool(support.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD);
+            }
+        }
+        if(!supported){
+            if(samples==1)throw std::runtime_error(std::string("Raw CMASK clear required format unsupported: ")+c.name);
+            fprintf(stderr,"SKIP: raw CMASK clear %s at 4 samples: adapter format capability\n",c.name);
+            continue;
+        }
+        const auto clear=DecodeGuestColorClear(c.buffer);
+        Require(clear&&clear->pixel_bytes==c.bytes&&!clear->rtv_compatible);
+        for(UINT byte=0;byte<c.bytes;++byte)Require(clear->pixel[byte]==std::byte(c.pixel[byte]));
+        ComPtr<ID3D12CommandAllocator> allocator;
+        Check(DX12_API_CALL(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&allocator))));
+        ComPtr<ID3D12GraphicsCommandList> list;
+        Check(DX12_API_CALL(device->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_DIRECT,allocator.Get(),nullptr,IID_PPV_ARGS(&list))));
+        std::vector<std::byte> initial(layout.guest_bytes,std::byte{0xee}),expected=initial;
+        GuestTextureCache cache(device);auto& image=cache.Upload(desc,initial,list.Get(),0);
+        const auto program=raw_clear.Prepare(image.texture.handle->GetDesc(),desc.data_format);
+        if(!program)throw std::runtime_error(std::string("Raw CMASK clear program unavailable: ")+c.name);
+        ComPtr<ID3D12DescriptorHeap> heap;D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
+        heap_desc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;heap_desc.NumDescriptors=1;
+        Check(DX12_API_CALL(device->CreateDescriptorHeap(&heap_desc,IID_PPV_ARGS(&heap))));
+        auto view_desc=desc;view_desc.first_layer=1;view_desc.view_layers=1;
+        auto rtv=image.Rtv(view_desc);rtv.Format=program->format;
+        const auto handle=heap->GetCPUDescriptorHandleForHeapStart();
+        DX12_API_CALL(device->CreateRenderTargetView(image.texture.handle.Get(),&rtv,handle));
+        // One interior rectangle and one clipped logical edge on layer 1.
+        // Layer 0, every other pixel and physical padding retain the sentinel.
+        const D3D12_RECT rectangles[]={{3,2,13,7},{16,8,19,11}};
+        image.texture.Transition(list.Get(),D3D12_RESOURCE_STATE_RENDER_TARGET);
+        GuestRawColorClear::Record(list.Get(),*program,handle,desc.width,desc.height,rectangles,*clear);
+        image.pending=true;
+        for(UINT sample=0;sample<samples;++sample)
+        for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x)
+            if((x>=3&&x<13&&y>=2&&y<7)||(x>=16&&y>=8)){
+                const auto offset=GuestPixelOffset(desc,layout,0,1,x,y,sample);
+                memcpy(expected.data()+offset,c.pixel.data(),c.bytes);
+            }
+        GuestImageReadback readback(device,image,list.Get());
+        Check(DX12_API_CALL(list->Close()));Timeline timeline(device);
+        const auto fence=timeline.Submit(queue,list.Get());cache.Submitted(fence);readback.Submitted(fence);
+        timeline.Wait(fence);auto restored=initial;readback.Resolve(timeline.Completed(),restored);
+        if(restored!=expected)throw std::runtime_error(std::string("Raw CMASK clear exact regions/samples/layers: ")+c.name+
+            " samples="+std::to_string(samples));
+    }
+}
 void CheckCmaskAddressing() {
     using P=AmdGpu::PipeConfig;
     struct Golden {P pipe;uint32_t x,y;uint64_t byte;uint32_t bit;};
@@ -68,13 +362,16 @@ void CheckCmaskPartialSurfaces() {
         {AmdGpu::TileMode::DisplayThinPrt,false,257,512,4},
         {AmdGpu::TileMode::Thin1DThin,true,257,512,4},
     };
-    for(const auto& c:cases)for(bool linear:{false,true})for(uint32_t log2_samples:{0u,2u}){
+    for(const auto& c:cases)for(bool linear:{false,true})for(uint32_t log2_samples:{0u,2u})
+    for(const auto swap:{ClearSwap::Standard,ClearSwap::AlternateReverse}){
         AmdGpu::ColorBuffer b{};b.base_address=0x10000;b.cmask_base_address=0x20000;
         b.info.format=10;b.info.fast_clear=1;b.info.cmask_is_linear=linear;
         b.info.alt_tile_mode=c.alt;b.attrib.tile_mode_index=c.tile;
         b.attrib.num_fragments_log2=log2_samples;b.pitch.tile_max=127;b.slice.tile_max=8191;
         b.view.slice_start=1;b.view.slice_max=2;b.cmask_slice.tile_max=31;
         b.clear_word0=0x80402010;
+        b.info.comp_swap=swap;
+        const uint32_t expected_pixel=swap==ClearSwap::Standard?0x80402010:0x40201080;
         AmdGpu::CbDbExtent extent{};extent.width=41;extent.height=25;
         auto desc=DescribeGuestColorBuffer(b,extent);desc.alt_tile=c.alt;
         const auto layout=LayoutGuestTexture(desc);
@@ -86,7 +383,7 @@ void CheckCmaskPartialSurfaces() {
         for(uint32_t y=0;y<desc.height;++y)for(uint32_t x=0;x<desc.width;++x)
             if((x>=16&&x<24&&y<8)||(x<8&&y>=16&&y<24)){
                 const auto offset=GuestPixelOffset(desc,layout,0,1,x,y,sample);
-                memcpy(expected.data()+offset,&b.clear_word0,4);
+                memcpy(expected.data()+offset,&expected_pixel,4);
             }
         Require(MaterializeGuestColorClear(b,desc,layout,color,metadata));
         Require(color==expected);
@@ -95,6 +392,7 @@ void CheckCmaskPartialSurfaces() {
     }
 }
 int main(){try {
+    CheckColorClearCodec();CheckPackedColorClearCodec();CheckPacked16ColorClearCodec();CheckColorClearCpuIntegration();
     CheckCmaskAddressing();CheckCmaskPartialSurfaces();
     AmdGpu::ColorBuffer b{}; b.base_address=0x10000; b.cmask_base_address=0x20000;
     b.info.format=10; b.info.fast_clear=1; b.attrib.tile_mode_index=AmdGpu::TileMode(13);
@@ -153,5 +451,6 @@ int main(){try {
     GuestTextureCache cache(device.Get()); auto& entry=cache.Upload(desc,color,list.Get(),0); GuestImageReadback readback(device.Get(),entry,list.Get());
     Check(DX12_API_CALL(list->Close())); Timeline timeline(device.Get()); auto fence=timeline.Submit(queue.Get(),list.Get()); cache.Submitted(fence); readback.Submitted(fence); timeline.Wait(fence); std::vector<std::byte> restored=color; readback.Resolve(timeline.Completed(),restored);
     Require(restored==color);
+    CheckRawColorClearGpu(device.Get(),queue.Get());
     puts("PASS: mixed CMASK tile equation, exact changed/unchanged pixels, idempotence, untouched layer and D3D12 readback"); return 0;
 } catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

@@ -10,6 +10,7 @@
 #include "video_core/guest_image_layout.h"
 #include "guest_tile_address.h"
 #include "guest_cmask_address.h"
+#include "guest_color_clear.h"
 #ifdef SHADPS4_NATIVE_DX12_CORE
 #include "core/libraries/kernel/process.h"
 #endif
@@ -59,14 +60,28 @@ std::span<const DXGI_FORMAT> PackedFloatCasts(DXGI_FORMAT format,bool supported)
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
     return resource.castable_formats?std::span<const DXGI_FORMAT>(*resource.castable_formats):std::span<const DXGI_FORMAT>{};
 }
-bool IndependentMultisampleTransfer(const GuestTextureDesc& d,const GuestTextureLayout& layout){
-    // Match the R32 sample-storage family admitted by independent ownership.
-    // Other MSAA formats/planes need their own exact domain-transfer contract.
+}
+bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc& d,const GuestTextureLayout& layout){
+    // These typeless 8/16/32-bit families have exact UINT buffer, MSAA SRV and
+    // RTV transfers. Sub-DWORD texels use the tiler's byte-masked retile,
+    // preserving neighbouring texels and row padding. sRGB transfers use UINT
+    // views and a linear copy footprint, without gamma conversion.
+    // RGB32 is deliberately excluded: its guest 12-byte
+    // texel expands to a 16-byte host texel. Typed access and sample quality
+    // remain adapter-validated by Upload and GuestMultisample::Prepare.
+    const UINT bytes8=d.data_format==1?1:d.data_format==3?2:d.data_format==10?4:0;
+    const UINT bytes16=d.data_format==2?2:d.data_format==5?4:d.data_format==12?8:0;
+    const UINT bytes=bytes8?bytes8:bytes16?bytes16:d.data_format==4?4:d.data_format==11?8:d.data_format==14?16:0;
+    const bool number=d.number_format==4||d.number_format==5||(!bytes8&&d.number_format==7)||
+        ((bytes8||bytes16)&&(d.number_format==0||d.number_format==1))||
+        (d.data_format==10&&d.number_format==9);
     return (d.samples==2||d.samples==4||d.samples==8)&&d.levels==1&&
         !d.depth_target&&!d.stencil_address&&!d.volume_depth&&!d.one_dimensional&&
-        d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7)&&
-        layout.block_extent==1&&layout.bytes_per_pixel==4&&!layout.expanded_bytes_per_pixel;
-}
+        // Raw RGBA8 uses an R32 allocation, but its MSAA transfer still binds
+        // RGBA8_UINT views. It needs a separate packing path, unlike raw R32.
+        !(d.data_format==10&&d.UsesRaw32())&&
+        bytes&&number&&layout.block_extent==1&&layout.bytes_per_pixel==bytes&&
+        layout.HostBytesPerPixel()==bytes&&!layout.expanded_bytes_per_pixel;
 }
 void GuestTextureCache::ValidateWritableFormat(DXGI_FORMAT format){
     if(writable_formats_.contains(format))return;
@@ -433,7 +448,15 @@ bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureD
     if(color.size()<l.guest_bytes)throw std::out_of_range("Native CMASK color storage span too short");
     const uint32_t words[]{b.clear_word0,b.clear_word1};
     const uint32_t wide[]{b.clear_word0,b.clear_word0,b.clear_word0,b.clear_word1};
-    const auto* pixel=reinterpret_cast<const std::byte*>(l.bytes_per_pixel>=12?wide:words);
+    const auto decoded=DecodeGuestColorClear(b);
+    if(decoded&&(decoded->data_format!=d.data_format||decoded->number_format!=d.number_format||
+                 decoded->pixel_bytes!=l.bytes_per_pixel))
+        throw std::invalid_argument("CMASK typed clear does not match color storage");
+    // Formats with an established reference codec share CPU/GPU component and
+    // numeric conversion. Preserve the historical raw behavior for remaining
+    // ambiguous formats; a storage mapping alone is not a typed-clear oracle.
+    const auto* pixel=decoded?decoded->pixel.data():
+        reinterpret_cast<const std::byte*>(l.bytes_per_pixel>=12?wide:words);
     const auto slice_bytes=GuestCmaskBytes(b)/b.NumSlices();
     if(!plan.uniform_layers.empty()) {
         std::vector<std::byte> linear(size_t(d.width)*d.height*d.samples*l.bytes_per_pixel);
@@ -872,10 +895,79 @@ void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12Graphi
     entry.sample_backings[old_samples]=std::move(entry.texture);
     entry.texture=std::move(destination);entry.last_use=++use_sequence_;
 }
+void GuestTextureCache::EnsureMultisampleStorage(Entry& entry){
+    if(!entry.desc.writable||entry.desc.samples<2||!entry.texture.handle)
+        throw std::invalid_argument("Native MSAA shader storage has no writable image");
+    if(entry.storage_samples.size()==entry.desc.samples&&entry.storage_linear.handle){
+        entry.storage_retired=false;return;
+    }
+    if(!entry.storage_retired||!entry.storage_samples.empty()||entry.storage_linear.handle||
+       !CanTransferIndependentMultisample(entry.desc,entry.layout))
+        throw std::invalid_argument("Native MSAA shader storage is not reconstructible");
+    const auto owner=image_uids_.find(entry.image_uid);
+    if(entry.cache!=this||owner==image_uids_.end()||owner->second!=&entry)
+        throw std::invalid_argument("Retired MSAA storage has no owning cache");
+    auto description=entry.texture.handle->GetDesc();
+    if(description.SampleDesc.Count!=entry.desc.samples)
+        throw std::invalid_argument("Retired MSAA storage needs matching native sample backing");
+    description.SampleDesc={1,0};description.Alignment=0;
+    description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    const auto formats=ResourceCasts(entry.texture);
+    const auto texture_bytes=texture_allocator_.AllocationInfo(description,formats).SizeInBytes;
+    const auto linear_bytes=GuestMultisample::LinearBytes(entry.desc,GuestMultisample::Footprint(entry.desc,entry.layout));
+    D3D12_RESOURCE_DESC buffer{};buffer.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer.Width=(linear_bytes+3)&~uint64_t(3);buffer.Height=buffer.DepthOrArraySize=buffer.MipLevels=1;
+    buffer.SampleDesc.Count=1;buffer.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    buffer.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    const auto buffer_bytes=device_->GetResourceAllocationInfo(0,1,&buffer).SizeInBytes;
+    if(!texture_bytes||texture_bytes==UINT64_MAX||!buffer_bytes||buffer_bytes==UINT64_MAX||
+       texture_bytes>(UINT64_MAX-buffer_bytes)/entry.desc.samples)
+        throw std::overflow_error("Invalid restored MSAA storage allocation size");
+    const auto bytes=texture_bytes*entry.desc.samples+buffer_bytes;
+    if(entry.allocation_bytes>UINT64_MAX-bytes)throw std::overflow_error("Restored MSAA storage accounting overflow");
+    ReserveMemory(bytes,collected_fence_,&entry);
+    // Allocate the complete replacement before publishing any of it. The
+    // existing StorageLease read pass initializes every sample before use.
+    std::vector<Resource> samples;samples.reserve(entry.desc.samples);
+    for(UINT sample=0;sample<entry.desc.samples;++sample)
+        samples.push_back(texture_allocator_.Allocate(description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats));
+    auto linear=GuestTiler::Scratch(device_.Get(),linear_bytes);
+    entry.storage_samples=std::move(samples);entry.storage_linear=std::move(linear);
+    entry.allocation_bytes+=bytes;entry.storage_retired=false;
+    Diagnostics::Count("image-msaa.storage-restored.bytes",bytes);
+}
+bool GuestTextureCache::RetireMultisampleStorage(Entry& entry,uint64_t completed){
+    if(!entry.gpu_owned||!entry.buffer_alias_version||!entry.desc.writable||
+       !CanTransferIndependentMultisample(entry.desc,entry.layout)||entry.BindingPinned()||
+       entry.pending||entry.fence>completed||entry.storage_samples.size()!=entry.desc.samples||
+       !entry.storage_linear.handle||!entry.texture.handle||
+       entry.texture.handle->GetDesc().SampleDesc.Count!=entry.desc.samples||
+       !entry.storage_leases.empty()||!entry.storage_clear_leases.empty()||!entry.format_transfers.empty())return false;
+    const auto owner=image_uids_.find(entry.image_uid);
+    if(entry.cache!=this||owner==image_uids_.end()||owner->second!=&entry)
+        throw std::invalid_argument("MSAA pressure storage has no owning cache");
+    const auto buffer=entry.storage_linear.handle->GetDesc();
+    auto bytes=device_->GetResourceAllocationInfo(0,1,&buffer).SizeInBytes;
+    if(!bytes||bytes==UINT64_MAX)throw std::overflow_error("Invalid retired MSAA linear allocation");
+    for(const auto& sample:entry.storage_samples){
+        // Descriptor bindings retain the placed allocation independently of
+        // the cache. Do not claim their bytes freed while such a lease exists.
+        if(!sample.handle||!sample.allocation||sample.allocation.use_count()!=1)return false;
+        const auto sample_bytes=texture_allocator_.AllocationInfo(sample.handle->GetDesc(),ResourceCasts(sample)).SizeInBytes;
+        if(!sample_bytes||sample_bytes==UINT64_MAX||bytes>UINT64_MAX-sample_bytes)
+            throw std::overflow_error("Invalid retired MSAA sample allocation");
+        bytes+=sample_bytes;
+    }
+    if(bytes>entry.allocation_bytes)throw std::logic_error("MSAA storage exceeds its accounted allocation");
+    entry.storage_samples.clear();entry.storage_linear={};entry.storage_retired=true;
+    entry.allocation_bytes-=bytes;
+    // The authoritative multisample texture, image UID and CPU-write guards
+    // remain intact. Never resolve an independent image into physical memory.
+    Diagnostics::Count("image-msaa.storage-retired.bytes",bytes);return true;
+}
 std::shared_ptr<GuestMultisample::StorageLease> GuestTextureCache::PrepareMultisampleStorage(Entry& entry){
-    if(!entry.desc.writable||entry.desc.samples<2||entry.storage_samples.size()!=entry.desc.samples||
-       !entry.storage_linear.handle||!multisample_)
-        throw std::invalid_argument("Native MSAA shader storage is not allocated");
+    EnsureMultisampleStorage(entry);
+    if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
     auto lease=multisample_->PrepareStorage(entry.texture,entry.storage_samples,entry.storage_linear,entry.desc,entry.layout);
     entry.storage_leases.push_back(lease);entry.pending=true;return lease;
 }
@@ -982,6 +1074,7 @@ void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* p
             }
             ++it;
         }
+        RetireMultisampleStorage(*e,completed);
         total-=before-e->ResidentBytes();
         if(total<=resident_budget_)break;
     }
@@ -1014,7 +1107,7 @@ void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* p
 }
 bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const GuestTextureLayout& layout,bool writable_snapshot){
     return (!d.writable||writable_snapshot)&&!d.stencil_address&&
-        (d.samples==1||IndependentMultisampleTransfer(d,layout))&&d.address%4==0&&
+        (d.samples==1||CanTransferIndependentMultisample(d,layout))&&d.address%4==0&&
         layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
@@ -1090,9 +1183,9 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
             if((existing->desc.samples>1||d.samples>1)&&
                (existing->desc.samples!=d.samples||
-                !IndependentMultisampleTransfer(existing->desc,existing->layout)||
-                !IndependentMultisampleTransfer(d,layout)))
-                throw std::runtime_error("Independent MSAA image transfer needs matching R32 sample domains");
+                !CanTransferIndependentMultisample(existing->desc,existing->layout)||
+                !CanTransferIndependentMultisample(d,layout)))
+                throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
             auto* source=existing.get();auto pin=PinBinding(*source);
             auto snapshot=read_independent_(*source,d.address,layout.guest_bytes);
             // Source ownership and its CPU-write guard remain live until the
@@ -1419,7 +1512,7 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     const auto resource_desc=image.texture.handle->GetDesc();
     const bool multisampled=image.desc.samples>1;
     if(resource_desc.SampleDesc.Count!=image.desc.samples||
-       (multisampled&&!IndependentMultisampleTransfer(image.desc,image.layout)))
+       (multisampled&&!CanTransferIndependentMultisample(image.desc,image.layout)))
         throw std::invalid_argument("Independent image sample backing has no exact transfer");
     const auto linear_bytes=image.layout.HostBytesPerPixel();
     const bool inherited=image.layout.expanded_bytes_per_pixel!=0;
@@ -1488,7 +1581,7 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     if(inherited)merge->Record(list,image.expanded_guest_backing,output,image.expanded_written_mask);
     for(auto& slice:linear){
         // MSAA textures cannot be copied into a placed buffer footprint. Load
-        // every sample through the existing raw R32 transfer, without resolve,
+        // every sample through the existing raw integer transfer, without resolve,
         // then retile only logical texels into the physical-seeded private copy.
         if(slice.samples)slice.samples->Record(list,image.texture,slice.buffer);
         else{

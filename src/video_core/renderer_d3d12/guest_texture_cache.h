@@ -124,6 +124,9 @@ public:
         std::vector<std::shared_ptr<GuestMultisample::CopyLease>> sample_copy_leases;
         std::vector<Resource> storage_samples;
         Resource storage_linear;
+        // Completed UAV sample planes are reconstructible from the native MSAA
+        // image. Pressure can retire these copies without retiring its owner.
+        bool storage_retired=false;
         std::vector<std::shared_ptr<GuestMultisample::StorageLease>> storage_leases;
         std::vector<std::shared_ptr<void>> storage_clear_leases;
         std::vector<Resource> uploads;uint64_t fence=0;bool pending=false;
@@ -229,12 +232,17 @@ public:
     bool ConsumeMeta(uint64_t address,uint32_t slice);
     void RemoveMeta(uint64_t address,uint64_t size);
     void SetBackingSamples(Entry&,UINT samples,ID3D12GraphicsCommandList*,bool copy=true);
+    void EnsureMultisampleStorage(Entry&);
+    bool RetireMultisampleStorage(Entry&,uint64_t completed_fence);
     std::shared_ptr<GuestMultisample::StorageLease> PrepareMultisampleStorage(Entry&);
     Entry& Upload(const GuestTextureDesc&,std::span<const std::byte> guest_bytes,
                   ID3D12GraphicsCommandList*,uint64_t completed_fence,
                   std::span<const std::byte> stencil_bytes={},bool guest_snapshot=false,
                   const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false);
     static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
+    // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
+    // require the existing device checks during allocation/transfer preparation.
+    static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);
     std::shared_ptr<void> PinBinding(Entry&);
     struct PressureSourceLease {std::shared_ptr<void> lease;uint64_t bytes;};
     PressureSourceLease RetainPressureSource(Entry&);
