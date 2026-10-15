@@ -27,6 +27,36 @@ inline std::optional<GuestColorClearValue> DecodeGuestColorClear(
     const AmdGpu::ColorBuffer& buffer) {
     const uint32_t format = buffer.info.format;
     const uint32_t number = uint32_t(buffer.GetFixedNumberFormat());
+    if (format == 6 || format == 7) {
+        if (number != 7) return std::nullopt;
+        const uint32_t word = buffer.clear_word0;
+        // Canonical UF11 bits retain the five-bit exponent. Widening UF10
+        // needs only a zero low mantissa bit, including packed subnormals.
+        // Original7 uses different fields and maps R/B before storage in6.
+        std::array<uint32_t, 4> values = format == 6 ?
+            std::array<uint32_t, 4>{word & 0x7ff, (word >> 11) & 0x7ff,
+                ((word >> 22) & 0x3ff) << 1, 0x3c0} :
+            std::array<uint32_t, 4>{(word & 0x3ff) << 1, (word >> 10) & 0x7ff,
+                (word >> 21) & 0x7ff, 0x3c0};
+        values = buffer.Swizzle().Apply(values);
+        // Do not invent a NaN payload or cross-width rounding oracle. Only
+        // finite values exactly representable by the final UF11/UF11/UF10
+        // lanes enter this common CPU/RTV codec. Other cases keep fallback.
+        for (uint32_t i = 0; i < 3; ++i)
+            if ((values[i] >> 6) == 31) return std::nullopt;
+        if (values[2] & 1) return std::nullopt;
+        GuestColorClearValue clear;
+        clear.data_format = 6; clear.number_format = number; clear.pixel_bytes = 4;
+        for (uint32_t i = 0; i < 3; ++i) {
+            const uint32_t exponent = values[i] >> 6, mantissa = values[i] & 63;
+            // Even the smallest packed subnormal is normal in F32, so the
+            // numeric RTV input does not encounter F32 denormal flushing.
+            clear.rtv[i] = exponent ? std::ldexp(float(64 + mantissa), int(exponent) - 21) :
+                std::ldexp(float(mantissa), -20);
+        }
+        const uint32_t packed = values[0] | (values[1] << 11) | ((values[2] >> 1) << 22);
+        std::memcpy(clear.pixel.data(), &packed, 4); return clear;
+    }
     if (format >= 16 && format <= 19) {
         // Vulkan R5G6B5 / A1R5G5B5 and DXGI B5G6R5 / B5G5R5A1
         // have identical physical bits. Original format18 remaps to format17,

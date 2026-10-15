@@ -191,6 +191,56 @@ void CheckPacked16ColorClearCodec(){
     Require(!DecodeGuestColorClear(ClearBuffer(18,4,0xa28b)));
     Require(!DecodeGuestColorClear(ClearBuffer(19,4,0x4321)));
 }
+void CheckPackedFloatColorClearCodec(){
+    // Original6 fields encode [1.5,2,4]. Original7 has the same logical
+    // fields with UF10 first, then UF11/UF11; its remap swaps R/B afterward.
+    auto clear=CheckClearPixel("original6 finite Standard",ClearBuffer(6,7,0x882003e0,0xdeadbeef),
+        {0xe0,3,0x20,0x88});
+    Require(clear.data_format==6&&clear.rtv[0]==1.5f&&clear.rtv[1]==2.f&&clear.rtv[2]==4.f);
+    clear=CheckClearPixel("original6 finite Alternate alpha",ClearBuffer(6,7,0x882003e0,0,ClearSwap::Alternate),
+        {0xe0,3,0x20,0x78});
+    Require(clear.rtv[2]==1.f);
+    CheckClearPixel("original6 finite StandardReverse",ClearBuffer(6,7,0x882003e0,0,ClearSwap::StandardReverse),
+        {0x40,4,0x20,0x7c});
+    CheckClearPixel("original6 finite AlternateReverse",ClearBuffer(6,7,0x882003e0,0,ClearSwap::AlternateReverse),
+        {0xc0,3,0x20,0x7c});
+    clear=CheckClearPixel("original7 finite Standard",ClearBuffer(7,7,0x881001f0),{0x40,4,0x20,0x7c});
+    Require(clear.data_format==6&&clear.rtv[0]==4.f&&clear.rtv[1]==2.f&&clear.rtv[2]==1.5f);
+    CheckClearPixel("original7 finite Alternate alpha",ClearBuffer(7,7,0x881001f0,0,ClearSwap::Alternate),
+        {0xc0,3,0x20,0x7c});
+    CheckClearPixel("original7 finite StandardReverse",ClearBuffer(7,7,0x881001f0,0,ClearSwap::StandardReverse),
+        {0xe0,3,0x20,0x88});
+    CheckClearPixel("original7 finite AlternateReverse",ClearBuffer(7,7,0x881001f0,0,ClearSwap::AlternateReverse),
+        {0xe0,3,0x20,0x78});
+
+    clear=CheckClearPixel("original6 packed subnormals",ClearBuffer(6,7,0x00401001),{1,0x10,0x40,0});
+    Require(clear.rtv[0]==0x1p-20f&&clear.rtv[1]==0x1p-19f&&clear.rtv[2]==0x1p-19f);
+    clear=CheckClearPixel("original7 exact subnormal widening",ClearBuffer(7,7,0x00200801),{1,0x10,0x40,0});
+    Require(clear.rtv[0]==0x1p-20f&&clear.rtv[2]==0x1p-19f);
+    CheckClearPixel("original6 exact subnormal narrowing",ClearBuffer(6,7,2,0,ClearSwap::StandardReverse),
+        {0,0,0x40,0});
+    CheckClearPixel("original6 exact normal narrowing",ClearBuffer(6,7,0x3c2,0,ClearSwap::StandardReverse),
+        {0,0,0x40,0x78});
+    clear=CheckClearPixel("original6 maximum finite UF11",ClearBuffer(6,7,0x7bf),{0xbf,7,0,0});
+    Require(clear.rtv[0]==65024.f);
+    clear=CheckClearPixel("original6 exact maximum UF10",ClearBuffer(6,7,0x7be,0,ClearSwap::StandardReverse),
+        {0,0,0xc0,0xf7});
+    Require(clear.rtv[2]==64512.f);
+    CheckClearPixel("original6 zero",ClearBuffer(6,7,0),{0,0,0,0});
+
+    // These are explicit open cases, not a claim that historical fallback
+    // already implements reference rounding or exceptional-value semantics.
+    Require(!DecodeGuestColorClear(ClearBuffer(6,7,1,0,ClearSwap::StandardReverse)));
+    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x3c1,0,ClearSwap::StandardReverse)));
+    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7bf,0,ClearSwap::StandardReverse)));
+    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x00200801,0,ClearSwap::StandardReverse)));
+    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c0)));
+    Require(!DecodeGuestColorClear(ClearBuffer(6,7,0x7c1)));
+    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x3e0)));
+    Require(!DecodeGuestColorClear(ClearBuffer(7,7,0x3e1)));
+    Require(!DecodeGuestColorClear(ClearBuffer(6,4,0x882003e0)));
+    Require(!DecodeGuestColorClear(ClearBuffer(34,7,1)));
+}
 void CheckCpuClearPixel(AmdGpu::ColorBuffer b,std::initializer_list<uint8_t> pixel){
     b.base_address=0x10000;b.cmask_base_address=0x20000;b.info.fast_clear=1;
     b.attrib.tile_mode_index=AmdGpu::TileMode(13);b.pitch.tile_max=63;b.slice.tile_max=2047;
@@ -226,6 +276,9 @@ void CheckColorClearCpuIntegration(){
     CheckCpuClearPixel(ClearBuffer(16,0,0x10000),{0,0xf8});
     CheckCpuClearPixel(ClearBuffer(19,0,0x4321,0,ClearSwap::Alternate),{0x23,0x41});
     CheckCpuClearPixel(ClearBuffer(19,0,0x10000),{0,0xf0});
+    CheckCpuClearPixel(ClearBuffer(6,7,0x882003e0,0,ClearSwap::StandardReverse),{0x40,4,0x20,0x7c});
+    CheckCpuClearPixel(ClearBuffer(7,7,0x881001f0,0,ClearSwap::Alternate),{0xc0,3,0x20,0x7c});
+    CheckCpuClearPixel(ClearBuffer(7,7,0x00200801),{1,0x10,0x40,0});
 }
 void CheckRawColorClearGpu(ID3D12Device* device,ID3D12CommandQueue* queue){
     struct Case {
@@ -392,7 +445,8 @@ void CheckCmaskPartialSurfaces() {
     }
 }
 int main(){try {
-    CheckColorClearCodec();CheckPackedColorClearCodec();CheckPacked16ColorClearCodec();CheckColorClearCpuIntegration();
+    CheckColorClearCodec();CheckPackedColorClearCodec();CheckPacked16ColorClearCodec();
+    CheckPackedFloatColorClearCodec();CheckColorClearCpuIntegration();
     CheckCmaskAddressing();CheckCmaskPartialSurfaces();
     AmdGpu::ColorBuffer b{}; b.base_address=0x10000; b.cmask_base_address=0x20000;
     b.info.format=10; b.info.fast_clear=1; b.attrib.tile_mode_index=AmdGpu::TileMode(13);
