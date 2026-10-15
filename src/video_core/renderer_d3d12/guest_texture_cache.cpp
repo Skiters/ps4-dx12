@@ -59,6 +59,14 @@ std::span<const DXGI_FORMAT> PackedFloatCasts(DXGI_FORMAT format,bool supported)
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
     return resource.castable_formats?std::span<const DXGI_FORMAT>(*resource.castable_formats):std::span<const DXGI_FORMAT>{};
 }
+bool IndependentMultisampleTransfer(const GuestTextureDesc& d,const GuestTextureLayout& layout){
+    // Match the R32 sample-storage family admitted by independent ownership.
+    // Other MSAA formats/planes need their own exact domain-transfer contract.
+    return (d.samples==2||d.samples==4||d.samples==8)&&d.levels==1&&
+        !d.depth_target&&!d.stencil_address&&!d.volume_depth&&!d.one_dimensional&&
+        d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7)&&
+        layout.block_extent==1&&layout.bytes_per_pixel==4&&!layout.expanded_bytes_per_pixel;
+}
 }
 void GuestTextureCache::ValidateWritableFormat(DXGI_FORMAT format){
     if(writable_formats_.contains(format))return;
@@ -1011,7 +1019,8 @@ void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* p
     }
 }
 bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const GuestTextureLayout& layout,bool writable_snapshot){
-    return (!d.writable||writable_snapshot)&&!d.stencil_address&&d.samples==1&&d.address%4==0&&
+    return (!d.writable||writable_snapshot)&&!d.stencil_address&&
+        (d.samples==1||IndependentMultisampleTransfer(d,layout))&&d.address%4==0&&
         layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
@@ -1083,8 +1092,13 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
             if(!read_independent_||!acquire_independent_||!retire_independent_||
-               !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address||existing->desc.samples!=1)
+               !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address)
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
+            if((existing->desc.samples>1||d.samples>1)&&
+               (existing->desc.samples!=d.samples||
+                !IndependentMultisampleTransfer(existing->desc,existing->layout)||
+                !IndependentMultisampleTransfer(d,layout)))
+                throw std::runtime_error("Independent MSAA image transfer needs matching R32 sample domains");
             auto* source=existing.get();auto pin=PinBinding(*source);
             auto snapshot=read_independent_(*source,d.address,layout.guest_bytes);
             // Source ownership and its CPU-write guard remain live until the
@@ -1409,21 +1423,29 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
        initial.handle->GetDesc().Width<image.layout.guest_bytes)
         throw std::invalid_argument("Unsupported independent image formatted-buffer geometry");
     const auto resource_desc=image.texture.handle->GetDesc();
+    const bool multisampled=image.desc.samples>1;
+    if(resource_desc.SampleDesc.Count!=image.desc.samples||
+       (multisampled&&!IndependentMultisampleTransfer(image.desc,image.layout)))
+        throw std::invalid_argument("Independent image sample backing has no exact transfer");
     const auto linear_bytes=image.layout.HostBytesPerPixel();
     const bool inherited=image.layout.expanded_bytes_per_pixel!=0;
     if(inherited&&(!HasExactPackedExpansion(image.desc,image.layout)||
        !image.expanded_guest_backing.handle||!image.expanded_written_mask.handle||!image.expanded_backing_bytes))
         throw std::invalid_argument("Independent expanded image lost its exact packed backing");
     struct Linear {D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT64 bytes;UINT mip,layer;Resource buffer;
-        std::shared_ptr<GuestTiler::Lease> dispatch;};
+        std::shared_ptr<GuestTiler::Lease> dispatch;std::shared_ptr<GuestMultisample::Lease> samples;};
     std::vector<Linear> linear;linear.reserve(size_t(image.desc.levels)*image.desc.layers);
     if(!inherited)for(UINT layer=0;layer<image.desc.layers;++layer)for(UINT mip=0;mip<image.desc.levels;++mip){
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};UINT64 bytes{},row_bytes{};
-        DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels,
+        if(multisampled){
+            footprint=GuestMultisample::Footprint(image.desc,image.layout);
+            row_bytes=u64(image.desc.width)*linear_bytes;
+            bytes=GuestMultisample::LinearBytes(image.desc,footprint);
+        }else DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels,
             1,0,&footprint,nullptr,&row_bytes,&bytes));
         if(row_bytes!=u64(std::max(image.desc.width>>mip,1u))*linear_bytes||!bytes||bytes>UINT32_MAX)
             throw std::logic_error("Independent image transfer footprint changed");
-        linear.push_back({footprint,bytes,mip,layer,{},{}});
+        linear.push_back({footprint,bytes,mip,layer,{},{},{}});
     }
     const auto mask_bytes=GuestTiler::WrittenBytes(image.layout.guest_bytes);
     const auto allocation_bytes=[&](uint64_t length,bool uav){
@@ -1438,38 +1460,50 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     };
     auto reservation=allocation_bytes(image.layout.guest_bytes,true)+
         (inherited?0:allocation_bytes(mask_bytes,true))+allocation_bytes(initial.handle->GetDesc().Width,false);
-    for(const auto& slice:linear)reservation+=allocation_bytes((slice.bytes+3)&~u64(3),false);
+    for(const auto& slice:linear)reservation+=allocation_bytes((slice.bytes+3)&~u64(3),multisampled);
     ReserveMemory(reservation,completed,&image);
     if(!image.tiler)image.tiler=std::make_shared<GuestTiler>(device_.Get());
+    if(multisampled&&!image.multisample)image.multisample=std::make_shared<GuestMultisample>(device_.Get());
     auto output=GuestTiler::Scratch(device_.Get(),image.layout.guest_bytes);
     auto mask=inherited?image.expanded_written_mask:GuestTiler::Scratch(device_.Get(),mask_bytes);
     auto merge=inherited?image.tiler->PrepareMaskedMerge(image.expanded_guest_backing,output,mask,image.layout.guest_bytes):
         std::shared_ptr<GuestTiler::Lease>{};
     for(auto& slice:linear){
-        slice.buffer=Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        slice.buffer=multisampled?GuestTiler::Scratch(device_.Get(),slice.bytes):
+            Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
         slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,image.desc,image.layout,
             slice.mip,slice.layer,slice.footprint,linear_bytes,true);
+        if(multisampled)slice.samples=image.multisample->Prepare(image.texture,slice.buffer,
+            image.desc,image.layout,slice.layer,0,false);
     }
     // Retain all resources/descriptors and account transient bytes before recording.
     image.buffer_sync_resources.reserve(image.buffer_sync_resources.size()+linear.size()+3+(inherited?1:0));
     image.tiler_leases.reserve(image.tiler_leases.size()+linear.size()+(inherited?1:0));
+    image.multisample_leases.reserve(image.multisample_leases.size()+(multisampled?linear.size():0));
     image.buffer_sync_resources.insert(image.buffer_sync_resources.end(),{output,mask,initial});
     if(inherited){image.buffer_sync_resources.push_back(image.expanded_guest_backing);image.tiler_leases.push_back(merge);}
     for(const auto& slice:linear){image.buffer_sync_resources.push_back(slice.buffer);
-        image.tiler_leases.push_back(slice.dispatch);}
+        image.tiler_leases.push_back(slice.dispatch);
+        if(slice.samples)image.multisample_leases.push_back(slice.samples);}
     image.buffer_sync_allocation_bytes+=reservation;
     image.pending=true;
     if(image.texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)image.texture.UavBarrier(list);
-    image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+    if(!multisampled)image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
     initial.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
     DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,initial.handle.Get(),0,image.layout.guest_bytes));
     if(inherited)merge->Record(list,image.expanded_guest_backing,output,image.expanded_written_mask);
     for(auto& slice:linear){
-        D3D12_TEXTURE_COPY_LOCATION source{};source.pResource=image.texture.handle.Get();
-        source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=slice.mip+slice.layer*image.desc.levels;
-        D3D12_TEXTURE_COPY_LOCATION destination{};destination.pResource=slice.buffer.handle.Get();
-        destination.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;destination.PlacedFootprint=slice.footprint;
-        DX12_API_CALL(list->CopyTextureRegion(&destination,0,0,0,&source,nullptr));
+        // MSAA textures cannot be copied into a placed buffer footprint. Load
+        // every sample through the existing raw R32 transfer, without resolve,
+        // then retile only logical texels into the physical-seeded private copy.
+        if(slice.samples)slice.samples->Record(list,image.texture,slice.buffer);
+        else{
+            D3D12_TEXTURE_COPY_LOCATION source{};source.pResource=image.texture.handle.Get();
+            source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=slice.mip+slice.layer*image.desc.levels;
+            D3D12_TEXTURE_COPY_LOCATION destination{};destination.pResource=slice.buffer.handle.Get();
+            destination.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;destination.PlacedFootprint=slice.footprint;
+            DX12_API_CALL(list->CopyTextureRegion(&destination,0,0,0,&source,nullptr));
+        }
         slice.dispatch->Record(list,slice.buffer,output,mask);
     }
     output.UavBarrier(list);
