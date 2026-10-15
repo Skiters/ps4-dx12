@@ -3,6 +3,7 @@
 #include "nv_shader_clock.h"
 #include "guest_sampler.h"
 #include "guest_image_readback.h"
+#include "guest_image_ownership.h"
 #include "diagnostics.h"
 #include "guest_dma.h"
 #include "shader_recompiler/native_dma.h"
@@ -301,6 +302,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::vector<std::pair<size_t,GuestTextureCache::Entry*>> formatted_images;
     std::vector<std::shared_ptr<void>> formatted_image_pins;
     std::vector<std::pair<size_t,u32>> formatted_metadata;
+    struct OrderedFormattedImage {
+        VAddr address;u64 bytes;GuestTextureCache::Entry* image;Resource tiled;
+    };
+    std::vector<OrderedFormattedImage> ordered_formatted_images;
+    GuestTextureCache::Entry* ordered_formatted_version{};
+    bool ordered_formatted_writer=false;
     if(textures)for(size_t i=0;i<ordinary_count;++i)if(pending[i].formatted_read&&
         rasterizer.FormattedBufferNeedsImageSync(requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)){
         if(const auto meta=textures->GetMetaInfo(requests[i].address+pending[i].byte_adjust))
@@ -310,9 +317,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
     }
     for(size_t i=0;i<ordinary_count;++i)if(separate_overlap(requests[i].address,requests[i].size)){
-        if(pending[i].formatted_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})&&
-           rasterizer.FormattedBufferNeedsImageSync(
-            requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)){
+        if(pending[i].formatted_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})){
+            const bool needs_sync=rasterizer.FormattedBufferNeedsImageSync(
+                requests[i].address+pending[i].byte_adjust,pending[i].original_bytes);
+            const bool overlaps_writer=std::ranges::any_of(requests,[&](const auto& buffer){
+                return buffer.written&&buffer.address<requests[i].address+requests[i].size&&
+                    requests[i].address<buffer.address+buffer.size;});
+            if(!needs_sync&&!overlaps_writer)continue;
             GuestTextureCache::Entry* version{};size_t candidates{};
             if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
                 entry->desc.address==requests[i].address){
@@ -322,10 +333,59 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             if(candidates>1&&version->layout.guest_bytes!=pending[i].original_bytes)
                 throw std::runtime_error("Formatted buffer has ambiguous independent image versions");
-            if(!version||pending[i].byte_adjust||std::ranges::any_of(requests,[&](const auto& buffer){
-                return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
-                    version->desc.address<buffer.address+buffer.size;}))
+            if(!version||pending[i].byte_adjust)
                 throw std::runtime_error("Independent formatted image/buffer partial or simultaneous-write ordering is not adapted");
+            const auto first_writer=std::ranges::find_if(requests,[&](const auto& buffer){
+                return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
+                    version->desc.address<buffer.address+buffer.size;});
+            if(first_writer!=requests.end()){
+                // Pinned BindBuffers visits descriptors in order. A prior writer
+                // makes this image GpuDirty; only reads before the first writer
+                // may tile the preceding image into the shared buffer arena.
+                const bool reads_image=i<size_t(first_writer-requests.begin());
+                const auto ownership=DescribeGuestImageOwnership(*version);
+                const auto& layout=version->layout;const auto& desc=version->desc;
+                // Earlier raw reads also stream a small clean CPU snapshot;
+                // a later formatted read must not turn them into arena aliases.
+                const bool reads_before_writer=std::any_of(requests.begin(),first_writer,[&](const auto& buffer){
+                    return !buffer.written&&buffer.address<desc.address+layout.guest_bytes&&
+                        desc.address<buffer.address+buffer.size;
+                });
+                const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
+                const bool all_full_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
+                    if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
+                    const auto original=buffer.WriteRange();
+                    return buffer.unordered_access&&buffer.address==desc.address&&buffer.size==layout.guest_bytes&&
+                        original.address==desc.address&&original.size==layout.guest_bytes;
+                });
+                const bool unique=std::ranges::none_of(textures->Entries(),[&](const auto& image){
+                    return image.get()!=version&&image->gpu_owned&&image->buffer_alias_version&&
+                        image->desc.address<desc.address+layout.guest_bytes&&
+                        desc.address<image->desc.address+image->layout.guest_bytes;
+                });
+                if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
+                   !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
+                   (ordered_formatted_version&&ordered_formatted_version!=version)||!all_full_uavs||
+                   pending[i].original_bytes!=layout.guest_bytes||
+                   (reads_before_writer&&layout.guest_bytes<=16384&&
+                    !rasterizer.IsGpuBufferModified(desc.address,layout.guest_bytes))||
+                   textures->GetMetaInfo(desc.address)||!ownership||
+                   !textures->CanRetainIndependentImage(ownership->desc,ownership->layout)||
+                   native.SampleDesc.Count!=desc.samples||
+                   (desc.samples>1&&!GuestTextureCache::CanTransferIndependentMultisample(desc,layout))||
+                   (layout.expanded_bytes_per_pixel&&(!HasExactPackedExpansion(desc,layout)||
+                    !version->expanded_guest_backing.handle||!version->expanded_written_mask.handle||
+                    !version->expanded_backing_bytes)))
+                    throw std::runtime_error("Ordered formatted buffer/image writers require a unique full-range resident compute alias");
+                ordered_formatted_writer=true;ordered_formatted_version=version;
+                requests[i].resident=true;
+                if(reads_image&&ordered_formatted_images.empty()){
+                    formatted_image_pins.push_back(textures->PinBinding(*version));
+                    ordered_formatted_images.push_back({desc.address,layout.guest_bytes,version,{}});
+                }
+                continue;
+            }
+            if(!needs_sync)continue;
             requests[i].resident=true;
             formatted_image_pins.push_back(textures->PinBinding(*version));
             formatted_images.emplace_back(i,version);
@@ -353,6 +413,31 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             throw std::runtime_error("Native guest compute DXIL resource has no guest metadata binding");
     }
     diagnostic.Detail("compute=%u buffers=%zu images=%zu samplers=%zu",unsigned(pipeline.IsCompute()),requests.size(),images.size(),samplers.size());
+    if(ordered_formatted_writer){
+        // Complete legality validation precedes captures and logical invalidation.
+        // Capture may rebuild native envelopes: no final shader views exist yet.
+        for(const auto& request:requests){
+            (void)request.WriteRange();
+            rasterizer.ValidateGpuBacking(request.address,request.size,request.written);
+        }
+        for(auto& transfer:ordered_formatted_images){
+            // Capture/ReserveMemory may Finish and consume a one-shot callback.
+            // Cover earlier work first, then publish the new retile submission
+            // even if later buffer preparation throws before descriptor creation.
+            rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+            auto initial=rasterizer.CaptureShaderBuffer(transfer.address,transfer.bytes);
+            try{
+                transfer.tiled=textures->RetileBufferVersion(*transfer.image,initial,
+                    rasterizer.RecordingList(),rasterizer.CompletedFence());
+            }catch(...){
+                // Retile publishes its leases before recording; a failing API
+                // call can still leave those commands pending for later Flush.
+                rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+                throw;
+            }
+            rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+        }
+    }
     // Invalidation uses the original logical sharp address even when a cached
     // native envelope is already protected or starts before that sharp.
     for(size_t i=0;i<ordinary_count;++i)if(requests[i].written){const auto write=requests[i].WriteRange();
@@ -398,6 +483,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     diagnostic.Stage("buffer-views");
     auto views=rasterizer.PrepareShaderBuffers(requests);
+    for(auto& transfer:ordered_formatted_images){
+        // The source image is now invalidated. Consume its retained transfer,
+        // never its old logical entry, and keep every alias on this same arena.
+        rasterizer.CopyToPreparedShaderBuffer(transfer.address,transfer.bytes,transfer.tiled,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
     for(const auto& [index,value]:formatted_metadata){
         const auto& request=requests[index];
         rasterizer.FillPreparedShaderBuffer(request.address,request.size,value,
