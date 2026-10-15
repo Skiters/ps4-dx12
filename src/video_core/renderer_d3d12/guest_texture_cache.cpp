@@ -93,6 +93,16 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
             layout.format==DXGI_FORMAT_R9G9B9E5_SHAREDEXP&&
             layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
     }
+    if(d.data_format==13){
+        // RGB32 retains its 96-bit guest geometry. UINT4 moves the three
+        // payload DWORDs and a synthetic host alpha; retile stores only RGB.
+        // Pinned guest usage permits sampled images, not IMAGE_WRITE or MRT.
+        const auto format=d.number_format==4?DXGI_FORMAT_R32G32B32A32_UINT:
+            d.number_format==5?DXGI_FORMAT_R32G32B32A32_SINT:
+            d.number_format==7?DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_UNKNOWN;
+        return !d.writable&&!d.render_target&&format!=DXGI_FORMAT_UNKNOWN&&
+            layout.format==format&&layout.bytes_per_pixel==12&&layout.HostBytesPerPixel()==16;
+    }
     if(d.data_format==9){
         // Packed10 storage is either one raw R32 word or an exact four-lane
         // R10G10B10A2 UINT transfer. Never reconstruct signed sampled expansion
@@ -123,9 +133,8 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
     // RTV transfers. Sub-DWORD texels use the tiler's byte-masked retile,
     // preserving neighbouring texels and row padding. sRGB transfers use UINT
     // views and a linear copy footprint, without gamma conversion.
-    // RGB32 is deliberately excluded: its guest 12-byte
-    // texel expands to a 16-byte host texel. Typed access and sample quality
-    // remain adapter-validated by Upload and GuestMultisample::Prepare.
+    // Typed access and sample quality remain adapter-validated by Upload and
+    // GuestMultisample::Prepare; RGB32's distinct guest stride is handled above.
     const UINT bytes8=d.data_format==1?1:d.data_format==3?2:d.data_format==10?4:0;
     const UINT bytes16=d.data_format==2?2:d.data_format==5?4:d.data_format==12?8:0;
     const UINT bytes=bytes8?bytes8:bytes16?bytes16:d.data_format==4?4:d.data_format==11?8:d.data_format==14?16:0;
@@ -1609,7 +1618,7 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
     const auto ownership=DescribeGuestImageOwnership(image);
     if(!list||!image.gpu_owned||!image.buffer_alias_version||!ownership||
-       !CanRetainBufferAlias(ownership->desc,ownership->layout)||
+       !CanRetainIndependentImage(ownership->desc,ownership->layout)||
        !initial.handle||initial.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
        initial.handle->GetDesc().Width<image.layout.guest_bytes)
         throw std::invalid_argument("Unsupported independent image formatted-buffer geometry");

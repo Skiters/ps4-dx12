@@ -293,6 +293,8 @@ add_test(NAME native_independent_msaa_packed_clear COMMAND native-independent-ve
 set_tests_properties(native_independent_msaa_packed_clear PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_packed_float_transfer COMMAND native-independent-version-transfer-test --msaa-packed-float)
 set_tests_properties(native_independent_msaa_packed_float_transfer PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_msaa_rgb32_transfer COMMAND native-independent-version-transfer-test --msaa-rgb32)
+set_tests_properties(native_independent_msaa_rgb32_transfer PROPERTIES TIMEOUT 180)
 add_executable(dx12-memory-surface-provider-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider_test.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider.cpp")

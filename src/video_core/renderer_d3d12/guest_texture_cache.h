@@ -217,6 +217,7 @@ private:
     std::function<bool(Entry&)> acquire_owned_;
     std::function<void(Entry&)> notify_write_;
     std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain_buffer_alias_;
+    std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain_independent_image_;
     std::function<void()> retire_pending_;
     std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
@@ -264,6 +265,12 @@ public:
     void SetBufferAliasRetention(std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain){retain_buffer_alias_=std::move(retain);}
     bool CanRetainBufferAlias(const GuestTextureDesc& desc,const GuestTextureLayout& layout)const {
         return retain_buffer_alias_&&retain_buffer_alias_(desc,layout);
+    }
+    // Physical image ownership is separate from permission to initialize a
+    // writable image version alongside an independently writable buffer.
+    void SetIndependentImageRetention(std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain){retain_independent_image_=std::move(retain);}
+    bool CanRetainIndependentImage(const GuestTextureDesc& desc,const GuestTextureLayout& layout)const {
+        return retain_independent_image_&&retain_independent_image_(desc,layout);
     }
     bool Own(Entry& entry){
         if(entry.gpu_owned){if(notify_write_)notify_write_(entry);return true;}

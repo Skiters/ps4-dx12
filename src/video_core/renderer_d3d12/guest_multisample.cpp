@@ -47,6 +47,17 @@ void ValidatePackedFloatTransfer(const Resource& texture,const GuestTextureDesc&
     if(!texture.AllowsCast(format)||!texture.AllowsCast(DXGI_FORMAT_R32_UINT))
         throw std::runtime_error("Native packed-float transfer needs declared typed and R32 UINT views");
 }
+void ValidateRgb32Transfer(const Resource& texture,const GuestTextureDesc& d,
+    const GuestTextureLayout& layout){
+    if(d.data_format!=13)return;
+    const auto format=d.number_format==4?DXGI_FORMAT_R32G32B32A32_UINT:
+        d.number_format==5?DXGI_FORMAT_R32G32B32A32_SINT:
+        d.number_format==7?DXGI_FORMAT_R32G32B32A32_FLOAT:DXGI_FORMAT_UNKNOWN;
+    if(format==DXGI_FORMAT_UNKNOWN||layout.format!=format||layout.bytes_per_pixel!=12||
+       layout.HostBytesPerPixel()!=16||layout.expanded_bytes_per_pixel||
+       texture.handle->GetDesc().Format!=DXGI_FORMAT_R32G32B32A32_TYPELESS)
+        throw std::invalid_argument("Native RGB32 transfer needs 12-byte guest words and typeless RGBA32 backing");
+}
 DXGI_FORMAT TransferFormat(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if(d.depth_target)return LinearFormat(layout.format);
     if(d.data_format>=16&&d.data_format<=19)
@@ -103,6 +114,7 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
     ValidateRawRgba8Transfer(d,layout,texture_desc.Format);
     ValidateRawPackedTransfer(d,layout,texture_desc.Format);
     ValidatePackedFloatTransfer(texture,d,layout);
+    ValidateRgb32Transfer(texture,d,layout);
     if(d.samples<2||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||plane>1||
        (plane&&!d.stencil_address)||texture_desc.SampleDesc.Count!=d.samples||
        texture_desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
@@ -285,6 +297,7 @@ std::shared_ptr<GuestMultisample::StorageLease> GuestMultisample::PrepareStorage
            !(desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
             throw std::invalid_argument("Native MSAA storage sample layout changed");
         ValidatePackedFloatTransfer(sample,d,layout);
+        ValidateRgb32Transfer(sample,d,layout);
     }
     lease->reads.reserve(d.layers);lease->writes.reserve(d.layers);
     for(UINT layer=0;layer<d.layers;++layer){
@@ -325,6 +338,8 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
     ValidateRawPackedTransfer(d,layout,src.Format);
     ValidatePackedFloatTransfer(source,d,layout);
     ValidatePackedFloatTransfer(destination,d,layout);
+    ValidateRgb32Transfer(source,d,layout);
+    ValidateRgb32Transfer(destination,d,layout);
     if(d.depth_target||d.levels!=1||d.volume_depth||d.one_dimensional||layer>=d.layers||
        layout.block_extent!=1||src.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        dst.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||src.Width!=dst.Width||src.Height!=dst.Height||

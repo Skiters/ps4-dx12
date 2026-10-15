@@ -15,6 +15,11 @@ struct GuestImageOwnershipGeometry {
 inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     const GuestTextureCache::Entry& image) {
     auto owner=image.desc;owner.writable=true;owner.render_target=false;
+    if(image.desc.data_format==13&&!image.desc.writable&&!image.desc.render_target){
+        // RGB32 has a true 96-bit guest layout. Its independent read-only
+        // ownership must neither authorize image writes nor become R32/RGBA32.
+        owner.writable=false;
+    }
     if(image.desc.data_format==34&&image.desc.number_format==7&&
        !image.desc.writable&&!image.desc.render_target&&!image.desc.depth_target&&
        !image.desc.stencil_address){

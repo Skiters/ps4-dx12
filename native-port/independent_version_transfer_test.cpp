@@ -18,7 +18,7 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
     bool raw_source=false,bool raw_destination=false,const RawMultisampleClear* clear=nullptr,UINT view_data=0){
     Rasterizer renderer(device);GuestTextureCache cache(device);GuestMultisample transfer(device);
     GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;desc.layers=2;
-    desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=true;
+    desc.tile_mode=13;desc.data_format=data_format;desc.number_format=number_format;desc.samples=samples;desc.writable=data_format!=13;
     desc.native_raw32=raw_source&&data_format==10;
     desc.native_packed10_raw=raw_source&&data_format==9;
     const bool packed16=data_format>=16&&data_format<=19;
@@ -78,10 +78,13 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         renderer.RecordingList()->CopyBufferRegion(gpu.handle.Get(),0,upload.handle.Get(),0,physical.size());
         // RGB9E5 is a sampled alias, not a guest storage-write format. Require
         // the same separate ownership witness used by the production rasterizer.
-        cache.SetBufferAliasRetention([](const auto& owner,const auto&){return owner.data_format!=34;});
+        cache.SetBufferAliasRetention([](const auto& owner,const auto&){
+            return owner.writable&&owner.data_format!=13&&owner.data_format!=34;});
+        cache.SetIndependentImageRetention([](const auto& owner,const auto&){
+            return owner.data_format!=34&&(owner.data_format!=13||!owner.writable);});
         const auto acquire=[&](auto& image){
             const auto owner=DescribeGuestImageOwnership(image);
-            if(!owner||!cache.CanRetainBufferAlias(owner->desc,owner->layout))return false;
+            if(!owner||!cache.CanRetainIndependentImage(owner->desc,owner->layout))return false;
             image.buffer_alias_version=true;image.SetGpuOwned(true);return true;};
         cache.SetOwnershipAcquirer(acquire);
         unsigned transfers{};
@@ -128,6 +131,14 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         if(packed16&&(source.layout.bytes_per_pixel!=2||source.layout.HostBytesPerPixel()!=4||
            source.texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_UINT||source.Uav(0).Format!=DXGI_FORMAT_R32_UINT))
             throw std::runtime_error("Packed16 did not use one low guest halfword per R32 plane texel");
+        if(data_format==13){
+            auto invalid_layout=layout;invalid_layout.bytes_per_pixel=16;
+            bool rejected{};
+            try{transfer.Prepare(source.texture,gpu,desc,invalid_layout,0,0,false);}
+            catch(const std::invalid_argument& error){
+                rejected=strcmp(error.what(),"Native RGB32 transfer needs 12-byte guest words and typeless RGBA32 backing")==0;}
+            if(!rejected)throw std::runtime_error("RGB32 transfer accepted RGBA32 guest geometry");
+        }
         if(data_format==6){
             if(!source.texture.AllowsCast(DXGI_FORMAT_R11G11B10_FLOAT)||
                !source.texture.AllowsCast(DXGI_FORMAT_R32_UINT))
@@ -202,6 +213,13 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                         // it rather than corrupt the adjacent guest halfword.
                         const u32 word=u32(pixels[x])|0x5a5a0000u;
                         memcpy(row+x*4,&word,4);
+                    }
+                }else if(data_format==13){
+                    // Internal UINT4 transfer seeds a readonly RGB32 version;
+                    // this is not a guest IMAGE_WRITE13. Alpha is host-only.
+                    for(UINT x=0;x<desc.width;++x){
+                        memcpy(row+x*16,pixels+x*3,12);
+                        const u32 poison=0xdeadc0deu;memcpy(row+x*16+12,&poison,4);
                     }
                 }else memcpy(row,pixels,desc.width*layout.bytes_per_pixel);
             }
@@ -364,11 +382,31 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                 if(!rejected)throw std::runtime_error("Ownership accepted a mismatched guest mip layout");
             }
         }
+        if(sampled.data_format==13){
+            auto invalid_usage=sampled;invalid_usage.writable=true;
+            if(GuestTextureCache::CanTransferIndependentMultisample(invalid_usage,sampled_layout))
+                throw std::runtime_error("RGB32 independent transfer admitted guest storage writes");
+            invalid_usage=sampled;invalid_usage.render_target=true;
+            if(GuestTextureCache::CanTransferIndependentMultisample(invalid_usage,sampled_layout))
+                throw std::runtime_error("RGB32 independent transfer admitted guest attachment writes");
+            const auto owner=DescribeGuestImageOwnership(converted);
+            if(!owner||owner->desc.data_format!=13||owner->desc.writable||
+               !cache.CanRetainIndependentImage(owner->desc,owner->layout)||
+               cache.CanRetainBufferAlias(owner->desc,owner->layout)||
+               converted.layout.bytes_per_pixel!=12||converted.layout.HostBytesPerPixel()!=16||
+               converted.expanded_guest_backing.handle||converted.expanded_written_mask.handle||
+               !converted.storage_samples.empty())
+                throw std::runtime_error("RGB32 readonly ownership changed its physical/component domain");
+            const auto srv=converted.Srv();
+            if(D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(3,srv.Shader4ComponentMapping)!=
+               D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1)
+                throw std::runtime_error("RGB32 sampled alpha did not use guest constant one");
+        }
         const bool ownership=transfers==1&&converted.image_uid!=source_uid&&converted.gpu_owned&&
             converted.buffer_alias_version&&!source.gpu_owned;
         const bool expanded=sampled_layout.expanded_bytes_per_pixel==16;
         const bool exact_roundtrip=expanded||(packed16&&!sampled.writable)||
-            sampled.data_format==6||sampled.data_format==34;
+            sampled.data_format==6||sampled.data_format==13||sampled.data_format==34;
         if(exact_roundtrip){
             if(expanded&&(!converted.expanded_guest_backing.handle||!converted.expanded_written_mask.handle||
                !converted.expanded_backing_bytes||!converted.tiler))
@@ -436,6 +474,12 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
                             const u16 native=data_format==18?u16((guest>>1)|(guest<<15)):guest;
                             equal&=actual==native;}
                     }
+                }else if(sampled.data_format==13){
+                    for(UINT x=0;x<desc.width;++x){
+                        equal&=memcmp(row+x*16,pixels+x*12,12)==0;
+                        u32 alpha{};memcpy(&alpha,row+x*16+12,4);
+                        equal&=alpha==(sampled.number_format==7?0x3f800000u:1u);
+                    }
                 }else equal&=memcmp(row,pixels,desc.width*sampled_layout.bytes_per_pixel)==0;
             }
             readbacks[layer].handle->Unmap(0,nullptr);
@@ -498,9 +542,10 @@ int main(int argc,char** argv){try{
     }
     if(argc==2&&strcmp(argv[1],"--msaa-vector32")==0){
         GuestTextureDesc rejected;rejected.samples=2;rejected.data_format=13;rejected.number_format=7;
+        rejected.writable=true;
         if(GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
-            throw std::runtime_error("Expanded RGB32 acquired raw-component MSAA ownership");
-        rejected.data_format=14;rejected.samples=16;
+            throw std::runtime_error("Writable RGB32 acquired sampled-only MSAA ownership");
+        rejected.data_format=14;rejected.samples=16;rejected.writable=false;
         if(GuestTextureCache::CanTransferIndependentMultisample(rejected,LayoutGuestTexture(rejected)))
             throw std::runtime_error("16-sample image acquired unsupported MSAA ownership");
         for(const UINT data:{11u,14u})for(const bool writable:{false,true}){
@@ -627,6 +672,11 @@ int main(int argc,char** argv){try{
         RunMultisample<u32>(device.Get(),8,4,true,true,9,true,true);
         puts("PASS: packed10 raw/native UINT MSAA words, samples/layers, pressure and independent padding/domain");return 0;
     }
+    if(argc==2&&strcmp(argv[1],"--msaa-rgb32")==0){
+        for(const UINT samples:{2u,4u,8u})for(const UINT number:{4u,5u,7u})
+            RunMultisample<u32>(device.Get(),samples,number,false,false,13);
+        puts("PASS: readonly RGB32 MSAA guest12/host16 exact components, alpha discard, independent ownership and padding");return 0;
+    }
     if(argc==2&&strcmp(argv[1],"--msaa-packed-float")==0){
         for(const UINT samples:{2u,4u,8u}){
             RunMultisample<u32>(device.Get(),samples,7,false,true,6);
@@ -668,6 +718,7 @@ int main(int argc,char** argv){try{
     void* mapped{};Check(upload.handle->Map(0,nullptr,&mapped));memcpy(mapped,physical.data(),physical.size());upload.handle->Unmap(0,nullptr);
     renderer.RecordingList()->CopyBufferRegion(gpu.handle.Get(),0,upload.handle.Get(),0,physical.size());
     cache.SetBufferAliasRetention([](const auto&,const auto&){return true;});
+    cache.SetIndependentImageRetention([](const auto&,const auto&){return true;});
     const auto acquire=[](auto& image){image.buffer_alias_version=true;image.SetGpuOwned(true);return true;};
     cache.SetOwnershipAcquirer(acquire);
     cache.SetIndependentVersionTransfer([&](auto& image,u64 address,u64 size){

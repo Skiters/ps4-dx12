@@ -134,8 +134,8 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
     textures_.SetImageWriteNotifier([this](auto& image){QueueLinearImageDownload(image);});
-    textures_.SetBufferAliasRetention([this](const auto& desc,const auto& layout){
-        return page_watch_&&desc.writable&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
+    const auto retain_image=[this](const auto& desc,const auto& layout){
+        return page_watch_&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
             !desc.one_dimensional&&(desc.samples==1||
                 GuestTextureCache::CanTransferIndependentMultisample(desc,layout))&&
             ((desc.data_format==6&&desc.number_format==7)||
@@ -150,6 +150,12 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
               (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||desc.number_format==7)))&&
             !layout.expanded_bytes_per_pixel&&desc.address%4096==0&&layout.guest_bytes%4096==0&&
             layout.guest_bytes<=64*1024*1024&&has_backing_(desc.address,layout.guest_bytes);
+    };
+    textures_.SetBufferAliasRetention([retain_image](const auto& desc,const auto& layout){
+        return desc.writable&&retain_image(desc,layout);
+    });
+    textures_.SetIndependentImageRetention([retain_image](const auto& desc,const auto& layout){
+        return (desc.writable||desc.data_format==13)&&retain_image(desc,layout);
     });
 }
 bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
@@ -180,7 +186,7 @@ bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     // A cached image can keep a version distinct from its physical/resident
     // buffer, including a read-only descriptor or ordinary owned attachment.
     const auto owner=DescribeGuestImageOwnership(image);
-    if(!owner||!textures_.CanRetainBufferAlias(owner->desc,owner->layout))return false;
+    if(!owner||!textures_.CanRetainIndependentImage(owner->desc,owner->layout))return false;
     // Repeated image uses validate the physical owner, including a retained
     // read-only descriptor, without changing an overlapping buffer's guard.
     if(image.buffer_alias_version){image.SetGpuOwned(true);return true;}
