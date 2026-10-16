@@ -11,6 +11,15 @@ The129 groups now distinguish connected implementation from behavior verified. [
 Current continuation: verify committed build script from the clean checkout, then resume expanded BC typed-view production work and the explicit remaining code backlog. Full-port goal remains active. Preview24/original Vulkan/saves/user session unchanged.
 
 
+### Post-integration production continuation — 2026-10-17
+
+The committed Release build script passed in the clean checkout at `ff8534f`; identity is `F:/PS4Dev/handoff/integrated-release-20261016/SCRIPT_RELEASE_IDENTITY.json`, log `command-20261017-003210-70240.log`. Its EXE SHA256 is `86a67a4cbe3383ba03446453569ea3c1d67f18216eb72169fa3a3416932fdeae`.
+
+Continued production work: expanded BC1/2/3/7 UNORM/sRGB CPU snapshots share one RGBA8 typeless resource. Full same-codec physical-layout proof and actual resource-format checks gate typed views. Complete compressed-byte/padding comparison gates reuse, including identical pending immutable uploads without overwriting staging. Original owner/descriptor identity stays; signed BC4/5/6H FLOAT decode variants remain separate, and native BC parent-prefix rules are unchanged. Logical modified history survives compatible expanded numeric views.
+
+Incremental primary Release compiled/linked the new production code (exit0, `command-20261017-003847-60380.log`). Extended existing BC volume checks are authored only. Next: build this committed continuation in the clean checkout, preserve binary identity and push ordinary verified commits; then continue the concrete production backlog in IMPLEMENTATION_REGISTRY.md. No final tests/game or app installation yet; the full-port implementation boundary remains open.
+
+
 ## Active BC typed sampled views checkpoint - 2026-10-16
 
 Authoritative current section. Full-port goal remains active/all129 groups partial/open.

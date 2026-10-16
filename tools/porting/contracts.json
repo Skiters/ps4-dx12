@@ -1993,6 +1993,10 @@
           "paths": [
             "native-port/bc_volume_test.cpp"
           ]
+        },
+        {
+          "kind": "expanded_bc_numeric_pair",
+          "description": "bc_volume_test.cpp now authors same-parent UNORM/sRGB reuse for BC1/2/3/7 across odd 2D, 1D and volumes; cold pending upload, warm reuse, changed compressed bytes, hardware BC numeric reference and signed-float negative controls. Not compiled or run in this integration session."
         }
       ]
     },

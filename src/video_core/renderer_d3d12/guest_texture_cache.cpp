@@ -47,6 +47,8 @@ DXGI_FORMAT BlockStorageFormat(DXGI_FORMAT format){
 }
 bool CanBindReadonlyBcMipPrefix(const GuestTextureCache::Entry&,const GuestTextureDesc&,
     const GuestTextureLayout&);
+bool CanBindReadonlyBcView(const GuestTextureCache::Entry&,const GuestTextureDesc&,
+    const GuestTextureLayout&);
 // PS4 number formats reinterpret the same texel bits. Allocate the DXGI
 // typeless family, then bind a fully typed SRV/UAV for each guest descriptor.
 DXGI_FORMAT GuestStorageFormat(uint32_t data,DXGI_FORMAT fallback){
@@ -837,7 +839,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
     if(sampled_view==desc)return Srv();
     const bool shader_alias=!sampled_view.writable&&CompatibleGuestShaderStorage(desc,sampled_view);
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
-        CanBindReadonlyBcMipPrefix(*this,sampled_view,LayoutGuestTexture(sampled_view));
+        CanBindReadonlyBcView(*this,sampled_view,LayoutGuestTexture(sampled_view));
     if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias)||sampled_view.first_mip>=sampled_view.levels||
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
@@ -1383,6 +1385,34 @@ bool CanBindReadonlyBcMipPrefix(const GuestTextureCache::Entry& source,const Gue
     const auto format=DX12_API_CALL(source.texture.handle->GetDesc()).Format;
     return format==layout.format||format==BlockStorageFormat(layout.format);
 }
+bool IsExpandedReadonlyBcRgba8(const GuestTextureDesc& desc,const GuestTextureLayout& layout){
+    // Mesa expands these codecs to the same encoded RGBA bytes for UNORM and
+    // sRGB. BC4/5/6H decode signed/unsigned values into floats and cannot share
+    // the decoded pixels just because their compressed block sizes agree.
+    return !desc.writable&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
+        desc.samples==1&&((desc.data_format>=35&&desc.data_format<=37)||desc.data_format==41)&&
+        (desc.number_format==0||desc.number_format==9)&&layout.block_extent==4&&
+        layout.expanded_bytes_per_pixel==4&&
+        (layout.format==DXGI_FORMAT_R8G8B8A8_UNORM||layout.format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
+}
+bool MatchesExpandedReadonlyBc(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
+    const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
+    if(!IsExpandedReadonlyBcRgba8(source,source_layout)||!IsExpandedReadonlyBcRgba8(view,view_layout)||
+       source.data_format!=view.data_format||!MatchesGuestMipLayout(source_layout,view_layout))return false;
+    auto physical_view=view;physical_view.number_format=source.number_format;
+    return CompatibleGuestSampledStorage(source,physical_view);
+}
+bool CanBindReadonlyBcView(const GuestTextureCache::Entry& source,const GuestTextureDesc& view,
+    const GuestTextureLayout& layout){
+    if(CanBindReadonlyBcMipPrefix(source,view,layout))return true;
+    // Expanded BC has no independent GPU-written compressed owner/retile path.
+    // Admit only the complete immutable CPU snapshot; upload reuse still checks
+    // every compressed byte, including physical padding, before using this view.
+    if(!source.texture.handle||source.gpu_owned||
+       !MatchesExpandedReadonlyBc(source.desc,source.layout,view,layout))return false;
+    const auto format=DX12_API_CALL(source.texture.handle->GetDesc()).Format;
+    return format==layout.format||format==DXGI_FORMAT_R8G8B8A8_TYPELESS;
+}
 // Bounded pinned ExpandImage copy: all source words fit target BC blocks,
 // and complete source physical storage is the same mip-major target prefix.
 bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTextureLayout& a,
@@ -1421,7 +1451,8 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
 }
 bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
-    return MatchesReadonlyBcMipPrefix(a,al,b,bl)||MatchesReadonlyBcMipPrefix(b,bl,a,al);
+    return MatchesReadonlyBcMipPrefix(a,al,b,bl)||MatchesReadonlyBcMipPrefix(b,bl,a,al)||
+        MatchesExpandedReadonlyBc(a,al,b,bl);
 }
 GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
@@ -1682,7 +1713,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
             const bool block=MatchesReferenceBlockImage(previous.desc,previous.layout,d,layout)||
                 MatchesReferencePartialBlockExpansion(previous.desc,previous.layout,d,layout)||
-                MatchesReadonlyBcMipPrefix(previous.desc,previous.layout,d,layout);
+                MatchesReadonlyBcMipPrefix(previous.desc,previous.layout,d,layout)||
+                MatchesExpandedReadonlyBc(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
                (!block&&!MatchesGuestMipLayout(previous.layout,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
@@ -1866,8 +1898,13 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             }
         }
         auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed){auto* existing=indexed->second;
-            if(existing->pending||existing->fence>completed||
-               (!CompatibleGuestSampledStorage(existing->desc,d)&&!CanBindReadonlyBcMipPrefix(*existing,d,layout))||
+            const bool immutable_bc=!existing->gpu_owned&&!existing->logical_dirty&&
+                IsExpandedReadonlyBcRgba8(d,layout)&&CanBindReadonlyBcView(*existing,d,layout);
+            // An identical immutable upload may be read by another typed view
+            // while pending: no staging or texture bytes are overwritten, and
+            // its original copy precedes both reads on the same scheduler.
+            if(((existing->pending||existing->fence>completed)&&!immutable_bc)||
+               (!CompatibleGuestSampledStorage(existing->desc,d)&&!CanBindReadonlyBcView(*existing,d,layout))||
                existing->layout.guest_bytes!=layout.guest_bytes||
                existing->sampled_snapshot.size()!=layout.guest_bytes)continue;
             bool same_layout=existing->layout.mips.size()==layout.mips.size();
@@ -1940,6 +1977,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(d.stencil_address)new_entry->stencil_layout=stencil_layout;
         D3D12_RESOURCE_DESC r{};r.Dimension=d.volume_depth?D3D12_RESOURCE_DIMENSION_TEXTURE3D:d.one_dimensional?D3D12_RESOURCE_DIMENSION_TEXTURE1D:D3D12_RESOURCE_DIMENSION_TEXTURE2D;r.Width=d.width;r.Height=d.height;r.DepthOrArraySize=UINT16(d.volume_depth?d.volume_depth:d.layers);r.MipLevels=UINT16(d.levels);r.Format=layout.format;r.SampleDesc.Count=d.samples;
         if(layout.format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)r.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        if(IsExpandedReadonlyBcRgba8(d,layout))r.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
         if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=GuestStorageFormat(d.data_format,layout.format);
         if(HasExactPackedExpansion(d,layout))r.Format=DXGI_FORMAT_R32G32B32A32_TYPELESS;
         if(d.depth_target) {

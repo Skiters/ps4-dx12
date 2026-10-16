@@ -145,7 +145,28 @@ float4 SliceSample(float3 uv,uint mip){
             auto& v=cache.Upload(volume,vb,raster.RecordingList(),raster.CompletedFence());
             auto& r=cache.Upload(reference,rb,raster.RecordingList(),raster.CompletedFence());
             if(pass==1&&(!v.uploads.empty()||!r.uploads.empty()))throw std::runtime_error("Unchanged BC snapshots did not reuse resources");
-            ResourceBindings bindings(device.Get(),pipeline.Layout());bindings.Srv(0,0,v.texture.handle.Get(),v.Srv());bindings.Srv(1,0,r.texture.handle.Get(),r.Srv());
+            auto v_pin=cache.PinBinding(v),r_pin=cache.PinBinding(r);
+            auto sampled_volume=volume,sampled_reference=reference;
+            if(format<=37||format==41){
+                sampled_volume.number_format=sampled_reference.number_format=number==9?0:9;
+                const auto alternate_layout=LayoutGuestTexture(sampled_volume);
+                if(!CompatibleGuestBlockSampledViews(volume,vl,sampled_volume,alternate_layout))
+                    throw std::runtime_error("Expanded BC numeric views lost their physical compatibility");
+                auto& alternate=cache.Upload(sampled_volume,vb,raster.RecordingList(),raster.CompletedFence());
+                if(&alternate!=&v||alternate.texture.handle.Get()!=v.texture.handle.Get()||
+                   v.texture.handle->GetDesc().Format!=DXGI_FORMAT_R8G8B8A8_TYPELESS||v.desc!=volume)
+                    throw std::runtime_error("Expanded BC numeric view duplicated or replaced its immutable parent");
+                // The hardware BC reference decodes the opposite numeric view
+                // independently; both directions, cold pending upload, warm and
+                // changed compressed bytes are exercised by the existing loops.
+            }else{
+                auto alternate=volume;alternate.number_format=number==1?0:1;
+                if(CompatibleGuestBlockSampledViews(volume,vl,alternate,LayoutGuestTexture(alternate)))
+                    throw std::runtime_error("Signed BC float expansion was incorrectly reinterpreted");
+            }
+            ResourceBindings bindings(device.Get(),pipeline.Layout());
+            bindings.Srv(0,0,v.texture.handle.Get(),v.Srv(sampled_volume));
+            bindings.Srv(1,0,r.texture.handle.Get(),r.Srv(sampled_reference));
             D3D12_SAMPLER_DESC sampler{};sampler.Filter=D3D12_FILTER_MIN_MAG_MIP_LINEAR;
             sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D12_TEXTURE_ADDRESS_MODE_CLAMP;sampler.MaxLOD=D3D12_FLOAT32_MAX;
             sampler.ComparisonFunc=D3D12_COMPARISON_FUNC_ALWAYS;bindings.Sampler(0,0,sampler);
