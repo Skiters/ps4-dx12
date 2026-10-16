@@ -58,3 +58,9 @@ No final suite, game, XInput, profiling or UI was run. No new FPS/image/control/
 ## Immediate continuation
 
 Finish verifying the committed build script in the clean checkout and persist its identity. Continue the retained production target: GuestTextureCache::UploadVersion / GuestBcDecoder expanded BC1/2/3/7 UNORM/sRGB shared typed sampling, without reinterpreting BC4/5/6H signed float decodes. Preserve compressed snapshots, CPU PageWatch, ownership and fences. Then work through concrete production gap IDs; do not repeat completed architectural audits or confuse unrun fixtures with absent code.
+
+## Latest continuation build
+
+Production BC continuation commit `6cbaef71857b04275be11013e62c05c2b3c672b3` passed the committed build script from the same clean checkout (exit0, `command-20261017-004316-56776.log`). No primary-checkout inputs in 2282 compile commands; tracked source tree clean.
+
+Preserved complete executable/PDB/runtime/compiler/licenses: `F:/PS4Dev/handoff/integrated-release-20261016/artifacts-6cbaef7`. EXE SHA256 `7751a7b565c94920c3ac15271dba0088308506a1a1717406aa8c1eb2aaf450c8`; PDB SHA256 `ee44494e2fa0dc1ba99d46401966dd365bae5670f332d9d7c964c7239b6132be`. Full manifest/proof: `LATEST_RELEASE_IDENTITY.json` / `LATEST_RELEASE_PROOF.json` in the evidence root. Initial72569a5 artifacts remain separately preserved. This build is untested in game and is not installed as an accepted application core.

@@ -1,4 +1,4 @@
-# Implementation and verification registry вЂ” 2026-10-17
+# Implementation and verification registry — 2026-10-17
 
 Pinned reference: `e0a466753a1aacbc8db8253be685bf7ab4d9daae`. All 129 groups have committed implementation/integration sources.
 Release core built from clean commit `72569a531e1c262fc828e80d56400f7f1507d75a`. Desktop C# and prepared fixtures were retained, not executed by this core build.
@@ -9,78 +9,78 @@ The known backlog below retains real native guards; this registry does not certi
 
 ## Concrete remaining production changes
 
-| ID | Upstream symbol в†’ native symbol | Missing semantics |
+| ID | Upstream symbol → native symbol | Missing semantics |
 |---|---|---|
-| color-attachment-feedback | Vulkan::Rasterizer::BindResources / BeginRendering в†’ NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources | Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback. |
-| formatted-alias-ordering | Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources в†’ NativeDX12::ExecuteGuestResources | Non-base or differently laid out simultaneous buffer/image writers and overlapping planned formatted-image geometries need physical-range ownership and ordering adaptation; existing admitted independent exact-base domains stay implemented. |
-| depth-color-shared-storage | Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth в†’ NativeDX12::GuestRasterizer::Draw | Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback. |
-| signed-packed10-attachment | Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState в†’ NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState | R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected. |
-| packed19-msaa-attachment | Vulkan::SurfaceFormat / GraphicsPipeline в†’ NativeDX12::LayoutGuestTexture / GuestTextureCache::UploadVersion | Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented. |
-| polygon-point-fill | Vulkan::Rasterizer::UpdateDynamicState в†’ NativeDX12::BuildGuestGraphicsState | Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture. |
-| mixed-blend-constants | Vulkan::GraphicsPipeline / Rasterizer::UpdateDynamicState в†’ NativeDX12::BuildGuestGraphicsState | Simultaneous constant-color and constant-alpha RGB blend factors on adapters without native ALPHA_FACTOR require an exact fallback; native supporting adapters are handled. |
-| other-vendor-clock | Shader::Backend::SPIRV::EmitMemtime в†’ Shader::Backend::SPIRV::EmitMemtime / NativeDX12 shader clock selection | Hardware S_MEMTIME integration for adapters outside NVIDIA NVAPI and AMD AGS, when their pinned Vulkan path exposes the corresponding clock capability. Never substitute a constant or CPU time. |
-| point-capture-stage-domain | Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex в†’ NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics | Extend oversized point-output capture fallback to the tessellation+geometry stage domain already accepted by pinned graphics; the currently connected capture route requires EsGs. Dynamic ring scalar-offset paths and complete indirect-batch bounds still need adaptation in that fallback. On-chip geometry and stream output are excluded because the pinned renderer skips them. |
+| color-attachment-feedback | Vulkan::Rasterizer::BindResources / BeginRendering → NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources | Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback. |
+| formatted-alias-ordering | Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources → NativeDX12::ExecuteGuestResources | Non-base or differently laid out simultaneous buffer/image writers and overlapping planned formatted-image geometries need physical-range ownership and ordering adaptation; existing admitted independent exact-base domains stay implemented. |
+| depth-color-shared-storage | Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth → NativeDX12::GuestRasterizer::Draw | Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback. |
+| signed-packed10-attachment | Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState → NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState | R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected. |
+| packed19-msaa-attachment | Vulkan::SurfaceFormat / GraphicsPipeline → NativeDX12::LayoutGuestTexture / GuestTextureCache::UploadVersion | Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented. |
+| polygon-point-fill | Vulkan::Rasterizer::UpdateDynamicState → NativeDX12::BuildGuestGraphicsState | Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture. |
+| mixed-blend-constants | Vulkan::GraphicsPipeline / Rasterizer::UpdateDynamicState → NativeDX12::BuildGuestGraphicsState | Simultaneous constant-color and constant-alpha RGB blend factors on adapters without native ALPHA_FACTOR require an exact fallback; native supporting adapters are handled. |
+| other-vendor-clock | Shader::Backend::SPIRV::EmitMemtime → Shader::Backend::SPIRV::EmitMemtime / NativeDX12 shader clock selection | Hardware S_MEMTIME integration for adapters outside NVIDIA NVAPI and AMD AGS, when their pinned Vulkan path exposes the corresponding clock capability. Never substitute a constant or CPU time. |
+| point-capture-stage-domain | Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex → NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics | Extend oversized point-output capture fallback to the tessellation+geometry stage domain already accepted by pinned graphics; the currently connected capture route requires EsGs. Dynamic ring scalar-offset paths and complete indirect-batch bounds still need adaptation in that fallback. On-chip geometry and stream output are excluded because the pinned renderer skips them. |
 
 ## All 129 groups
 
-Only concrete change IDs from the table above are listed. `вЂ”` means none established, not runtime PASS.
+Only concrete change IDs from the table above are listed. `—` means none established, not runtime PASS.
 
 | # | Group | Implementation | Remaining production changes | Behavior |
 |---|---|---|---|---|
-| 1 | common-pm4-completion-and-backing-writes | connected | вЂ” | not_run |
-| 2 | native-texture-binding-lifetime | connected | вЂ” | not_run |
+| 1 | common-pm4-completion-and-backing-writes | connected | — | not_run |
+| 2 | native-texture-binding-lifetime | connected | — | not_run |
 | 3 | native-image-depth-prewrite-snapshots | connected_with_known_gaps | color-attachment-feedback, depth-color-shared-storage | not_run |
 | 4 | native-readonly-depth-buffer-prewrite-snapshots | connected_with_known_gaps | depth-color-shared-storage | not_run |
 | 5 | native-gpu-buffer-image-prewrite-snapshots | connected_with_known_gaps | color-attachment-feedback, formatted-alias-ordering | not_run |
-| 6 | native-anisotropic-manual-storage-filtering | connected | вЂ” | not_run |
+| 6 | native-anisotropic-manual-storage-filtering | connected | — | not_run |
 | 7 | native-buffer-image-prewrite-snapshots | connected_with_known_gaps | color-attachment-feedback, formatted-alias-ordering, depth-color-shared-storage | not_run |
-| 8 | native-unit-anisotropy-storage-filtering | connected | вЂ” | not_run |
+| 8 | native-unit-anisotropy-storage-filtering | connected | — | not_run |
 | 9 | native-r32-rgba8-shader-format-reinterpretation | connected_with_known_gaps | color-attachment-feedback | not_run |
-| 10 | native-integer-nearest-image-sampling | connected | вЂ” | not_run |
+| 10 | native-integer-nearest-image-sampling | connected | — | not_run |
 | 11 | native-packed10-coherent-numeric-shader-views | connected_with_known_gaps | color-attachment-feedback | not_run |
-| 12 | native-graphics-device-settings | connected | вЂ” | not_run |
-| 13 | native-gpu-debug-markers | connected | вЂ” | not_run |
+| 12 | native-graphics-device-settings | connected | — | not_run |
+| 13 | native-gpu-debug-markers | connected | — | not_run |
 | 14 | native-signed-packed-sampled-textures | connected_with_known_gaps | signed-packed10-attachment | not_run |
 | 15 | native-packed10-storage | connected_with_known_gaps | signed-packed10-attachment | not_run |
 | 16 | native-signed-packed-integer-color | connected_with_known_gaps | signed-packed10-attachment | not_run |
 | 17 | native-signed-packed-backing-conversion | connected_with_known_gaps | color-attachment-feedback | not_run |
 | 18 | native-packed10-disjoint-shader-views | connected_with_known_gaps | color-attachment-feedback | not_run |
-| 19 | common-sysmodule-id-validation | connected | вЂ” | not_run |
-| 20 | common-game-path-discovery | connected | вЂ” | not_run |
-| 21 | common-kernel-network-time | connected | вЂ” | not_run |
-| 22 | common-amdgpu-format-tables | connected | вЂ” | not_run |
+| 19 | common-sysmodule-id-validation | connected | — | not_run |
+| 20 | common-game-path-discovery | connected | — | not_run |
+| 21 | common-kernel-network-time | connected | — | not_run |
+| 22 | common-amdgpu-format-tables | connected | — | not_run |
 | 23 | native-shared-color-attachment-layers | connected_with_known_gaps | color-attachment-feedback | not_run |
-| 24 | native-cp-buffer-copy | connected | вЂ” | not_run |
-| 25 | native-packed-float-bit-transfers | connected | вЂ” | not_run |
-| 26 | common-original-videoout-cadence | connected | вЂ” | partial_gpu_verified |
-| 27 | common-windows-mapping-protections | connected | вЂ” | not_run |
-| 28 | common-gcn-arithmetic-and-subgroup-memory-ordering | connected | вЂ” | not_run |
-| 29 | immutable-reference-gpu-completion-capture | connected | вЂ” | not_run |
-| 30 | native-bc-volume-and-extent | connected | вЂ” | not_run |
-| 31 | desktop-core-runtime-identity | connected | вЂ” | not_run |
-| 32 | amd-layout | connected | вЂ” | not_run |
-| 33 | guest-tiling-transfers | connected | вЂ” | not_run |
+| 24 | native-cp-buffer-copy | connected | — | not_run |
+| 25 | native-packed-float-bit-transfers | connected | — | not_run |
+| 26 | common-original-videoout-cadence | connected | — | partial_gpu_verified |
+| 27 | common-windows-mapping-protections | connected | — | not_run |
+| 28 | common-gcn-arithmetic-and-subgroup-memory-ordering | connected | — | not_run |
+| 29 | immutable-reference-gpu-completion-capture | connected | — | not_run |
+| 30 | native-bc-volume-and-extent | connected | — | not_run |
+| 31 | desktop-core-runtime-identity | connected | — | not_run |
+| 32 | amd-layout | connected | — | not_run |
+| 33 | guest-tiling-transfers | connected | — | not_run |
 | 34 | guest-multisample | connected_with_known_gaps | packed19-msaa-attachment | not_run |
 | 35 | native-render-state-and-rasterizer-discard | connected_with_known_gaps | polygon-point-fill, mixed-blend-constants | not_run |
-| 36 | native-compute-wave-size | connected | вЂ” | not_run |
+| 36 | native-compute-wave-size | connected | — | not_run |
 | 37 | guest-hardware-clock | connected_with_known_gaps | other-vendor-clock | not_run |
 | 38 | guest-surface-metadata | connected_with_known_gaps | depth-color-shared-storage | not_run |
-| 39 | host-fsr-and-post-process | connected | вЂ” | not_run |
-| 40 | native-screenshot-capture | connected | вЂ” | not_run |
-| 41 | native-rgb96-storage | connected | вЂ” | not_run |
-| 42 | native-imgui-display-and-lifetime | connected | вЂ” | not_run |
-| 43 | common-cpu-and-mp3 | connected | вЂ” | not_run |
-| 44 | native-big-picture-launcher | connected | вЂ” | not_run |
-| 45 | native-pipeline-preload | connected | вЂ” | not_run |
+| 39 | host-fsr-and-post-process | connected | — | not_run |
+| 40 | native-screenshot-capture | connected | — | not_run |
+| 41 | native-rgb96-storage | connected | — | not_run |
+| 42 | native-imgui-display-and-lifetime | connected | — | not_run |
+| 43 | common-cpu-and-mp3 | connected | — | not_run |
+| 44 | native-big-picture-launcher | connected | — | not_run |
+| 45 | native-pipeline-preload | connected | — | not_run |
 | 46 | native-packed16-images | connected_with_known_gaps | color-attachment-feedback, packed19-msaa-attachment | not_run |
-| 47 | native-shader-debug-and-reload | connected | вЂ” | not_run |
-| 48 | native-buffer-extents-and-index-bounds | connected | вЂ” | not_run |
-| 49 | native-dma-page-table-growth | connected | вЂ” | not_run |
+| 47 | native-shader-debug-and-reload | connected | — | not_run |
+| 48 | native-buffer-extents-and-index-bounds | connected | — | not_run |
+| 49 | native-dma-page-table-growth | connected | — | not_run |
 | 50 | native-depth-stencil-shader-plane-access | connected_with_known_gaps | depth-color-shared-storage | not_run |
 | 51 | native-depth-shader-subresource-access | connected_with_known_gaps | color-attachment-feedback, depth-color-shared-storage | partial_gpu_verified |
 | 52 | native-independent-buffer-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 53 | native-independent-formatted-buffer-sync | connected_with_known_gaps | formatted-alias-ordering | not_run |
-| 54 | native-formatted-metadata-arena-synthesis | connected | вЂ” | not_run |
+| 54 | native-formatted-metadata-arena-synthesis | connected | — | not_run |
 | 55 | native-independent-r32-mip-chains | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 56 | native-independent-r32-array-layers | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 57 | native-independent-r32-vector-formats | connected_with_known_gaps | formatted-alias-ordering | not_run |
@@ -97,46 +97,46 @@ Only concrete change IDs from the table above are listed. `вЂ”` means none e
 | 68 | native-independent-packed16-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 69 | native-independent-r11-packed-float-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 70 | native-independent-logical-partial-buffer-writes | connected_with_known_gaps | formatted-alias-ordering | not_run |
-| 71 | native-mixed-page-buffer-ownership | connected | вЂ” | not_run |
+| 71 | native-mixed-page-buffer-ownership | connected | — | not_run |
 | 72 | native-exact-subdword-buffer-write-ranges | connected_with_known_gaps | formatted-alias-ordering | not_run |
-| 73 | native-actual-cpu-store-formatted-buffer-pages | connected | вЂ” | not_run |
-| 74 | native-zero-clear-original-image-domain | connected | вЂ” | not_run |
-| 75 | native-image-clear-complete-subresources-padding | connected | вЂ” | not_run |
-| 76 | native-nonzero-wide-storage-image-clears | connected | вЂ” | not_run |
-| 77 | native-nonzero-typed-narrow-image-clears | connected | вЂ” | not_run |
-| 78 | native-raw-rgba8-converted-image-clears | connected | вЂ” | not_run |
-| 79 | native-packed16-sampled-volumes | connected | вЂ” | not_run |
-| 80 | native-packed16-nonzero-image-clears | connected | вЂ” | not_run |
+| 73 | native-actual-cpu-store-formatted-buffer-pages | connected | — | not_run |
+| 74 | native-zero-clear-original-image-domain | connected | — | not_run |
+| 75 | native-image-clear-complete-subresources-padding | connected | — | not_run |
+| 76 | native-nonzero-wide-storage-image-clears | connected | — | not_run |
+| 77 | native-nonzero-typed-narrow-image-clears | connected | — | not_run |
+| 78 | native-raw-rgba8-converted-image-clears | connected | — | not_run |
+| 79 | native-packed16-sampled-volumes | connected | — | not_run |
+| 80 | native-packed16-nonzero-image-clears | connected | — | not_run |
 | 81 | native-packed10-converted-image-clears | connected_with_known_gaps | signed-packed10-attachment | not_run |
-| 82 | native-srgb-image-clears | connected | вЂ” | not_run |
-| 83 | native-readonly-image-clear-promotion | connected | вЂ” | not_run |
-| 84 | native-compact-linear-image-download | connected | вЂ” | not_run |
-| 85 | native-queued-independent-image-downloads | connected | вЂ” | not_run |
-| 86 | native-priority-retirement-drain | connected | вЂ” | not_run |
-| 87 | native-priority-linear-pressure-commit | connected | вЂ” | not_run |
-| 88 | native-rgb32-and-wide-readonly-clears | connected | вЂ” | not_run |
-| 89 | native-expanded-packed-image-clears | connected | вЂ” | not_run |
-| 90 | native-packed16-sampled-one-dimensional | connected | вЂ” | not_run |
-| 91 | native-priority-inflight-backing-generation | connected | вЂ” | not_run |
-| 92 | native-nonblocking-linear-pressure-source-residency | connected | вЂ” | not_run |
-| 93 | native-queued-linear-color-attachment-domains | connected | вЂ” | not_run |
-| 94 | native-compact-exact-expanded-packed-downloads | connected | вЂ” | not_run |
-| 95 | native-source-residency-format-and-sample-admission | connected | вЂ” | not_run |
-| 96 | native-image-source-gpu-modification-selection | connected | вЂ” | not_run |
-| 97 | native-r32-float-multisample-image-clears | connected | вЂ” | not_run |
-| 98 | native-image-clear-physical-channel-swizzles | connected | вЂ” | not_run |
-| 99 | native-exact-expanded-pressure-source-residency | connected | вЂ” | not_run |
-| 100 | native-multisample-storage-uav-image-clears | connected | вЂ” | not_run |
+| 82 | native-srgb-image-clears | connected | — | not_run |
+| 83 | native-readonly-image-clear-promotion | connected | — | not_run |
+| 84 | native-compact-linear-image-download | connected | — | not_run |
+| 85 | native-queued-independent-image-downloads | connected | — | not_run |
+| 86 | native-priority-retirement-drain | connected | — | not_run |
+| 87 | native-priority-linear-pressure-commit | connected | — | not_run |
+| 88 | native-rgb32-and-wide-readonly-clears | connected | — | not_run |
+| 89 | native-expanded-packed-image-clears | connected | — | not_run |
+| 90 | native-packed16-sampled-one-dimensional | connected | — | not_run |
+| 91 | native-priority-inflight-backing-generation | connected | — | not_run |
+| 92 | native-nonblocking-linear-pressure-source-residency | connected | — | not_run |
+| 93 | native-queued-linear-color-attachment-domains | connected | — | not_run |
+| 94 | native-compact-exact-expanded-packed-downloads | connected | — | not_run |
+| 95 | native-source-residency-format-and-sample-admission | connected | — | not_run |
+| 96 | native-image-source-gpu-modification-selection | connected | — | not_run |
+| 97 | native-r32-float-multisample-image-clears | connected | — | not_run |
+| 98 | native-image-clear-physical-channel-swizzles | connected | — | not_run |
+| 99 | native-exact-expanded-pressure-source-residency | connected | — | not_run |
+| 100 | native-multisample-storage-uav-image-clears | connected | — | not_run |
 | 101 | native-exported-vs-point-size-geometry | connected_with_known_gaps | polygon-point-fill | not_run |
-| 102 | native-sized-point-emulated-clip-forwarding | connected | вЂ” | not_run |
-| 103 | native-sized-point-render-target-layer-forwarding | connected | вЂ” | not_run |
-| 104 | native-sized-point-dynamic-viewport-extents | connected | вЂ” | not_run |
+| 102 | native-sized-point-emulated-clip-forwarding | connected | — | not_run |
+| 103 | native-sized-point-render-target-layer-forwarding | connected | — | not_run |
+| 104 | native-sized-point-dynamic-viewport-extents | connected | — | not_run |
 | 105 | native-guest-geometry-point-expansion | connected_with_known_gaps | polygon-point-fill, point-capture-stage-domain | not_run |
-| 106 | native-geometry-cache-borrowed-copy-span-elimination | connected | вЂ” | not_run |
-| 107 | native-point-misc-valid-varying-slot | connected | вЂ” | not_run |
-| 108 | native-late-per-viewport-homogeneous-conversion | connected | вЂ” | not_run |
+| 106 | native-geometry-cache-borrowed-copy-span-elimination | connected | — | not_run |
+| 107 | native-point-misc-valid-varying-slot | connected | — | not_run |
+| 108 | native-late-per-viewport-homogeneous-conversion | connected | — | not_run |
 | 109 | native-point-window-transform-and-viewport-edge-footprint | connected_with_known_gaps | polygon-point-fill | not_run |
-| 110 | native-point-parameter-liveness-and-sparse-clip-interface | connected | вЂ” | not_run |
+| 110 | native-point-parameter-liveness-and-sparse-clip-interface | connected | — | not_run |
 | 111 | native-gcn-point-geometry-live-output-budget | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 112 | native-acyclic-point-gs-emission-bound | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 113 | native-unit-point-gs-hardware-emission | connected_with_known_gaps | point-capture-stage-domain | not_run |
@@ -144,9 +144,9 @@ Only concrete change IDs from the table above are listed. `вЂ”` means none e
 | 115 | native-point-gs-sparse-component-transport | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 116 | native-point-gs-aliased-fragment-input-declarations | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 117 | native-point-gs-qualified-parameter-transport | connected_with_known_gaps | point-capture-stage-domain | not_run |
-| 118 | native-clip-disabled-viewport-transforms | connected | вЂ” | not_run |
+| 118 | native-clip-disabled-viewport-transforms | connected | — | not_run |
 | 119 | native-point-center-private-distances | connected_with_known_gaps | point-capture-stage-domain | not_run |
-| 120 | native-linked-clip-input-signatures | connected | вЂ” | not_run |
+| 120 | native-linked-clip-input-signatures | connected | — | not_run |
 | 121 | native-point-dense-distance-interface | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 122 | native-unit-point-dense-distance-outputs | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 123 | native-point-vs-qualified-parameter-transport | connected_with_known_gaps | point-capture-stage-domain | not_run |
@@ -155,7 +155,7 @@ Only concrete change IDs from the table above are listed. `вЂ”` means none e
 | 126 | native-point-captured-fragment-attribute-fetch | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 127 | native-point-capture-replay-submission | connected_with_known_gaps | point-capture-stage-domain | not_run |
 | 128 | native-placed-color-transfer-initialization | connected_with_known_gaps | packed19-msaa-attachment | not_run |
-| 129 | native-present-modes | connected | вЂ” | not_run |
+| 129 | native-present-modes | connected | — | not_run |
 
 ## Prepared checks (independent of remaining code changes)
 

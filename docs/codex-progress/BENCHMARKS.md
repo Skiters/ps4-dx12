@@ -1,5 +1,11 @@
 # Benchmarks
 
+
+## Integration builds — 2026-10-17
+
+Clean committed Release compiled/linked at72569a5, ff8534f and latest `6cbaef71857b04275be11013e62c05c2b3c672b3`. Latest EXE SHA256 `7751a7b565c94920c3ac15271dba0088308506a1a1717406aa8c1eb2aaf450c8`; artifacts/proof: `F:/PS4Dev/handoff/integrated-release-20261016/artifacts-6cbaef7` and integration evidence root. No tests/game/XInput/profiling/FPS measured during integration. Prior saved Vulkan/DX12 measurements remain the baseline; build duration is not performance evidence.
+
+
 ## Current BC block source block - no new measurements, 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.
