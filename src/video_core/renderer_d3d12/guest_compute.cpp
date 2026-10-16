@@ -254,14 +254,26 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         const auto count=source.NumBindings(info);
         if(!count||image_reg>UINT_MAX-count)throw std::out_of_range("Native image descriptor register span");
         const auto type=source.is_written?D3D12_DESCRIPTOR_RANGE_TYPE_UAV:D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        std::optional<D3D_SRV_DIMENSION> reflected_dimension;
         for(const auto& b:pipeline.Layout().Bindings())if(b.type==type&&b.space==0)
-            for(UINT i=0;i<count;++i)if(image_reg+i>=b.reg&&image_reg+i-b.reg<b.count)covered.emplace(UINT(image_reg+i),0);
+            for(UINT i=0;i<count;++i)if(image_reg+i>=b.reg&&image_reg+i-b.reg<b.count){
+                covered.emplace(UINT(image_reg+i),0);
+                if(reflected_dimension&&*reflected_dimension!=b.dimension)
+                    throw std::runtime_error("Native image mip descriptors have different resource dimensions");
+                reflected_dimension=b.dimension;
+            }
         // Pinned BindTextures prepares every original image slot: refresh,
         // tracking and conservative storage ownership survive shader liveness.
         // Only descriptor writes below depend on actual native reflection.
         {
             const auto sharp=source.GetSharp(info);
             const bool array=source.is_array||sharp.GetType()==AmdGpu::ImageType::Cube;
+            // Direct/imported shaders can retain Texture2D declarations.
+            // Promote only when actual DXIL agrees; dead original slots still
+            // use the native ABI for conservative ownership preparation.
+            const bool slice_view=source.NeedsNativeSliceView(info)&&(!reflected_dimension||
+                *reflected_dimension==D3D_SRV_DIMENSION_TEXTURE2DARRAY||
+                *reflected_dimension==D3D_SRV_DIMENSION_TEXTURE2DMSARRAY);
             auto desc=DescribeGuestTexture(sharp);desc.writable=source.is_written;
             desc.native_packed10_raw=source.native_packed10_raw;
             desc.native_raw32=source.native_raw32;
@@ -269,11 +281,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             // The native view must match that emitted DXIL resource dimension.
             if(desc.one_dimensional)desc.one_dimensional=false;
             if(desc.layers>1&&!array){
-                if(!source.NeedsNativeSliceView(info))throw std::runtime_error("Unsupported native non-array layer view");
+                if(!slice_view)throw std::runtime_error("Unsupported native non-array layer view");
                 desc.view_layers=1;
             }
             auto layout=LayoutGuestTexture(desc);
-            if(sharp&&count==1)if(auto view=textures->RebaseBlockSubresource(desc,layout,array)){
+            if(sharp&&count==1)if(auto view=textures->RebaseBlockSubresource(desc,layout,array||slice_view)){
                 desc=*view;layout=LayoutGuestTexture(desc);
             }
             if(desc.writable)textures->ValidateWritableFormat(layout.format);
@@ -309,7 +321,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                         throw std::runtime_error("Native overlapping SRV/UAV image subresources require shader access unification");
                 }
             }
-            images.push_back({desc,std::move(layout),UINT(image_reg),count,mip,array,!bool(sharp),source.native_msaa_storage,{},{}});
+            images.push_back({desc,std::move(layout),UINT(image_reg),count,mip,array||slice_view,!bool(sharp),source.native_msaa_storage,{},{}});
         }
         image_reg+=count;
     }
@@ -876,9 +888,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     // mip span to the larger shared child allocation.
                     auto view=block_alias_view||direct_bc_view?descriptor_entry.Srv():entry->Srv(image.desc);
                     if(image.array&&image.desc.layers==1){
-                        if(image.desc.one_dimensional){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={image.desc.first_mip,image.desc.levels-image.desc.first_mip,0,1,0};}
+                        if(image.desc.one_dimensional){const auto source=view.Texture1D;
+                            view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={source.MostDetailedMip,source.MipLevels,0,1,source.ResourceMinLODClamp};}
                         else if(image.desc.samples>1){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;view.Texture2DMSArray={0,1};}
-                        else{view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={image.desc.first_mip,image.desc.levels-image.desc.first_mip,0,1,0,0};}
+                        else{const auto source=view.Texture2D;
+                            view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={source.MostDetailedMip,source.MipLevels,0,1,source.PlaneSlice,source.ResourceMinLODClamp};}
                     }
                     bindings.RetainAllocation(entry->texture.allocation);
                     bindings.Srv(b.reg,0,entry->texture.handle.Get(),view,reg-b.reg);

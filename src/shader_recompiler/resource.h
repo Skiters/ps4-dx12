@@ -169,10 +169,23 @@ struct ImageResource {
     }
 
     bool NeedsNativeSliceView(const auto& info) const {
-        const auto sharp = GetSharp(info);
-        const auto type = sharp.GetType();
-        return !is_array && sharp.NumLayers() > 1 &&
-            (type == AmdGpu::ImageType::Color1DArray || type == AmdGpu::ImageType::Color2DArray);
+        const auto type = GetSharp(info).GetViewType(is_array);
+        // A logical non-array image always binds one physical array slice.
+        // Its backing can then be a standalone texture or an existing array
+        // without changing the compiled resource dimension at binding time.
+        return !is_array && (type == AmdGpu::ImageType::Color1D ||
+            type == AmdGpu::ImageType::Color2D || type == AmdGpu::ImageType::Color2DMsaa);
+    }
+
+    AmdGpu::ImageType NativeViewType(const auto& info) const {
+        const auto type = GetSharp(info).GetViewType(is_array);
+        if (!NeedsNativeSliceView(info)) return type;
+        switch (type) {
+        case AmdGpu::ImageType::Color1D: return AmdGpu::ImageType::Color1DArray;
+        case AmdGpu::ImageType::Color2D: return AmdGpu::ImageType::Color2DArray;
+        case AmdGpu::ImageType::Color2DMsaa: return AmdGpu::ImageType::Color2DMsaaArray;
+        default: return type;
+        }
     }
 
     u32 NumBindings(const auto& info) const {

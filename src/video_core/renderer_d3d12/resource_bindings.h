@@ -26,6 +26,7 @@ public:
 struct ShaderBinding {
     D3D12_DESCRIPTOR_RANGE_TYPE type{};
     UINT reg{},space{},count{},offset{};
+    D3D_SRV_DIMENSION dimension=D3D_SRV_DIMENSION_UNKNOWN;
 };
 // Reflect actual DXIL resource registers, including Mesa's runtime/push CBVs.
 // No guessed register layout and no Vulkan descriptor objects.

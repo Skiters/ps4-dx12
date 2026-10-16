@@ -22,7 +22,8 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
     constexpr u32 Endpoints=0x07e0f800,Green=0x55555555,BufferValue=0x13579bdf,Poison=0xaaaaaaaa;
     struct alignas(256) Code {std::array<u32,128> words{};};
     std::array<Code,Subresources> seed{},before{},covered{},after{};
-    std::array<Code,Layers> complement{},shifted_tail{};
+    std::array<Code,Layers> complement{};
+    std::array<std::array<Code,Layers>,3> shifted_tail{};
     Code output_init{},warm{},writer{},gap_writer{},raw{},formatted{};
     GuestShaderFrontend frontend(profile);
     struct Drain {GuestRasterizer& r;bool armed=true;~Drain(){if(armed)try{r.Finish();}catch(...){}}} drain{rasterizer};
@@ -45,7 +46,7 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
     };
     struct BufferExpectation {AmdGpu::Buffer sharp;bool written,formatted;};
     const auto verify=[&](const auto& stage,std::initializer_list<BufferExpectation> buffers,
-                          const AmdGpu::Image* image=nullptr,bool written=false,u32 mip=0){
+                          const AmdGpu::Image* image=nullptr,bool written=false,u32 mip=0,bool array=true){
         if(stage.spirv.empty()||stage.info.translation_failed||stage.info.uses_dma||stage.info.images.size()!=(image?1u:0u))
             throw std::runtime_error("Partial BC GCN changed image/DMA operands");
         auto next=buffers.begin();for(const auto& resource:stage.info.buffers)if(!resource.IsSpecial()){
@@ -55,7 +56,7 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
                 throw std::runtime_error("Partial BC changed original bounds/access/order");++next;}
         if(next!=buffers.end())throw std::runtime_error("Partial BC removed guest buffer");
         if(image){const auto& resource=stage.info.images.front();const auto sharp=resource.GetSharp(stage.info);
-            if(resource.is_written!=written||!resource.is_array||resource.native_raw32||std::memcmp(&sharp,image,sizeof(sharp)))
+            if(resource.is_written!=written||resource.is_array!=array||resource.native_raw32||std::memcmp(&sharp,image,sizeof(sharp)))
                 throw std::runtime_error("Partial BC changed array image sharp/access");
             if(written&&!profile.supports_image_load_store_lod&&
                (resource.mip_fallback_mode!=Shader::MipStorageFallbackMode::ConstantIndex||resource.constant_mip_index!=mip))
@@ -171,19 +172,21 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
             std::memcpy(p.user_data.data(),&bc,sizeof(bc));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
             verify(frontend.BuildCompute(gpu),{{output,true,false}},&bc,false,mip);rasterizer.DispatchDirect();}};
         sample_covered(covered,512,7);
-        // The actual BC parent now exists. A standalone 6x6 BC1 T# would
-        // choose expanded RGBA storage, but these reads must bind its native
-        // mip4 directly and preserve the independent I / complement B/P bytes.
-        for(u32 layer=0;layer<Layers;++layer){
-            auto local=bc;const auto& physical=target_layout.mips.at(4);
+        // Preserve the original DA-array case, then observe logical 2D loads
+        // through both an array T# with one slice and a plain Color2D T#.
+        // The actual BC mip4 remains the authority in every case.
+        constexpr std::array<u32,3> TailOutput{768,896,1408};
+        for(u32 mode=0;mode<TailOutput.size();++mode)for(u32 layer=0;layer<Layers;++layer){
+            const bool array=mode==0;auto local=bc;const auto& physical=target_layout.mips.at(4);
             const u64 address=base+ImageOffset+physical.offset+layer*physical.slice_bytes;
             local.base_address=address>>8;local.width=local.height=5;local.pitch=31;
             local.base_level=local.last_level=0;local.depth=local.base_array=local.last_array=0;
+            if(mode==2)local.type=u64(AmdGpu::ImageType::Color2D);
             const auto local_desc=DescribeGuestTexture(local);const auto local_layout=LayoutGuestTexture(local_desc);
             if(address%256||local_desc.address!=address||local_desc.width!=6||local_desc.height!=6||local_desc.pitch!=32||
                local_desc.levels!=1||local_desc.first_mip||local_desc.min_lod||local_desc.layers!=1||local_desc.first_layer||
-               local_desc.view_layers!=1||local.GetType()!=AmdGpu::ImageType::Color2DArray||local_desc.writable||
-               local_desc.data_format!=target_desc.data_format||local_desc.number_format!=target_desc.number_format||
+               local_desc.view_layers!=1||local.GetType()!=(mode==2?AmdGpu::ImageType::Color2D:AmdGpu::ImageType::Color2DArray)||
+               local_desc.writable||local_desc.data_format!=target_desc.data_format||local_desc.number_format!=target_desc.number_format||
                local_layout.block_extent!=4||local_layout.bytes_per_pixel!=8||local_layout.expanded_bytes_per_pixel!=4||
                local_layout.format!=DXGI_FORMAT_R8G8B8A8_UNORM||local_layout.guest_bytes!=physical.slice_bytes||
                local_layout.mips.size()!=1||local_layout.mips[0].offset||local_layout.mips[0].pitch!=physical.pitch||
@@ -191,19 +194,25 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
                IsNativeReadonlyGuestBlockStorage(local_desc,local_layout))
                 throw std::runtime_error("Shifted 6x6 BC tail must require standalone expansion and match actual parent slice");
             std::vector<u32> words;
+            if(!array){
+                move(words,0,0);words.insert(words.end(),{0xf0380f00,0x00000400,0xbf8c0000});
+                const std::array<u32,4> dimensions{6,6,0,1};
+                for(u32 component=0;component<4;++component){const u32 offset=448+((mode-1)*Layers+layer)*16+component*4;
+                    words.insert(words.end(),{0xe0700000u+offset,0x80020000u|((4+component)<<8)});
+                    expect(OutputOffset+offset,dimensions[component]);}}
             for(u32 index=0;index<4;++index){const u32 x=index&1,y=index>>1;
                 if(local_desc.address+GuestPixelOffset(local_desc,local_layout,0,0,x,y)!=
                    target_desc.address+GuestPixelOffset(target_desc,target_layout,4,layer,x,y))
                     throw std::runtime_error("Shifted 6x6 BC tail physical block address changed");
-                coords(words,0,x*4,y*4,0,0);words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});
+                coords(words,0,x*4,y*4,0,0);words.insert(words.end(),{array?0xf0044f00u:0xf0040f00u,0x00000400,0xbf8c0000});
                 const bool green=index==0||(layer==1&&index==1);
-                for(u32 component=0;component<4;++component){const u32 offset=768+(layer*4+index)*16+component*4;
+                for(u32 component=0;component<4;++component){const u32 offset=TailOutput[mode]+(layer*4+index)*16+component*4;
                     words.insert(words.end(),{0xe0700000u+offset,0x80020000u|((4+component)<<8)});
                     const bool one=component==3||(green?component==1:component==0);
                     expect(OutputOffset+offset,std::bit_cast<u32>(one?1.f:0.f));}}
-            words.push_back(0xbf810000);initialize(shifted_tail[layer],words,hash(12,layer));auto& p=bind(shifted_tail[layer],12);
+            words.push_back(0xbf810000);initialize(shifted_tail[mode][layer],words,hash(12+mode,layer));auto& p=bind(shifted_tail[mode][layer],12);
             std::memcpy(p.user_data.data(),&local,sizeof(local));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
-            verify(frontend.BuildCompute(gpu),{{output,true,false}},&local,false,0);rasterizer.DispatchDirect();}
+            verify(frontend.BuildCompute(gpu),{{output,true,false}},&local,false,0,array);rasterizer.DispatchDirect();}
         for(u32 layer=0;layer<Layers;++layer){std::vector<u32> words;for(u32 index=0;index<3;++index){
             const u32 x=index==1?0:1,y=index==0?0:1;coords(words,0,x*4,y*4,layer,4);
             words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});const bool green=layer==1&&index==0;

@@ -1,35 +1,41 @@
 # Vulkan / native D3D12 parity audit
 
-## Active odd local BC subresource checkpoint - 2026-10-16
+## Active native image slice binding checkpoint - 2026-10-16
 
 This section supersedes earlier current/next instructions. Full-port goal remains active;
-all129 groups partial/open. Source-only gate remains: no configure/build/compiler,
-helper/fixture/tests/GPU/game/XInput/UI. No new runtime result or FPS; preview24 unchanged.
+all129 groups partial/open. Source-only gate: no configure/build/compiler/helper/fixture,
+GPU/game/XInput/UI. No new PASS/FPS; preview24, original Vulkan and saves unchanged.
 
-RebaseBlockSubresource now classifies readonly BC guest storage before host-expanded
-RGBA fallback can reject an existing native parent mip. Original physical block/slice
-proof, exact local authority, GPU parent/watch, codec/number, normalized native typed
-format, retention and ambiguity gates remain. Generic odd BC allocation/upload/decoder
-rules are unchanged. Original shader resource type/dimension/mip constants remain.
+Through88a54a4, odd local BC descriptors can reuse a proved native parent mip without
+relaxing standalone allocation/upload rules. Current production block uses physical
+one-slice arrays for logical nonarray native1D/2D/MSAA images, preserving original sharp,
+coordinates, dimensions and LOD. ImageResource::NativeViewType selects the type only
+for native_coherent_images; existing slice-coordinate/query/atomic lowering stays.
+ShaderBinding retains actual DXIL dimension; live imported Texture2D declarations keep
+their existing descriptors. Register/mip dimension conflicts reject. Renderer physical
+array capability now permits shifted nonarray BC/UINT views to use existing parent
+address/owner/watch proofs. Single-layer SRV conversion also preserves minLOD/plane.
 
-The existing partial-expansion GCN scenario now authors shifted standalone6x6 BC1
-mip4/layers0,1 reads of every2x2 block in both GPU-B/physical-P seed branches, preserving
-I and complement observations and existing physical/output oracles. This is UNRUN;
-no below4-pixel/BC3/numeric/graphics/macro-thick runtime coverage is claimed. Prior27
-writable-alias GCN cases and9positive/18negative address controls remain UNRUN.
+Existing partial-expansion GCN helper retains DA-array6x6 reads and authors DA=false
+array-T#/plain2D-T# reads of actual BC mip4/layers0,1 plus dimensions6,6,0,1 in both B/P
+branches. Programs90DWORDs fit96DWORD metadata; twelve userSGPRs and disjoint output
+ranges remain. All controls UNRUN; 1D/MSAA/sample/gather/atomic/graphics and shifted UINT
+coverage have not been executed. Cache specialization/image bool and EXE/SPIRV identities
+separate new shader ABI. No end-to-end or full parity acceptance.
 
-Evidence/recovery: F:/PS4Dev/handoff/bc-odd-subresource-20261016/{SOURCE_CONTRACT.md,
-checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Broad inherited integration
-and exact22 staged deletions remain separate. Restore only in a separate checkout at
-manifest.head; then staged.patch --index, unstaged.patch, source-files.zip. Clean commits
-alone do not reproduce current integration. Previous evidence/results remain unchanged.
+Current evidence/recovery: F:/PS4Dev/handoff/native-slice-binding-20261016/{SOURCE_CONTRACT.md,
+checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. resource.h and resource_bindings
+contain inherited work; only owned method/field/reflection deltas are committed. Broad
+integration and exact22 staged deletions remain separately preserved. Restore only in a
+separate checkout at manifest.head using staged.patch --index, unstaged.patch and source
+archive; clean commits alone do not reproduce current core. Previous evidence remains.
 
-Next source block: shifted standalone nonarray BC views of array parents. Preserve
-RebaseBlockSubresource's !array && parent.layers!=1 guard until native_slice_view and
-DXIL resource dimension/slice behavior are proven (guest_compute.cpp, specialization.h).
-Reuse existing view/address/owner findings; no general audit or execution. Pinned SliceOf
-multi-local-layer/base_array discrepancy remains open; do not claim full Vulkan parity.
-
+Next production target: typed readonly BC views sharing an existing native BC parent.
+Inspect MatchesReadonlyBcMipPrefix/RebaseBlockSubresource's exact number/DXGI gates,
+existing native typeless BC resource creation and pinned host-format compatibility.
+Prove same-family UNORM/sRGB or signed/unsigned BC reuse before relaxing gates; preserve
+codec, swizzle, physical mapping and ownership. Reuse existing evidence; no general audit.
+Pinned SliceOf multi-local-layer/base_array discrepancy remains open.
 
 ## Active mixed BC / UINT view coverage - 2026-10-16
 

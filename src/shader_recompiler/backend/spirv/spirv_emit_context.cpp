@@ -1110,8 +1110,8 @@ spv::ImageFormat GetFormat(const AmdGpu::Image& image) {
 Id ImageType(EmitContext& ctx, const ImageResource& desc, Id sampled_type) {
     const auto image = desc.GetSharp(ctx.info);
     const auto format = desc.is_atomic ? (desc.native_raw32 ? spv::ImageFormat::R32ui : GetFormat(image)) : spv::ImageFormat::Unknown;
-    const auto type = image.GetViewType(desc.is_array ||
-        (ctx.profile.native_coherent_images && desc.NeedsNativeSliceView(ctx.info)));
+    const auto type = ctx.profile.native_coherent_images ? desc.NativeViewType(ctx.info) :
+        image.GetViewType(desc.is_array);
     const u32 sampled = desc.is_written ? 2 : 1;
     switch (type) {
     case AmdGpu::ImageType::Color1D:

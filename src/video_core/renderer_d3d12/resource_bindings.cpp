@@ -90,6 +90,9 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
                 throw std::runtime_error("Unbounded/oversized DXIL descriptor range is not supported yet");
             auto type=RangeType(binding.Type);Key key{UINT(type),binding.Space,binding.BindPoint};
             auto [it,added]=unique.emplace(key,ShaderBinding{type,binding.BindPoint,binding.Space,binding.BindCount});
+            if(added)it->second.dimension=binding.Dimension;
+            else if(it->second.dimension!=binding.Dimension)
+                throw std::runtime_error("Conflicting DXIL resource dimensions at one register");
             if(!added&&it->second.count!=binding.BindCount)throw std::runtime_error("Conflicting DXIL descriptor array sizes");
         }
     }
