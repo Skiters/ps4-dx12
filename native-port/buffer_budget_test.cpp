@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/rasterizer.h"
+#include "texture_heap_pressure_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
 #include <cstring>
 using namespace NativeDX12;
-int main(){try{
+int main(int argc,char** argv){try{
+    const bool texture_heaps=argc>1&&std::string_view(argv[1])=="texture-heaps";
     ComPtr<ID3D12Debug> debug;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)));ComPtr<ID3D12Device> device;
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1> adapter;
@@ -14,6 +16,7 @@ int main(){try{
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware device");
+    if(texture_heaps){RunTextureHeapPressureFixture(device.Get());return 0;}
     {
         constexpr u64 page=65536;
         PlacedBufferAllocator buffers(device.Get(),page,4*page);

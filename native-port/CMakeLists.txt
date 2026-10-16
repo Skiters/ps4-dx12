@@ -151,6 +151,8 @@ add_test(NAME native_memory_perf_pending_fence COMMAND native-memory-perf-test f
 add_test(NAME native_memory_perf_watch_ranges COMMAND native-memory-perf-test ranges)
 set_tests_properties(native_memory_perf_pending_fence PROPERTIES TIMEOUT 20)
 target_link_libraries(native-buffer-budget-test PRIVATE shadps4_native_d3d12)
+add_test(NAME native_texture_heap_pressure COMMAND native-buffer-budget-test texture-heaps)
+set_tests_properties(native_texture_heap_pressure PROPERTIES TIMEOUT 60)
 add_test(NAME native_large_buffer_cache_budget COMMAND native-buffer-budget-test)
 set_tests_properties(native_large_buffer_cache_budget PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
 add_test(NAME native_buffer_batch_over_2gib COMMAND native-buffer-budget-test large)
