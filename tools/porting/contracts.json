@@ -3377,7 +3377,8 @@
         "native-port/gcn_ordered_formatted_fixture.h",
         "src/shader_recompiler/backend/dxil/spirv_buffer_access.h",
         "src/video_core/renderer_d3d12/guest_shader_cache.cpp",
-        "native-port/gcn_ordered_disjoint_fixture.h"
+        "native-port/gcn_ordered_disjoint_fixture.h",
+        "native-port/gcn_mixed_formatted_fixture.h"
       ],
       "contract": {
         "inputs": "Readonly formatted buffers aliasing one retained R32 image version at its exact complete extent, including full mip chains. Original sharp base/byte size determine the 16-KiB streaming condition separately from native DWORD alignment.",
@@ -3442,6 +3443,10 @@
         {
           "kind": "ordered_interior_buffer_writer",
           "description": "Eight DWORD and sixteen byte/halfword real-GCN controls extend gcn_ordered_formatted_fixture.h: reader/writer and writer/reader discovery order, small/large and CPU-clean/GPU-modified B, seeded I != B, later formatted reread, unchanged I probe, exact offset write bounds and full physical/padding oracle. Narrow controls use same-width load/store/OOB accesses, require the actual U8/U16-only resource type and observe the live full GPU word to catch hidden padding writes. C++ /Zs passed in primary and clean production compiler environments; no shader conversion, fixture linking or GPU execution."
+        },
+        {
+          "kind": "mixed_formatted_buffer_image_versions",
+          "description": "Thirty-two authored real-GCN cases cover both buffer descriptor orders, small/large and clean/dirty B, exact-base/interior W and sampled/storage I. Seeded I!=B, same-invocation raw/formatted/image observations, next-element OOB store, two later I probes around CPU readback and complete64KiB physical/padding oracle. Actual C++ /Zs passed in primary and clean committed Release compiler environments atc238eef. Shader conversion, fixture linking and GPU execution remain not_run."
         }
       ]
     },
@@ -8120,7 +8125,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources",
       "native_symbol": "NativeDX12::ExecuteGuestResources",
-      "missing_semantics": "Simultaneous buffer/image writers outside the connected single-image, exact-sharp-byte common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+      "missing_semantics": "Multiple-stage ordered buffer/image binding, different physical layouts and overlapping planned image geometries still need ownership/ordering adaptation. Overlapping sampled/storage image subresources need shader access unification. Single-stage compatible-layout shader images can now accompany ordered exact-sharp-byte common-UAV buffer requests, keeping I and B independent. The formatted reader remains exact-base (pinned BufferCache::SynchronizeMemoryFromImage assertion).",
       "evidence": "src/video_core/renderer_d3d12/guest_compute.cpp: Independent formatted image/buffer partial or simultaneous-write ordering is not adapted",
       "groups": [
         4,
@@ -8147,7 +8152,8 @@
       ],
       "implemented_subcontracts": [
         "Single compute-stage buffer-only requests can bind contained DWORD interior writers before or after exact-base formatted readers. Only a prior exact-base writer invalidates I; every clean small CPU stream remains private. Full prewrite I retile/padding, original sharp bounds/dirty ranges and fence leases are retained. Production Release compiled/linked; GPU acceptance not run.",
-        "Native buffer loads, stores and 32/64-bit atomics use an independent inclusive byte limit in CBV b0 space34, preserving both halves of ranges above 4GiB and rejecting native prefix/component overflow. Contained byte/halfword writer envelopes now share B under the same ordering/ownership guards, requiring actual bounds reflection and natural alignment for every used scalar type. Shader metadata version25; null-sharp temporary and special-buffer semantics retained. Sixteen additional real-GCN controls check exact sub-DWORD bounds plus live GPU neighbor bytes; C++ typechecked only. Clean Release built at7304bb2; runtime acceptance remains not_run."
+        "Native buffer loads, stores and 32/64-bit atomics use an independent inclusive byte limit in CBV b0 space34, preserving both halves of ranges above 4GiB and rejecting native prefix/component overflow. Contained byte/halfword writer envelopes now share B under the same ordering/ownership guards, requiring actual bounds reflection and natural alignment for every used scalar type. Shader metadata version25; null-sharp temporary and special-buffer semantics retained. Sixteen additional real-GCN controls check exact sub-DWORD bounds plus live GPU neighbor bytes; C++ typechecked only. Clean Release built at7304bb2; runtime acceptance remains not_run.",
+        "Single-stage mixed buffer/image commands retain a valid I for interior buffer writers. Images invalidated by a later exact-base writer refresh from the immutable B1 result of an earlier formatted retile, after its final COPY_SOURCE to shader-read transition. Matching guest mip layout and shader storage gate admission; incompatible layouts, multiple stages and overlapping image SRV/UAV subresources remain explicit guards. Primary and clean Release compiled/linked atc238eef;32 new real-GCN controls are C++ typechecked only."
       ]
     },
     "depth-color-shared-storage": {
