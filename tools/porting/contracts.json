@@ -5602,7 +5602,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "72569a531e1c262fc828e80d56400f7f1507d75a"
+        "core_release_build_commit": "284be47d1bfacd32bdc8a871759bf6953a1edcf4"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5619,6 +5619,17 @@
           "kind": "source_paths",
           "paths": [
             "native-port/guest_buffer_access_test.cpp",
+            "native-port/page_owned_gpu_test.cpp"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Invalid independent I pressure election is covered by the new source-authored cache fixture: complete separate B/CPU/padding and same-value CPU-store markers, linear/tiled modes, pending/in-flight/pin/preserve exclusion, callback re-pin rejection, and pinned valid tiled retention. Five fixture TUs C++ /Zs only, no execution."
+        },
+        {
+          "kind": "source_paths",
+          "paths": [
+            "native-port/invalid_image_pressure_fixture.h",
             "native-port/page_owned_gpu_test.cpp"
           ]
         }
@@ -5888,7 +5899,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "72569a531e1c262fc828e80d56400f7f1507d75a"
+        "core_release_build_commit": "284be47d1bfacd32bdc8a871759bf6953a1edcf4"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5904,6 +5915,17 @@
         {
           "kind": "source_paths",
           "paths": [
+            "native-port/page_owned_gpu_test.cpp"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Invalid independent I pressure election is covered by the new source-authored cache fixture: complete separate B/CPU/padding and same-value CPU-store markers, linear/tiled modes, pending/in-flight/pin/preserve exclusion, callback re-pin rejection, and pinned valid tiled retention. Five fixture TUs C++ /Zs only, no execution."
+        },
+        {
+          "kind": "source_paths",
+          "paths": [
+            "native-port/invalid_image_pressure_fixture.h",
             "native-port/page_owned_gpu_test.cpp"
           ]
         }
@@ -8171,8 +8193,8 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources",
       "native_symbol": "NativeDX12::ExecuteGuestResources",
-      "missing_semantics": "Late DMA sharps smaller than a complete4KiB subpage, late arena replacement/materialization before stable views, SRV-only auxiliary bindings that need unified DMA access, ordered opaque depth/stencil I/B transfers, tiled independent-image retirement under pressure, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations replay per-stage BindBuffers then BindTextures; fully materialized late64KiB pages and4KiB subpages are published at BeforeBind, with resource identity and initialized-coverage checks, CPU-dirty B synchronization and placed-allocation retention. No formatted I retile or future guest-write declaration is added. Partial-page protection, same-base compatible mip-prefix views, exact-base invalidation and private CPU streams remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred.",
-      "evidence": "src/video_core/renderer_d3d12/guest_dma.cpp: PlanRanges/BindResident require complete resident subpages and stable selected B; guest_compute.cpp: opaque_dma and image-domain guards; guest_rasterizer.cpp: ResolveImage/RetireImageForPressure independent-image guards",
+      "missing_semantics": "Late DMA sharps smaller than a complete4KiB subpage, stable physical B residency or GPU-preserving envelope growth before final views (CPU snapshot/store-marker and watch ownership transfer included), SRV-only auxiliary bindings that need unified DMA access, ordered opaque depth/stencil I/B transfers, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations replay per-stage BindBuffers then BindTextures; fully materialized late64KiB pages and4KiB subpages are published at BeforeBind, with resource identity and initialized-coverage checks, CPU-dirty B synchronization and placed-allocation retention. No formatted I retile or future guest-write declaration is added. Partial-page protection, same-base compatible mip-prefix views, exact-base invalidation and private CPU streams remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred. Invalid independent I pressure discard is connected; retaining valid GPU-modified tiled I follows the pinned GC exclusion and is not an additional port gap.",
+      "evidence": "src/video_core/renderer_d3d12/rasterizer.cpp: PrepareShaderBuffers/DropCached/Find recreate B envelopes from CPU; guest_dma.cpp: PlanRanges/BindResident require complete resident subpages and stable views; guest_compute.cpp: opaque_dma and image-domain guards",
       "groups": [
         4,
         6,
@@ -8206,7 +8228,8 @@
         "7420e32 connects partial-page independent image protection to original logical bytes: full-page protection envelopes, at-most-two full physical-B boundary snapshots, rearm-before-compare lazy validation, CPU-winner buffer proof invalidation, sibling/stronger-B guard preservation and nested pre-store validation deferral. Exact-base GPU invalidation and original I/B domains remain unchanged. Ordinary exclusive image ownership still requires complete pages. Primary and separate clean committed Release linked; PageWatch/alias/GCN controls C++ typechecked only, no runtime tests or acceptance.",
         "1678638 adds PrepareOrderedGuestStages to ExecuteGuestResources for multiple graphics stages with compatible native physical I/B domains. It reserves one stable B batch without marking future writes early, keeps original clean CPU streams/private DWORD envelopes, applies buffer invalidation and image refresh in original stage order, refreshes one bound native I allocation so earlier views observe later updates, and retains final dirty I rather than reviving/downloading it. Frozen initial retile preserves the original cache prefix/interpretation until the first image bind despite host preallocation. Metadata synthesis, narrow sharp bounds, original SRV/UAV ranges, fences and pins are retained. Root and nine standalone fixture source lists include the module.48 source-authored transfer/cache controls are C++ typechecked only; separate clean Release linked, no test execution or graphics acceptance.",
         "50bdc81/a564b6c/34232f8 connect planned resident DMA B synchronization after per-stage image binding, including single-stage DMA, direct native sharp residency observation, physical guest backing admission, borrowed read-only PageWatch witnesses, safe image/buffer watch release, and protected opaque physical backing snapshots preserving unchanged GPU B. The original buffer content loop is extracted unchanged; no DMA guest stores or eager formatted retile were added. DMA refresh captures only its actual resident views. Initial opaque rejection in50 was corrected bya564. Core Release reproduced from clean34232f8; alias/GCN/DMA/buffer-access fixture TUs C++ typechecked only, all runtime acceptance not_run. Late page publication and unsupported independent transfer domains remain listed gaps.",
-        "7cc493f separates DMA range planning from final publication. BeforeBind selects fully materialized late64KiB pages or4KiB subpages through PreparedDmaBuffer without Find/reservation/upload, verifies original selected B identities, preserves distinct native mapping boundaries, checks UAV access, retains placed allocations, synchronizes CPU-dirty B once and binds the updated banks/table/metadata. The persistent table zero/copy/patch capacity logic and fence fault ring are unchanged. New full/partial/tiny-coverage, GPU-only B and resource-identity/SRV controls are authored; alias/GCN/DMA/buffer-access TUs pass C++ /Zs only. Primary and separate clean committed Release linked. Tiny late sharps and late replacement still require earlier complete-page materialization; no runtime or full-port acceptance."
+        "7cc493f separates DMA range planning from final publication. BeforeBind selects fully materialized late64KiB pages or4KiB subpages through PreparedDmaBuffer without Find/reservation/upload, verifies original selected B identities, preserves distinct native mapping boundaries, checks UAV access, retains placed allocations, synchronizes CPU-dirty B once and binds the updated banks/table/metadata. The persistent table zero/copy/patch capacity logic and fence fault ring are unchanged. New full/partial/tiny-coverage, GPU-only B and resource-identity/SRV controls are authored; alias/GCN/DMA/buffer-access TUs pass C++ /Zs only. Primary and separate clean committed Release linked. Tiny late sharps and late replacement still require earlier complete-page materialization; no runtime or full-port acceptance.",
+        "284be47 connects pressure eviction of invalid independent I through retire_independent_ rather than a stale-pixel download, matching pinned TextureCache GC SafeToDownload = GpuModified && !Dirty. Pending/in-flight/pinned/preserved and valid tiled I remain protected. ReclaimResidentMemory shares actual admission/election with ReserveMemory, retains transitive preserve pins and reevaluates DXGI budget after recursive callbacks. New page_owned_gpu_test fixture covers linear/tiled invalid I, B/CPU/padding preservation, preexisting same-value CPU-store markers and a binding acquired during retirement; source C++ /Zs only. Primary and separate clean committed Release linked; runtime not_run. Valid tiled pressure retention is the pinned rule, not unfinished implementation."
       ]
     },
     "depth-color-shared-storage": {
