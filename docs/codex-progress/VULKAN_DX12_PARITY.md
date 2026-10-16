@@ -15,6 +15,7 @@ All129 groups remain partial/open. Production changes are source-reviewed only.
 | Unaligned private prefixes | Private upload/retile requires live full-parent UID/pin/watch and exact physical prefix | Authored/unrun |
 | Shifted one-mip UINT views | Exact thin microtiled mip/slice rebase before shared grouping | Authored/unrun; multi-layer/base_array reference discrepancy open |
 | Shifted/bounded native BC SRVs | Actual typed BC parent reuse; original mip/layer spans; BC-only views across graphics stages | Authored/unrun; graphics runtime unverified |
+| Macro/thick shifted views | Aligned group stride, rounded layers and exact pipe/bank correction proof; canonical parent swizzle | CPU address controls authored/unrun; real-GCN coverage absent |
 | Overlapping feedback/DMA/buffers | Unsupported combinations still rejected | Remaining contracts |
 
 Twenty-four GCN cases are prepared, including shifted UINT/native BC and bounded BC mip ranges; none was compiled or run. No new game/FPS evidence or

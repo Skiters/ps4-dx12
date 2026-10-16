@@ -1,13 +1,12 @@
 # Native DX12 state
 
-## Current pointer - shifted BC / UINT views, 2026-10-16
+## Current pointer - macro/thick block-view rebase, 2026-10-16
 
-SESSION_HANDOFF.md's top section is authoritative; exact HEAD/residual recovery:
-F:/PS4Dev/handoff/bc-shifted-native-20261016/CHECKPOINT_FINAL.json.
-Thin shifted UINT views share a child; native BC prefix SRVs reuse the actual full parent
-with original mip/layer ranges. Twenty-four cases authored/unrun, all129 groups partial.
-No builds/tests/game/UI; broader base_array/graphics/runtime parity remains unverified.
-Preview24 and user session unchanged. Earlier sections historical.
+SESSION_HANDOFF.md's active section and bc-macro-rebase-20261016/CHECKPOINT_FINAL.json
+are authoritative. Physical group/padding/pipe/bank proofs now gate macro/thick aliases;
+canonical storage adopts parent swizzle only after proof. CPU controls authored/unrun;
+existing24 GCN cases unchanged, macro/thick GCN coverage still absent. All129 groups partial.
+No builds/tests/game/UI; preview24 and user session unchanged. Earlier notes historical.
 
 ## Current BC block image bridge - 2026-10-16
 

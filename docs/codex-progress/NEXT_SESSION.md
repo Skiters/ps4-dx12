@@ -2,12 +2,13 @@
 
 ## Current continuation pointer - 2026-10-16
 
-Read SESSION_HANDOFF.md and bc-shifted-native-20261016/CHECKPOINT_FINAL.json; verify HEAD
-and preserve inherited integration/22 staged deletions. Thin UINT rebase and native BC
-prefix SRV reuse are saved. Next production: shifted macro/thick mapping with exact
-bank/slice rotations in RebaseBlockSubresource and GuestTileAddress::{Pipe,Bank,Macro}.
-Start from base slice0 mip-boundary proof, then nonzero slices; retain owner/prefix checks.
-No compiler/build/tests/GPU/game/UI. Prior audits/tasks below are historical.
+Read active SESSION_HANDOFF.md and bc-macro-rebase-20261016/CHECKPOINT_FINAL.json; verify
+actual HEAD and preserve inherited dirty integration/22 staged deletions. Macro/thick
+address-family admission is saved. Next production: single-level BC parent word views,
+starting at MatchesReadonlyBlockMipPrefix's source.levels<=1 rejection. Extend private
+readonly and writable grouping together; readonly-only BC+UINT must not retire a bound
+BC parent. Exact physical identity, owner/watch/pins/fences stay. Add authored one-level
+controls, no execution. Earlier next-task notes below are historical.
 
 ## Current BC mip continuation - 2026-10-16
 

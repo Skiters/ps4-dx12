@@ -4,6 +4,7 @@
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/renderer_d3d12/guest_image_ownership.h"
 #include "video_core/amdgpu/liverpool.h"
+#include "guest_subresource_rebase_checks.h"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -26,6 +27,7 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     Code output_init{},warm{},marker{},raw{},writer{},formatted{},mixed_copy_probe{},shifted_probe{};
     GuestShaderFrontend frontend(profile);
     struct Drain {GuestRasterizer& r;bool armed=true;~Drain(){if(armed)try{r.Finish();}catch(...){}}} drain{rasterizer};
+    RunGuestSubresourceRebaseChecks();
     const auto initialize=[](Code& code,const std::vector<u32>& words,u64 hash){
         constexpr u32 Metadata=96;
         if(words.size()>Metadata||Metadata*4+sizeof(AmdGpu::BinaryInfo)>sizeof(code.words))

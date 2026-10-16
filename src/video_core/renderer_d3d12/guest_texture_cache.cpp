@@ -10,6 +10,7 @@
 #include "video_core/amdgpu/tiling.h"
 #include "video_core/guest_image_layout.h"
 #include "guest_tile_address.h"
+#include "guest_subresource_rebase.h"
 #include "guest_cmask_address.h"
 #include "guest_color_clear.h"
 #ifdef SHADPS4_NATIVE_DX12_CORE
@@ -1519,9 +1520,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
     // replace it with another overlapping image's contents.
     if(FindValidIndependentImage(desc,layout))return std::nullopt;
     const auto& local=layout.mips[0];
-    if(local.offset||local.macro||local.thickness!=1||!local.slice_bytes||
-       local.slice_bytes>UINT64_MAX/desc.layers||
-       layout.guest_bytes!=local.slice_bytes*desc.layers)return std::nullopt;
+    if(local.offset||!local.slice_bytes)return std::nullopt;
     Entry* owner{};std::optional<GuestTextureDesc> result;
     for(const auto& candidate:entries_){const auto& parent=*candidate;
         if(!parent.gpu_owned||!parent.buffer_alias_version||!parent.buffer_alias_watch||
@@ -1534,7 +1533,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
         const auto delta=desc.address-parent.desc.address;
         if(delta>=parent.layout.guest_bytes||layout.guest_bytes>parent.layout.guest_bytes-delta)continue;
         for(uint32_t mip=0;mip<parent.desc.levels;++mip){const auto& physical=parent.layout.mips[mip];
-            if(physical.macro||physical.thickness!=1||!physical.slice_bytes||
+            if(!physical.slice_bytes||
                physical.pitch!=local.pitch||physical.height!=local.height||
                physical.slice_bytes!=local.slice_bytes||u64(desc.pitch)!=u64(physical.pitch)*layout.block_extent||
                delta<physical.offset)continue;
@@ -1542,7 +1541,11 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
             if(layer_bytes%physical.slice_bytes)continue;
             const auto layer=layer_bytes/physical.slice_bytes;
             if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer)continue;
+            if(!MatchesGuestSliceAddressing(parent.desc,parent.layout,mip,desc,layout,uint32_t(layer)))continue;
             auto view=desc;view.address=parent.desc.address;
+            // The local bank swizzle has been proved against slice rotation.
+            // Canonical storage must use the full parent's coordinates/swizzle.
+            view.bank_swizzle=parent.desc.bank_swizzle;
             const auto divisor=native_bc?1u:4u;
             view.width=parent.desc.width/divisor;view.height=parent.desc.height/divisor;view.pitch=parent.desc.pitch/divisor;
             if(mip>=std::bit_width(std::max(view.width,view.height))||
