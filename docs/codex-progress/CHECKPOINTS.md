@@ -114,6 +114,21 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
+into by-value Defer after GPU execution; deque allocation failure can destroy its last
+resource lease before fence completion. Source-proven failure path, not an observed crash.
+The simple copy-before-clear experiment is INCOMPLETE and was removed only after preserving
+its exact patch/before/after, with inherited scheduler bytes restored by exact comparison.
+Evidence: F:/PS4Dev/handoff/scheduler-retention-20261016/{REVIEW.md,DISPOSITION.md,EXPLORATORY_OWN.patch}.
+
+Next production fix: preallocate a scheduler-owned retirement/resource batch before queue
+execution, publish its fence without allocating after ExecuteCommandLists, retain ownership
+on Signal/Defer/publication failures, and avoid repeated partially executed callbacks. Review
+this before publishing any scheduler fix. The previous submitted BC expansion38b7c95 remains
+source-only; its staging uses this existing lifetime contract and has no runtime acceptance.
+New partial BC fixture authoring is in progress separately; existing committed expectations
+remain unchanged. Build/test/game/GPU/UI execution remains deferred; all129 groups partial.
+
 Current partial BC expansion source WIP: 38b7c95 (2026-10-16), superseding prior next-step
 notes below. MatchesReferencePartialBlockExpansion now admits same-address UINT64/128
 source to native readonly BC target with matching base4x dimensions/pitch, equal array layers,
