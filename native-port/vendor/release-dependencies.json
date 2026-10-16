@@ -1,0 +1,222 @@
+{
+  "reference_sha": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
+  "submodules": [
+    {
+      "path": "externals/CLI11",
+      "sha": "12ba4ac4dbaa6489cb07e01be796e2bc074ef4f4"
+    },
+    {
+      "path": "externals/ImGuiFileDialog",
+      "sha": "57a1c6a6d44bd99e844e3642d27851f6c065af62"
+    },
+    {
+      "path": "externals/LibAtrac9",
+      "sha": "946e05a9212976626a9f5e52f29c0a7202871f29"
+    },
+    {
+      "path": "externals/aacdec/fdk-aac",
+      "sha": "ee76460efbdb147e26d804c798949c23f174460b"
+    },
+    {
+      "path": "externals/abseil-cpp",
+      "sha": "76bb24329e8bf5f39704eb10d21b9a80befa7c81"
+    },
+    {
+      "path": "externals/cpp-httplib",
+      "sha": "28f8264d134a576422cd0f99f19719c2749d9e47"
+    },
+    {
+      "path": "externals/date",
+      "sha": "a45ea7c17b4a7f320e199b71436074bd624c9e15"
+    },
+    {
+      "path": "externals/discord-rpc",
+      "sha": "19f66e6dcabb2268965f453db9e5774ede43238f"
+    },
+    {
+      "path": "externals/discord-rpc/thirdparty/rapidjson",
+      "sha": "d621dc9e9c77f81e5c8a35b8dcc16dcd63351321"
+    },
+    {
+      "path": "externals/discord-rpc/thirdparty/rapidjson/thirdparty/gtest",
+      "sha": "ba96d0b1161f540656efdaed035b3c062b60e006"
+    },
+    {
+      "path": "externals/epoll-shim",
+      "sha": "18159584bb3d17e601b9315a7398ace018251bdc"
+    },
+    {
+      "path": "externals/ext-boost",
+      "sha": "ca6f230e67be7cc45fc919057f07b2aee64dadc1"
+    },
+    {
+      "path": "externals/ext-wepoll",
+      "sha": "d3bb81035304a0dc6a5ca48ebf0f8cee1fe269e4"
+    },
+    {
+      "path": "externals/ffmpeg-core",
+      "sha": "94dde08c8a9e4271a93a2a7e4159e9fb05d30c0a"
+    },
+    {
+      "path": "externals/fmt",
+      "sha": "ec73fb72477d80926c758894a3ab2cb3994fd051"
+    },
+    {
+      "path": "externals/freetype",
+      "sha": "b91f75bd02db43b06d634591eb286d3eb0ce3b65"
+    },
+    {
+      "path": "externals/freetype/subprojects/dlg",
+      "sha": "395ccad2c1e0daae535c4d20bb0a3f2424648e17"
+    },
+    {
+      "path": "externals/glslang",
+      "sha": "ba1640446f3826a518721d1f083f3a8cca1120c3"
+    },
+    {
+      "path": "externals/half",
+      "sha": "1ddada225144cac0de8f6b5c0dd9acffd99a2e68"
+    },
+    {
+      "path": "externals/hwinfo",
+      "sha": "8660006e0ca4aae5dda7a29e585968b50b0273b7"
+    },
+    {
+      "path": "externals/imgui",
+      "sha": "7e1b65d26d52e9dd199d889c148c72184de647b4"
+    },
+    {
+      "path": "externals/json",
+      "sha": "55f93686c01528224f448c19128836e7df245f72"
+    },
+    {
+      "path": "externals/libpng",
+      "sha": "c1cc0f3f4c3d4abd11ca68c59446a29ff6f95003"
+    },
+    {
+      "path": "externals/libressl",
+      "sha": "b0504086dbbc186724b0cc92e6ba1832c245de0b"
+    },
+    {
+      "path": "externals/libusb",
+      "sha": "d087ea86539ab1f1ec42faf86e2357e2fad126a6"
+    },
+    {
+      "path": "externals/magic_enum",
+      "sha": "a413fcc9c46a020a746907136a384c227f3cd095"
+    },
+    {
+      "path": "externals/mesa-kosmickrisp",
+      "sha": "af7dd0a35c071cecbfff32662675641d19e8e4db"
+    },
+    {
+      "path": "externals/mesa-kosmickrisp/externals/mesa",
+      "sha": "b628375fb1fd99476bfbaaa0532deb6fe3a6870e"
+    },
+    {
+      "path": "externals/minimp3",
+      "sha": "7b590fdcfa5a79c033e76eacc05d0c3e4c79f536"
+    },
+    {
+      "path": "externals/miniupnp",
+      "sha": "bf4215a7574f88aa55859db9db00e3ae58cf42d6"
+    },
+    {
+      "path": "externals/miniz",
+      "sha": "174573d60290f447c13a2b1b3405de2b96e27d6c"
+    },
+    {
+      "path": "externals/openal-soft",
+      "sha": "83ea7236c6f23fc98e2b62eb9c5b3abfd4b2be86"
+    },
+    {
+      "path": "externals/protobuf",
+      "sha": "5917ee224a7e47383a78acc129628511fe210dff"
+    },
+    {
+      "path": "externals/pugixml",
+      "sha": "caade5a28aad86b92a4b5337a9dc70c4ba73c5eb"
+    },
+    {
+      "path": "externals/robin-map",
+      "sha": "4ec1bf19c6a96125ea22062f38c2cf5b958e448e"
+    },
+    {
+      "path": "externals/sdl3",
+      "sha": "d5af35e3fbb5bb6555ed00e69740d52af2a4e877"
+    },
+    {
+      "path": "externals/sirit",
+      "sha": "fc2b42d5e57ee2f638676c0c02f7fd71934b596a"
+    },
+    {
+      "path": "externals/sirit/externals/SPIRV-Headers",
+      "sha": "2acb319af38d43be3ea76bfabf3998e5281d8d12"
+    },
+    {
+      "path": "externals/spdlog",
+      "sha": "b8944a4bcd478ee03375c9c50dc8d6c741f43f7b"
+    },
+    {
+      "path": "externals/toml11",
+      "sha": "a01fe3b4c14c6d7b99ee3f07c9e80058c6403097"
+    },
+    {
+      "path": "externals/toml11/docs/themes/hugo-book",
+      "sha": "2f64607bc9a4caa6ffc4ed7f614c8ad9a5b6611c"
+    },
+    {
+      "path": "externals/toml11/tests/extlib/doctest",
+      "sha": "ae7a13539fb71f270b87eb2e874fbac80bc8dda2"
+    },
+    {
+      "path": "externals/toml11/tests/extlib/json",
+      "sha": "8c391e04fe4195d8be862c97f38cfe10e2a3472e"
+    },
+    {
+      "path": "externals/tracy",
+      "sha": "143a53d1985b8e52a7590a0daca30a0a7c653b42"
+    },
+    {
+      "path": "externals/vma",
+      "sha": "f378e7b3f18f6e2b06b957f6ba7b1c7207d2a536"
+    },
+    {
+      "path": "externals/vulkan-headers",
+      "sha": "ee3b5caaa7e372715873c7b9c390ee1c3ca5db25"
+    },
+    {
+      "path": "externals/vulkan-loader",
+      "sha": "466498bc64eb77955c3b782f0127520548224de0"
+    },
+    {
+      "path": "externals/xbyak",
+      "sha": "44a72f369268f7d552650891b296693e91db86bb"
+    },
+    {
+      "path": "externals/xxhash",
+      "sha": "953a09abc39096da9e216b6eb0002c681cdc1199"
+    },
+    {
+      "path": "externals/zarchive",
+      "sha": "965b66c8d67b6b7e30fd63b3b75aa91a99ff303b"
+    },
+    {
+      "path": "externals/zlib-ng",
+      "sha": "fd0d263cedab1a136f40d65199987e3eaeecfcbd"
+    },
+    {
+      "path": "externals/zstd",
+      "sha": "5c7b7bad26808e6b40ac3b3d0075466e27738a9d"
+    },
+    {
+      "path": "externals/zydis",
+      "sha": "120e0e705f8e3b507dc49377ac2879979f0d545c"
+    },
+    {
+      "path": "externals/zydis/dependencies/zycore",
+      "sha": "38d4f0285e6157ee840ea82a9b90aba71c8a705d"
+    }
+  ],
+  "description": "Read-only source dependencies from immutable shadPS4 reference; native Mesa patch and DXC hashes are separately pinned in native-port/vendor."
+}

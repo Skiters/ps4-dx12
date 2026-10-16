@@ -1,0 +1,3 @@
+# These source inputs have byte identities pinned in mesa-native.json.
+native-port/vendor/mesa-b628375f-native.patch text eol=lf
+native-port/vendor/mesa-api/spirv_to_dxil_linked.h text eol=lf
