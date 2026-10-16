@@ -3,6 +3,7 @@
 #include "resources.h"
 #include "common/types.h"
 #include <deque>
+#include <exception>
 #include <functional>
 #include <span>
 #include <thread>
@@ -44,6 +45,7 @@ class CommandScheduler {
     size_t active_{};
     bool recording_{};
     u64 submitted_{};
+    std::exception_ptr submit_failure_;
     std::deque<PendingOperation> pending_;
     std::deque<PendingOperation> priority_pending_;
     mutable std::mutex pending_mutex_;
@@ -66,6 +68,8 @@ public:
     ID3D12GraphicsCommandList* Begin();
     GpuTimestamp BeginTimestamp(const char* name);
     void EndTimestamp(GpuTimestamp,const char* name);
+    // Own retirement leases before GPU execution; a failed submission is terminal
+    // for further recording so unknown/partially published work is never replayed.
     u64 Submit(std::span<std::function<void(u64)>> retirements = {},
                std::span<std::function<void(u64)>> submitted = {});
     void Wait(u64 fence) { timeline_.Wait(fence); }
