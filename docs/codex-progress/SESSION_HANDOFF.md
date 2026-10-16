@@ -331,6 +331,21 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+Current source continuation: 179972f (2026-10-16), authoritative over older notes below.
+Readonly UINT block-texel views selecting one mip now support nonzero first_mip through an
+exact full physical prefix [0..k]. The helper requires first_mip=levels-1, prefix levels
+within the BC parent, and identical per-mip pitch/height/offset/slice/tiling/layers and block
+geometry. Complete ownership replacement keeps its original reverse-chain guard. The
+private child remains dirty/non-authoritative; parent BC allocation, ownership and pending
+fence resources survive. Independent source review: F:/PS4Dev/handoff/
+bc-selected-prefix-20261016/REVIEW.md. No build/test/GPU/game/UI execution; no runtime PASS.
+
+Remaining: reverse selected-view fixture coverage, writable shared-subresource coherence,
+dirty-parent refresh, address-shifted mip/slice aliases, and forward partial BC copies with
+the proved shared target B/P seed. Next source change must use NEXT_PARTIAL_BC_COPY_CONTRACT.md
+in bc-mip-bridge-20261016; preserve one source version and target padding/tail provenance.
+All129 groups remain partial/open. Earlier fixtures are authored/unrun; preview24 unchanged.
+
 ## BC mip fixture oracle review update - 2026-10-16
 
 92af292 adds a GPU snapshot baseline of the complete 4 KiB output region before the
