@@ -523,6 +523,10 @@
           "paths": [
             "native-port/gcn_frontend_test.cpp"
           ]
+        },
+        {
+          "kind": "physical_image_identity_controls",
+          "description": "Prepared classified-identity alias dispatch with differing cache/performance/counter/reserved T# fields; the real resource pass must promote the read, share physical UAV storage and preserve the complete physical allocation oracle. Specialization stays stable for non-storage controls but11 individual address/format/type/extent/pitch/mip/tiling/padding changes must break the alias group/key. Existing classification fixture additionally covers loaded same-storage sharps and external pipeline writer hints, native/reference isolation, mip/query and sRGB cases. Both C++ TUs /Zs passed in primary and clean committed Release environments; no fixture link, shader conversion, test or GPU execution."
         }
       ]
     },
@@ -606,6 +610,10 @@
             "native-port/gcn_frontend_test.cpp",
             "native-port/writable_image_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "physical_image_identity_controls",
+          "description": "Prepared classified-identity alias dispatch with differing cache/performance/counter/reserved T# fields; the real resource pass must promote the read, share physical UAV storage and preserve the complete physical allocation oracle. Specialization stays stable for non-storage controls but11 individual address/format/type/extent/pitch/mip/tiling/padding changes must break the alias group/key. Existing classification fixture additionally covers loaded same-storage sharps and external pipeline writer hints, native/reference isolation, mip/query and sRGB cases. Both C++ TUs /Zs passed in primary and clean committed Release environments; no fixture link, shader conversion, test or GPU execution."
         }
       ]
     },
@@ -741,6 +749,10 @@
             "native-port/image_access_classification_test.cpp",
             "native-port/packed10_image_test.cpp"
           ]
+        },
+        {
+          "kind": "physical_image_identity_controls",
+          "description": "Prepared classified-identity alias dispatch with differing cache/performance/counter/reserved T# fields; the real resource pass must promote the read, share physical UAV storage and preserve the complete physical allocation oracle. Specialization stays stable for non-storage controls but11 individual address/format/type/extent/pitch/mip/tiling/padding changes must break the alias group/key. Existing classification fixture additionally covers loaded same-storage sharps and external pipeline writer hints, native/reference isolation, mip/query and sRGB cases. Both C++ TUs /Zs passed in primary and clean committed Release environments; no fixture link, shader conversion, test or GPU execution."
         }
       ]
     },
@@ -1070,6 +1082,10 @@
             "native-port/typeless_texture_test.cpp",
             "native-port/writable_image_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "physical_image_identity_controls",
+          "description": "Prepared classified-identity alias dispatch with differing cache/performance/counter/reserved T# fields; the real resource pass must promote the read, share physical UAV storage and preserve the complete physical allocation oracle. Specialization stays stable for non-storage controls but11 individual address/format/type/extent/pitch/mip/tiling/padding changes must break the alias group/key. Existing classification fixture additionally covers loaded same-storage sharps and external pipeline writer hints, native/reference isolation, mip/query and sRGB cases. Both C++ TUs /Zs passed in primary and clean committed Release environments; no fixture link, shader conversion, test or GPU execution."
         }
       ]
     },
@@ -8125,7 +8141,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources",
       "native_symbol": "NativeDX12::ExecuteGuestResources",
-      "missing_semantics": "Multiple-stage ordered buffer/image binding, different physical layouts and overlapping planned image geometries still need ownership/ordering adaptation. Overlapping sampled/storage image subresources need shader access unification. Single-stage compatible-layout shader images can now accompany ordered exact-sharp-byte common-UAV buffer requests, keeping I and B independent. The formatted reader remains exact-base (pinned BufferCache::SynchronizeMemoryFromImage assertion).",
+      "missing_semantics": "Multiple-stage ordered buffer/image binding, different physical layouts and overlapping planned image geometries still need ownership/ordering adaptation. Overlapping sampled/storage image views outside the connected NativeImageViewAliases/CompatibleGuestShaderStorage geometry proof need further shader/native-view unification. Compatible views already use coherent UAV reads and manual sampling/LOD; non-storage T# control differences are now covered. Single-stage compatible-layout shader images can accompany ordered exact-sharp-byte common-UAV buffers, keeping I and B independent. Formatted readers remain exact-base (pinned assertion).",
       "evidence": "src/video_core/renderer_d3d12/guest_compute.cpp: Independent formatted image/buffer partial or simultaneous-write ordering is not adapted",
       "groups": [
         4,
@@ -8153,7 +8169,8 @@
       "implemented_subcontracts": [
         "Single compute-stage buffer-only requests can bind contained DWORD interior writers before or after exact-base formatted readers. Only a prior exact-base writer invalidates I; every clean small CPU stream remains private. Full prewrite I retile/padding, original sharp bounds/dirty ranges and fence leases are retained. Production Release compiled/linked; GPU acceptance not run.",
         "Native buffer loads, stores and 32/64-bit atomics use an independent inclusive byte limit in CBV b0 space34, preserving both halves of ranges above 4GiB and rejecting native prefix/component overflow. Contained byte/halfword writer envelopes now share B under the same ordering/ownership guards, requiring actual bounds reflection and natural alignment for every used scalar type. Shader metadata version25; null-sharp temporary and special-buffer semantics retained. Sixteen additional real-GCN controls check exact sub-DWORD bounds plus live GPU neighbor bytes; C++ typechecked only. Clean Release built at7304bb2; runtime acceptance remains not_run.",
-        "Single-stage mixed buffer/image commands retain a valid I for interior buffer writers. Images invalidated by a later exact-base writer refresh from the immutable B1 result of an earlier formatted retile, after its final COPY_SOURCE to shader-read transition. Matching guest mip layout and shader storage gate admission; incompatible layouts, multiple stages and overlapping image SRV/UAV subresources remain explicit guards. Primary and clean Release compiled/linked atc238eef;32 new real-GCN controls are C++ typechecked only."
+        "Single-stage mixed buffer/image commands retain a valid I for interior buffer writers. Images invalidated by a later exact-base writer refresh from the immutable B1 result of an earlier formatted retile, after its final COPY_SOURCE to shader-read transition. Matching guest mip layout and shader storage gate admission; incompatible layouts, multiple stages and overlapping image SRV/UAV subresources remain explicit guards. Primary and clean Release compiled/linked atc238eef;32 new real-GCN controls are C++ typechecked only.",
+        "NativeImageStorageAliases now compares physical storage fields rather than the entire T# object, matching pinned ImageInfo(sharp, desc) allocation inputs. Non-storage control/counter/reserved differences no longer leave compatible reads as SRVs beside a UAV. Existing coherent UAV read/manual sampling/LOD/swizzle/format paths are reused, not reimplemented. Stored stage metadata version26 invalidates older unpromoted artifacts. Production Release and clean committed Release built atb85f076; authored controls are C++ typechecked only. Distinct geometry/layout and multi-stage domains remain explicit gaps."
       ]
     },
     "depth-color-shared-storage": {
