@@ -1,4 +1,5 @@
 #include "video_core/renderer_d3d12/command_scheduler.h"
+#include "scheduler_submission_fixture.h"
 #include <dxgi1_6.h>
 #include <cstdio>
 using namespace NativeDX12;
@@ -18,6 +19,7 @@ int main() { try {
     debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;
     Check(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device)));
+    RunSchedulerSubmissionFixture(device.Get());
     CommandScheduler scheduler(device.Get());
     // A recording list has no completion fence, including after context reuse.
     for (unsigned pass = 0; pass != 2; ++pass) {

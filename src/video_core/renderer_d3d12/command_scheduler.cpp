@@ -255,8 +255,16 @@ void CommandScheduler::Collect() {
             pending_.pop_front();
         }
     }
-    for (auto& operation : ready) operation.callback(operation.fence);
+    // A completed callback can report an error, but later completed callbacks
+    // still own required releases/publications. Drain all of them once before
+    // reporting the first failure instead of destroying the uncalled tail.
+    std::exception_ptr callback_failure;
+    for (auto& operation : ready) {
+        try { operation.callback(operation.fence); }
+        catch (...) { if(!callback_failure)callback_failure=std::current_exception(); }
+    }
     for(auto& context:contexts_)CollectTimestamps(context);
+    if(callback_failure)std::rethrow_exception(callback_failure);
 }
 
 void CommandScheduler::PriorityWorker(std::stop_token token) {

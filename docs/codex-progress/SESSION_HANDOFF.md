@@ -331,6 +331,24 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+## Callback drain and authored submission controls - 2026-10-16
+
+Collect now invokes every already-ready retirement callback once even if an earlier one
+throws, then reports the first callback failure. It previously destroyed the uncalled tail.
+Independent source review: scheduler-batch-20261016/callback-drain/REVIEW.md. New authored
+scheduler_submission_fixture.h covers normal/throwing publication with an external queue
+gate, three real upload/readback copies, callback-only lease weak references, no replay,
+exact fence results, and a throwing retirement followed by another ready retirement.
+Debug messages are attributed by cursor, old messages retained, overflow rejected. Fixture
+source review remains distinct from runtime acceptance: no build/test/GPU execution.
+Fault-injected allocation/Signal failure and device timeout remain unverified. Existing
+priority tests and scheduler integration were preserved outside these scoped commits.
+
+Next production contract is writable BC selected-view transaction per
+F:/PS4Dev/handoff/bc-writable-view-20261016/REFERENCE_CONTRACT.md. Child writes must merge
+into one parent-I seeded replacement; mixed parent/child reads in one dispatch and multiple
+children require explicit coherence/grouping, otherwise fail closed before dispatch.
+
 ## Scheduler submission lease block - 6f55ea1, 2026-10-16
 
 Retirement callbacks are now copied into scheduler-owned pending nodes BEFORE copy/direct
