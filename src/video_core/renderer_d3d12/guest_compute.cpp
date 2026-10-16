@@ -137,6 +137,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     if(!info.images.empty()&&!textures)throw std::runtime_error("Native guest image cache not supplied");
     if(start.buffer>Shader::NUM_BUFFERS||info.buffers.size()>Shader::NUM_BUFFERS-start.buffer)
         throw std::out_of_range("Native guest push buffer offset index");
+    bool has_guest_srv=false,has_guest_uav=false;
+    for(size_t index=0;index<info.buffers.size();++index)if(info.buffers[index].buffer_type==Shader::BufferType::Guest)
+        for(const auto& binding:pipeline.Layout().Bindings())if(binding.space==0&&
+            u64(start.unified)+index>=binding.reg&&u64(start.unified)+index-u64(binding.reg)<binding.count){
+            has_guest_srv|=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            has_guest_uav|=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        }
     for(size_t index=0;index<info.buffers.size();++index) {
         if(index>UINT_MAX-start.unified)throw std::out_of_range("Native compute register overflow");
         const auto reg=start.unified+UINT(index);
@@ -148,8 +155,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 reflected=&binding;
             }
         }
-        if(!reflected)continue; // DXIL optimization removed this guest descriptor.
-        const auto& source=info.buffers[index];const bool uav=reflected->type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        const auto& source=info.buffers[index];
+        // Pinned BindBuffers still prepares optimized-away guest sharps: their
+        // invalidation, dirty-page and formatted-retile effects remain visible.
+        if(!reflected&&source.buffer_type!=Shader::BufferType::Guest)continue;
+        // Production SSBOs are unified UAVs. Keep SRV-only conversion callers'
+        // readonly access class when a live guest binding establishes it.
+        const bool uav=reflected?reflected->type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV:
+            source.is_written||has_guest_uav||!has_guest_srv;
         if(source.is_written&&!uav)throw std::runtime_error("Native writable guest buffer reflected as SRV");
         VAddr address{};u64 size{},original_bytes{};u32 adjust{};
         switch(source.buffer_type) {
@@ -313,8 +326,28 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::vector<size_t> ordered_stream_reads;
     GuestTextureCache::Entry* ordered_formatted_version{};
     bool ordered_formatted_writer=false;
+    const auto streams_before_binding=[&](size_t index){
+        if(!pending[index].guest_read||!pending[index].original_bytes||pending[index].original_bytes>16384)
+            return false;
+        const auto source=requests[index].WriteRange();
+        if(source.address>UINT64_MAX-source.size)
+            throw std::out_of_range("Ordered buffer stream range overflows");
+        if(rasterizer.IsGpuBufferModified(source.address,source.size))return false;
+        const auto first_page=source.address>>12,last_page=(source.address+source.size-1)>>12;
+        // Pinned ObtainBuffer marks each writer's original range before binding
+        // the next descriptor. Even byte-disjoint writes can share query pages.
+        for(size_t j=0;j<index;++j)if(requests[j].written){
+            const auto write=requests[j].WriteRange();
+            if(!write.size||write.address>UINT64_MAX-write.size)
+                throw std::out_of_range("Ordered buffer writer range overflows");
+            if((write.address>>12)<=last_page&&first_page<=((write.address+write.size-1)>>12))
+                return false;
+        }
+        return true;
+    };
     if(textures)for(size_t i=0;i<ordinary_count;++i)if(pending[i].formatted_read&&
-        rasterizer.FormattedBufferNeedsImageSync(requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)){
+        (!streams_before_binding(i)||rasterizer.FormattedBufferNeedsImageSync(
+            requests[i].address+pending[i].byte_adjust,pending[i].original_bytes))){
         if(const auto meta=textures->GetMetaInfo(requests[i].address+pending[i].byte_adjust))
             if(const auto value=FormattedMetadataValue(*meta)){
                 if(pending[i].byte_adjust)throw std::runtime_error("Formatted metadata synthesis requires DWORD-aligned original sharp");
@@ -323,8 +356,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     for(size_t i=0;i<ordinary_count;++i)if(separate_overlap(requests[i].address,requests[i].size)){
         if(pending[i].guest_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})){
-            const bool needs_sync=pending[i].formatted_read&&rasterizer.FormattedBufferNeedsImageSync(
-                requests[i].address+pending[i].byte_adjust,pending[i].original_bytes);
+            const bool needs_sync=pending[i].formatted_read&&(!streams_before_binding(i)||
+                rasterizer.FormattedBufferNeedsImageSync(requests[i].address+pending[i].byte_adjust,pending[i].original_bytes));
             const auto request_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                 return buffer.written&&buffer.address<requests[i].address+requests[i].size&&
                     requests[i].address<buffer.address+buffer.size;});
@@ -332,8 +365,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             // Raw-only commands need the same early clean CPU stream, even when
             // no formatted descriptor triggers image synchronization afterward.
             if(!pending[i].formatted_read&&(!overlaps_writer||i>=size_t(request_writer-requests.begin())||
-               pending[i].original_bytes>16384||rasterizer.IsGpuBufferModified(
-                   requests[i].address+pending[i].byte_adjust,pending[i].original_bytes)))continue;
+               !streams_before_binding(i)))continue;
             if(!needs_sync&&!overlaps_writer)continue;
             GuestTextureCache::Entry* version{};size_t candidates{};
             if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
@@ -358,8 +390,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto& layout=version->layout;const auto& desc=version->desc;
                 // Earlier raw reads also stream a small clean CPU snapshot;
                 // a later formatted read must not turn them into arena aliases.
-                const bool clean_small=pending[i].original_bytes<=16384&&
-                    !rasterizer.IsGpuBufferModified(desc.address,pending[i].original_bytes);
+                const bool clean_small=streams_before_binding(i);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
                 const bool same_base_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
@@ -414,8 +445,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
                     if(pending[j].guest_read&&requests[j].address<desc.address+layout.guest_bytes&&
                        desc.address<requests[j].address+requests[j].size&&
-                       pending[j].original_bytes<=16384&&
-                       !rasterizer.IsGpuBufferModified(requests[j].address,pending[j].original_bytes)&&
+                       streams_before_binding(j)&&
                        std::ranges::find(ordered_stream_reads,j)==ordered_stream_reads.end())
                         ordered_stream_reads.push_back(j);
                 if(reads_image&&!clean_small&&ordered_formatted_images.empty()){
