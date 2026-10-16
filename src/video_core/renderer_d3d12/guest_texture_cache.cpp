@@ -1183,8 +1183,10 @@ Resource GuestTextureCache::AllocateTexture(Entry* preserve,const D3D12_RESOURCE
             // alignment or fragmentation. Retry actual heap admission only after
             // one real eviction or completed in-flight source reclamation.
             const auto preceding_budget=resident_budget_;
+            const auto preceding_commitment=texture_allocator_.CommittedBytes();
             RefreshMemoryBudget();
-            if(resident_budget_>preceding_budget)continue;
+            if(resident_budget_>preceding_budget||
+               texture_allocator_.CommittedBytes()<preceding_commitment)continue;
             bool released=false;
             for(auto& image:entries_)if(image.get()!=preserve)
                 released|=ReleaseRetiredStorage(*image,collected_fence_)!=0;

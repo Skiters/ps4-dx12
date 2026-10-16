@@ -114,6 +114,13 @@ void PlacedTextureAllocator::SetBudget(u64 bytes){
     std::lock_guard lock(mutex_);
     // Existing leases may exceed a reduced limit; future pages must honor it.
     budget_=AlignHeap(bytes);
+    // Allocate can reuse an idle page without reaching CreatePage's trim. Drop
+    // unused commitment now when a lower adapter budget requires reclamation.
+    if(committed_>budget_)for(auto it=pages_.begin();it!=pages_.end();){
+        if(it->use_count()==1){committed_-=(*it)->size;it=pages_.erase(it);}
+        else ++it;
+        if(committed_<=budget_)break;
+    }
 }
 std::shared_ptr<PlacedTextureAllocator::Page> PlacedTextureAllocator::CreatePage(
     u64 minimum,u64 alignment,D3D12_HEAP_FLAGS flags){
