@@ -114,6 +114,14 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+## Selected BC mip view source checkpoint - 2026-10-16
+
+923d637 pushed a readonly selected-mip0 conversion path that preserves the multi-mip BC
+parent's authority and lifetime. It is WIP/source-only; the authored fixture oracle still
+needs independent GPU readback and review. Evidence and exact source snapshot are in
+F:/PS4Dev/handoff/bc-mip-bridge-20261016. Original staged network deletions are preserved.
+
+
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
 06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
 readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate

@@ -132,6 +132,15 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+## Continue selected BC mip views - 2026-10-16
+
+923d637 is pushed, source-only. Review the selected mip0 private snapshot path and finish
+the authored fixture's independent GPU output readback; verify parent all-mip identity. Then
+continue nonzero selected mip and writable child coherence, and forward partial-copy source
+seed semantics from bc-mip-bridge-20261016/NEXT_PARTIAL_BC_COPY_CONTRACT.md. Keep tests/build/game
+deferred. Do not mark BC complete.
+
+
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
 06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
 readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate

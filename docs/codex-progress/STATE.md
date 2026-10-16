@@ -118,6 +118,15 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+## Current selected BC mip view - 2026-10-16
+
+923d637 pushed: readonly mip0 UINT view over multi-mip BC parent snapshots privately and
+keeps the parent authoritative; no child ownership/parent retirement. Prefix validation
+uses allocation mip0 independent of the parent's shader view selector. Source-only; fixture
+oracle and review remain pending, and no runtime acceptance is claimed. Writable and nonzero
+selected aliases remain open. See SESSION_HANDOFF.md and bc-mip-bridge-20261016.
+
+
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
 06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
 readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate

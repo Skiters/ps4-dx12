@@ -151,6 +151,18 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+## Selected BC view coverage - 2026-10-16
+
+| Contract | Production continuation | Acceptance |
+|---|---|---|
+| Readonly BC parent to UINT mip0 view | Private dirty snapshot; parent remains sole owner | Source WIP 923d637; review/fixture pending |
+| Parent view selector normalization | Allocation mip0 prefix is checked independently of prior view first_mip | Source inspection only |
+| Writable or nonzero selected alias | Coherence/dependency not implemented | Open |
+| BC partial-copy untouched bytes | B/P seed choice contract saved; implementation open | Open |
+
+No build, fixture, runtime, or game equivalence is claimed.
+
+
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
 06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
 readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate

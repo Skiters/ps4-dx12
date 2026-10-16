@@ -96,6 +96,13 @@ No new performance result exists. Source admission is not a measured speedup. Hi
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+## Selected BC view continuation - no new measurements, 2026-10-16
+
+923d637 contains a source-only readonly mip0 BC parent view change. No build, tests, GPU
+execution, game run, FPS, frame-time, image, stability, or performance measurements were
+obtained. Fixture oracle/review are pending. Earlier benchmark identities remain unchanged.
+
+
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.
 06536f2 and6ded358 are pushed: exact packed-float2/4/8-sample transfers with actual cast lists,
 readonly RGB9E5 physical ownership, and readonly RGB32 guest12/host16 transfer with separate

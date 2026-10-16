@@ -331,6 +331,29 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+## Selected BC mip view continuation - 2026-10-16
+
+Source WIP 923d637 is pushed. A readonly UINT block-texel view selecting mip0 from a
+multi-mip BC parent now has a dedicated private snapshot path. It preserves the full BC
+parent as the sole authoritative owner, leaves the copied child logically dirty, and does
+not acquire child ownership or retire the parent. Prefix layout is normalized to allocation
+mip0 even when the parent's original shader view selected another mip. This is source-only
+review; no compile, fixture, runtime, or game acceptance.
+
+The current authored multi-mip fixture still needs its output oracle corrected: guest
+ReadMemory can resolve a covering GPU mapping and collapse source/target dirty distinctions.
+Author is switching the chunk check to independent native GPU readback while retaining the
+full physical backing checks. After freeze, review whether the fixture exercises readonly
+selected-mip0 reverse access and confirms every parent mip remains intact. Exact evidence is
+in F:/PS4Dev/handoff/bc-mip-bridge-20261016/selected-source and fixture source snapshots.
+
+Next source boundary: prove writable UINT alias behavior and nonzero selected mip ranges;
+they remain fail-closed/unimplemented. Partial-chain forward copies must choose uncovered
+bytes from the pinned Vulkan refresh source (synchronized B when GPU-modified, P otherwise),
+using one shared target seed; see NEXT_PARTIAL_BC_COPY_CONTRACT.md. No alias coherence or
+full BC parity is claimed. The original22 staged deletions were verified byte-identical.
+
+
 Pushedd55fb2d additionally preserves pinned-compatible ordinary uncompressed color
 interpretations (8/16/32/64/96/128 guest bits), including R32_UINT to R16G16_UINT.
 Full physical geometry and normalized image identity must match. This is an explicit
