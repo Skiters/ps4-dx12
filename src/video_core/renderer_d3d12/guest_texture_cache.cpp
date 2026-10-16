@@ -1259,6 +1259,40 @@ bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
 }
+bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
+    GuestTextureDesc view,const GuestTextureLayout& view_layout){
+    const bool source_block=IsIndependentGuestBlockStorage(source,source_layout);
+    const bool view_block=IsIndependentGuestBlockStorage(view,view_layout);
+    if(!source_block&&!view_block)return false;
+    const auto word=[](const GuestTextureDesc& d,const GuestTextureLayout& l){
+        return !d.render_target&&!d.depth_target&&!d.stencil_address&&!d.volume_depth&&
+            !d.one_dimensional&&d.samples==1&&d.levels==1&&!d.pow2_padding&&
+            !d.storage_height&&!d.storage_slice_bytes&&!l.expanded_bytes_per_pixel&&
+            l.block_extent==1&&d.number_format==4&&
+            ((d.data_format==11&&l.bytes_per_pixel==8)||(d.data_format==14&&l.bytes_per_pixel==16));
+    };
+    if((!source_block&&!word(source,source_layout))||(!view_block&&!word(view,view_layout))||
+       (source_block&&view_block&&source.data_format!=view.data_format)||
+       source_layout.bytes_per_pixel!=view_layout.bytes_per_pixel||
+       source_layout.guest_bytes!=view_layout.guest_bytes||
+       source_layout.logical_bytes!=view_layout.logical_bytes||
+       source_layout.mips.size()!=1||view_layout.mips.size()!=1)return false;
+    const auto& a=source_layout.mips[0];const auto& b=view_layout.mips[0];
+    if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
+       a.macro!=b.macro||a.thickness!=b.thickness)return false;
+    // Pinned ResolveOverlap/ExpandImage copies uncompressed words to BC
+    // blocks. Its block-texel view class also permits the reverse UINT view.
+    // Same-codec BC numeric views keep those exact bytes; different codecs do
+    // not become compatible just because their blocks have the same size.
+    if(source_block){source.width/=4;source.height/=4;source.pitch/=4;}
+    if(view_block){view.width/=4;view.height/=4;view.pitch/=4;}
+    source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.writable=view.writable=false;
+    source.native_packed10_raw=view.native_packed10_raw=source.native_raw32=view.native_raw32=false;
+    source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
+    source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
+    return source==view;
+}
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
@@ -1295,10 +1329,11 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     if(auto* direct=FindValidIndependentImage(desc,layout))return direct;
     Entry* result{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
-        if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
-           !MatchesGuestMipLayout(entry->layout,layout)||
+        if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty)continue;
+        const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout);
+        if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
-            !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout)))continue;
+            !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout))))continue;
         if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||
             entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
             entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get()))
@@ -1320,13 +1355,14 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     if(refresh_current){
         auto [first,last]=address_index_.equal_range(d.address);
         for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
+            const bool block=MatchesReferenceBlockImage(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
-               !MatchesGuestMipLayout(previous.layout,layout))continue;
+               (!block&&!MatchesGuestMipLayout(previous.layout,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
                !CompatibleGuestPackedStorage(previous.desc,d)&&
                !CompatibleGuestAttachmentStorage(previous.desc,d)&&
                !CompatibleGuestSampledStorage(previous.desc,d)&&
-               !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout))continue;
+               !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout)&&!block)continue;
             // ReserveMemory may evict cache entries. Keep the logical identity
             // witness alive until the replacement's refresh is published.
             history_pins.push_back(PinBinding(previous));inherited_modified=true;
@@ -1435,6 +1471,15 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
+            if((existing->layout.block_extent==4||layout.block_extent==4)&&
+               !MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&
+               !MatchesGuestUploadStorage(*existing,d,layout)){
+                // A different BC codec is a distinct image class. Refresh it
+                // from B while retaining the old codec's independent I.
+                if(existing->layout.block_extent==4&&layout.block_extent==4&&
+                   existing->desc.data_format!=d.data_format)continue;
+                throw std::runtime_error("Independent block image view has no proven word/layout transfer");
+            }
             if(!read_independent_||!acquire_independent_||!retire_independent_||
                !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address)
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
@@ -1824,7 +1869,8 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
             bytes=GuestMultisample::LinearBytes(image.desc,footprint);
         }else DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels,
             1,0,&footprint,nullptr,&row_bytes,&bytes));
-        if(row_bytes!=u64(std::max(image.desc.width>>mip,1u))*linear_bytes||!bytes||bytes>UINT32_MAX)
+        const auto blocks=(std::max(image.desc.width>>mip,1u)+image.layout.block_extent-1)/image.layout.block_extent;
+        if(row_bytes!=u64(blocks)*linear_bytes||!bytes||bytes>UINT32_MAX)
             throw std::logic_error("Independent image transfer footprint changed");
         linear.push_back({footprint,bytes,mip,layer,{},{},{}});
     }

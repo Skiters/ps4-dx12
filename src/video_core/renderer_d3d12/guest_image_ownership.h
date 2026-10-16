@@ -10,11 +10,34 @@ struct GuestImageOwnershipGeometry {
     GuestTextureLayout layout;
 };
 
+// One native BC block can retain the same physical words as a UINT64/128
+// image. Keep this separate from BC shader-write or decoded-pixel admission.
+inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout) {
+    return desc.data_format>=35&&desc.data_format<=41&&!desc.writable&&
+        !desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
+        !desc.volume_depth&&!desc.one_dimensional&&desc.samples==1&&desc.levels==1&&
+        desc.tile_mode!=8&&desc.tile_mode!=31&&
+        desc.width%4==0&&desc.height%4==0&&desc.pitch%4==0&&
+        !desc.pow2_padding&&!desc.storage_height&&!desc.storage_slice_bytes&&
+        layout.block_extent==4&&!layout.expanded_bytes_per_pixel&&
+        (layout.bytes_per_pixel==8||layout.bytes_per_pixel==16);
+}
+
 // Ownership tracks physical guest words independently of the current shader
 // interpretation. It must not make a read-only format legal for IMAGE_WRITE.
 inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     const GuestTextureCache::Entry& image) {
     auto owner=image.desc;owner.writable=true;owner.render_target=false;
+    const bool block=image.layout.block_extent==4;
+    if(block){
+        if(!IsIndependentGuestBlockStorage(image.desc,image.layout))return std::nullopt;
+        // Validate only physical ownership using one UINT texel per BC block.
+        // The real image stays readonly BC; no BC UAV is created or authorized.
+        owner.width/=4;owner.height/=4;owner.pitch/=4;
+        owner.data_format=image.layout.bytes_per_pixel==8?11:14;owner.number_format=4;
+        owner.native_raw32=owner.native_packed10_raw=false;
+    }
     if(image.desc.data_format==13&&!image.desc.writable&&!image.desc.render_target){
         // RGB32 has a true 96-bit guest layout. Its independent read-only
         // ownership must neither authorize image writes nor become R32/RGBA32.
@@ -32,7 +55,8 @@ inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     }
     auto layout=LayoutGuestTexture(owner);
     const auto& source=image.layout;
-    if(layout.bytes_per_pixel!=source.bytes_per_pixel||layout.block_extent!=source.block_extent||
+    if(layout.bytes_per_pixel!=source.bytes_per_pixel||
+       (block?(layout.block_extent!=1||source.block_extent!=4):layout.block_extent!=source.block_extent)||
        layout.guest_bytes!=source.guest_bytes||layout.logical_bytes!=source.logical_bytes||
        layout.mips.size()!=source.mips.size())return std::nullopt;
     for(size_t i=0;i<layout.mips.size();++i){
