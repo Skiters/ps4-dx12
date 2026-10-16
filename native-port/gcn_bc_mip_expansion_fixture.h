@@ -208,6 +208,21 @@ inline void RunBcMipExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Live
         sample_bc(sample,512,7);
         if(!rasterizer.IsGpuBufferModified(target.base_address,target.GetSize())||std::memcmp(backing,physical_before.data(),AllocationBytes))
             throw std::runtime_error("BC mip expansion published B or I before compressed observations");
+        // Establish the exact GPU output baseline after earlier probes. This
+        // makes untouched output bytes deterministic without reconciling the
+        // source guest mapping or assuming its physical backing matches GPU B.
+        {
+            auto snapshot=rasterizer.CapturePreparedShaderBuffer(output.base_address,OutputBytes);
+            ComPtr<ID3D12Device> device;Check(snapshot.handle->GetDevice(IID_PPV_ARGS(&device)));
+            auto readback=Buffer(device.Get(),OutputBytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            rasterizer.RetainUntilFinish([snapshot,readback](u64){(void)snapshot;(void)readback;});
+            auto* list=rasterizer.RecordingList();snapshot.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            list->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,OutputBytes);
+            rasterizer.Finish();rasterizer.ValidateDebugMessages();
+            void* mapped{};D3D12_RANGE range{0,SIZE_T(OutputBytes)};Check(readback.handle->Map(0,&range,&mapped));
+            std::memcpy(expected.data()+OutputOffset,mapped,OutputBytes);
+            D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);
+        }
         // Every byte of all mips/layers/padding passes through this real GCN
         // formatted reader. v0 local X indexes256 DWORDs; s8 selects the chunk.
         initialize(formatted,{0xe0002000,0x08000400,0xbf8c0000,0xe0702000,0x80010400,0xbf810000},hash(8));
