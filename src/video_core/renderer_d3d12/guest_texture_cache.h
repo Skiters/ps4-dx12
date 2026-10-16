@@ -251,6 +251,8 @@ public:
                   bool current_buffer_snapshot=false);
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    // Also admits an existing packed conversion source, never direct view reuse.
+    Entry* FindIndependentUploadSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
     static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.

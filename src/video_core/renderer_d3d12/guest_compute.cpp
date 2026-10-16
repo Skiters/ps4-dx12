@@ -556,7 +556,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // independent image. Keep I here instead of capturing unrelated B0.
         // Capturing another image can reserve memory, so pin this witness until
         // Upload has selected and retained its descriptor resource.
-        if(!image.desc.writable)if(auto* retained=textures->FindValidIndependentImage(image.desc,image.layout)){
+        if(!image.desc.writable)if(auto* retained=textures->FindIndependentUploadSource(image.desc,image.layout)){
             preserved_image_pins.push_back(textures->PinBinding(*retained));continue;
         }
         image.current_buffer_snapshot=!image.desc.writable&&std::ranges::any_of(

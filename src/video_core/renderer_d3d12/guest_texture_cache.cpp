@@ -1216,6 +1216,21 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
     if(ambiguous)throw std::runtime_error("Ambiguous clean independent image binding");
     return result;
 }
+GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout)const{
+    if(auto* direct=FindValidIndependentImage(desc,layout))return direct;
+    Entry* result{};auto [first,last]=address_index_.equal_range(desc.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
+        if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
+           !MatchesGuestMipLayout(entry->layout,layout)||!CompatibleGuestPackedStorage(entry->desc,desc))continue;
+        if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||
+            entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
+            entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get()))
+            throw std::runtime_error("Ambiguous independent image conversion source");
+        if(!result)result=entry;
+    }
+    return result;
+}
 GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
@@ -1283,7 +1298,9 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         if(stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
-    auto* independent_reuse=guest_snapshot?nullptr:FindValidIndependentImage(d,layout);
+    auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
+    auto* independent_reuse=independent_source&&MatchesGuestUploadStorage(*independent_source,d,layout)?
+        independent_source:nullptr;
     Entry* reuse=independent_reuse;
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;
       if(guest_snapshot&&existing->cpu_watched){
@@ -1295,7 +1312,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
          !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes))));
       if((pending_coherent||(!guest_snapshot&&!existing->logical_dirty&&(existing->gpu_owned||existing->cpu_watched)))&&
         MatchesGuestUploadStorage(*existing,d,layout)){
-        if(!independent_reuse&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
+        if(!independent_source&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
       }
     }
     if(reuse){
@@ -1312,7 +1329,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     // overlapping backing on the caller before any comparison or parallel
     // detile can fault on a worker waiting for the caller's execution mutex.
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto& existing=*indexed->second;
-        if(!guest_snapshot&&existing.gpu_owned&&!existing.logical_dirty&&CompatibleGuestPackedStorage(existing.desc,d)){
+        if(!guest_snapshot&&(!independent_source||&existing==independent_source)&&
+           existing.gpu_owned&&!existing.logical_dirty&&CompatibleGuestPackedStorage(existing.desc,d)){
             existing.MarkLogicalDirty();
             if(ConvertPackedBacking(existing,d,layout,list))return finish_refresh(existing);
             // A rejected conversion has not mutated its original resource.
@@ -1325,7 +1343,16 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     // A prewrite snapshot already owns complete independent contents. Current
     // shader writers may have acquired guest ownership after capture; resolving
     // them here would retire their initialization before their recorded writes.
-    for(auto& existing:entries_)if(!guest_snapshot&&existing->gpu_owned&&
+    // Preserve the same clean-I source that made the caller omit a B snapshot,
+    // including when an in-place packed conversion declines for capacity/device
+    // reasons and needs the existing domain-preserving transfer instead.
+    std::vector<Entry*> resolve_entries;
+    if(!guest_snapshot){
+        if(independent_source)resolve_entries.push_back(independent_source);
+        for(auto& existing:entries_)if(existing.get()!=independent_source&&existing->gpu_owned)
+            resolve_entries.push_back(existing.get());
+    }
+    for(auto* existing:resolve_entries)if(!guest_snapshot&&existing->gpu_owned&&
         (overlaps(d.address,layout.guest_bytes,existing->desc.address,existing->layout.guest_bytes)||
          (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.address,existing->layout.guest_bytes))||
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
@@ -1339,7 +1366,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
                 !CanTransferIndependentMultisample(existing->desc,existing->layout)||
                 !CanTransferIndependentMultisample(d,layout)))
                 throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
-            auto* source=existing.get();auto pin=PinBinding(*source);
+            auto* source=existing;auto pin=PinBinding(*source);
             auto snapshot=read_independent_(*source,d.address,layout.guest_bytes);
             // Source ownership and its CPU-write guard remain live until the
             // new interpretation has acquired its own guard. Pending copies
