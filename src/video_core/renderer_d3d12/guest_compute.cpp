@@ -225,10 +225,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         const auto count=source.NumBindings(info);
         if(!count||image_reg>UINT_MAX-count)throw std::out_of_range("Native image descriptor register span");
         const auto type=source.is_written?D3D12_DESCRIPTOR_RANGE_TYPE_UAV:D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        bool used=false;
         for(const auto& b:pipeline.Layout().Bindings())if(b.type==type&&b.space==0)
-            for(UINT i=0;i<count;++i)if(image_reg+i>=b.reg&&image_reg+i-b.reg<b.count){covered.emplace(UINT(image_reg+i),0);used=true;}
-        if(used) {
+            for(UINT i=0;i<count;++i)if(image_reg+i>=b.reg&&image_reg+i-b.reg<b.count)covered.emplace(UINT(image_reg+i),0);
+        // Pinned BindTextures prepares every original image slot: refresh,
+        // tracking and conservative storage ownership survive shader liveness.
+        // Only descriptor writes below depend on actual native reflection.
+        {
             const auto sharp=source.GetSharp(info);
             const bool array=source.is_array||sharp.GetType()==AmdGpu::ImageType::Cube;
             auto desc=DescribeGuestTexture(sharp);desc.writable=source.is_written;
