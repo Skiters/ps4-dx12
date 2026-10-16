@@ -744,7 +744,17 @@ int main(int argc,char** argv){try{
     const float value[]{0.25f,0,0,0};renderer.RecordingList()->ClearUnorderedAccessViewFloat(views.Gpu(slot),cpu_views.Cpu(cpu_slot),source.texture.handle.Get(),value,0,nullptr);
     if(!cache.Own(source))throw std::runtime_error("Source ownership acquisition failed");
     const auto source_uid=source.image_uid;
-    auto& converted=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence());
+    const GuestTextureCache::BufferResidency inherited{{desc.address,layout.guest_bytes}};
+    source.pending_buffer_residency=inherited;
+    GuestTextureCache::BufferResidency published;unsigned publications{};
+    cache.SetBufferResidencyPublisher([&](auto ranges){++publications;published.assign(ranges.begin(),ranges.end());});
+    auto& converted=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence(),
+        {},false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
+    if(publications||converted.pending_buffer_residency!=inherited)
+        throw std::runtime_error("Private I conversion lost or prematurely published its parent's B residency");
+    cache.PublishBufferResidency(converted);cache.PublishBufferResidency(converted);
+    if(publications!=1||published!=inherited||!converted.pending_buffer_residency.empty())
+        throw std::runtime_error("Converted I did not consume its original B-source effect exactly once");
     const bool transferred=converted.image_uid!=source_uid&&converted.gpu_owned&&converted.buffer_alias_version&&!source.gpu_owned;
     auto pixels=TextureTransfer::Create(device.Get(),converted.texture,true);pixels.Readback(renderer.RecordingList(),converted.texture);
     auto backing=Buffer(device.Get(),physical.size(),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);

@@ -39,6 +39,7 @@ void RefreshBoundImage(Rasterizer& rasterizer,GuestTextureCache::Entry& target,
     copy_aux(target.expanded_guest_backing,source.expanded_guest_backing);
     copy_aux(target.expanded_written_mask,source.expanded_written_mask);
     target.logical_gpu_modified=source.logical_gpu_modified;target.logical_dirty=source.logical_dirty;
+    target.pending_buffer_residency=std::move(source.pending_buffer_residency);
     target.buffer_alias_version=target.buffer_alias_watch=false;target.linear_download_pending=false;
     target.sampled_snapshot.clear();target.stencil_snapshot.clear();target.pending=true;
     // The transient upload is a source for the bound allocation, not a second
@@ -162,7 +163,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                         rasterizer.RecordingList(),rasterizer.CompletedFence());arm();
                 }
                 const auto guest=std::span(reinterpret_cast<const std::byte*>(address),size_t(domain.layout.guest_bytes));
-                auto& entry=textures.Upload(domain.desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence());
+                auto& entry=textures.Upload(domain.desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence(),
+                    {},false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
                 if(entry.HasValidLogicalImage()&&!textures.RevalidateReadonly(entry))
                     throw std::runtime_error("Ordered stage grown I cannot retain independent ownership");
                 result.pins->push_back(textures.PinBinding(entry));arm();
@@ -263,6 +265,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                     domain.bound_generation=domain.generation;arm();
                 }
                 result.images[i]=entry;
+                textures.PublishBufferResidency(*entry);
                 if(image.written){
                     entry->buffer_alias_version=true;
                     if(!textures.Own(*entry))throw std::runtime_error("Ordered stage writable I cannot keep independent ownership");

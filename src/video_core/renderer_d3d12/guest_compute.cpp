@@ -114,6 +114,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;bool sample_storage;
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;
+        bool buffer_source_residency=false;
         std::optional<size_t> ordered_transfer;std::optional<size_t> storage_group;
         GuestTextureCache::Entry* ordered_entry{};};
     std::vector<ImagePending> images;
@@ -793,7 +794,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(!needs_transfer)continue;
         rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
         const auto bytes=std::span(reinterpret_cast<const std::byte*>(group.desc.address),size_t(group.layout.guest_bytes));
-        auto& expanded=textures->Upload(group.desc,bytes,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        auto& expanded=textures->Upload(group.desc,bytes,rasterizer.RecordingList(),rasterizer.CompletedFence(),
+            {},false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
         preserved_image_pins.push_back(textures->PinBinding(expanded));
         rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
     }
@@ -846,8 +848,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             image.ordered_transfer=size_t(prefix-ordered_formatted_images.begin());
             continue;
         }
+        image.buffer_source_residency=rasterizer.IsGpuBufferModified(key.first,key.second);
         if(GuestTextureCache::CanUploadGpuSnapshot(input,input_layout,image.buffer_writer_alias)&&
-           rasterizer.IsGpuBufferModified(key.first,key.second)){
+           image.buffer_source_residency){
             auto existing=gpu_image_snapshots.find(key);
             const auto capacity=(key.second+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
                 ~u64(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1);
@@ -856,7 +859,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             if(capacity<=64*1024*1024-gpu_snapshot_bytes){
                 diagnostic.Stage("buffer-image-gpu-prewrite-snapshot");
-                image.gpu_snapshot=std::make_shared<Resource>(rasterizer.CaptureShaderBuffer(key.first,key.second));
+                image.gpu_snapshot=std::make_shared<Resource>(rasterizer.CaptureShaderBuffer(key.first,key.second,false));
                 gpu_image_snapshots.emplace(key,image.gpu_snapshot);gpu_snapshot_bytes+=capacity;
                 Diagnostics::Count("buffer-image.gpu-snapshot.bytes",key.second);
                 continue;
@@ -875,6 +878,19 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
         image.guest_snapshot=snapshot;
     }
+    }
+    // CPU fallback can have resolved only narrow dirty sharps while capturing
+    // a larger image. Reserve its complete B source before selecting any views;
+    // the actual image bind below still owns semantic publication.
+    for(const auto& image:images)if(image.buffer_source_residency){
+        const auto& desc=storage_desc(image);const auto& layout=storage_layout(image);
+        if(std::ranges::any_of(requests,[&](const auto& request){return request.resident&&
+            request.address<=desc.address&&desc.address-request.address<=request.size&&
+            layout.guest_bytes<=request.size-(desc.address-request.address);}))continue;
+        const bool uav=std::ranges::any_of(requests,[&](const auto& request){return request.unordered_access&&
+            request.address<desc.address+layout.guest_bytes&&desc.address<request.address+request.size;});
+        requests.push_back({desc.address,layout.guest_bytes,false,uav,true});
+        requests.back().publish_dma_residency=false;
     }
     diagnostic.Stage("buffer-views");
     std::optional<OrderedGuestBindings> stage_bindings;
@@ -934,8 +950,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     for(auto& image:images)if(image.ordered_transfer){
         const auto key=std::pair{storage_desc(image).address,storage_layout(image).guest_bytes};
-        const Rasterizer::ShaderBufferRequest resident{key.first,key.second,false,true,true};
-        rasterizer.DmaMemory().ObserveResidentSharps(std::span(&resident,1));
+        image.buffer_source_residency=true;
         auto [existing,inserted]=gpu_image_snapshots.try_emplace(key);
         if(inserted)existing->second=std::make_shared<Resource>(rasterizer.CapturePreparedShaderBuffer(key.first,key.second));
         image.gpu_snapshot=existing->second;
@@ -1146,6 +1161,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             if(!image.null_resource&&image.desc.writable&&!block_alias_view&&
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
+            if(!image.null_resource){
+                if(image.buffer_source_residency){
+                    const Rasterizer::ShaderBufferRequest resident{storage_desc(image).address,
+                        storage_layout(image).guest_bytes,false,true,true};
+                    rasterizer.DmaMemory().ObserveResidentSharps(std::span(&resident,1));
+                }
+                textures->PublishBufferResidency(*entry);
+            }
             if(!image.null_resource&&separate_input&&!block_alias_view&&!image.ordered_entry)entry->buffer_alias_version=true;
             const bool direct_bc_view=!image.null_resource&&!image.desc.writable&&image.layout.block_extent==4&&
                 textures->FindReadonlyBlockParent(image.desc,image.layout)==entry;

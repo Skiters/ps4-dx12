@@ -3,6 +3,7 @@
 #include "video_core/renderer_d3d12/guest_dma.h"
 #include "video_core/renderer_d3d12/compute_pipeline.h"
 #include "common/scope_exit.h"
+#include "image_source_residency_fixture.h"
 #include <cstring>
 
 namespace NativeDX12 {
@@ -67,6 +68,7 @@ void RunSemanticBufferResidencyFixture(ID3D12Device* device){
     require(high.ResidentIntersections(UINT64_MAX-7,4)==clipped,"High native residency wrapped or was truncated to PS4 VA");
     bool rejected=false;try{(void)high.ResidentIntersections(UINT64_MAX-3,8);}catch(const std::out_of_range&){rejected=true;}
     require(rejected,"Resident intersection accepted an overflowing native range");
+    RunImageSourceResidencyFixture(device,renderer,base);
     renderer.ValidateDebugMessages();
 }
 }

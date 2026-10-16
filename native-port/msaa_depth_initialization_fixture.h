@@ -261,11 +261,11 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             upload(texture,d,2,1,4);stencil_phase[2]=4;check();
             upload(texture,d,2,0,5);depth_phase[2]=5;check(); // Stencil then depth, same layer.
         }else std::puts("SKIP: stencil uploads require PSSpecifiedStencilRefSupported; depth preserves cleared stencil checked");
-        auto small=d;small.width=small.pitch=SmallWidth;small.height=SmallHeight;
-        upload(texture,small,0,0,6);depth_phase[0]=6;partial_depth[0]=true;check();
+        auto smaller=d;smaller.width=smaller.pitch=SmallWidth;smaller.height=SmallHeight;
+        upload(texture,smaller,0,0,6);depth_phase[0]=6;partial_depth[0]=true;check();
         if(options.PSSpecifiedStencilRefSupported){
             // Layer0 outside the upload rectangle still has its preinitialized baseline.
-            upload(texture,small,0,1,7);stencil_phase[0]=7;partial_stencil[0]=true;check();
+            upload(texture,smaller,0,1,7);stencil_phase[0]=7;partial_stencil[0]=true;check();
         }
     }else std::puts("SKIP: combined D32/S8 lacks2x/4x MSAA; plane/partial controls unavailable");
     renderer.Finish();renderer.ValidateDebugMessages();

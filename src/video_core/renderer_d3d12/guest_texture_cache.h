@@ -122,10 +122,19 @@ void EncodeGuestSubresource(const GuestTextureDesc&,const GuestTextureLayout&,
     std::span<std::byte> guest,std::span<const std::byte> linear,uint32_t mip,uint32_t layer);
 class GuestTextureCache {
 public:
+    enum class UploadPurpose { Binding, Preparation };
+    using BufferResidency=std::vector<std::pair<uint64_t,uint64_t>>;
+    struct BlockExpansion {
+        Resource snapshot;
+        BufferResidency residency;
+    };
     struct Entry {
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
         uint64_t image_uid{};
+        // Physical prewarm can seed new I from B before its original image bind.
+        // Retain the deferred EnsureResident effect with that exact I version.
+        BufferResidency pending_buffer_residency;
         uint64_t diagnostic_writer{},diagnostic_vs{},diagnostic_ps{};
         // Tokens can outlive cache destruction after a device-loss error.
         // Their counter must not point back into the destroyed Entry.
@@ -206,7 +215,7 @@ private:
     bool IsLiveBlockParent(const WritableBlockAlias&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
     Entry& UploadVersion(const GuestTextureDesc&,std::span<const std::byte>,ID3D12GraphicsCommandList*,
-        uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*);
+        uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
         const WritableBlockAlias*);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
@@ -249,7 +258,8 @@ private:
     std::function<void(Entry&)> resolve_owned_;
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
     std::function<void()> transfer_submission_;
-    std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
+    std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
+    std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
     std::function<bool(Entry&)> acquire_independent_;
     std::function<void(Entry&)> retire_independent_;
     std::function<void(Entry&)> retire_pressure_;
@@ -282,7 +292,9 @@ public:
                   ID3D12GraphicsCommandList*,uint64_t completed_fence,
                   std::span<const std::byte> stencil_bytes={},bool guest_snapshot=false,
                   const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false,
-                  bool current_buffer_snapshot=false);
+                  bool current_buffer_snapshot=false,UploadPurpose purpose=UploadPurpose::Binding);
+    // Only an actual image use consumes a prepared B-source residency effect.
+    void PublishBufferResidency(Entry&);
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     // Also admits existing packed conversion and pinned-compatible uncompressed
@@ -322,8 +334,11 @@ public:
         read_independent_=std::move(read);acquire_independent_=std::move(acquire);retire_independent_=std::move(retire);
     }
     void SetIndependentBlockExpansion(
-        std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand){
+        std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand){
         expand_block_=std::move(expand);
+    }
+    void SetBufferResidencyPublisher(std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish){
+        publish_buffer_residency_=std::move(publish);
     }
     void SetTransferSubmissionPublisher(std::function<void()> publish){transfer_submission_=std::move(publish);}
     void SetPressureRetirement(std::function<void(Entry&)> retirement){retire_pressure_=std::move(retirement);}

@@ -1715,9 +1715,10 @@ std::optional<GuestTextureCache::WritableBlockAlias> GuestTextureCache::BeginWri
         throw std::runtime_error("Writable BC alias has no parent transfer");
     WritableBlockAlias alias;alias.parent=parent;alias.parent_uid=parent->image_uid;
     alias.parent_pin=PinBinding(*parent);
+    PublishBufferResidency(*parent);
     auto snapshot=read_independent_(*parent,desc.address,layout.guest_bytes);
     auto storage=desc;storage.first_layer=0;storage.view_layers=storage.layers;
-    auto& child=UploadVersion(storage,{},list,completed,{},true,&snapshot,true,false,&alias);
+    auto& child=UploadVersion(storage,{},list,completed,{},true,&snapshot,true,false,&alias,UploadPurpose::Binding);
     // Snapshot Upload cannot reuse an owned or binding-pinned image. Do not
     // convert any preexisting ownership state into a detached child by clearing it.
     if(child.gpu_owned||child.buffer_alias_version||child.cpu_watched)
@@ -1750,14 +1751,22 @@ GuestTextureCache::Entry& GuestTextureCache::CommitWritableBlockAlias(WritableBl
     Diagnostics::Count("image-version.writable-block-view");
     return replacement;
 }
-GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot){
+void GuestTextureCache::PublishBufferResidency(Entry& entry){
+    if(entry.pending_buffer_residency.empty())return;
+    if(!publish_buffer_residency_)throw std::logic_error("Prepared image B residency has no publisher");
+    // Keep the receipt on failure; a retry is idempotent. No cache allocation,
+    // resource recreation or descriptor replacement belongs in the publisher.
+    publish_buffer_residency_(entry.pending_buffer_residency);
+    entry.pending_buffer_residency.clear();
+}
+GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot,UploadPurpose purpose){
     return UploadVersion(d,bytes,list,completed,stencil_bytes,guest_snapshot,gpu_snapshot,
-        writable_snapshot,current_buffer_snapshot,nullptr);
+        writable_snapshot,current_buffer_snapshot,nullptr,purpose);
 }
 GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDesc& d,
     std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,
     std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,
-    bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency){
+    bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency,UploadPurpose purpose){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
@@ -1800,6 +1809,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // logical image has refreshed from its current buffer domain.
             entry.MarkLogicalDirty();
         }
+        if(purpose==UploadPurpose::Binding)PublishBufferResidency(entry);
         return entry;
     };
     const bool preserve_expanded=d.samples>1&&(d.data_format==9||d.data_format==19)&&
@@ -1918,12 +1928,20 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 !CanTransferIndependentMultisample(d,layout)))
                 throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
             auto* source=existing;auto pin=PinBinding(*source);
-            auto snapshot=partial_block?expand_block_(*source,d,layout):
-                read_independent_(*source,d.address,layout.guest_bytes);
+            auto residency=source->pending_buffer_residency;
+            Resource snapshot;
+            if(partial_block){
+                auto expanded=expand_block_(*source,d,layout);
+                snapshot=std::move(expanded.snapshot);
+                residency.insert(residency.end(),expanded.residency.begin(),expanded.residency.end());
+            }else snapshot=read_independent_(*source,d.address,layout.guest_bytes);
             // Source ownership and its CPU-write guard remain live until the
             // new interpretation has acquired its own guard. Pending copies
             // retain the old allocation/descriptors through normal cache fences.
-            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable);
+            // First attach the complete dependency chain, then publish only at
+            // the actual bind. Recursive upload cannot consume it prematurely.
+            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable,false,UploadPurpose::Preparation);
+            converted.pending_buffer_residency=std::move(residency);
             if(private_block_view){
                 // Do not publish a second mutable owner or retire the BC parent:
                 // the selected mip is only a binding snapshot of its private I.
@@ -1931,6 +1949,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 // ownership and prevents reuse after the parent changes. Upload's
                 // pending resources and the binding pin retain it through fences.
                 converted.MarkLogicalDirty();
+                if(purpose==UploadPurpose::Binding)PublishBufferResidency(converted);
                 Diagnostics::Count("image-version.private-block-mip-view");
                 return converted;
             }
@@ -2140,7 +2159,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry->expanded_guest_backing=std::move(original);entry->expanded_written_mask=std::move(written);
         entry->expanded_backing_bytes=expanded_snapshot_bytes;
     }else{entry->expanded_guest_backing={};entry->expanded_written_mask={};entry->expanded_backing_bytes=0;}
-    entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();
+    entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();entry->pending_buffer_residency.clear();
     const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target&&!gpu_detile;
     entry->pending=true;
     if(!copy_upload)entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);

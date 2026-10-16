@@ -9,6 +9,7 @@
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
 #include "guest_image_ownership.h"
+#include "guest_dma.h"
 #include "guest_page_range.h"
 #include "common/scope_exit.h"
 #include "guest_color_clear.h"
@@ -118,6 +119,16 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     textures_.SetTransferSubmissionPublisher([this]{
         NotifyOnSubmission([this](u64 fence){textures_.Submitted(fence);});
     });
+    textures_.SetBufferResidencyPublisher([this](auto ranges){
+        std::vector<ShaderBufferRequest> requests;requests.reserve(ranges.size());
+        for(const auto& [address,bytes]:ranges){
+            if(!bytes||address>UINT64_MAX-bytes)throw std::out_of_range("Image B-source residency overflow");
+            if(!PreparedDmaBuffer(address,bytes))
+                throw std::logic_error("Prepared image B-source backing changed before its original bind");
+            requests.push_back({address,bytes,false,true,true});
+        }
+        DmaMemory().ObserveResidentSharps(requests);
+    });
     textures_.SetIndependentVersionTransfer([this](auto& image,VAddr address,u64 bytes){
         // Retile into a private GPU buffer seeded from the physical buffer
         // domain. This does not commit image pixels into that buffer domain.
@@ -141,9 +152,11 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
         // Pinned ObtainBufferForImage chooses B only for GPU-modified target
         // pages. A resident arena alone is not proof that B is the refresh seed.
-        Resource seed;
-        if(IsGpuBufferModified(desc.address,layout.guest_bytes))
-            seed=CaptureShaderBuffer(desc.address,layout.guest_bytes);
+        Resource seed;GuestTextureCache::BufferResidency residency;
+        if(IsGpuBufferModified(desc.address,layout.guest_bytes)){
+            seed=CaptureShaderBuffer(desc.address,layout.guest_bytes,false);
+            residency.emplace_back(desc.address,layout.guest_bytes);
+        }
         else{
             std::vector<std::byte> bytes(size_t(layout.guest_bytes));
             if(!read_backing_(desc.address,bytes))throw std::runtime_error("BC refresh lost physical backing");
@@ -161,7 +174,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         seed.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
         DX12_API_CALL(RecordingList()->CopyBufferRegion(seed.handle.Get(),0,prefix.handle.Get(),0,image.layout.guest_bytes));
         seed.Transition(RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        return seed;
+        return GuestTextureCache::BlockExpansion{std::move(seed),std::move(residency)};
     });
     textures_.SetImageWriteNotifier([this](auto& image){QueueLinearImageDownload(image);});
     const auto retain_image=[this](const auto& desc,const auto& layout){
@@ -1036,9 +1049,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         record_depth_writer(desc.address,layout.guest_bytes);
     }
     Resource depth_gpu_snapshot;
+    bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
     std::optional<u32> depth_meta_snapshot;
     if(depth_attachment_snapshot){
+        depth_buffer_source=IsGpuBufferModified(descriptions[8].address,layouts[8].guest_bytes);
+        stencil_buffer_source=descriptions[8].stencil_address&&
+            IsGpuBufferModified(stencil_desc.address,stencil_layout.guest_bytes);
         // Binding a writer invalidates guest-memory equality proofs, and cache
         // uploads can replace overlapping entries. Keep independent prewrite
         // contents rather than a cache pointer. HTILE is also a writer: keep its mask
@@ -1050,7 +1067,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 throw std::out_of_range("Native depth snapshot has no readable guest backing");
             auto& entry=textures_.Upload(descriptions[8],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
-                RecordingList(),CompletedFence(),stencil_memory);
+                RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
+                GuestTextureCache::UploadPurpose::Preparation);
             textures_.RegisterMeta(entry,GuestTextureCache::MetaType::HTile,meta,entry.htile_initial_mask);
             const auto info=textures_.GetMetaInfo(meta);
             if(!info)throw std::logic_error("Native depth snapshot lost its HTILE owner");
@@ -1062,7 +1080,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         diagnostic.Stage("shader-depth-prewrite-snapshot");
         if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8])&&
            IsGpuBufferModified(descriptions[8].address,layouts[8].guest_bytes)){
-            depth_gpu_snapshot=CaptureShaderBuffer(descriptions[8].address,layouts[8].guest_bytes);
+            depth_gpu_snapshot=CaptureShaderBuffer(descriptions[8].address,layouts[8].guest_bytes,false);
             Diagnostics::Count("shader-depth.gpu-snapshot.bytes",layouts[8].guest_bytes);
         }else{
             const auto capture=[&](VAddr address,u64 bytes,std::vector<std::byte>& result){
@@ -1076,13 +1094,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             if(descriptions[8].stencil_address)
                 capture(stencil_desc.address,stencil_layout.guest_bytes,stencil_guest_snapshot);
         }
+        std::vector<ShaderBufferRequest> backing;
+        if(depth_buffer_source)backing.push_back({descriptions[8].address,layouts[8].guest_bytes,false,true,true});
+        if(stencil_buffer_source)backing.push_back({stencil_desc.address,stencil_layout.guest_bytes,false,true,true});
+        for(auto& request:backing)request.publish_dma_residency=false;
+        if(!backing.empty())PrepareShaderBuffers(backing,std::span<const BufferWrite>{});
     }
     GuestTextureCache::Entry* feedback_depth{};
     std::shared_ptr<void> feedback_depth_pin;
     if(depth_feedback&&!depth_attachment_snapshot){
         feedback_depth=&textures_.Upload(descriptions[8],
             std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
-            RecordingList(),CompletedFence(),stencil_memory);
+            RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
+            GuestTextureCache::UploadPurpose::Preparation);
         feedback_depth_pin=textures_.PinBinding(*feedback_depth);
     }
     // D3D12 cannot place one subresource in RENDER_TARGET and SHADER_RESOURCE
@@ -1255,6 +1279,15 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             auto& entry=feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
                 depth_bytes,RecordingList(),CompletedFence(),stencil_bytes,
                 depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr);
+            if(depth_buffer_source){
+                const ShaderBufferRequest resident{descriptions[8].address,layouts[8].guest_bytes,false,true,true};
+                DmaMemory().ObserveResidentSharps(std::span(&resident,1));
+            }
+            if(stencil_buffer_source){
+                const ShaderBufferRequest resident{stencil_desc.address,stencil_layout.guest_bytes,false,true,true};
+                DmaMemory().ObserveResidentSharps(std::span(&resident,1));
+            }
+            textures_.PublishBufferResidency(entry);
             bindings.RetainAllocation(textures_.PinBinding(entry));bindings.RetainAllocation(entry.texture.allocation);
             const auto meta=r.depth_buffer.z_info.tile_surface_enable?
                 r.depth_htile_data_base.GetAddress():0;
