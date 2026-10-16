@@ -1259,7 +1259,7 @@ bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
 }
-bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
+bool MatchesReferenceBlockStorage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
     GuestTextureDesc view,const GuestTextureLayout& view_layout){
     const bool source_block=IsIndependentGuestBlockStorage(source,source_layout);
     const bool view_block=IsIndependentGuestBlockStorage(view,view_layout);
@@ -1278,9 +1278,6 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
        source_layout.guest_bytes!=view_layout.guest_bytes||
        source_layout.logical_bytes!=view_layout.logical_bytes||source.levels!=view.levels||
        source_layout.mips.size()!=source.levels||view_layout.mips.size()!=view.levels)return false;
-    // This predicate replaces complete independent ownership. Reverse multi-mip
-    // allocation views need a separate path that retains the BC parent below.
-    if(source_block&&!view_block&&source.levels!=1)return false;
     for(uint32_t mip=0;mip<source.levels;++mip){
         const auto& a=source_layout.mips[mip];const auto& b=view_layout.mips[mip];
         if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
@@ -1304,21 +1301,32 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
 }
+bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
+    GuestTextureDesc view,const GuestTextureLayout& view_layout){
+    // Complete ownership replacement must not discard unrelated BC parent mips.
+    if(source_layout.block_extent==4&&view_layout.block_extent!=4&&source.levels!=1)return false;
+    return MatchesReferenceBlockStorage(source,source_layout,view,view_layout);
+}
 // A block-texel view selects one mip, not necessarily a one-mip allocation.
-// Materialize a private readonly mip-zero binding; the full BC chain remains
-// the sole authoritative image. This is deliberately not an ownership match.
+// Materialize a private readonly prefix through the selected mip; the full BC
+// chain remains the sole authoritative image. This is not an ownership match.
 bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
-    if(view.writable||view.levels!=1||view.first_mip||source.levels<=1||
+    if(view.writable||!view.levels||view.levels>source.levels||
+       view.first_mip!=view.levels-1||source.levels<=1||
        !IsIndependentGuestBlockStorage(source,source_layout)||view_layout.block_extent!=1)return false;
-    auto prefix=source;prefix.levels=1;prefix.first_mip=0;
+    auto prefix=source;prefix.levels=view.levels;prefix.first_mip=0;
     const auto prefix_layout=LayoutGuestTexture(prefix);
-    const auto& actual=source_layout.mips.front();const auto& first=prefix_layout.mips.front();
-    if(prefix_layout.guest_bytes>source_layout.guest_bytes||
-       actual.pitch!=first.pitch||actual.height!=first.height||actual.offset!=first.offset||
-       actual.slice_bytes!=first.slice_bytes||actual.macro!=first.macro||actual.thickness!=first.thickness)
-        return false;
-    return MatchesReferenceBlockImage(prefix,prefix_layout,view,view_layout);
+    if(prefix_layout.guest_bytes>source_layout.guest_bytes)return false;
+    // Guest arrays are mip-major. Only an identical complete physical prefix
+    // can be clipped from the parent's private retile without remapping layers.
+    for(uint32_t mip=0;mip<prefix.levels;++mip){
+        const auto& actual=source_layout.mips[mip];const auto& part=prefix_layout.mips[mip];
+        if(actual.pitch!=part.pitch||actual.height!=part.height||actual.offset!=part.offset||
+           actual.slice_bytes!=part.slice_bytes||actual.macro!=part.macro||actual.thickness!=part.thickness)
+            return false;
+    }
+    return MatchesReferenceBlockStorage(prefix,prefix_layout,view,view_layout);
 }
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
