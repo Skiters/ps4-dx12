@@ -1185,6 +1185,24 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
     }
     return true;
 }
+bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
+    GuestTextureDesc view,const GuestTextureLayout& view_layout){
+    // Pinned texture_cache/host_compatibility.cpp groups ordinary uncompressed
+    // color formats by texel bits (8/16/32/64/96/128 here). Equal-sized BC blocks
+    // and depth/stencil are separate classes and must not enter this predicate.
+    if(source.render_target||view.render_target||source.depth_target||view.depth_target||
+       source.stencil_address||view.stencil_address||source_layout.block_extent!=1||view_layout.block_extent!=1||
+       !MatchesGuestMipLayout(source_layout,view_layout))return false;
+    switch(source_layout.bytes_per_pixel){case 1:case 2:case 4:case 8:case 12:case 16:break;default:return false;}
+    source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.writable=view.writable=false;
+    source.native_packed10_raw=view.native_packed10_raw=source.native_raw32=view.native_raw32=false;
+    source.storage_height=view.storage_height=0;source.storage_slice_bytes=view.storage_slice_bytes=0;
+    source.pow2_padding=view.pow2_padding=false;
+    source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
+    source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
+    return source==view;
+}
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
@@ -1222,11 +1240,13 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     Entry* result{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
-           !MatchesGuestMipLayout(entry->layout,layout)||!CompatibleGuestPackedStorage(entry->desc,desc))continue;
+           !MatchesGuestMipLayout(entry->layout,layout)||
+           (!CompatibleGuestPackedStorage(entry->desc,desc)&&
+            !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout)))continue;
         if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||
             entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
             entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get()))
-            throw std::runtime_error("Ambiguous independent image conversion source");
+            throw std::runtime_error("Ambiguous independent image interpretation source");
         if(!result)result=entry;
     }
     return result;
@@ -1249,7 +1269,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
                !CompatibleGuestPackedStorage(previous.desc,d)&&
                !CompatibleGuestAttachmentStorage(previous.desc,d)&&
-               !CompatibleGuestSampledStorage(previous.desc,d))continue;
+               !CompatibleGuestSampledStorage(previous.desc,d)&&
+               !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout))continue;
             // ReserveMemory may evict cache entries. Keep the logical identity
             // witness alive until the replacement's refresh is published.
             history_pins.push_back(PinBinding(previous));inherited_modified=true;
@@ -1344,8 +1365,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     // shader writers may have acquired guest ownership after capture; resolving
     // them here would retire their initialization before their recorded writes.
     // Preserve the same clean-I source that made the caller omit a B snapshot,
-    // including when an in-place packed conversion declines for capacity/device
-    // reasons and needs the existing domain-preserving transfer instead.
+    // including a reference-compatible view requiring an independent transfer,
+    // or when an in-place packed conversion declines for capacity/device reasons.
     std::vector<Entry*> resolve_entries;
     if(!guest_snapshot){
         if(independent_source)resolve_entries.push_back(independent_source);
