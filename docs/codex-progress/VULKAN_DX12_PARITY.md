@@ -1,5 +1,26 @@
 # Vulkan / native D3D12 parity audit
 
+## Current readonly history coverage - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only continuation: no configure/build/package, fixture/test/compiler execution,
+GPU/game/profiling/XInput/UI operation. All129 contract groups remain partial/open.
+No current runtime PASS, image acceptance, FPS or performance result is claimed.
+
+| Contract | Production coverage added | Acceptance |
+|---|---|---|
+| Modified/dirty identity | Sticky entry history across invalidation; pinned compatible replacement | Source review only |
+| Readonly refresh | Explicit current-B provenance; direct independent reacquisition without fake write | Authored/unrun |
+| Interior buffer writer | Clean I retained for direct and existing packed conversion sources | Authored/unrun |
+| Reference color classes | Equal physical identity for ordinary8..128-bit views; existing transfer/history | Source review only |
+| Failure/lifetime | Dirty-source formatted/retile rejection; witness pins and existing fences | Source review only |
+| Original image writes | Own/readbacks follow original writable slots, not cache description | Source review only |
+
+36b109c/01f916c/d55fb2d are WIP source commits, not full cache/format/renderer equivalence.
+Never-modified/CPU/private-snapshot/remap controls, compressed/depth/attachment/incompatible-overlap identity,
+pressure/device-loss and broader runtime acceptance remain open. See SESSION_HANDOFF.md.
+
+
 ## Current source coverage update - 2026-10-16
 
 Authoritative current section; earlier current/next statements are historical.

@@ -1,5 +1,16 @@
 # Benchmarks
 
+## Readonly-history source continuation - 2026-10-16
+
+No measurements, build/tests/compiler execution or GPU/game/UI runs were performed for
+36b109c/01f916c/d55fb2d or their authored fixtures. No FPS, frame time, wait, memory-throughput,
+image/control or stability result is attributed to them. Source review and whitespace/
+hash/archive checks are not PASS evidence. Historical326/346(native211/229) and three
+targeted passes remain old separate results. Installed preview24 was not replaced.
+Use saved Vulkan/DX12 baseline only when authorized; count completed guest frames,
+excluding FG. Evidence: F:/PS4Dev/handoff/readonly-revalidation-20261016.
+
+
 ## Ordered writer/source continuation - 2026-10-16
 
 No new measurements, build, tests or GPU/game runs.24 authored GCN scenarios are not

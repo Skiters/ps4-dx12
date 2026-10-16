@@ -1,5 +1,19 @@
 # Checkpoints
 
+## Readonly history checkpoint - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only continuation: no configure/build/package, fixture/test/compiler execution,
+GPU/game/profiling/XInput/UI operation. All129 contract groups remain partial/open.
+No current runtime PASS, image acceptance, FPS or performance result is claimed.
+
+Production commits36b109c,01f916c andd55fb2d are pushed. 2f8522f adds four readonly real-GCN scenarios,
+authored/unrun; fixture commit/current hashes are in readonly-revalidation-20261016.
+CHECKPOINT_FINAL.json records exact final HEAD/remote/commit list/index/archive checks.
+final-residual keeps the accumulated unknown-origin source integration and exact split;
+original22 staged deletions remain separate. Previous4919bdb archive is immutable.
+
+
 ## Ordered writer and original-slot checkpoint - 2026-10-16
 
 Authoritative current section; earlier current/next statements are historical.

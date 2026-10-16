@@ -1,5 +1,21 @@
 # Native DX12 state
 
+## Current readonly history and source selection - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only continuation: no configure/build/package, fixture/test/compiler execution,
+GPU/game/profiling/XInput/UI operation. All129 contract groups remain partial/open.
+No current runtime PASS, image acceptance, FPS or performance result is claimed.
+
+36b109c/01f916c/d55fb2d are pushed: sticky modified/dirty history, current readonly refresh,
+original-slot write classification, failure guards and clean-I preservation for direct
+and existing packed conversion/reference-compatible uncompressed color paths. Four additional GCN scenarios (28 total in this mode) are authored/unrun.
+Current source is not built/installed; preview24/selection remain unchanged. See the
+new authoritative SESSION_HANDOFF.md top and readonly-revalidation-20261016 evidence.
+Remaining work includes readonly identity controls, the bounded reinterpretation source
+boundary, pressure/retirement and existing registry contracts; no broad semantic closure.
+
+
 ## Current ordered ranges and original-slot state - 2026-10-16
 
 Authoritative current section; earlier current/next statements are historical.

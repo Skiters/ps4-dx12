@@ -1,5 +1,24 @@
 # Next session
 
+## Current readonly continuation - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only continuation: no configure/build/package, fixture/test/compiler execution,
+GPU/game/profiling/XInput/UI operation. All129 contract groups remain partial/open.
+No current runtime PASS, image acceptance, FPS or performance result is claimed.
+
+Verify HEAD/upstream against readonly-revalidation-20261016/CHECKPOINT_FINAL.json and
+read SESSION_HANDOFF.md's authoritative top.36b109c/01f916c/d55fb2d already implement modified/
+dirty history and direct/packed/reference-color-class source preservation; do not redo them. Reuse exact
+primary/independent source reviews and current fixtures. Complete never-modified,
+CPU-write, private-snapshot, failed-retention and remap identity controls; inspect the
+saved reference-class proof before any compressed/depth/attachment identity extension.
+Continue GuestRasterizer::RetireImageForPressure and TextureCache ReserveMemory/
+RetainPressureSource production contracts through the existing registry, preserving
+independent MSAA/format domains, exact physical commits and fence/pin lifetime.
+All execution stays deferred. Preserve dirty integration/index and push accurate WIP.
+
+
 ## Current continuation - 2026-10-16
 
 Authoritative current section; earlier current/next statements are historical.

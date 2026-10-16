@@ -1,4 +1,103 @@
-# SESSION HANDOFF — active full-port checkpoint, 2026-10-15
+# SESSION HANDOFF — active full-port checkpoint, 2026-10-16
+
+## Current readonly history and packed-source continuation - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only continuation: no configure/build/package, fixture/test/compiler execution,
+GPU/game/profiling/XInput/UI operation. All129 contract groups remain partial/open.
+No current runtime PASS, image acceptance, FPS or performance result is claimed.
+
+### Production state
+
+Pushed36b109c adds Entry logical_gpu_modified/logical_dirty independently of ownership.
+Own records original conservative storage-write history even if physical acquisition
+falls back. CPU overlap and exact original-base GPU invalidation retain modified history
+while marking dirty, including history-only Entries and writing CPU-fault paths.
+Successful current Upload restores validity; compatible history witnesses are pinned
+across allocation. Generic/private snapshots stay dirty. Explicit current-B snapshots
+require same-base original writer provenance plus a compatible dirty modified witness.
+Readonly restoration invokes independent acquisition directly, without fake Own/write
+notification or linear download. Original writable slots alone drive shader Own/readback.
+HLE clear notes its real write. Failed/partial uploads cannot authorize formatted retile:
+selected formatted sources and central RetileBufferVersion reject logical_dirty.
+
+Pushed01f916c preserves clean I beside an interior writer even when the requested readonly
+view requires existing packed GPU conversion rather than direct native view reuse.
+FindIndependentUploadSource first uses direct reuse, then admitted same-base clean packed
+sources with complete equal physical mip geometry. Different authoritative backings fail
+closed. Upload prefers that same conversion source and its existing domain-preserving
+fallback; a conversion-required resource is never bound as an incompatible direct view.
+Capture-skipping and replacement witnesses retain cache identities through preparation.
+No new format/sample/domain admission is implied by this selection correction.
+
+Pushedd55fb2d additionally preserves pinned-compatible ordinary uncompressed color
+interpretations (8/16/32/64/96/128 guest bits), including R32_UINT to R16G16_UINT.
+Full physical geometry and normalized image identity must match. This is an explicit
+pinned same-image class witness, not arbitrary native overlap. Compressed blocks,
+depth/stencil and attachment identity expansion are excluded. Non-direct sources use
+existing independent retile/detile; compatible sticky modified history follows the
+explicit replacement. Native format/sample/retention guards still govern admission.
+
+### Evidence and verification
+
+Evidence root: F:/PS4Dev/handoff/readonly-revalidation-20261016.
+SOURCE_CONTRACT.md, INDEPENDENT_SOURCE_REVIEW.md, cache/, production/ and packed-source/
+contain exact deltas/hashes, primary source proof and independent reviews. The
+reference-class/ review and NEXT_SOURCE_BOUNDARY.md establish the now-implemented
+R32/RG16 source identity correction. The first
+review's missing dirty-source guards were corrected; its final disposition supersedes
+that earlier finding. 2f8522f commits four additional real-GCN readonly-history scenarios, authored only
+in gcn_readonly_revalidation_fixture.h and the existing ordered-formatted-owned mode:
+exact-base prewrite-B refresh, interior-I preservation, R32-to-RGBA8 packed preservation
+and R32-to-RG16 exact component preservation. All four remain uncompiled/unrun; together
+with earlier24 there are28 authored scenarios, not28 PASS results. The initial seed
+native_raw32 assertion was corrected from primary frontend source, with prior source
+and explanation preserved in fixtures/before-raw32-fix/. All source/manual/Git/hash/archive
+checks are distinct from runtime evidence. See fixtures/ for exact current case manifest.
+
+The original22 staged network deletions and accumulated unknown-origin integration are
+preserved. CHECKPOINT_FINAL.json records exact final HEAD/upstream, commits, source/index
+checks and final-residual archive identity. Restore only into a separate checkout using
+its README; never overlay the live dirty tree. Older archives remain unchanged.
+
+Installed core is still preview24, source a3f1d5e plus archived dirty integration,
+SHA25670eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf at
+C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe.
+Current source is not built or installed. Selection was not changed (last known preview23).
+PDB/runtime provenance: eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Original Vulkan, saves, settings, monitors and remote session were untouched.
+Historical326/346(native211/229) and three targeted passes remain old separate evidence.
+Bloodborne world-render/FPS/controls acceptance and historical EOP attribution remain open.
+
+### Exact continuation and deferred controls
+
+Do not reimplement this modified/dirty history or repeat completed direct/packed source
+proofs. Reuse the new source-selection boundary evidence before extending any remaining
+read_independent reinterpretation case: direct, packed and reference-compatible ordinary
+color classes are now covered; arbitrary incompatible overlap is still not the same
+logical pinned image merely because native transfer exists. Add/finish
+never-modified sampled, CPU-write, private-snapshot, failed-retention and unmap/remap
+controls using the current fixture helpers, without execution while the gate remains.
+Then continue GuestRasterizer::RetireImageForPressure and TextureCache ReserveMemory/
+RetainPressureSource contracts: extend remaining admitted independent MSAA/format
+retirement only with a domain-preserving physical-commit/lifetime mechanism; the current
+compact path is single-sample linear and broader retirement remains open. Reuse saved
+pressure/source-residency evidence and existing leases; do not restart a general audit. Broader formats/MSAA/attachment/aliasing/cross-stage/metadata
+contracts and device-loss/pressure/runtime acceptance remain open.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask. Read this authoritative top
+section and readonly-revalidation-20261016/CHECKPOINT_FINAL.json; verify actual HEAD and
+upstream, preserve the original staged/unstaged/untracked split. Reuse saved Vulkan/DX12
+measurements and source reviews; do not repeat completed audits. Continue the specific
+readonly-history acceptance controls/source-selection boundary and existing production
+C++ pressure/retirement queue from this checkpoint. Keep build/tests/game/UI/XInput
+deferred until authorized. Once authorized, build changed targets, execute focused then
+required regressions and minimal existing-XInput game checks; compare completed guest
+frames excluding FG with saved baseline. Preserve original Vulkan/saves, checkpoint and
+push coherent WIP; never claim full port completion from source review alone.
+
 
 ## Current ordered ranges, descriptor state and compiler groups - 2026-10-16
 
