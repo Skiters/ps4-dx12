@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/page_watch.h"
+#include "video_core/renderer_d3d12/guest_page_range.h"
 #include "video_core/renderer_d3d12/persistent_cache.h"
 #include <thread>
 #include <condition_variable>
 #include <cstdio>
 using namespace NativeDX12;
 static void Require(bool value){if(!value)throw std::runtime_error("Native ownership/cache assertion failed");}
+static_assert(GuestProtectionPages(0x2100,0x1200)->address==0x2000);
+static_assert(GuestProtectionPages(0x2100,0x1200)->size==0x2000);
+static_assert(!GuestProtectionPages(UINT64_MAX-7,8));
+static_assert(!GuestProtectionPages(0x1000,0));
+static_assert(ShareGuestProtectionPages(0,UINT64_MAX,0x2100,1));
+static_assert(!ShareGuestProtectionPages(0x2000,4096,0x3000,4096));
 // Explicit exception injection makes rejected faults observable without an
 // invalid store or dependence on the compiler's asynchronous SEH support.
 // The GPU ownership test below this suite uses genuine CPU page faults.
@@ -63,6 +70,60 @@ int main(){try{
         Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
         Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==64);
         Require(watch.Contains(reinterpret_cast<uint64_t>(guest)));
+    }
+    {
+        // Real shared physical aliases, two independent I ranges, a stronger B
+        // owner on the tail page, and stores outside I followed by unguarded
+        // stores inside I. Exercise the production full-byte witness helpers.
+        memset(alias,0x17,8192);
+        const auto base=reinterpret_cast<uint64_t>(guest);
+        GuestImageBoundaryPages a,b;
+        std::vector<std::byte> logical_i(4608,std::byte{0xa5});
+        unsigned callbacks{};PageWatch* active{};
+        const auto read=[&](uint64_t address,std::span<std::byte> out){
+            if(address<base||address-base>bytes||out.size()>bytes-(address-base))return false;
+            memcpy(out.data(),alias+size_t(address-base),out.size());return true;
+        };
+        PageWatch watch([&](uint64_t address,bool writing){
+            Require(writing);++callbacks;
+            RememberGuestImageBoundary(a,base+256,4608,address,1,read);
+            RememberGuestImageBoundary(b,base+512,128,address,1,read);
+            Require(active->UntrackReadOnly(address&~uint64_t(4095),4096,true));
+        });active=&watch;
+        const auto protect=[&](uint64_t address,uint64_t size){return watch.TrackReadOnly(address,size,true);};
+        Require(watch.TrackReadOnly(base,8192));
+        Require(watch.TrackOwned(base+4096,4096));
+        *reinterpret_cast<volatile unsigned char*>(guest+10)=0x31;
+        Require(callbacks==1&&a.size()==1&&b.size()==1&&a.begin()->second.size()==3840&&b.begin()->second.size()==128);
+        Require(!watch.Contains(base)&&watch.Contains(base+4096));
+        MEMORY_BASIC_INFORMATION region{};
+        Require(VirtualQuery(guest+4096,&region,sizeof(region))&&region.Protect==PAGE_NOACCESS);
+        Require(ValidateGuestImageBoundary(a,base+256,read,protect).empty());
+        Require(ValidateGuestImageBoundary(b,base+512,read,protect).empty());
+        Require(watch.Contains(base)&&logical_i.front()==std::byte{0xa5}&&alias[256]==std::byte{0x17});
+        *reinterpret_cast<volatile unsigned char*>(guest+11)=0x32;
+        Require(callbacks==2&&a.size()==1&&b.size()==1);
+        *reinterpret_cast<volatile unsigned char*>(guest+600)=0x83;
+        // Repeated outside stores must not replace the original B snapshot.
+        Require(!RememberGuestImageBoundary(a,base+256,4608,base+12,1,read));
+        const auto changed_a=ValidateGuestImageBoundary(a,base+256,read,protect);
+        const auto changed_b=ValidateGuestImageBoundary(b,base+512,read,protect);
+        Require(callbacks==2&&changed_a==std::vector<uint64_t>{base}&&changed_b==changed_a);
+        Require(a.empty()&&b.empty()&&watch.Contains(base));
+        // Releasing the stronger B owner restores the independent I tail guard.
+        watch.Untrack(base+4096,4096);Require(watch.TrackReadOnly(base,8192,true));
+        *reinterpret_cast<volatile unsigned char*>(guest+5000)=0x42;
+        Require(callbacks==3&&a.size()==1&&b.empty()&&a.begin()->second.size()==768);
+        *reinterpret_cast<volatile unsigned char*>(guest+4700)=0x94;
+        Require(watch.Contains(base)&&!watch.Contains(base+4096));
+        bool rejected=false;
+        try{ValidateGuestImageBoundary(a,base+256,read,[](uint64_t,uint64_t){return false;});}
+        catch(const std::runtime_error&){rejected=true;}
+        Require(rejected&&a.size()==1); // failed reprotection cannot certify I
+        Require(ValidateGuestImageBoundary(a,base+256,read,protect)==std::vector<uint64_t>{base+4096});
+        Require(callbacks==3&&a.empty()&&watch.Contains(base)&&watch.Contains(base+4096));
+        Require(alias[600]==std::byte{0x83}&&alias[4700]==std::byte{0x94}&&logical_i.back()==std::byte{0xa5});
+        watch.Untrack(base,8192);
     }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
     {

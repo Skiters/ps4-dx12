@@ -9,6 +9,8 @@
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
 #include "guest_image_ownership.h"
+#include "guest_page_range.h"
+#include "common/scope_exit.h"
 #include "guest_color_clear.h"
 #include "guest_raw_color_clear.h"
 #include "diagnostics.h"
@@ -177,7 +179,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
                (desc.data_format==10&&desc.number_format==9)))||
              ((desc.data_format==2||desc.data_format==5||desc.data_format==12)&&
               (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||desc.number_format==7)))&&
-            !layout.expanded_bytes_per_pixel&&desc.address%4096==0&&layout.guest_bytes%4096==0&&
+            !layout.expanded_bytes_per_pixel&&GuestProtectionPages(desc.address,layout.guest_bytes)&&
             layout.guest_bytes<=64*1024*1024&&has_backing_(desc.address,layout.guest_bytes);
     };
     textures_.SetBufferAliasRetention([retain_image](const auto& desc,const auto& layout){
@@ -262,6 +264,7 @@ void GuestRasterizer::DownloadIndependentImage(GuestTextureCache::Entry& image){
 }
 void GuestRasterizer::ProcessDownloadImages(){
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     for(auto& image:textures_.Entries())if(image->linear_download_pending){
         if(!image->gpu_owned||!image->buffer_alias_version){image->linear_download_pending=false;continue;}
         // Submission/fence downloads expose physical CPU bytes while the
@@ -270,17 +273,65 @@ void GuestRasterizer::ProcessDownloadImages(){
     }
 }
 void GuestRasterizer::ReleaseIndependentImageWatches(GuestTextureCache::Entry& image){
+    image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);
+    image.unprotected_cpu_pages.clear();image.linear_download_pending=false;
+    image.sampled_snapshot.clear();image.stencil_snapshot.clear();
+    ReleaseImageProtection(image);
+}
+void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
     std::vector<std::pair<VAddr,u64>> retained;
     for(const auto& other:textures_.Entries())if(other.get()!=&image&&(other->gpu_owned||other->cpu_watched)){
-        retained.emplace_back(other->desc.address,other->layout.guest_bytes);
+        const auto pages=GuestProtectionPages(other->desc.address,other->layout.guest_bytes);
+        if(!pages)throw std::runtime_error("Invalid retained image protection envelope");
+        auto cursor=pages->address;
+        for(const auto& [page,bytes]:other->unprotected_cpu_pages){
+            if(cursor<page)retained.emplace_back(cursor,page-cursor);
+            cursor=page+4096;
+        }
+        if(cursor<pages->address+pages->size)retained.emplace_back(cursor,pages->address+pages->size-cursor);
         if(other->desc.stencil_address)retained.emplace_back(other->desc.stencil_address,other->stencil_layout.guest_bytes);
     }
-    image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);
-    image.sampled_snapshot.clear();image.stencil_snapshot.clear();
     ReleaseUnusedReadOnlyWatches(image.desc.address,image.layout.guest_bytes,retained);
+}
+void GuestRasterizer::RememberImageBoundary(GuestTextureCache::Entry& image,VAddr address,u64 size){
+    if(!image.gpu_owned||!image.buffer_alias_version)return;
+    if(RememberGuestImageBoundary(image.unprotected_cpu_pages,image.desc.address,image.layout.guest_bytes,
+        address,size,read_backing_)){
+        image.buffer_alias_watch=false;image_watch_pending_=true;
+    }
+}
+void GuestRasterizer::ValidateIndependentImageWatches(){
+    std::lock_guard lock(execution_mutex_);
+    if(!image_watch_pending_||validating_image_watches_)return;
+    validating_image_watches_=true;
+    SCOPE_EXIT {validating_image_watches_=false;};
+    std::vector<GuestTextureCache::Entry*> dirty;
+    std::vector<VAddr> changed_pages;
+    for(auto& image:textures_.Entries())if(!image->unprotected_cpu_pages.empty()){
+        if(!image->gpu_owned||!image->buffer_alias_version){image->unprotected_cpu_pages.clear();continue;}
+        const auto changed=ValidateGuestImageBoundary(image->unprotected_cpu_pages,image->desc.address,
+            read_backing_,[this](u64 page,u64 size){return page_watch_->TrackReadOnly(page,size,true);});
+        image->buffer_alias_watch=true;
+        if(!changed.empty()){
+            changed_pages.insert(changed_pages.end(),changed.begin(),changed.end());
+            image->MarkLogicalDirty();image->linear_download_pending=false;dirty.push_back(image.get());
+        }
+    }
+    image_watch_pending_=false;
+    // A lost image witness also ends every clean CPU buffer proof on that
+    // physical page. Record CPU winners before Finish can reconcile GPU B.
+    std::sort(changed_pages.begin(),changed_pages.end());
+    changed_pages.erase(std::unique(changed_pages.begin(),changed_pages.end()),changed_pages.end());
+    for(const auto page:changed_pages)InvalidateCpuBufferPages(page,4096);
+    if(!dirty.empty())Finish();
+    for(auto* image:dirty)ReleaseIndependentImageWatches(*image);
+    // Buffer proof retirement can release a shared page; restore all surviving
+    // independent images after the dirty versions have relinquished ownership.
+    if(!dirty.empty())WatchBufferImageVersions(0,UINT64_MAX);
 }
 void GuestRasterizer::RetireImageForPressure(GuestTextureCache::Entry& image){
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     if(!image.gpu_owned)return;
     if(!image.buffer_alias_version||image.desc.tile_mode!=8||image.desc.samples!=1||
        (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
@@ -308,7 +359,7 @@ void GuestRasterizer::OnFence(){
     std::lock_guard lock(execution_mutex_);ProcessDownloadImages();Rasterizer::OnFence();
 }
 void GuestRasterizer::ResolveImage(GuestTextureCache::Entry& image){
-    std::lock_guard lock(execution_mutex_);if(!image.gpu_owned)return;
+    std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();if(!image.gpu_owned)return;
     if(image.buffer_alias_version){
         if((image.desc.tile_mode!=8&&image.desc.width>8)||image.desc.samples!=1||
            (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
@@ -337,23 +388,25 @@ void GuestRasterizer::ResolveImage(GuestTextureCache::Entry& image){
 }
 void GuestRasterizer::ResolveMemory(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     for(auto& image:textures_.Entries())if(image->gpu_owned&&!image->buffer_alias_version&&ImageOverlap(address,size,*image))ResolveImage(*image);
 }
 void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu_write){
     std::lock_guard lock(execution_mutex_);std::vector<GuestTextureCache::Entry*> versions;
+    if(!size)return;
     for(auto& image:textures_.Entries())if(ImageOverlap(address,size,*image)&&
         (!gpu_write||image->desc.address==address)){
         // Pinned CPU/GPU dirty invalidation retains GpuModified even after the
         // old version has lost ownership. A later readonly refresh can validate
         // that same logical image again; pressure retirement alone cannot.
         image->MarkLogicalDirty();
+        image->linear_download_pending=false;
         if(image->gpu_owned&&image->buffer_alias_version)versions.push_back(image.get());
     }
-    if(versions.empty())return;
     // CPU writes retire the old image's uses before invalidating it. A GPU
     // buffer write instead preserves the preceding descriptors/allocations
     // through their existing leases and invalidates the logical version only.
-    if(!gpu_write)Finish();
+    if(!gpu_write&&!versions.empty())Finish();
     for(auto* image:versions){
         if(image->buffer_alias_watch){
             ReleaseCpuBufferWatches(image->desc.address,image->layout.guest_bytes);
@@ -364,23 +417,58 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
         ReleaseIndependentImageWatches(*image);
     }
     WatchBufferImageVersions(address,size);
+    if(!gpu_write){
+        std::vector<VAddr> released_pages;
+        for(auto& image:textures_.Entries()){
+            RememberImageBoundary(*image,address,size);
+            for(const auto& [page,saved]:image->unprotected_cpu_pages)
+                if(ShareGuestProtectionPages(address,size,page,4096))released_pages.push_back(page);
+        }
+        // The store that raised the fault must be allowed to finish. Images
+        // sharing only its page now carry bounded, full-byte B witnesses.
+        std::sort(released_pages.begin(),released_pages.end());
+        released_pages.erase(std::unique(released_pages.begin(),released_pages.end()),released_pages.end());
+        for(const auto page:released_pages){
+            InvalidateCpuBufferPages(page,4096);
+            ReleaseImageWatches(page,4096);
+            if(!page_watch_->UntrackReadOnly(page,4096,true))
+                throw std::runtime_error("Cannot release a CPU image write page");
+        }
+    }
 }
 void GuestRasterizer::WatchBufferImageVersions(VAddr address,u64 size){
-    for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version&&ImageOverlap(address,size,*image)){
-        if(!page_watch_||!has_backing_(image->desc.address,image->layout.guest_bytes)||
-           !page_watch_->TrackReadOnly(image->desc.address,image->layout.guest_bytes,true))
+    for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version&&
+        ShareGuestProtectionPages(address,size,image->desc.address,image->layout.guest_bytes)){
+        const auto pages=GuestProtectionPages(image->desc.address,image->layout.guest_bytes);
+        if(!page_watch_||!pages||!has_backing_(image->desc.address,image->layout.guest_bytes))
+            throw std::runtime_error("Independent image protection lost backing");
+        auto cursor=pages->address;bool tracked=true;
+        for(const auto& [page,bytes]:image->unprotected_cpu_pages){
+            if(cursor<page)tracked=tracked&&page_watch_->TrackReadOnly(cursor,page-cursor,true);
+            cursor=page+4096;
+        }
+        if(cursor<pages->address+pages->size)
+            tracked=tracked&&page_watch_->TrackReadOnly(cursor,pages->address+pages->size-cursor,true);
+        if(!tracked)
             throw std::runtime_error("Cannot protect an independent image version against CPU writes: address="+
                 std::to_string(image->desc.address)+" bytes="+std::to_string(image->layout.guest_bytes)+
                 " uid="+std::to_string(image->image_uid));
-        image->buffer_alias_watch=true;
+        image->buffer_alias_watch=image->unprotected_cpu_pages.empty();
     }
 }
 void GuestRasterizer::ReleaseBufferPageWatch(VAddr address,u64 size){
     page_watch_->Untrack(address,size);WatchBufferImageVersions(address,size);
 }
 void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
+    ValidateIndependentImageWatches();
+    // The faulting instruction has not executed its store yet. A nested image
+    // resolver/Finish must not certify and rearm its new boundary snapshot
+    // before the VEH returns; validation resumes at the next access/command.
+    const auto validating=std::exchange(validating_image_watches_,true);
+    SCOPE_EXIT {validating_image_watches_=validating;};
     const bool separate=std::ranges::any_of(textures_.Entries(),[address](const auto& image){
-        return image->gpu_owned&&image->buffer_alias_version&&ImageOverlap(address,1,*image);});
+        return image->gpu_owned&&image->buffer_alias_version&&
+            ShareGuestProtectionPages(address,1,image->desc.address,image->layout.guest_bytes);});
     if(!separate){
         if(writing)DiscardBufferImageVersions(address,1,false);
         GuestBufferAccess::ResolveCpuFault(address,writing);return;
@@ -390,12 +478,18 @@ void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
     ResolveMemory(address,1);if(!writing)WatchBufferImageVersions(address,1);
 }
 void GuestRasterizer::PrepareGpuBacking(VAddr address,u64 size,bool writing){
+    ValidateIndependentImageWatches();
     GuestBufferAccess::PrepareGpuBacking(address,size,writing);
 }
 void GuestRasterizer::NotifyGpuBufferWrite(VAddr address,u64 size){
     DiscardBufferImageVersions(address,size,true);
 }
 void GuestRasterizer::CheckBacking(VAddr address,u64 size,bool writing){
+    std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
+    const auto validating=std::exchange(validating_image_watches_,true);
+    SCOPE_EXIT {validating_image_watches_=validating;};
+    if(writing)ResolveGpuBuffers(address,size);
     if(writing)DiscardBufferImageVersions(address,size,false);
     GuestBufferAccess::CheckBacking(address,size,writing);
 }
@@ -409,8 +503,8 @@ void GuestRasterizer::ReleaseImmutableWatch(VAddr address,u64 size){
 }
 void GuestRasterizer::ReleaseImageWatches(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
-    for(auto& image:textures_.Entries())if(image->cpu_watched&&Overlap(address,size,image->desc.address,image->layout.guest_bytes)){
-        image->cpu_watched=false;page_watch_->Untrack(image->desc.address,image->layout.guest_bytes);
+    for(auto& image:textures_.Entries())if(image->cpu_watched&&ShareGuestProtectionPages(address,size,image->desc.address,image->layout.guest_bytes)){
+        image->cpu_watched=false;ReleaseImageProtection(*image);
     }
 }
 void GuestRasterizer::DiscardImages(VAddr address,u64 size){
@@ -425,10 +519,13 @@ void GuestRasterizer::DiscardImages(VAddr address,u64 size){
     textures_.Invalidate(address,size,CompletedFence());
 }
 bool GuestRasterizer::ReadMemory(VAddr address,u64 size,bool assume){
-    std::lock_guard lock(execution_mutex_);ResolveMemory(address,size);
+    std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();ResolveMemory(address,size);
     const bool readable=Rasterizer::ReadMemory(address,size,assume);if(readable)WatchBufferImageVersions(address,size);return readable;
 }
 bool GuestRasterizer::InvalidateMemory(VAddr address,u64 size,bool assume){
+    std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();
+    const auto validating=std::exchange(validating_image_watches_,true);
+    SCOPE_EXIT {validating_image_watches_=validating;};
     DiscardBufferImageVersions(address,size,false);
     InvalidateCpuBufferPages(address,size);ReleaseImageWatches(address,size);
     // A real CPU access has already resolved the guard before the write. Keep
@@ -448,12 +545,13 @@ void GuestRasterizer::FillBuffer(VAddr address,u32 size,u32 value,bool gds){
 }
 void GuestRasterizer::PrepareMemoryProtection(VAddr address,u64 size){ResolveGpuBuffers(address,size);DiscardBufferImageVersions(address,size,false);ReleaseImmutableWatch(address,size);ResolveMemory(address,size);DiscardImages(address,size);}
 Resource* GuestRasterizer::CoherentDisplayTexture(VAddr address,UINT width,UINT height,UINT pitch){
-    std::lock_guard lock(execution_mutex_);Finish();
+    std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();Finish();
     return textures_.CoherentDisplayTexture(address,width,height,pitch,CompletedFence());
 }
 Resource* GuestRasterizer::PrepareDisplayTexture(VAddr address,UINT width,UINT height,UINT pitch,
                                                   ID3D12CommandQueue* consumer){
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     const auto submitted=Flush();
     if(submitted)textures_.Submitted(submitted);
     textures_.Collect(CompletedFence());
@@ -724,6 +822,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     u16 vertex_sgpr,u16 instance_sgpr) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Draw,"execution-lock");
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     const auto& r=gpu_.regs;
     diagnostic.Detail("primitive=%u count=%u indexed=%u cb0=%llx",u32(r.primitive_type),r.num_indices,
         unsigned(indexed),(unsigned long long)r.color_buffers[0].Address());
@@ -1504,6 +1603,7 @@ void GuestRasterizer::Dispatch(const u32 (&groups)[3]) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Dispatch,"execution-lock");
     diagnostic.Detail("groups=%u,%u,%u",groups[0],groups[1],groups[2]);
     std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
     // PS4 zero-dimensional commands perform no work, unlike D3D12's validated
     // nonempty path. Do not translate/read a shader for a no-op command.
     if(!groups[0]||!groups[1]||!groups[2])return;

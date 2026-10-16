@@ -5,6 +5,7 @@
 #include "shader_pipeline.h"
 #include "compute_pipeline.h"
 #include "guest_dma.h"
+#include "guest_page_range.h"
 #include "common/scope_exit.h"
 #include <algorithm>
 #include <execution>
@@ -379,13 +380,16 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
 }
 void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<const std::pair<VAddr,u64>> retained){
     std::lock_guard lock(execution_mutex_);
-    if(!size||address%4096||size%4096||address>UINT64_MAX-size||!release_cpu_pages_)
+    const auto pages=GuestProtectionPages(address,size);
+    if(!pages||!release_cpu_pages_)
         throw std::invalid_argument("Invalid image-only read-only watch retirement");
+    address=pages->address;size=pages->size;
     const auto end=address+size;std::vector<std::pair<VAddr,VAddr>> keep;
     for(const auto& [base,bytes]:retained){
-        if(base%4096||bytes%4096||base>UINT64_MAX-bytes)
+        const auto protected_range=GuestProtectionPages(base,bytes);
+        if(!protected_range)
             throw std::invalid_argument("Invalid retained image watch range");
-        const auto first=std::max(address,base),last=std::min(end,base+bytes);
+        const auto first=std::max(address,protected_range->address),last=std::min(end,protected_range->address+protected_range->size);
         if(first<last)keep.emplace_back(first,last);
     }
     for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<end;++it){

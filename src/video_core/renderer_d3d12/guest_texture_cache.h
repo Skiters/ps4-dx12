@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "guest_page_range.h"
 #include "resources.h"
 #include "memory_allocator.h"
 #include "guest_tiler.h"
@@ -154,6 +155,9 @@ public:
         // Separate shader buffer/image writers retain the original cache
         // domains. Their image version does not replace physical buffer bytes.
         bool buffer_alias_version=false,buffer_alias_watch=false;
+        // Only unprotected boundary pages need a physical-B equality witness.
+        // I remains logically distinct; compare these bytes before reusing I.
+        GuestImageBoundaryPages unprotected_cpu_pages;
         bool linear_download_pending=false;
         // Ownership changes also invalidate the CP's authoritative-image index.
         void SetGpuOwned(bool);

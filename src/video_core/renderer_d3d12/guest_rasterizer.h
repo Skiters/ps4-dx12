@@ -20,6 +20,7 @@ class GuestRasterizer : public GuestBufferAccess {
     std::unique_ptr<NativePointCapturePass> point_capture_;
     std::unique_ptr<GuestRawColorClear> raw_color_clear_;
     bool native_alpha_factor_{};
+    bool image_watch_pending_{},validating_image_watches_{};
     std::function<bool(VAddr,std::span<std::byte>)> read_backing_;
     std::function<bool(VAddr,std::span<const std::byte>)> write_backing_;
     bool OwnImage(GuestTextureCache::Entry&);
@@ -29,6 +30,9 @@ class GuestRasterizer : public GuestBufferAccess {
     void DownloadIndependentImage(GuestTextureCache::Entry&);
     void RetireImageForPressure(GuestTextureCache::Entry&);
     void ReleaseIndependentImageWatches(GuestTextureCache::Entry&);
+    void ReleaseImageProtection(GuestTextureCache::Entry&);
+    void ValidateIndependentImageWatches();
+    void RememberImageBoundary(GuestTextureCache::Entry&,VAddr,u64);
     void ProcessDownloadImages();
     void ResolveImage(GuestTextureCache::Entry&);
     void ResolveMemory(VAddr,u64);
