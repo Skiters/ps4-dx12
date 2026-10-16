@@ -43,6 +43,8 @@ struct InfoPersistent {
     ImageResourceList images;
     // Native compilation input, resolved from the other active pipeline stages.
     std::vector<NativeImageWrite> native_pipeline_writes;
+    std::vector<NativeImageWrite> native_pipeline_signed_packed_views;
+    std::vector<NativeImageWrite> native_pipeline_raw32_views;
     SamplerResourceList samplers;
     FMaskResourceList fmasks;
 

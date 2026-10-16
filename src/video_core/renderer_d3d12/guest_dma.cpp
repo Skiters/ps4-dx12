@@ -7,7 +7,6 @@
 namespace NativeDX12 {
 namespace {
 namespace Dma=Shader::NativeDma;
-constexpr u64 TableBytes=u64(Dma::TableEntries)*sizeof(u64);
 constexpr u64 FaultBytes=u64(Dma::PageCount)/8;
 D3D12_UNORDERED_ACCESS_VIEW_DESC RawView(u64 offset,u64 bytes){
     if(offset%16||bytes%4||!bytes||bytes/4>UINT_MAX)throw std::invalid_argument("Native DMA raw view extent");
@@ -23,7 +22,20 @@ Resource Upload(ID3D12Device* device,u64 bytes,const void* initial=nullptr){
 }
 }
 void GuestDmaMemory::Initialize(Rasterizer& rasterizer){
-    if(table_.handle)return;
+    const u64 TableBytes=u64(required_entries_)*sizeof(u64);
+    if(table_.handle){
+        const auto old_bytes=table_.handle->GetDesc().Width;
+        if(old_bytes>=TableBytes)return;
+        auto table=UavBuffer(device_.Get(),TableBytes);
+        auto zero=std::make_shared<Resource>(Upload(device_.Get(),TableBytes));
+        auto previous=std::make_shared<Resource>(table_);
+        rasterizer.RetainUntilFinish([zero,previous](u64){});
+        auto* list=rasterizer.RecordingList();table.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        DX12_API_CALL(list->CopyBufferRegion(table.handle.Get(),0,zero->handle.Get(),0,TableBytes));
+        table_.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        DX12_API_CALL(list->CopyBufferRegion(table.handle.Get(),0,table_.handle.Get(),0,old_bytes));
+        table.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);table_=std::move(table);return;
+    }
     auto table=UavBuffer(device_.Get(),TableBytes),faults=UavBuffer(device_.Get(),FaultBytes);
     auto zero_faults=Upload(device_.Get(),FaultBytes);
     auto exported=UavBuffer(device_.Get(),DmaFaultCompactor::Bytes);
@@ -55,7 +67,6 @@ void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterize
             u32 valid{};for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub)
                 if(rasterizer.IsDmaReadable(address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize))valid|=1u<<sub;
             if(!valid){it=pages_.erase(it);continue;}
-            if(partial_count==Dma::PartialPageCount)throw std::runtime_error("Native DMA partial-page table exceeds buffer batch capacity");
             indirect_entries_.emplace(*it,Dma::PartialFlag|u64(partial_count+1));
             for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub)if(valid&(1u<<sub))
                 append(Dma::SecondaryBase+partial_count*Dma::SubpagesPerPage+sub,address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize);
@@ -63,6 +74,10 @@ void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterize
         }
         ++it;
     }
+    const u64 required=u64(Dma::SecondaryBase)+u64(partial_count)*Dma::SubpagesPerPage;
+    if(required>UINT32_MAX||required*sizeof(u64)>Dma::MaxRawViewBytes)
+        throw std::out_of_range("Native DMA page-table descriptor extent overflow");
+    required_entries_=UINT(std::max<u64>(Dma::TableEntries,required));
     // Resolve image/CPU ownership before preparing any views. Buffer and DMA
     // aliases in this submission are then materialized together in one batch.
     for(const auto& range:ranges_)rasterizer.ReadMemory(range.address,range.size);
@@ -99,6 +114,7 @@ void GuestDmaMemory::Bind(Rasterizer& rasterizer,ResourceBindings& bindings,
         [](const auto& binding){return binding.space==Dma::DescriptorSet&&binding.reg==0&&
             binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&binding.count==Dma::BankCount;});
     Initialize(rasterizer);
+    next.emplace(Dma::PartialCapacityEntry,(table_.handle->GetDesc().Width/sizeof(u64)-Dma::SecondaryBase)/Dma::SubpagesPerPage);
     if(banks_used){
         for(UINT i=0;i<banks.size();++i){const auto& bank=banks[i];
             bindings.Uav(0,Dma::DescriptorSet,bank.resource.Get(),RawView(bank.base,bank.bytes),i);}
@@ -128,7 +144,7 @@ void GuestDmaMemory::BindMetadata(ResourceBindings& bindings,UINT reg,bool fault
     auto& resource=fault?faults_:table_;
     for(const auto& binding:bindings.Layout().Bindings())if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&
         binding.space==0&&reg>=binding.reg&&reg-binding.reg<binding.count){
-        bindings.Uav(binding.reg,0,resource.handle.Get(),RawView(0,fault?FaultBytes:TableBytes),reg-binding.reg);return;}
+            bindings.Uav(binding.reg,0,resource.handle.Get(),RawView(0,resource.handle->GetDesc().Width),reg-binding.reg);return;}
     throw std::runtime_error("Native DMA metadata is not a UAV binding");
 }
 void GuestDmaMemory::RecordFaults(Rasterizer& rasterizer){

@@ -24,7 +24,7 @@ public:
     void ScopeMarker(fmt::string_view format, fmt::format_args args, Function&& action) {
         if (!MarkersEnabled()) { action(); return; }
         ScopeMarkerBegin(fmt::vformat(format, args));
-        action();
+        try { action(); } catch (...) { try { ScopeMarkerEnd(); } catch (...) {} throw; }
         ScopeMarkerEnd();
     }
     virtual void FillBuffer(VAddr address, u32 bytes, u32 value, bool gds) = 0;

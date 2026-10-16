@@ -1,6 +1,8 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "spirv_converter.h"
+#include "common/runtime_module_trace.h"
+#include "native_clock_compile.h"
 #include "spirv_buffer_access.h"
 #include <windows.h>
 #include <wrl/client.h>
@@ -21,7 +23,7 @@ using Microsoft::WRL::ComPtr;
 struct Module {
     HMODULE handle{};
     explicit Module(const std::wstring& path) {
-        handle=LoadLibraryExW(path.c_str(),nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
+        handle=Common::RuntimeModuleTrace::Load(path.c_str(),nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
         if(!handle) throw std::runtime_error("Cannot load linked compiler DLL, Win32 "+std::to_string(GetLastError()));
     }
     ~Module(){ if(handle) FreeLibrary(handle); }
@@ -91,6 +93,7 @@ LinkedSpirvResult ConvertLinkedStages(const std::wstring& converter_dll,
         if(slash==std::wstring::npos) throw std::runtime_error("Linked converter path must include its directory");
         auto directory=converter_dll.substr(0,slash+1);
         Module validator_module{directory+L"dxil.dll"},dxc_module{directory+L"dxcompiler.dll"},converter_module{converter_dll};
+        NativeClockCompileScope clock_scope(converter_module.handle,options.native_shader_clock_backend);
         auto convert=converter_module.Symbol<decltype(&spirv_to_dxil_linked)>("spirv_to_dxil_linked");
         auto release=converter_module.Symbol<decltype(&spirv_to_dxil_free)>("spirv_to_dxil_free");
         result.converter_version=converter_module.Symbol<decltype(&spirv_to_dxil_get_version)>("spirv_to_dxil_get_version")();

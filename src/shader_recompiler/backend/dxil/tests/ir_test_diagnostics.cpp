@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Only the standalone IR fixture uses this diagnostic sink. The emulator keeps its logger.
+// Standalone fixtures use this diagnostic sink. The emulator keeps its logger.
 #include "common/logging/log.h"
 #include <fmt/format.h>
 #include <cstdio>

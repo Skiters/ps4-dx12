@@ -8,4 +8,5 @@ namespace Shader::Backend::DX12 {
 struct DxilResult { bool success{}; std::vector<uint8_t> bytecode; std::string diagnostics; };
 // Explicit DLL path keeps this portable and avoids changing the installed SDK/driver.
 DxilResult CompileDxil(const std::wstring& compiler_dll, const std::string& hlsl, Stage stage);
+DxilResult CompileComputeDxil(const std::wstring& compiler_dll,const std::string& hlsl);
 }

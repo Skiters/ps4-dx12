@@ -10,8 +10,75 @@
 #include <set>
 #include <algorithm>
 namespace NativeDX12 {
+namespace {
+struct ColorSubresources {UINT mip,first,count;};
+ColorSubresources ColorRange(const D3D12_RESOURCE_DESC& resource,const D3D12_RENDER_TARGET_VIEW_DESC& view){
+    ColorSubresources range{0,0,resource.DepthOrArraySize};
+    const bool multisampled=resource.SampleDesc.Count>1;
+    switch(view.ViewDimension){
+    case D3D12_RTV_DIMENSION_UNKNOWN:break;
+    case D3D12_RTV_DIMENSION_TEXTURE2D:
+        if(multisampled||resource.DepthOrArraySize!=1||view.Texture2D.PlaneSlice)
+            throw std::invalid_argument("Native color view dimension or plane mismatch");
+        range={view.Texture2D.MipSlice,0,1};break;
+    case D3D12_RTV_DIMENSION_TEXTURE2DARRAY:
+        if(multisampled||view.Texture2DArray.PlaneSlice)
+            throw std::invalid_argument("Native color array view sample or plane mismatch");
+        range={view.Texture2DArray.MipSlice,view.Texture2DArray.FirstArraySlice,view.Texture2DArray.ArraySize};break;
+    case D3D12_RTV_DIMENSION_TEXTURE2DMS:
+        if(!multisampled||resource.DepthOrArraySize!=1)
+            throw std::invalid_argument("Native multisample color view dimension mismatch");
+        range={0,0,1};break;
+    case D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY:
+        if(!multisampled)throw std::invalid_argument("Native multisample color array view sample mismatch");
+        range={0,view.Texture2DMSArray.FirstArraySlice,view.Texture2DMSArray.ArraySize};break;
+    default:throw std::invalid_argument("Native color view is not two dimensional");
+    }
+    if(range.mip>=resource.MipLevels||!range.count||range.first>=resource.DepthOrArraySize||
+       range.count>resource.DepthOrArraySize-range.first)
+        throw std::out_of_range("Native color view exceeds resource subresources");
+    return range;
+}
+D3D12_DEPTH_STENCIL_VIEW_DESC DepthView(const Resource& resource,D3D12_DEPTH_STENCIL_VIEW_DESC view,
+    DXGI_FORMAT format,bool read_only_depth,bool read_only_stencil){
+    const auto desc=resource.handle->GetDesc();
+    if(view.Format==DXGI_FORMAT_UNKNOWN){
+        view.Format=format;
+        if(desc.SampleDesc.Count>1){
+            view.ViewDimension=desc.DepthOrArraySize>1?D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY:D3D12_DSV_DIMENSION_TEXTURE2DMS;
+            if(desc.DepthOrArraySize>1)view.Texture2DMSArray={0,desc.DepthOrArraySize};
+        }else{
+            view.ViewDimension=desc.DepthOrArraySize>1?D3D12_DSV_DIMENSION_TEXTURE2DARRAY:D3D12_DSV_DIMENSION_TEXTURE2D;
+            if(desc.DepthOrArraySize>1)view.Texture2DArray={0,0,desc.DepthOrArraySize};
+        }
+    }
+    const bool has_stencil=resource.SubresourceCount()>UINT(desc.MipLevels)*UINT(desc.DepthOrArraySize);
+    view.Flags=D3D12_DSV_FLAGS((read_only_depth?D3D12_DSV_FLAG_READ_ONLY_DEPTH:0)|
+        (read_only_stencil&&has_stencil?D3D12_DSV_FLAG_READ_ONLY_STENCIL:0));
+    return view;
+}
+ColorSubresources DepthRange(const D3D12_RESOURCE_DESC& resource,const D3D12_DEPTH_STENCIL_VIEW_DESC& view){
+    ColorSubresources range{0,0,1};const bool multisampled=resource.SampleDesc.Count>1;
+    switch(view.ViewDimension){
+    case D3D12_DSV_DIMENSION_TEXTURE2D:
+        if(multisampled||resource.DepthOrArraySize!=1)throw std::invalid_argument("Native depth view dimension/sample mismatch");
+        range.mip=view.Texture2D.MipSlice;break;
+    case D3D12_DSV_DIMENSION_TEXTURE2DARRAY:
+        if(multisampled)throw std::invalid_argument("Native depth array view sample mismatch");
+        range={view.Texture2DArray.MipSlice,view.Texture2DArray.FirstArraySlice,view.Texture2DArray.ArraySize};break;
+    case D3D12_DSV_DIMENSION_TEXTURE2DMS:
+        if(!multisampled||resource.DepthOrArraySize!=1)throw std::invalid_argument("Native multisample depth view mismatch");break;
+    case D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY:
+        if(!multisampled)throw std::invalid_argument("Native multisample depth array view mismatch");
+        range={0,view.Texture2DMSArray.FirstArraySlice,view.Texture2DMSArray.ArraySize};break;
+    default:throw std::invalid_argument("Native depth view is not two dimensional");
+    }
+    if(range.mip>=resource.MipLevels||!range.count||range.first>=resource.DepthOrArraySize||
+        range.count>resource.DepthOrArraySize-range.first)throw std::out_of_range("Native depth view exceeds resource subresources");
+    return range;
+}
+}
 void Rasterizer::ValidateDebugMessages() {
-    if(!std::getenv("SHADPS4_NATIVE_D3D12_VALIDATION"))return;
     ComPtr<ID3D12InfoQueue> info;
     if(FAILED(DX12_API_CALL(device_.As(&info))))return;
     bool failed=false;
@@ -42,6 +109,8 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         throw std::invalid_argument("Native draw viewport bounds");
     for(const auto& r:scissors)if(r.right<r.left||r.bottom<r.top)throw std::invalid_argument("Native draw inverted scissor");
     std::set<ID3D12Resource*> attachments;
+    std::vector<std::pair<ID3D12Resource*,ColorSubresources>> color_ranges;
+    D3D12_DEPTH_STENCIL_VIEW_DESC depth_view{};ColorSubresources depth_range{};
     for(size_t i=0;i<colors.size();++i) {
         const auto& color=colors[i];const auto expected=pipeline.TargetFormats()[i];
         if(!color.resource){if(expected!=DXGI_FORMAT_UNKNOWN)throw std::invalid_argument("Native draw missing color target");continue;}
@@ -50,14 +119,27 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         if(bindings.References(color.resource->handle.Get()))throw std::runtime_error("Native draw attachment also bound as shader resource needs alias handling");
         const auto format=color.view.Format==DXGI_FORMAT_UNKNOWN?d.Format:color.view.Format;
         if(d.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||!(d.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||
-           d.SampleDesc.Count!=pipeline.SampleCount()||format!=expected||!attachments.insert(color.resource->handle.Get()).second)
+           d.SampleDesc.Count!=pipeline.SampleCount()||format!=expected)
             throw std::invalid_argument("Native draw color target format/sample/usage/alias mismatch");
+        const auto range=ColorRange(d,color.view);
+        for(const auto& [resource,previous]:color_ranges)
+            if(resource==color.resource->handle.Get()&&range.mip==previous.mip&&
+                range.first<previous.first+previous.count&&previous.first<range.first+range.count)
+                throw std::invalid_argument("Native color targets overlap the same subresource");
+        color_ranges.emplace_back(color.resource->handle.Get(),range);
+        attachments.insert(color.resource->handle.Get());
     }
     if(depth&&depth->resource) {
         if(!depth->resource->handle)throw std::invalid_argument("Null native draw depth resource");
-        if(bindings.References(depth->resource->handle.Get())&&
-           (!depth->read_only_depth||(!depth->read_only_stencil&&depth->view.Format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT)))
-            throw std::runtime_error("Native writable depth/stencil feedback is not a valid D3D12 attachment state");
+        const auto resource_desc=depth->resource->handle->GetDesc();
+        const bool has_stencil=depth->resource->SubresourceCount()>UINT(resource_desc.MipLevels)*UINT(resource_desc.DepthOrArraySize);
+        if(depth->clear_stencil&&!has_stencil)throw std::invalid_argument("Native stencil clear has no stencil plane");
+        depth_view=DepthView(*depth->resource,depth->view,pipeline.DepthFormat(),depth->read_only_depth,depth->read_only_stencil);
+        depth_range=DepthRange(resource_desc,depth_view);
+        for(UINT layer=depth_range.first;layer<depth_range.first+depth_range.count;++layer)
+            if((!depth->read_only_depth&&bindings.ShaderReferences(depth->resource->handle.Get(),depth_range.mip,layer,0))||
+               (has_stencil&&!depth->read_only_stencil&&bindings.ShaderReferences(depth->resource->handle.Get(),depth_range.mip,layer,1)))
+                throw std::runtime_error("Native writable depth/stencil feedback is not a valid D3D12 attachment state");
         auto d=DX12_API_CALL(depth->resource->handle->GetDesc());auto format=depth->view.Format==DXGI_FORMAT_UNKNOWN?d.Format:depth->view.Format;
         if(!(d.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)||d.SampleDesc.Count!=pipeline.SampleCount()||format!=pipeline.DepthFormat()||
            !attachments.insert(depth->resource->handle.Get()).second)throw std::invalid_argument("Native draw depth target mismatch");
@@ -76,14 +158,14 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             throw std::invalid_argument("Invalid native index buffer");
         const auto d=DX12_API_CALL(indices->resource->handle->GetDesc());const UINT element=indices->format==DXGI_FORMAT_R16_UINT?2:4;
         if(d.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||indices->offset%element||indices->offset>d.Width||
-           indices->bytes>d.Width-indices->offset||(u64(draw.first)+draw.count)*element>indices->bytes)
+           indices->bytes%element||indices->bytes>d.Width-indices->offset)
             throw std::out_of_range("Native indexed draw bounds");
         index_view={DX12_API_CALL(indices->resource->handle->GetGPUVirtualAddress())+indices->offset,indices->bytes,indices->format};
         bindings.Retain(indices->resource->handle.Get());bindings.RetainAllocation(indices->allocation);
     }
     if(colors.size()>8)throw std::invalid_argument("Native draw exceeds eight color targets");
     if(!color_descriptors_)color_descriptors_=std::make_unique<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_RTV,8,false);
-    if(depth&&depth->resource&&!depth_descriptors_)depth_descriptors_=std::make_unique<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_DSV,1,false);
+    if(depth&&depth->resource&&!depth_descriptors_)depth_descriptors_=std::make_unique<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_DSV,2,false);
     auto& rtvs=*color_descriptors_;
     std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> handles;D3D12_CPU_DESCRIPTOR_HANDLE depth_handle{};
     for(const auto& color:colors) {
@@ -95,17 +177,53 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
     }
     if(depth&&depth->resource) {
         depth_handle=depth_descriptors_->Cpu(0);
-        DX12_API_CALL(device_->CreateDepthStencilView(depth->resource->handle.Get(),depth->view.Format==DXGI_FORMAT_UNKNOWN?nullptr:&depth->view,depth_handle));
+        DX12_API_CALL(device_->CreateDepthStencilView(depth->resource->handle.Get(),&depth_view,depth_handle));
     }
     try {
         auto* list=RecordingList();BarrierBatch dependencies;
+        // A beginning clear precedes every shader load. A plane read-only
+        // during this draw must therefore be cleared through a separate
+        // writable DSV before entering its combined depth/SRV read state.
+        const bool preclear_depth=depth&&depth->resource&&depth->clear_depth&&depth->read_only_depth;
+        const bool preclear_stencil=depth&&depth->resource&&depth->clear_stencil&&depth->read_only_stencil;
+        if(preclear_depth||preclear_stencil){
+            auto view=depth_view;view.Flags=D3D12_DSV_FLAG_NONE;
+            const auto clear_handle=depth_descriptors_->Cpu(1);
+            DX12_API_CALL(device_->CreateDepthStencilView(depth->resource->handle.Get(),&view,clear_handle));
+            // No shader descriptors or DSV are bound during the clear. Both
+            // native planes can be writable here, then receive draw states.
+            depth->resource->Transition(list,D3D12_RESOURCE_STATE_DEPTH_WRITE);
+            DX12_API_CALL(list->ClearDepthStencilView(clear_handle,D3D12_CLEAR_FLAGS(
+                (preclear_depth?D3D12_CLEAR_FLAG_DEPTH:0)|(preclear_stencil?D3D12_CLEAR_FLAG_STENCIL:0)),
+                depth->clear_value,depth->stencil_value,0,nullptr));
+        }
         for(const auto& color:colors)if(color.resource)dependencies.Transition(*color.resource,D3D12_RESOURCE_STATE_RENDER_TARGET);
         if(depth&&depth->resource) {
-            const bool sampled=bindings.References(depth->resource->handle.Get());
-            dependencies.Transition(*depth->resource,sampled?
-                D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_DEPTH_READ|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):
-                (depth->read_only_depth&&depth->read_only_stencil?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE));
+            const auto desc=depth->resource->handle->GetDesc();
+            const auto plane_size=UINT(desc.MipLevels)*UINT(desc.DepthOrArraySize);
+            const auto count=depth->resource->SubresourceCount();
+            const auto sampled_depth=bindings.ShaderReferences(depth->resource->handle.Get(),0,0,0);
+            const auto sampled_stencil=count>plane_size&&bindings.ShaderReferences(depth->resource->handle.Get(),0,0,1);
+            const bool whole_attachment=desc.MipLevels==1&&depth_range.first==0&&depth_range.count==desc.DepthOrArraySize;
+            const bool single_layer=desc.DepthOrArraySize==1;
+            const bool uniform_access=count==plane_size||depth->read_only_depth==depth->read_only_stencil;
+            const bool uniform_shader=single_layer&&(count==plane_size||sampled_depth==sampled_stencil);
+            const bool no_shader=bindings.ShaderPlanes(depth->resource->handle.Get())==0;
+            if(whole_attachment&&uniform_access&&(uniform_shader||no_shader)){
+                const auto access=depth->read_only_depth?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE;
+                dependencies.Transition(*depth->resource,D3D12_RESOURCE_STATES(access|
+                    (sampled_depth?(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):0)));
+            }else for(UINT subresource=0;subresource<count;++subresource){
+                const auto mip=subresource%desc.MipLevels,layer=(subresource/desc.MipLevels)%desc.DepthOrArraySize;
+                const auto plane=subresource/plane_size;
+                const bool attached=mip==depth_range.mip&&layer>=depth_range.first&&layer-depth_range.first<depth_range.count;
+                const bool sampled=bindings.ShaderReferences(depth->resource->handle.Get(),mip,layer,plane);
+                if(!attached&&!sampled)continue;
+                const bool read_only=plane==0?depth->read_only_depth:depth->read_only_stencil;
+                const auto access=read_only?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE;
+                dependencies.Transition(*depth->resource,D3D12_RESOURCE_STATES((attached?access:0)|
+                    (sampled?(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):0)),subresource);
+            }
         }
         // Read usages combine. An IA buffer can also be fetched by a shader;
         // switching it to INDEX_BUFFER alone would invalidate that SRV state.
@@ -120,8 +238,16 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         dependencies.Flush(list);pipeline.Bind(list,bindings);
         DX12_API_CALL(list->RSSetViewports(UINT(viewports.size()),viewports.data()));DX12_API_CALL(list->RSSetScissorRects(UINT(scissors.size()),scissors.data()));
         ComPtr<ID3D12GraphicsCommandList4> render_list;D3D12_FEATURE_DATA_D3D12_OPTIONS5 render_options{};
-        const bool render_pass=SUCCEEDED(list->QueryInterface(IID_PPV_ARGS(&render_list)))&&
+        D3D12_FEATURE_DATA_D3D12_OPTIONS18 render_validity{};
+        // Guest vertex/pixel stores and atomics need ordinary UAV ordering.
+        // Use the existing OM path for these draws rather than imposing render
+        // pass UAV restrictions on shaders which the guest allows to write.
+        const bool shader_uavs=std::any_of(bindings.Layout().Bindings().begin(),bindings.Layout().Bindings().end(),
+            [](const auto& binding){return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;});
+        const bool render_pass=!shader_uavs&&SUCCEEDED(list->QueryInterface(IID_PPV_ARGS(&render_list)))&&
             SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5,&render_options,sizeof(render_options)))&&
+            SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS18,&render_validity,sizeof(render_validity)))&&
+            render_validity.RenderPassesValid&&
             render_options.RenderPassesTier!=D3D12_RENDER_PASS_TIER_0;
         std::vector<D3D12_RENDER_PASS_RENDER_TARGET_DESC> render_targets;
         D3D12_RENDER_PASS_DEPTH_STENCIL_DESC render_depth{};
@@ -130,20 +256,30 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
                 target.cpuDescriptor=handle;target.BeginningAccess.Type=D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
                 target.EndingAccess.Type=D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE;render_targets.push_back(target);}
             if(depth&&depth->resource){render_depth.cpuDescriptor=depth_handle;
-                render_depth.DepthBeginningAccess.Type=depth->clear_depth?D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
-                render_depth.DepthBeginningAccess.Clear.ClearValue.Format=depth->view.Format;
+                render_depth.DepthBeginningAccess.Type=depth->clear_depth&&!preclear_depth?D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
+                render_depth.DepthBeginningAccess.Clear.ClearValue.Format=depth_view.Format;
                 render_depth.DepthBeginningAccess.Clear.ClearValue.DepthStencil.Depth=depth->clear_value;
                 render_depth.DepthBeginningAccess.Clear.ClearValue.DepthStencil.Stencil=depth->stencil_value;
                 render_depth.DepthEndingAccess.Type=D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE;
-                render_depth.StencilBeginningAccess.Type=depth->clear_stencil?D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
+                render_depth.StencilBeginningAccess.Type=depth->clear_stencil&&!preclear_stencil?D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR:D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE;
                 render_depth.StencilBeginningAccess.Clear.ClearValue=render_depth.DepthBeginningAccess.Clear.ClearValue;
-                render_depth.StencilEndingAccess.Type=D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE;}
+                render_depth.StencilEndingAccess.Type=D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_PRESERVE;
+                if(depth_view.Format!=DXGI_FORMAT_D32_FLOAT_S8X24_UINT&&depth_view.Format!=DXGI_FORMAT_D24_UNORM_S8_UINT){
+                    render_depth.StencilBeginningAccess.Type=D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS;
+                    render_depth.StencilEndingAccess.Type=D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_NO_ACCESS;
+                }
+            }
+            D3D12_RENDER_PASS_FLAGS flags=D3D12_RENDER_PASS_FLAG_NONE;
+            if(depth&&depth->resource){
+                if(depth_view.Flags&D3D12_DSV_FLAG_READ_ONLY_DEPTH)flags|=D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_DEPTH;
+                if(depth_view.Flags&D3D12_DSV_FLAG_READ_ONLY_STENCIL)flags|=D3D12_RENDER_PASS_FLAG_BIND_READ_ONLY_STENCIL;
+            }
             DX12_API_CALL(render_list->BeginRenderPass(UINT(render_targets.size()),render_targets.data(),
-                depth&&depth->resource?&render_depth:nullptr,D3D12_RENDER_PASS_FLAG_NONE));
+                depth&&depth->resource?&render_depth:nullptr,flags));
         }else{
-            if(depth&&depth->resource&&(depth->clear_depth||depth->clear_stencil))
-                DX12_API_CALL(list->ClearDepthStencilView(depth_handle,D3D12_CLEAR_FLAGS((depth->clear_depth?D3D12_CLEAR_FLAG_DEPTH:0)|
-                    (depth->clear_stencil?D3D12_CLEAR_FLAG_STENCIL:0)),depth->clear_value,depth->stencil_value,0,nullptr));
+            if(depth&&depth->resource&&((depth->clear_depth&&!preclear_depth)||(depth->clear_stencil&&!preclear_stencil)))
+                DX12_API_CALL(list->ClearDepthStencilView(depth_handle,D3D12_CLEAR_FLAGS((depth->clear_depth&&!preclear_depth?D3D12_CLEAR_FLAG_DEPTH:0)|
+                    (depth->clear_stencil&&!preclear_stencil?D3D12_CLEAR_FLAG_STENCIL:0)),depth->clear_value,depth->stencil_value,0,nullptr));
             DX12_API_CALL(list->OMSetRenderTargets(UINT(handles.size()),handles.data(),FALSE,depth_handle.ptr?&depth_handle:nullptr));
         }
         std::array<float,4> native_blend{};std::copy(blend.begin(),blend.end(),native_blend.begin());
@@ -158,7 +294,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             ComPtr<ID3D12GraphicsCommandList9> extended;Check(DX12_API_CALL(list->QueryInterface(IID_PPV_ARGS(&extended))));
             DX12_API_CALL(extended->RSSetDepthBias(state.depth_bias,state.depth_bias_clamp,state.slope_depth_bias));
         }
-        if(state.depth_bounds) {
+        if(state.depth_bounds&&!state.rasterizer_discard) {
             if(!depth||!depth->resource)throw std::runtime_error("Native depth bounds attachment missing");
             ComPtr<ID3D12GraphicsCommandList1> extended;Check(DX12_API_CALL(list->QueryInterface(IID_PPV_ARGS(&extended))));
             DX12_API_CALL(extended->OMSetDepthBounds(state.depth_bounds_min,state.depth_bounds_max));

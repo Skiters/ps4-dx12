@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/microsoft/DirectXShaderCompiler",
+  "release": "v1.8.2403.2",
+  "dxcompiler_version": "1.8.2403.37 (11e1318c3)",
+  "dxil_version": "101.8.2403.24 (release/github-release-1.8.2403, aa2eb4763)",
+  "files": {
+    "dxcompiler.dll": "eb0e6196eae92f69f7e3a8a0bf0e35f30d7c2adad475bebbde3a41015ca0b414",
+    "dxil.dll": "1f61b171315ecffabdf56d4216e77d56533e3113f8fe29c5ad34a45c52c91efa",
+    "dxc.exe": "dd550800b298d0d7211c206bee5bdbbac580a3602058c5ef36d41dd1daa6c6f6",
+    "dxcapi.h": "f8487a553e9f3a0500ef1957414576b7bae4796f694d5f07d3a78a77cbdb44e2"
+  },
+  "fsr_hlsl_version": 2018,
+  "fsr_shader_model": "6.2 with native 16-bit types"
+}

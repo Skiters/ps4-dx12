@@ -18,9 +18,11 @@ class GuestDmaMemory {
     struct Translation {u32 entry,bytes;size_t range;u64 offset;};
     std::vector<Translation> translations_;
     std::map<u32,u64> indirect_entries_;
+    u32 required_entries_=Shader::NativeDma::TableEntries;
     void Initialize(Rasterizer&);
 public:
     explicit GuestDmaMemory(ID3D12Device* device):device_(device){}
+    u64 PageTableBytes()const{return table_.handle?table_.handle->GetDesc().Width:0;}
     void AppendRequests(Rasterizer&,std::vector<Rasterizer::ShaderBufferRequest>&);
     void Bind(Rasterizer&,ResourceBindings&,std::span<const Rasterizer::ShaderBufferView>);
     void BindMetadata(ResourceBindings&,UINT reg,bool fault);

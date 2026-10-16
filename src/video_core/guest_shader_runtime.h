@@ -10,7 +10,7 @@ struct GuestRuntimeContext {
     const Shader::Profile& profile;
     std::array<const Shader::Info*, Shader::MaxStageTypes> stage_infos{};
     std::array<Shader::PsColorBuffer, Shader::MaxColorBuffers> color_buffers{};
-    struct { u16 vertex_sgpr_offset{}; u32 instance_sgpr_offset{}; } indirect;
+    struct { u16 vertex_sgpr_offset{}; u32 instance_sgpr_offset{}; bool is_indirect{}; } indirect;
     bool depth_clip_control{};
 };
 // Reuses original guest register interpretation without referencing a host API.

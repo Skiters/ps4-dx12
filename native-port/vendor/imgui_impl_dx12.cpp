@@ -927,6 +927,18 @@ static void ImGui_ImplDX12_DestroyRenderBuffers(ImGui_ImplDX12_RenderBuffers* re
     render_buffers->IndexBufferSize = render_buffers->VertexBufferSize = 0;
 }
 
+bool ImGui_ImplDX12_SetSurfaceFormat(DXGI_FORMAT format)
+{
+    ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
+    if (!bd || !bd->pd3dDevice)
+        return false;
+    if (bd->RTVFormat == format)
+        return true;
+    ImGui_ImplDX12_InvalidateDeviceObjects();
+    bd->RTVFormat = bd->InitInfo.RTVFormat = format;
+    return ImGui_ImplDX12_CreateDeviceObjects();
+}
+
 void    ImGui_ImplDX12_InvalidateDeviceObjects()
 {
     ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();

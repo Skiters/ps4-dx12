@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <functional>
+#include <unordered_map>
 namespace NativeDX12 {
 // Reuse driver allocations only after the caller retires their GPU fence.
 // Unlike Vulkan descriptor pools, D3D12 heaps are shader-visible objects.
@@ -26,6 +27,8 @@ public:
 struct ShaderBinding {
     D3D12_DESCRIPTOR_RANGE_TYPE type{};
     UINT reg{},space{},count{},offset{};
+    bool nv_clock{};
+    bool amd_clock{};
     D3D_SRV_DIMENSION dimension=D3D_SRV_DIMENSION_UNKNOWN;
 };
 // Reflect actual DXIL resource registers, including Mesa's runtime/push CBVs.
@@ -54,12 +57,16 @@ class ResourceBindings {
     ComPtr<ID3D12DescriptorHeap> owned_resources_,owned_samplers_;
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
+    std::unordered_map<ID3D12Resource*,UINT> shader_planes_;
+    struct ShaderTextureRange {UINT mip,mips,layer,layers,planes;SIZE_T descriptor{};};
+    std::unordered_map<ID3D12Resource*,std::vector<ShaderTextureRange>> shader_texture_ranges_;
     std::vector<std::shared_ptr<void>> allocation_leases_;
     bool sealed_{};
     bool recycled_{};
     DescriptorHeapPool* pool_{};
     std::function<void(ResourceBindings&)> before_bind_;
     D3D12_CPU_DESCRIPTOR_HANDLE Slot(D3D12_DESCRIPTOR_RANGE_TYPE,UINT,UINT,UINT);
+    void TrackShaderTextureRange(ID3D12Resource*,ShaderTextureRange,SIZE_T);
 public:
     void Retain(ID3D12Resource*);
     void RetainAllocation(std::shared_ptr<void> lease){if(lease)allocation_leases_.push_back(std::move(lease));}
@@ -77,6 +84,17 @@ public:
     const ResourceLayout& Layout()const{return layout_;}
     bool References(ID3D12Resource* resource)const {
         for(const auto& held:keep_alive_)if(held.Get()==resource)return true;
+        return false;
+    }
+    UINT ShaderPlanes(ID3D12Resource* resource)const {
+        const auto it=shader_planes_.find(resource);return it==shader_planes_.end()?0:it->second;
+    }
+    bool ShaderReferences(ID3D12Resource* resource,UINT mip,UINT layer,UINT plane)const {
+        if(plane>=2)return false;
+        const auto found=shader_texture_ranges_.find(resource);
+        if(found==shader_texture_ranges_.end())return false;
+        for(const auto& range:found->second)if((range.planes&(1u<<plane))&&
+            mip>=range.mip&&mip-range.mip<range.mips&&layer>=range.layer&&layer-range.layer<range.layers)return true;
         return false;
     }
     void Srv(UINT reg,UINT space,ID3D12Resource*,const D3D12_SHADER_RESOURCE_VIEW_DESC&,UINT index=0);

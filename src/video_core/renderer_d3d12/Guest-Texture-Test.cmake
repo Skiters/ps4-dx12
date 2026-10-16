@@ -1,6 +1,13 @@
 # Include only from the separate native-port project after backend/compiler libs.
 get_filename_component(_guest_texture_port "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 add_library(shadps4_native_guest_textures STATIC "${CMAKE_CURRENT_LIST_DIR}/guest_texture_cache.cpp")
+target_sources(shadps4_native_guest_textures PRIVATE "${_guest_texture_port}/src/video_core/amdgpu/tiling.cpp")
+target_sources(shadps4_native_guest_textures PRIVATE
+    "${_guest_texture_port}/src/video_core/amdgpu/pixel_format.cpp"
+    "${_guest_texture_port}/src/shader_recompiler/backend/dxil/tests/ir_test_diagnostics.cpp")
+target_include_directories(shadps4_native_guest_textures PRIVATE "${SHADPS4_DEPENDENCY_ROOT}/externals/magic_enum/include")
+include("${_guest_texture_port}/native-port/Guest-Tiling.cmake")
+native_guest_tiling(shadps4_native_guest_textures)
 target_sources(shadps4_native_guest_textures PRIVATE "${CMAKE_CURRENT_LIST_DIR}/guest_image_readback.cpp")
 target_sources(shadps4_native_guest_textures PRIVATE "${CMAKE_CURRENT_LIST_DIR}/memory_surface_provider.cpp")
 target_compile_features(shadps4_native_guest_textures PUBLIC cxx_std_20)
@@ -16,11 +23,17 @@ add_test(NAME guest_texture_1d_array_hardware COMMAND dx12-guest-texture-test 1d
 add_executable(dx12-guest-bc-test "${CMAKE_CURRENT_LIST_DIR}/guest_bc_test.cpp")
 target_link_libraries(dx12-guest-bc-test PRIVATE shadps4_native_guest_textures)
 add_test(NAME native_guest_bc_hardware COMMAND dx12-guest-bc-test)
+add_executable(dx12-guest-signed-packed-test "${CMAKE_CURRENT_LIST_DIR}/guest_signed_packed_test.cpp")
+target_link_libraries(dx12-guest-signed-packed-test PRIVATE shadps4_native_guest_textures)
+add_test(NAME native_guest_signed_packed_sampled COMMAND dx12-guest-signed-packed-test)
 add_executable(dx12-guest-image-write-test "${CMAKE_CURRENT_LIST_DIR}/guest_image_write_test.cpp")
 target_link_libraries(dx12-guest-image-write-test PRIVATE shadps4_native_guest_textures)
 add_test(NAME native_guest_image_writeback COMMAND dx12-guest-image-write-test)
 add_test(NAME native_guest_volume_writeback COMMAND dx12-guest-image-write-test volume)
 add_test(NAME native_guest_deep_volume_mips COMMAND dx12-guest-image-write-test deep-volume)
+add_test(NAME native_guest_rgb96_writeback COMMAND dx12-guest-image-write-test rgb96)
+add_test(NAME native_guest_rgb96_linear_writeback COMMAND dx12-guest-image-write-test rgb96-linear)
+add_test(NAME native_guest_rgb96_float_raw_writeback COMMAND dx12-guest-image-write-test rgb96-float)
 set(_guest_original_tiling "${CMAKE_CURRENT_BINARY_DIR}/original_tiling.spv")
 add_custom_command(OUTPUT "${_guest_original_tiling}"
   COMMAND "${SHADPS4_GLSLANG_EXECUTABLE}"

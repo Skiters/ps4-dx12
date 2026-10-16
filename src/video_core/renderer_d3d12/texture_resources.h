@@ -23,7 +23,10 @@ struct TextureTransfer {
     UINT rows=0;
     UINT64 row_bytes=0,total_bytes=0;
     static TextureTransfer Create(ID3D12Device* device,const Resource& texture,bool readback) {
-        TextureTransfer t;auto desc=DX12_API_CALL(texture.handle->GetDesc());
+        return Create(device,DX12_API_CALL(texture.handle->GetDesc()),readback);
+    }
+    static TextureTransfer Create(ID3D12Device* device,const D3D12_RESOURCE_DESC& desc,bool readback) {
+        TextureTransfer t;
         if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.MipLevels!=1||desc.DepthOrArraySize!=1||desc.SampleDesc.Count!=1)
             throw std::invalid_argument("transfer supports single-subresource non-MSAA 2D textures");
         DX12_API_CALL(device->GetCopyableFootprints(&desc,0,1,0,&t.footprint,&t.rows,&t.row_bytes,&t.total_bytes));
@@ -50,12 +53,20 @@ struct TextureTransfer {
         D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
     }
-    void Readback(ID3D12GraphicsCommandList* list,Resource& texture) {
+    void Readback(ID3D12GraphicsCommandList* list,Resource& texture,const D3D12_BOX* region=nullptr) {
         if(staging.state!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::logic_error("not readback staging");
+        if(region){
+            const auto source=texture.handle->GetDesc();
+            if(region->right<=region->left||region->bottom<=region->top||region->front||region->back!=1||
+               region->right>source.Width||region->bottom>source.Height||
+               region->right-region->left!=footprint.Footprint.Width||
+               region->bottom-region->top!=footprint.Footprint.Height)
+                throw std::invalid_argument("Texture readback region/footprint mismatch");
+        }
         texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=texture.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=staging.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;dst.PlacedFootprint=footprint;
-        DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
+        DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,region));
     }
     void ReadRows(void* destination,size_t destination_size,UINT64 destination_pitch) {
         if(staging.state!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::logic_error("not readback staging");

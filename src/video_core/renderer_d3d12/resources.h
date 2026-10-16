@@ -28,6 +28,10 @@ struct Resource {
     // Keeps a placed-resource arena allocation alive across lightweight
     // Resource copies. Committed resources leave this empty.
     std::shared_ptr<void> allocation;
+    std::shared_ptr<const std::vector<DXGI_FORMAT>> castable_formats;
+    bool AllowsCast(DXGI_FORMAT format)const{
+        return castable_formats&&std::ranges::find(*castable_formats,format)!=castable_formats->end();
+    }
     // D3D12 forbids mixing legacy and enhanced state tracking for a resource.
     // BarrierBatch migrates through COMMON once, then every later transition
     // stays on the enhanced model.

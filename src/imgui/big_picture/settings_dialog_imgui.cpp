@@ -18,6 +18,7 @@
 #include "imgui/imgui_std.h"
 #include "input/input_handler.h"
 #include "settings_dialog_imgui.h"
+#include "big_picture.h"
 
 CMRC_DECLARE(res);
 
@@ -91,6 +92,8 @@ void SettingsWindow::LoadSettings(std::string profile) {
         neoModeSetting = EmulatorSettings.IsNeo();
         shadnetEnabledSetting = EmulatorSettings.IsShadNetEnabledSetting();
         connectedNetworkSetting = EmulatorSettings.IsConnectedToNetwork();
+        pipelineCacheEnabledSetting = EmulatorSettings.IsPipelineCacheEnabled();
+        pipelineCacheArchiveSetting = EmulatorSettings.IsPipelineCacheArchived();
         extraDmemSetting = EmulatorSettings.GetExtraDmemInMBytes();
         vblankFrequencySetting = EmulatorSettings.GetVblankFrequency();
     }
@@ -146,6 +149,8 @@ void SettingsWindow::SaveSettings(std::string profile) {
         EmulatorSettings.SetNeo(neoModeSetting, true);
         EmulatorSettings.SetShadNetEnabled(shadnetEnabledSetting, true);
         EmulatorSettings.SetConnectedToNetwork(connectedNetworkSetting, true);
+        EmulatorSettings.SetPipelineCacheEnabled(pipelineCacheEnabledSetting, true);
+        EmulatorSettings.SetPipelineCacheArchived(pipelineCacheArchiveSetting, true);
         EmulatorSettings.SetExtraDmemInMBytes(extraDmemSetting, true);
         EmulatorSettings.SetVblankFrequency(vblankFrequencySetting, true);
     }
@@ -180,30 +185,9 @@ void SettingsWindow::SaveInstallDirs() {
 
 void SettingsWindow::GetProfileInfo() {
     profileIcons.clear();
-    for (const auto& install : EmulatorSettings.GetAllGameInstallDirs()) {
-        if (!install.enabled || !std::filesystem::exists(install.path)) continue;
-        for (const auto& entry : std::filesystem::directory_iterator(install.path)) {
-            const bool archive = Core::FileSys::IsZArchiveFile(entry.path());
-            if (!entry.is_directory() && !archive) continue;
-            const auto base = archive ? Core::FileSys::StripZArchiveExtension(entry.path()) : entry.path();
-            const auto name = base.filename().string();
-            if (name.ends_with("-UPDATE") || name.ends_with("-patch")) continue;
-            const auto parent = base.parent_path();
-            for (const auto& candidate : {parent / (name + "-UPDATE"), parent / (name + "-UPDATE.zar"),
-                                          parent / (name + "-patch"), parent / (name + "-patch.zar"), entry.path()}) {
-                const auto path = Core::FileSys::ResolveGameFilePath(candidate, "sce_sys/param.sfo");
-                if (!path) continue;
-                PSF metadata;
-                if (!metadata.Open(*path)) continue;
-                const auto serial = metadata.GetString("TITLE_ID");
-                if (!serial || serial->empty()) continue;
-                if (std::ranges::none_of(profileIcons, [&](const auto& item) { return item.serial == *serial; }))
-                    profileIcons.push_back({std::string(metadata.GetString("TITLE").value_or(*serial)), std::string(*serial)});
-                break;
-            }
-        }
-    }
-    std::ranges::sort(profileIcons, {}, &ProfileInfo::title);
+    std::vector<BigPictureMode::IconInfo> games;
+    BigPictureMode::GetGameIconInfo(games, false);
+    for (const auto& game : games) profileIcons.push_back({game.title, game.serial});
     profileIcons.insert(profileIcons.begin(), {"Global", ""});
 }
 
@@ -708,11 +692,19 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Value");
 
             AddSettingCombo("Display Mode", fullscreenModeSetting, fullscreenModeOptions);
+            AddSettingCombo("Present Mode", presentModeSetting, presentModeOptions);
             AddSettingSliderInt("Window Width", windowWidthSetting, 0, 8000);
             AddSettingSliderInt("Window Height", windowHeightSetting, 0, 7000);
+            AddSettingCheckbox("Enable HDR", hdrAllowedSetting);
+            AddSettingCheckbox("Enable FSR", fsrEnabledSetting);
+            if (fsrEnabledSetting) {
+                AddSettingCheckbox("Enable RCAS", rcasEnabledSetting);
+            }
+            if (rcasEnabledSetting && fsrEnabledSetting) {
+                AddSettingSliderFloat("RCAS Attenuation", rcasAttenuationSetting, 0.0f, 3.0f, 3);
+            }
             ImGui::EndTable();
         }
-        ImGui::TextWrapped("Native DX12 uses VSync. HDR and FSR/RCAS are not available in this renderer yet.");
     } else if (category == SettingsCategory::Input) {
         if (ImGui::BeginTable("SettingsTable", 2)) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
@@ -775,6 +767,8 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             AddSettingCheckbox("Enable PS4 Neo Mode", neoModeSetting);
             AddSettingCheckbox("Enable ShadNet", shadnetEnabledSetting);
             AddSettingCheckbox("Set Network Connected to True", connectedNetworkSetting);
+            AddSettingCheckbox("Enable Pipeline Cache", pipelineCacheEnabledSetting);
+            AddSettingCheckbox("Enable Pipeline Cache Archive", pipelineCacheArchiveSetting);
             ImGui::EndTable();
         }
     }

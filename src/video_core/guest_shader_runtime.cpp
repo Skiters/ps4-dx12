@@ -225,6 +225,7 @@ Shader::RuntimeInfo BuildGuestRuntimeInfo(const AmdGpu::Regs& regs,
     }
     switch (l_stage) {
     case SwStage::Vertex:
+        info.sw.vs.is_indirect = context.indirect.is_indirect;
         info.sw.vs.step_rate_0 = regs.vgt_instance_step_rate_0;
         info.sw.vs.step_rate_1 = regs.vgt_instance_step_rate_1;
         info.sw.vs.vertex_sgpr_offset = context.indirect.vertex_sgpr_offset;

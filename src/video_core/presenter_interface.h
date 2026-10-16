@@ -8,7 +8,7 @@ namespace VideoCore {
 // completes. Guest flip acknowledgement remains the VideoOut driver's duty.
 struct HostFrame {
     u64 trace_id{};
-    virtual void TraceGpuCompletion() {}
+    virtual void BeginGuestFlip() {}
     virtual ~HostFrame() = default;
 };
 class PresenterInterface {

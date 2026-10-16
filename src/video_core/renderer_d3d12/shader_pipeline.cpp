@@ -1,6 +1,8 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "shader_pipeline.h"
+#include "nv_shader_clock.h"
+#include "ags_shader_clock.h"
 #include "persistent_cache.h"
 #include <map>
 #include <mutex>
@@ -18,7 +20,7 @@ void AddGraphicsState(CacheKey& k,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
         k.Add(r.BlendEnable);k.Add(r.LogicOpEnable);k.Add(r.SrcBlend);k.Add(r.DestBlend);k.Add(r.BlendOp);
         k.Add(r.SrcBlendAlpha);k.Add(r.DestBlendAlpha);k.Add(r.BlendOpAlpha);k.Add(r.LogicOp);k.Add(r.RenderTargetWriteMask);
     }
-    k.Add(d.SampleMask);const auto& r=d.RasterizerState;
+    k.Add(d.StreamOutput.RasterizedStream);k.Add(d.SampleMask);const auto& r=d.RasterizerState;
     k.Add(r.FillMode);k.Add(r.CullMode);k.Add(r.FrontCounterClockwise);k.Add(r.DepthBias);
     k.Add(r.DepthBiasClamp);k.Add(r.SlopeScaledDepthBias);k.Add(r.DepthClipEnable);k.Add(r.MultisampleEnable);
     k.Add(r.AntialiasedLineEnable);k.Add(r.ForcedSampleCount);k.Add(r.ConservativeRaster);
@@ -38,9 +40,7 @@ void AddGraphicsState(CacheKey& k,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
 }
 
 std::filesystem::path PsoDirectory(){
-    const auto* configured=std::getenv("SHADPS4_NATIVE_SHADER_CACHE");
-    if(configured)return std::string_view(configured)=="off"?std::filesystem::path{}:std::filesystem::path(configured)/"pso";
-    return std::filesystem::path("user/cache/native-dx12/pso");
+    return NativeCacheDirectory("pso");
 }
 CacheKey PsoKey(ID3D12Device* device,const std::wstring& dxc){
     struct Fingerprint {std::filesystem::file_time_type modified;uintmax_t size;std::array<std::byte,32> hash;};
@@ -128,7 +128,13 @@ ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
     desc.pRootSignature=layout_.Root();desc.CS={compute.data(),compute.size()};
     auto key=PsoKey(device,dxc);key.Text("compute");key.Blob(std::as_bytes(compute));
+    const bool nv_clock=std::ranges::any_of(layout_.Bindings(),[](const auto& b){return b.nv_clock;});
+    key.Add(nv_clock);if(nv_clock){key.Text("nvapi-global-timer-v1");key.Blob(NvShaderClockRuntimeDigest());}
+    const bool amd_clock=std::ranges::any_of(layout_.Bindings(),[](const auto& b){return b.amd_clock;});
+    key.Add(amd_clock);if(amd_clock){key.Text("ags-shader-clock-v1");key.Blob(AmdShaderClockRuntimeDigest(device));}
+    NvShaderClockScope clock_scope(device,nv_clock);
     CreateCachedPso(key,desc,state_,[&]{Check(DX12_API_CALL(device->CreateComputePipelineState(&desc,IID_PPV_ARGS(&state_))));});
+    clock_scope.Finish();
 }
 ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
     const GraphicsShaders& shaders,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& fixed_state,bool depth_bounds)
@@ -154,17 +160,24 @@ ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
     std::copy(std::begin(desc.RTVFormats),std::end(desc.RTVFormats),targets_.begin());
     desc.pRootSignature=layout_.Root();
     desc.VS={shaders.vertex.data(),shaders.vertex.size()};
-    desc.PS={shaders.pixel.data(),shaders.pixel.size()};
+    desc.PS=fixed_state.StreamOutput.RasterizedStream==D3D12_SO_NO_RASTERIZED_STREAM?
+        D3D12_SHADER_BYTECODE{}:D3D12_SHADER_BYTECODE{shaders.pixel.data(),shaders.pixel.size()};
     desc.HS={shaders.hull.data(),shaders.hull.size()};
     desc.DS={shaders.domain.data(),shaders.domain.size()};
     desc.GS={shaders.geometry.data(),shaders.geometry.size()};
     auto key=PsoKey(device,dxc);key.Text("graphics");key.Add(depth_bounds);key.Add(stencil.separate);
     key.Add(stencil.front_read);key.Add(stencil.front_write);key.Add(stencil.back_read);key.Add(stencil.back_write);AddGraphicsState(key,desc);
     for(const auto code:shaders.All())key.Blob(std::as_bytes(code));
+    const bool nv_clock=std::ranges::any_of(layout_.Bindings(),[](const auto& b){return b.nv_clock;});
+    key.Add(nv_clock);if(nv_clock){key.Text("nvapi-global-timer-v1");key.Blob(NvShaderClockRuntimeDigest());}
+    const bool amd_clock=std::ranges::any_of(layout_.Bindings(),[](const auto& b){return b.amd_clock;});
+    key.Add(amd_clock);if(amd_clock){key.Text("ags-shader-clock-v1");key.Blob(AmdShaderClockRuntimeDigest(device));}
+    NvShaderClockScope clock_scope(device,nv_clock);
     CreateCachedPso(key,desc,state_,[&]{
         if(depth_bounds||stencil.separate)CreateExtendedPipeline(device,desc,depth_bounds,stencil,state_.GetAddressOf());
         else Check(DX12_API_CALL(device->CreateGraphicsPipelineState(&desc,IID_PPV_ARGS(&state_))));
     });
+    clock_scope.Finish();
 }
 void ShaderPipeline::Bind(ID3D12GraphicsCommandList* list,ResourceBindings& resources) const {
     if(&resources.Layout()!=&layout_)

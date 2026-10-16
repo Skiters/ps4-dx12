@@ -20,6 +20,7 @@
 #include "widget/gpu_memory.h"
 #include "widget/memory_map.h"
 #include "widget/module_list.h"
+#include "widget/shader_list.h"
 
 
 using namespace ImGui;
@@ -47,6 +48,7 @@ static bool just_opened_options = false;
 static Widget::MemoryMapViewer memory_map;
 static Widget::ModuleList module_list;
 static Widget::GpuMemoryViewer gpu_memory;
+static Widget::ShaderList shader_list;
 
 // clang-format off
 static std::string help_text =
@@ -77,6 +79,7 @@ void L::DrawMenuBar() {
         if (BeginMenu("GPU Tools")) {
             MenuItem("Show frame info", nullptr, &frame_graph.is_open);
             MenuItem("Show GPU memory usage", nullptr, &gpu_memory.open);
+            MenuItem("Show loaded shaders", nullptr, &shader_list.open);
             if (BeginMenu("Dump frames")) {
                 SliderInt("Count", &dump_frame_count, 1, 5);
                 if (MenuItem("Dump", "Ctrl+Alt+F9", nullptr, !DebugState.DumpingCurrentFrame())) {
@@ -117,6 +120,7 @@ void L::DrawAdvanced() {
     const auto& io = ctx.IO;
 
     frame_graph.Draw();
+    if(shader_list.open)shader_list.Draw();
 
     if (DebugState.should_show_frame_dump && DebugState.waiting_reg_dumps.empty()) {
         DebugState.should_show_frame_dump = false;
@@ -277,6 +281,7 @@ static void LoadSettings(const char* line) {
         gpu_memory.open = i != 0;
         return;
     }
+    if(sscanf(line,"show_shader_list=%d",&i)==1){shader_list.open=i!=0;return;}
     if (sscanf(line, "dump_frame_count=%d", &i) == 1) {
         dump_frame_count = i;
         return;
@@ -321,6 +326,7 @@ void L::SetupSettings() {
         buf->appendf("show_memory_map=%d\n", memory_map.open);
         buf->appendf("show_module_list=%d\n", module_list.open);
         buf->appendf("show_gpu_memory=%d\n", gpu_memory.open);
+        buf->appendf("show_shader_list=%d\n",shader_list.open);
         buf->appendf("dump_frame_count=%d\n", dump_frame_count);
         buf->append("\n");
         buf->appendf("[%s][CmdList]\n", handler->TypeName);

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "resources.h"
+#include "shader_recompiler/native_sampler.h"
 #include "video_core/amdgpu/resource.h"
 #include <algorithm>
 namespace NativeDX12 {
+static_assert(Shader::NativeSampler::MinLodBias == D3D12_MIP_LOD_BIAS_MIN);
+static_assert(Shader::NativeSampler::MaxLodBias == D3D12_MIP_LOD_BIAS_MAX);
 inline D3D12_SAMPLER_DESC DescribeGuestSampler(const AmdGpu::Sampler& source,bool depth,
     const float* custom_border=nullptr) {
     if(!source.Valid())throw std::runtime_error("Invalid native guest sampler");
@@ -36,7 +39,7 @@ inline D3D12_SAMPLER_DESC DescribeGuestSampler(const AmdGpu::Sampler& source,boo
         linear(source.xy_min_filter.Value()),linear(source.xy_mag_filter.Value()),
         source.mip_filter.Value()==AmdGpu::MipFilter::Linear?D3D12_FILTER_TYPE_LINEAR:D3D12_FILTER_TYPE_POINT,reduction);
     result.MaxAnisotropy=1u<<UINT(source.max_aniso.Value());result.ComparisonFunc=D3D12_COMPARISON_FUNC(UINT(source.depth_compare_func.Value())+1);
-    result.MipLODBias=std::clamp(source.LodBias(),D3D12_MIP_LOD_BIAS_MIN,D3D12_MIP_LOD_BIAS_MAX);
+    result.MipLODBias=Shader::NativeSampler::ClampLodBias(source.LodBias());
     result.MinLOD=source.MinLod();result.MaxLOD=source.MaxLod();
     if(source.mip_filter.Value()==AmdGpu::MipFilter::None)result.MinLOD=result.MaxLOD=0;
     if(result.MinLOD>result.MaxLOD)throw std::runtime_error("Native guest sampler inverted LOD bounds");

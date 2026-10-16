@@ -1,6 +1,8 @@
 #include "command_scheduler.h"
 #include "diagnostics.h"
+#include "device_diagnostics.h"
 #include <algorithm>
+#include <utility>
 
 namespace NativeDX12 {
 
@@ -9,8 +11,10 @@ CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), time
     D3D12_COMMAND_QUEUE_DESC description{};
     description.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     Check(DX12_API_CALL(device_->CreateCommandQueue(&description, IID_PPV_ARGS(&direct_queue_))));
+    direct_queue_->SetName(L"shadPS4 DX12 guest DIRECT queue");
     description.Type=D3D12_COMMAND_LIST_TYPE_COPY;
     Check(DX12_API_CALL(device_->CreateCommandQueue(&description,IID_PPV_ARGS(&copy_queue_))));
+    copy_queue_->SetName(L"shadPS4 DX12 guest COPY queue");
     contexts_.reserve(8);
     copy_contexts_.reserve(8);
     active_ = AcquireContext();
@@ -42,7 +46,7 @@ u64 CommandScheduler::FlushCopy(){
     return copy_submitted_;
 }
 
-size_t CommandScheduler::AcquireCopyContext(){
+size_t CommandScheduler::AcquireCopyContext()try{
     const auto completed=copy_timeline_.Completed();
     for(size_t index=0;index<copy_contexts_.size();++index){
         auto& context=copy_contexts_[index];
@@ -58,6 +62,8 @@ size_t CommandScheduler::AcquireCopyContext(){
             IID_PPV_ARGS(&context.allocator))));
         Check(DX12_API_CALL(device_->CreateCommandList(0,D3D12_COMMAND_LIST_TYPE_COPY,
             context.allocator.Get(),nullptr,IID_PPV_ARGS(&context.list))));
+        wchar_t name[96];swprintf_s(name,L"shadPS4 DX12 COPY allocator %zu",copy_contexts_.size());context.allocator->SetName(name);
+        swprintf_s(name,L"shadPS4 DX12 COPY list %zu",copy_contexts_.size());context.list->SetName(name);
         copy_contexts_.push_back(std::move(context));
         return copy_contexts_.size()-1;
     }
@@ -69,11 +75,9 @@ size_t CommandScheduler::AcquireCopyContext(){
     Check(DX12_API_CALL(oldest->list->Reset(oldest->allocator.Get(),nullptr)));
     oldest->closed=false;
     return index;
-}
+}catch(...){ReportDeviceRemoval(device_.Get());throw;}
 
 CommandScheduler::~CommandScheduler() {
-    priority_worker_.request_stop();
-    pending_cv_.notify_all();
     try {
         if(submit_failure_){
             // A failed Signal may follow successful ExecuteCommandLists. Drain
@@ -89,9 +93,13 @@ CommandScheduler::~CommandScheduler() {
             Collect();
         }else Finish();
     }catch(...){}
+    try { DrainPriority(); } catch (...) {}
+    priority_worker_.request_stop();
+    pending_cv_.notify_all();
+    if(priority_worker_.joinable())priority_worker_.join();
 }
 
-size_t CommandScheduler::AcquireContext() {
+size_t CommandScheduler::AcquireContext()try {
     const auto completed = timeline_.Completed();
     for (size_t index = 0; index < contexts_.size(); ++index) {
         auto& context = contexts_[index];
@@ -108,19 +116,21 @@ size_t CommandScheduler::AcquireContext() {
             D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&context.allocator))));
         Check(DX12_API_CALL(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             context.allocator.Get(), nullptr, IID_PPV_ARGS(&context.list))));
+        wchar_t name[96];swprintf_s(name,L"shadPS4 DX12 DIRECT allocator %zu",contexts_.size());context.allocator->SetName(name);
+        swprintf_s(name,L"shadPS4 DX12 DIRECT list %zu",contexts_.size());context.list->SetName(name);
         contexts_.push_back(std::move(context));
         return contexts_.size() - 1;
     }
     const auto oldest = std::min_element(contexts_.begin(), contexts_.end(),
         [](const Context& left, const Context& right) { return left.fence < right.fence; });
     const auto index = size_t(oldest - contexts_.begin());
-    timeline_.Wait(oldest->fence);
+    Wait(oldest->fence);
     CollectTimestamps(*oldest);
     Check(DX12_API_CALL(oldest->allocator->Reset()));
     Check(DX12_API_CALL(oldest->list->Reset(oldest->allocator.Get(), nullptr)));
     oldest->closed = false;
     return index;
-}
+}catch(...){ReportDeviceRemoval(device_.Get());throw;}
 
 void CommandScheduler::CollectTimestamps(Context& context){
     // A reused recording context still carries its previous completed fence.
@@ -228,11 +238,15 @@ u64 CommandScheduler::Submit(std::span<std::function<void(u64)>> retirements,
     for(auto& callback:submitted)if(callback)callback(submitted_);
     Collect();
     return submitted_;
-}catch(...){submit_failure_=std::current_exception();throw;}
+}catch(...){submit_failure_=std::current_exception();ReportDeviceRemoval(device_.Get());throw;}
+
+void CommandScheduler::Wait(u64 fence){
+    try{timeline_.Wait(fence);}catch(...){ReportDeviceRemoval(device_.Get());throw;}
+}
 
 void CommandScheduler::Finish() {
     const auto fence = Submit();
-    if (fence) timeline_.Wait(fence);
+    if (fence) Wait(fence);
     Collect();
 }
 
@@ -265,6 +279,18 @@ void CommandScheduler::Collect() {
     }
     for(auto& context:contexts_)CollectTimestamps(context);
     if(callback_failure)std::rethrow_exception(callback_failure);
+    std::exception_ptr failure;
+    {std::lock_guard lock(pending_mutex_);failure=std::exchange(priority_failure_,{});}
+    if(failure)std::rethrow_exception(failure);
+}
+
+void CommandScheduler::DrainPriority(){
+    if(std::this_thread::get_id()==priority_worker_.get_id())
+        throw std::logic_error("Priority callback cannot drain its own scheduler");
+    std::unique_lock lock(pending_mutex_);
+    pending_cv_.wait(lock,[&]{return priority_pending_.empty()&&!priority_in_flight_;});
+    auto failure=std::exchange(priority_failure_,{});lock.unlock();
+    if(failure)std::rethrow_exception(failure);
 }
 
 void CommandScheduler::PriorityWorker(std::stop_token token) {
@@ -277,9 +303,19 @@ void CommandScheduler::PriorityWorker(std::stop_token token) {
             if (token.stop_requested()) break;
             operation = std::move(priority_pending_.front());
             priority_pending_.pop_front();
+            priority_in_flight_=true;
         }
-        timeline_.Wait(operation.fence);
-        if (!token.stop_requested()) operation.callback(operation.fence);
+        std::exception_ptr failure;
+        try{Wait(operation.fence);operation.callback(operation.fence);}
+        catch(...){failure=std::current_exception();Diagnostics::Count("gpu-priority.failure");}
+        // Release retained source/readback allocations before publishing drain
+        // completion; a derived owner can now safely destroy its fields.
+        operation={};
+        {std::lock_guard lock(pending_mutex_);
+            if(failure&&!priority_failure_)priority_failure_=std::move(failure);
+            priority_in_flight_=false;
+        }
+        pending_cv_.notify_all();
     }
 }
 

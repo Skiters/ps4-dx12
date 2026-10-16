@@ -42,9 +42,17 @@ struct GuestGraphicsState {
     bool dynamic_depth_bias{};
     float depth_bias{},depth_bias_clamp{},slope_depth_bias{};
     bool blend_constant_alpha_rgb{};
+    bool rasterizer_discard{};
     bool discard{};
-    bool WritesDepthStencil(bool clear_depth=false,bool clear_stencil=false)const {
+    bool WritesDepth(bool clear_depth=false)const {
         if(discard)return false;
+        if(rasterizer_discard)return clear_depth;
+        const auto& z=pipeline.DepthStencilState;
+        return clear_depth||(z.DepthEnable&&z.DepthWriteMask==D3D12_DEPTH_WRITE_MASK_ALL);
+    }
+    bool WritesStencil(bool clear_stencil=false)const {
+        if(discard)return false;
+        if(rasterizer_discard)return clear_stencil;
         const auto& z=pipeline.DepthStencilState;
         const auto writes=[](const D3D12_DEPTH_STENCILOP_DESC& face){
             return face.StencilFailOp!=D3D12_STENCIL_OP_KEEP||
@@ -53,15 +61,18 @@ struct GuestGraphicsState {
         };
         const auto front_mask=separate_stencil_faces?stencil_write_mask_front:z.StencilWriteMask;
         const auto back_mask=separate_stencil_faces?stencil_write_mask_back:z.StencilWriteMask;
-        return clear_depth||clear_stencil||(z.DepthEnable&&z.DepthWriteMask==D3D12_DEPTH_WRITE_MASK_ALL)||
+        return clear_stencil||
             (z.StencilEnable&&((front_mask&&writes(z.FrontFace))||(back_mask&&writes(z.BackFace))));
+    }
+    bool WritesDepthStencil(bool clear_depth=false,bool clear_stencil=false)const {
+        return WritesDepth(clear_depth)||WritesStencil(clear_stencil);
     }
 };
 // Attachment formats come from the actual native texture/depth cache. Preserve
 // PS4 RT slot numbers (including holes); no signature-derived placeholder formats.
 GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs&,
     std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth=DXGI_FORMAT_UNKNOWN,
-    UINT patch_control_points=0,bool vertex_y_flipped=false,bool native_alpha_factor=false);
+    UINT patch_control_points=0,bool native_alpha_factor=false);
 bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type);
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
     bool restart=false,u32 restart_index=~0u);

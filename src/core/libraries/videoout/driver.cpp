@@ -51,8 +51,8 @@ VideoOutDriver::VideoOutDriver(u32 width, u32 height) {
     main_port.resolution.full_height = height;
     main_port.resolution.pane_width = width;
     main_port.resolution.pane_height = height;
-    // Both FG backends may wait for interpolation/presentation. Guest vblank
-    // must advance independently, including when an output frame is dropped.
+    // The default follows the original coupled Present/vblank clock. The native
+    // extension can retain independent timing for explicit output experiments.
     independent_vblank = video_presenter->IndependentVblank();
     if (independent_vblank)
         vblank_thread = std::jthread([this](std::stop_token token) { VblankThread(token); });
@@ -255,6 +255,7 @@ void VideoOutDriver::Flip(const Request& req) {
 
     // Present the frame.
     const auto trace_id=req.frame->trace_id;
+    if(req.index>=0)req.frame->BeginGuestFlip();
     video_presenter->Present(req.frame);
     Common::GuestFrameTrace::Record(trace_id,"present-queued");
 
@@ -350,7 +351,6 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
 
     frame->trace_id=trace_id;
     Common::GuestFrameTrace::Record(trace_id,"prepared");
-    frame->TraceGpuCompletion();
     {
         std::scoped_lock lock{mutex};
         requests.push({
@@ -371,7 +371,7 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
     Common::SetCurrentThreadName("shadPS4:PresentThread");
     Common::SetCurrentThreadRealtime(vblank_period);
 
-    Common::AccurateTimer timer{vblank_period};
+    Common::AccurateTimer timer{vblank_period, std::chrono::nanoseconds::zero()};
 
     const auto receive_request = [this] -> Request {
         std::scoped_lock lk{mutex};
@@ -506,17 +506,20 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
 void VideoOutDriver::SignalVblank(u64 ticks) {
     std::scoped_lock lock{main_port.vo_mutex};
     auto& status = main_port.vblank_status;
-    status.count += ticks;
-    status.process_time = Kernel::sceKernelGetProcessTime();
-    status.tsc = Kernel::sceKernelReadTsc();
+    if (!ticks)
+        return;
+    const auto next_count = status.count + ticks;
     for (auto event : main_port.vblank_events) {
         if (auto equeue = Kernel::GetEqueue(event)) {
             equeue->TriggerEvent(static_cast<u64>(OrbisVideoOutInternalEventId::Vblank),
                 Kernel::OrbisKernelEvent::Filter::VideoOut,
                 reinterpret_cast<void*>(static_cast<u64>(OrbisVideoOutInternalEventId::Vblank) |
-                                        ((status.count - 1) << 16)));
+                                        ((next_count - 1) << 16)));
         }
     }
+    status.count = next_count;
+    status.process_time = Kernel::sceKernelGetProcessTime();
+    status.tsc = Kernel::sceKernelReadTsc();
     main_port.vblank_cv.notify_all();
 }
 

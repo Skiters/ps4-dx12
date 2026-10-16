@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <windows.h>
-#include <bcrypt.h>
+#include "common/sha256.h"
 #include <array>
 #include <atomic>
 #include <filesystem>
@@ -14,8 +14,26 @@
 #include <algorithm>
 #include <cstdint>
 #include <type_traits>
+#ifdef SHADPS4_NATIVE_DX12_CORE
+#include "common/elf_info.h"
+#include "common/path_util.h"
+#include "core/emulator_settings.h"
+#endif
 #pragma comment(lib,"bcrypt.lib")
 namespace NativeDX12 {
+inline std::filesystem::path NativeCacheDirectory(const char* kind){
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    if(!EmulatorSettings.IsPipelineCacheEnabled())return {};
+#endif
+    if(const auto* configured=std::getenv("SHADPS4_NATIVE_SHADER_CACHE"))
+        return std::string_view(configured)=="off"?std::filesystem::path{}:std::filesystem::path(configured)/kind;
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    return Common::FS::GetUserPath(Common::FS::PathType::CacheDir)/"native-dx12"/
+        Common::ElfInfo::Instance().GameSerial()/kind;
+#else
+    return std::filesystem::path("user/cache/native-dx12")/kind;
+#endif
+}
 class CacheKey {
 public:
     std::vector<std::byte> bytes;
@@ -26,27 +44,7 @@ public:
     void Blob(std::span<const std::byte> value){Add(uint64_t(value.size()));bytes.insert(bytes.end(),value.begin(),value.end());}
     void Text(const std::string& value){Blob(std::as_bytes(std::span(value)));}
 };
-class CacheDigest {
-    BCRYPT_ALG_HANDLE algorithm{};
-    BCRYPT_HASH_HANDLE hash{};
-    static void Check(NTSTATUS status){if(status<0)throw std::runtime_error("Native cache SHA256 failed");}
-public:
-    CacheDigest(){Check(BCryptOpenAlgorithmProvider(&algorithm,BCRYPT_SHA256_ALGORITHM,nullptr,0));
-        const auto status=BCryptCreateHash(algorithm,&hash,nullptr,0,nullptr,0,0);
-        if(status<0){BCryptCloseAlgorithmProvider(algorithm,0);algorithm=nullptr;Check(status);}}
-    ~CacheDigest(){if(hash)BCryptDestroyHash(hash);if(algorithm)BCryptCloseAlgorithmProvider(algorithm,0);}
-    void Update(std::span<const std::byte> bytes){
-        while(!bytes.empty()){const auto count=ULONG(std::min<size_t>(bytes.size(),1024*1024));
-            Check(BCryptHashData(hash,reinterpret_cast<PUCHAR>(const_cast<std::byte*>(bytes.data())),count,0));bytes=bytes.subspan(count);}}
-    std::array<std::byte,32> Finish(){std::array<std::byte,32> result{};Check(BCryptFinishHash(hash,reinterpret_cast<PUCHAR>(result.data()),32,0));return result;}
-    static auto Of(std::span<const std::byte> bytes){CacheDigest digest;digest.Update(bytes);return digest.Finish();}
-    static auto File(const std::filesystem::path& path){
-        std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Cannot fingerprint native compiler DLL");
-        CacheDigest digest;std::array<char,65536> block{};
-        while(file.read(block.data(),block.size())||file.gcount())digest.Update(std::as_bytes(std::span(block.data(),size_t(file.gcount()))));
-        if(!file.eof())throw std::runtime_error("Cannot read native compiler DLL fingerprint");return digest.Finish();
-    }
-};
+using CacheDigest=Common::Sha256;
 class PersistentCache {
     std::filesystem::path directory;
     inline static std::atomic<uint64_t> next_temp{};

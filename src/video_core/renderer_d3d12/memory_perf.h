@@ -32,9 +32,12 @@ struct MemoryPerfConfig {
     struct Limits {u64 cache,arena;};
     Limits Budget(u64 budget,u64 usage,u64 buffer_commitment)const {
         if(!enabled){
-            auto cache=std::clamp<u64>(budget/8,128*MemoryMiB,2048*MemoryMiB);
+            const auto other=usage>buffer_commitment?usage-buffer_commitment:0;
+            const auto reserve=std::max<u64>(256*MemoryMiB,budget/8);
+            const auto arena=budget>other&&budget-other>reserve?budget-other-reserve:0;
+            auto cache=arena/5*4;
             if(requested)cache=std::min(cache,requested);
-            return {cache,std::clamp<u64>(budget/4,1024*MemoryMiB,8192*MemoryMiB)};
+            return {cache,arena};
         }
         // Account for other process resources and leave at least 2 GiB spare.
         // No reservation: these are caps on lazy allocation, not allocations.

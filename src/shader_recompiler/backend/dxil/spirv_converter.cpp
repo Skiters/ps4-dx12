@@ -1,6 +1,8 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "spirv_converter.h"
+#include "common/runtime_module_trace.h"
+#include "native_clock_compile.h"
 #include "spirv_buffer_access.h"
 #include <windows.h>
 #include <wrl/client.h>
@@ -19,7 +21,7 @@ using Microsoft::WRL::ComPtr;
 struct Module {
     HMODULE handle{};
     explicit Module(const std::wstring& path) {
-        handle = LoadLibraryExW(path.c_str(),nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
+        handle = Common::RuntimeModuleTrace::Load(path.c_str(),nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!handle) throw std::runtime_error("Cannot load compiler DLL, Win32 " + std::to_string(GetLastError()));
     }
     ~Module() { if(handle) FreeLibrary(handle); }
@@ -54,6 +56,12 @@ dxil_spirv_sysval_type SysvalOf(SystemValueMode mode) {
     throw std::runtime_error("Invalid system-value mode");
 }
 }
+uint64_t ConverterNativeFeatures(const std::wstring& converter_dll){
+    Module module{converter_dll};
+    const auto address=GetProcAddress(module.handle,"spirv_to_dxil_native_features");
+    const auto selection=GetProcAddress(module.handle,"spirv_to_dxil_set_native_clock_backend");
+    return address&&selection?reinterpret_cast<uint64_t(*)()>(address)():0;
+}
 SpirvConvertResult ConvertSpirv(const std::wstring& converter_dll,
                               std::span<const uint32_t> words,
                               const SpirvConvertOptions& options) {
@@ -75,8 +83,8 @@ SpirvConvertResult ConvertSpirv(const std::wstring& converter_dll,
             offset+=count;
         }
         if(options.stage==SpirvStage::Compute && options.compute_wave_size &&
-           (options.shader_model_minor<6 || options.compute_wave_size!=32))
-            throw std::invalid_argument("Native forced compute subgroup requires SM6.6 and 32 lanes");
+           (options.shader_model_minor<6 || (options.compute_wave_size!=32&&options.compute_wave_size!=64)))
+            throw std::invalid_argument("Native forced compute subgroup requires SM6.6 and 32 or 64 lanes");
         std::vector<uint32_t> unified_words;
         if(options.native_storage_buffer_uavs){unified_words=NativeStorageBufferUavs(words);words=unified_words;}
         auto slash=converter_dll.find_last_of(L"/\\");
@@ -85,9 +93,10 @@ SpirvConvertResult ConvertSpirv(const std::wstring& converter_dll,
         Module validator_module{directory+L"dxil.dll"};
         Module dxc_module{directory+L"dxcompiler.dll"};
         Module converter_module{converter_dll};
-        auto convert=converter_module.Symbol<decltype(&spirv_to_dxil)>(
-            options.stage==SpirvStage::Compute && options.compute_wave_size==32 ?
-                "spirv_to_dxil_compute_waves32" : "spirv_to_dxil");
+        NativeClockCompileScope clock_scope(converter_module.handle,options.native_shader_clock_backend);
+        const char* entry=options.stage!=SpirvStage::Compute||!options.compute_wave_size?"spirv_to_dxil":
+            options.compute_wave_size==64?"spirv_to_dxil_compute_waves64":"spirv_to_dxil_compute_waves32";
+        auto convert=converter_module.Symbol<decltype(&spirv_to_dxil)>(entry);
         auto free_output=converter_module.Symbol<decltype(&spirv_to_dxil_free)>("spirv_to_dxil_free");
         auto version=converter_module.Symbol<decltype(&spirv_to_dxil_get_version)>("spirv_to_dxil_get_version");
         result.converter_version=version();

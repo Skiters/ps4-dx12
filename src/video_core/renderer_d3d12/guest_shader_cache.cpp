@@ -7,9 +7,7 @@ namespace NativeDX12 {
 namespace DXIL = Shader::Backend::DX12;
 namespace {
 std::filesystem::path CacheDirectory(){
-    const auto* configured=std::getenv("SHADPS4_NATIVE_SHADER_CACHE");
-    if(configured)return std::string_view(configured)=="off"?std::filesystem::path{}:std::filesystem::path(configured);
-    return std::filesystem::path("user/cache/native-dx12/dxil");
+    return NativeCacheDirectory("dxil");
 }
 void OptionsKey(CacheKey& key,const DXIL::SpirvConvertOptions& o){
     key.Add(o.stage);key.Text(o.entry_point);key.Add(o.shader_model_minor);key.Add(o.validator_minor);
@@ -17,6 +15,7 @@ void OptionsKey(CacheKey& key,const DXIL::SpirvConvertOptions& o){
     key.Add(o.draw_sysvals);key.Add(o.workgroup_id);key.Add(o.declared_read_only_images_as_srvs);key.Add(o.inferred_read_only_images_as_srvs);
     key.Add(o.force_sample_rate_shading);key.Add(o.lower_view_index);key.Add(o.lower_view_index_to_rt_layer);
     key.Add(o.runtime_viewport_flips);key.Add(o.native_storage_buffer_uavs);key.Add(o.compute_wave_size);
+    key.Add(o.native_shader_clock_backend);
     key.Add(uint64_t(o.specializations.size()));for(const auto& s:o.specializations){key.Add(s.id);key.Add(s.raw_bits);key.Add(s.defined_on_module);}
 }
 void SaveStage(CacheKey& data,const DXIL::SpirvConvertResult& s){
@@ -53,6 +52,11 @@ GuestShaderCache::GuestShaderCache(std::wstring converter,DXIL::SpirvConvertOpti
     for(const auto& path:{std::filesystem::path(converter_),directory/L"dxcompiler.dll",directory/L"dxil.dll"})
         configuration_.Blob(CacheDigest::File(path));
 }
+void GuestShaderCache::ValidateStage(const GuestShaderStage& stage){
+    auto options=options_;options.stage=HostStage(stage.info.sw_stage);
+    const auto compiled=DXIL::ConvertSpirv(converter_,stage.EffectiveSpirv(),options);
+    if(!compiled.success||compiled.bytecode.empty())throw std::runtime_error("Native shader replacement compilation failed: "+compiled.diagnostics);
+}
 const GuestDxilStages& GuestShaderCache::Graphics(const GuestGraphicsStages& guest) {
     std::array<u64, Shader::MaxStageTypes> key{};
     for(u32 index=0;index<guest.stages.size();++index)if(guest.stages[index])key[index]=guest.stages[index]->id;
@@ -68,7 +72,7 @@ const GuestDxilStages& GuestShaderCache::Graphics(const GuestGraphicsStages& gue
         key[index] = stage->id;
         DXIL::LinkedSpirvStage input;
         input.stage = HostStage(stage->info.sw_stage);
-        input.words = stage->spirv;
+        input.words = stage->EffectiveSpirv();
         disk_key.Add(index);disk_key.Add(input.stage);disk_key.Blob(std::as_bytes(input.words));
         inputs.push_back(std::move(input));
         indices.push_back(index);
@@ -101,7 +105,7 @@ const DXIL::SpirvConvertResult& GuestShaderCache::Compute(const GuestShaderStage
     }
     auto options = options_;
     options.stage = DXIL::SpirvStage::Compute;
-    auto disk_key=configuration_;disk_key.Text("compute");OptionsKey(disk_key,options);disk_key.Blob(std::as_bytes(std::span(guest.spirv)));
+    auto disk_key=configuration_;disk_key.Text("compute");OptionsKey(disk_key,options);disk_key.Blob(std::as_bytes(guest.EffectiveSpirv()));
     std::vector<std::byte> saved;
     if(disk_.Load(disk_key.bytes,saved))try{
         CacheReader reader{saved};auto compiled=reader.Stage();if(!reader.data.empty())throw std::runtime_error("Trailing DXIL cache bytes");
@@ -109,7 +113,7 @@ const DXIL::SpirvConvertResult& GuestShaderCache::Compute(const GuestShaderStage
         return compute_.emplace(guest.id,std::move(compiled)).first->second;
     }catch(const std::exception&){}
     Diagnostics::Count("compute-dxil.compile");
-    auto compiled = DXIL::ConvertSpirv(converter_, guest.spirv, options);
+    auto compiled = DXIL::ConvertSpirv(converter_, guest.EffectiveSpirv(), options);
     if (!compiled.success) throw std::runtime_error("Guest compute DXIL compilation failed: " + compiled.diagnostics);
     CacheKey data;SaveStage(data,compiled);disk_.Store(disk_key.bytes,data.bytes);
     return compute_.emplace(guest.id, std::move(compiled)).first->second;

@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+// SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -189,22 +189,16 @@ struct GeneralSettings {
     Setting<bool> dev_kit_mode{false};
     Setting<int> extra_dmem_in_mbytes{0};
     Setting<int> extra_fmem_in_mbytes{0};
-    Setting<bool> shad_net_enabled{false};
     Setting<bool> trophy_popup_disabled{false};
     Setting<double> trophy_notification_duration{6.0};
     Setting<std::string> trophy_notification_side{"right"};
     Setting<bool> show_splash{false};
-    Setting<bool> connected_to_network{false};
     Setting<bool> discord_rpc_enabled{false};
     Setting<bool> show_fps_counter{false};
     Setting<int> console_language{1};
     Setting<int> big_picture_scale{1000};
-    Setting<std::string> shadnet_server{"srv.shadps4.net:31313"};
-    Setting<std::string> shadnet_webapi_server{"http://srv.shadps4.net:31315"};
-    Setting<std::string> signaling_info{};
-    Setting<bool> enable_upnp{true};
+    Setting<int> big_picture_folder_depth{2};
     Setting<bool> redzone_patches{false};
-
     // return a vector of override descriptors (runtime, but tiny)
     std::vector<OverrideItem> GetOverrideableFields() const {
         return std::vector<OverrideItem>{
@@ -215,7 +209,6 @@ struct GeneralSettings {
                                            &GeneralSettings::extra_dmem_in_mbytes),
             make_override<GeneralSettings>("extra_fmem_in_mbytes",
                                            &GeneralSettings::extra_fmem_in_mbytes),
-            make_override<GeneralSettings>("shad_net_enabled", &GeneralSettings::shad_net_enabled),
             make_override<GeneralSettings>("trophy_popup_disabled",
                                            &GeneralSettings::trophy_popup_disabled),
             make_override<GeneralSettings>("trophy_notification_duration",
@@ -223,26 +216,51 @@ struct GeneralSettings {
             make_override<GeneralSettings>("show_splash", &GeneralSettings::show_splash),
             make_override<GeneralSettings>("trophy_notification_side",
                                            &GeneralSettings::trophy_notification_side),
-            make_override<GeneralSettings>("connected_to_network",
-                                           &GeneralSettings::connected_to_network),
             make_override<GeneralSettings>("console_language", &GeneralSettings::console_language),
-            make_override<GeneralSettings>("shadnet_server", &GeneralSettings::shadnet_server),
-            make_override<GeneralSettings>("shadnet_webapi_server",
-                                           &GeneralSettings::shadnet_webapi_server),
-            make_override<GeneralSettings>("signaling_info", &GeneralSettings::signaling_info),
-            make_override<GeneralSettings>("enable_upnp", &GeneralSettings::enable_upnp),
             make_override<GeneralSettings>("redzone_patches", &GeneralSettings::redzone_patches)};
     }
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneralSettings, install_dirs, addon_install_dir, home_dir,
                                    sys_modules_dir, font_dir, volume_slider, neo_mode, dev_kit_mode,
-                                   extra_dmem_in_mbytes, extra_fmem_in_mbytes, shad_net_enabled,
+                                   extra_dmem_in_mbytes, extra_fmem_in_mbytes,
                                    trophy_popup_disabled, trophy_notification_duration, show_splash,
-                                   trophy_notification_side, connected_to_network,
-                                   discord_rpc_enabled, show_fps_counter, console_language,
-                                   big_picture_scale, shadnet_server, shadnet_webapi_server,
-                                   signaling_info, enable_upnp, redzone_patches)
+                                   trophy_notification_side, discord_rpc_enabled, show_fps_counter,
+                                   console_language, big_picture_scale, big_picture_folder_depth,
+                                   redzone_patches)
+
+// -------------------------------
+// Network settings
+// -------------------------------
+struct NetworkSettings {
+    Setting<bool> connected_to_network{false};
+    Setting<bool> shad_net_enabled{false};
+    Setting<std::string> shadnet_server{"srv.shadps4.net:31313"};
+    Setting<std::string> shadnet_webapi_server{"http://srv.shadps4.net:31315"};
+    Setting<std::string> signaling_info{};
+    Setting<bool> enable_upnp{true};
+    Setting<int> p2p_port{3658}; // 0 is any free port, 3658 is the default PS4 port. With UPnP
+                                 // enabled it is forwarded on the router.
+    Setting<bool> disable_https{false};
+
+    std::vector<OverrideItem> GetOverrideableFields() const {
+        return std::vector<OverrideItem>{
+            make_override<NetworkSettings>("connected_to_network",
+                                           &NetworkSettings::connected_to_network),
+            make_override<NetworkSettings>("shad_net_enabled", &NetworkSettings::shad_net_enabled),
+            make_override<NetworkSettings>("shadnet_server", &NetworkSettings::shadnet_server),
+            make_override<NetworkSettings>("shadnet_webapi_server",
+                                           &NetworkSettings::shadnet_webapi_server),
+            make_override<NetworkSettings>("signaling_info", &NetworkSettings::signaling_info),
+            make_override<NetworkSettings>("enable_upnp", &NetworkSettings::enable_upnp),
+            make_override<NetworkSettings>("p2p_port", &NetworkSettings::p2p_port),
+            make_override<NetworkSettings>("disable_https", &NetworkSettings::disable_https)};
+    }
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(NetworkSettings, connected_to_network, shad_net_enabled,
+                                   shadnet_server, shadnet_webapi_server, signaling_info,
+                                   enable_upnp, p2p_port, disable_https)
 
 // -------------------------------
 // Log settings
@@ -450,15 +468,37 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GPUSettings, window_width, window_height, int
                                    userfaultfd, inline_fetch_shader)
 
 // -------------------------------
-// Native graphics diagnostics
+// Native graphics settings
 // -------------------------------
 struct NativeGraphicsSettings {
+    Setting<s32> gpu_id{-1};
+    Setting<bool> validation_enabled{false};
+    Setting<bool> validation_core_enabled{true};
+    Setting<bool> validation_sync_enabled{false};
+    Setting<bool> validation_gpu_enabled{false};
+    Setting<bool> crash_diagnostics_enabled{false};
+    Setting<bool> host_markers{false};
+    Setting<bool> guest_markers{false};
     Setting<bool> renderdoc_enabled{false};
+    Setting<bool> pipeline_cache_enabled{false};
+    Setting<bool> pipeline_cache_archived{false};
     std::vector<OverrideItem> GetOverrideableFields() const {
-        return {make_override<NativeGraphicsSettings>("renderdoc_enabled", &NativeGraphicsSettings::renderdoc_enabled)};
+        return {make_override<NativeGraphicsSettings>("gpu_id", &NativeGraphicsSettings::gpu_id),
+                make_override<NativeGraphicsSettings>("validation_enabled", &NativeGraphicsSettings::validation_enabled),
+                make_override<NativeGraphicsSettings>("validation_core_enabled", &NativeGraphicsSettings::validation_core_enabled),
+                make_override<NativeGraphicsSettings>("validation_sync_enabled", &NativeGraphicsSettings::validation_sync_enabled),
+                make_override<NativeGraphicsSettings>("validation_gpu_enabled", &NativeGraphicsSettings::validation_gpu_enabled),
+                make_override<NativeGraphicsSettings>("crash_diagnostics_enabled", &NativeGraphicsSettings::crash_diagnostics_enabled),
+                make_override<NativeGraphicsSettings>("host_markers", &NativeGraphicsSettings::host_markers),
+                make_override<NativeGraphicsSettings>("guest_markers", &NativeGraphicsSettings::guest_markers),
+                make_override<NativeGraphicsSettings>("renderdoc_enabled", &NativeGraphicsSettings::renderdoc_enabled),
+                make_override<NativeGraphicsSettings>("pipeline_cache_enabled", &NativeGraphicsSettings::pipeline_cache_enabled),
+                make_override<NativeGraphicsSettings>("pipeline_cache_archived", &NativeGraphicsSettings::pipeline_cache_archived)};
     }
 };
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(NativeGraphicsSettings, renderdoc_enabled)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(NativeGraphicsSettings, gpu_id, validation_enabled, validation_core_enabled,
+    validation_sync_enabled, validation_gpu_enabled, crash_diagnostics_enabled, host_markers, guest_markers,
+    renderdoc_enabled, pipeline_cache_enabled, pipeline_cache_archived)
 
 // -------------------------------
 // Main manager
@@ -511,6 +551,7 @@ public:
 
 private:
     GeneralSettings m_general{};
+    NetworkSettings m_network{};
     LogSettings m_log{};
     DebugSettings m_debug{};
     InputSettings m_input{};
@@ -552,11 +593,32 @@ private:
     }
 
     static void PrintChangedSummary(const std::vector<std::string>& changed);
+    void MigrateNetworkKeys(const nlohmann::json& general, const nlohmann::json& network);
 
 public:
+    // Used by the launcher to back up / restore settings (e.g. per-game settings dialog)
+    EmulatorSettingsImpl& operator=(const EmulatorSettingsImpl& other) {
+        if (this != &other) {
+            m_shadnet_session_disabled.store(other.m_shadnet_session_disabled.load());
+            m_general = other.m_general;
+            m_network = other.m_network;
+            m_log = other.m_log;
+            m_debug = other.m_debug;
+            m_input = other.m_input;
+            m_audio = other.m_audio;
+            m_gpu = other.m_gpu;
+            m_native_graphics = other.m_native_graphics;
+            m_configMode = other.m_configMode;
+        }
+        return *this;
+    }
+
     // Add these getters to access overrideable fields
     std::vector<OverrideItem> GetGeneralOverrideableFields() const {
         return m_general.GetOverrideableFields();
+    }
+    std::vector<OverrideItem> GetNetworkOverrideableFields() const {
+        return m_network.GetOverrideableFields();
     }
     std::vector<OverrideItem> GetDebugOverrideableFields() const {
         return m_debug.GetOverrideableFields();
@@ -601,14 +663,14 @@ public:
     SETTING_FORWARD(m_general, ExtraDmemInMBytes, extra_dmem_in_mbytes)
     SETTING_FORWARD(m_general, ExtraFmemInMBytes, extra_fmem_in_mbytes)
     bool IsShadNetEnabled() const {
-        return m_general.shad_net_enabled.get(m_configMode) &&
+        return m_network.shad_net_enabled.get(m_configMode) &&
                !m_shadnet_session_disabled.load(std::memory_order_relaxed);
     }
     void SetShadNetEnabled(bool v, bool specific = false) {
-        m_general.shad_net_enabled.set(v, specific);
+        m_network.shad_net_enabled.set(v, specific);
     }
     bool IsShadNetEnabledSetting() const {
-        return m_general.shad_net_enabled.get(m_configMode);
+        return m_network.shad_net_enabled.get(m_configMode);
     }
     void SetShadNetSessionDisabled(bool v) {
         m_shadnet_session_disabled.store(v, std::memory_order_relaxed);
@@ -620,16 +682,21 @@ public:
     SETTING_FORWARD(m_general, TrophyNotificationDuration, trophy_notification_duration)
     SETTING_FORWARD(m_general, TrophyNotificationSide, trophy_notification_side)
     SETTING_FORWARD_BOOL(m_general, ShowSplash, show_splash)
-    SETTING_FORWARD_BOOL(m_general, ConnectedToNetwork, connected_to_network)
     SETTING_FORWARD_BOOL(m_general, DiscordRPCEnabled, discord_rpc_enabled)
     SETTING_FORWARD_BOOL(m_general, ShowFpsCounter, show_fps_counter)
     SETTING_FORWARD(m_general, ConsoleLanguage, console_language)
     SETTING_FORWARD(m_general, BigPictureScale, big_picture_scale)
-    SETTING_FORWARD(m_general, ShadNetServer, shadnet_server)
-    SETTING_FORWARD(m_general, ShadNetWebApiServer, shadnet_webapi_server)
-    SETTING_FORWARD(m_general, SignalingInfo, signaling_info)
-    SETTING_FORWARD_BOOL(m_general, UPnPEnabled, enable_upnp)
+    SETTING_FORWARD(m_general, BigPictureFolderDepth, big_picture_folder_depth)
     SETTING_FORWARD_BOOL(m_general, RedZonePatchingEnabled, redzone_patches)
+
+    // Network settings
+    SETTING_FORWARD_BOOL(m_network, ConnectedToNetwork, connected_to_network)
+    SETTING_FORWARD(m_network, ShadNetServer, shadnet_server)
+    SETTING_FORWARD(m_network, ShadNetWebApiServer, shadnet_webapi_server)
+    SETTING_FORWARD(m_network, SignalingInfo, signaling_info)
+    SETTING_FORWARD_BOOL(m_network, UPnPEnabled, enable_upnp)
+    SETTING_FORWARD(m_network, P2PPort, p2p_port)
+    SETTING_FORWARD_BOOL(m_network, ForcedHttpsDisabled, disable_https)
 
     // Log settings
     SETTING_FORWARD_BOOL(m_log, LogAppend, append)
@@ -715,8 +782,18 @@ public:
     SETTING_FORWARD_BOOL(m_input, MiceUsedAsMice, use_mice_as_mice)
     SETTING_FORWARD_BOOL(m_input, KeyboardUsedAsKeyboard, use_keyboard_as_keyboard)
 
-    // Native graphics diagnostics
+    // Vulkan settings
+    SETTING_FORWARD(m_native_graphics, GpuId, gpu_id)
+    SETTING_FORWARD_BOOL(m_native_graphics, ValidationEnabled, validation_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, ValidationCoreEnabled, validation_core_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, ValidationSyncEnabled, validation_sync_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, ValidationGpuEnabled, validation_gpu_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, CrashDiagnosticsEnabled, crash_diagnostics_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, HostMarkersEnabled, host_markers)
+    SETTING_FORWARD_BOOL(m_native_graphics, GuestMarkersEnabled, guest_markers)
     SETTING_FORWARD_BOOL(m_native_graphics, RenderdocEnabled, renderdoc_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, PipelineCacheEnabled, pipeline_cache_enabled)
+    SETTING_FORWARD_BOOL(m_native_graphics, PipelineCacheArchived, pipeline_cache_archived)
 
 #undef SETTING_FORWARD
 #undef SETTING_FORWARD_BOOL

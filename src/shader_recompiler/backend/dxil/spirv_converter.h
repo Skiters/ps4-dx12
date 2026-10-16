@@ -7,6 +7,10 @@
 namespace Shader::Backend::DX12 {
 enum class SpirvStage { Vertex, TessellationControl, TessellationEvaluation, Geometry, Pixel, Compute };
 enum class SystemValueMode { Zero, Native, RuntimeData };
+inline constexpr uint64_t NativeFeatureNvShaderClock=1;
+inline constexpr uint64_t NativeFeatureAmdShaderClock=2;
+inline constexpr uint64_t NativeFeatureComputeWave64=4;
+uint64_t ConverterNativeFeatures(const std::wstring& converter_dll);
 struct SpirvSpecialization { uint32_t id{}; uint64_t raw_bits{}; bool defined_on_module{}; };
 struct SpirvConvertOptions {
     SpirvStage stage = SpirvStage::Pixel;
@@ -29,6 +33,7 @@ struct SpirvConvertOptions {
     // buffer. Use one native UAV access class for all storage-buffer views.
     bool native_storage_buffer_uavs = false;
     uint32_t compute_wave_size = 0; // Zero preserves the original intermediate.
+    uint32_t native_shader_clock_backend=0;
     std::vector<SpirvSpecialization> specializations;
 };
 struct SpirvConvertResult {

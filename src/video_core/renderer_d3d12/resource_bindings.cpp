@@ -1,6 +1,9 @@
 #include "common/api_trace.h"
+#include "common/runtime_module_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "resource_bindings.h"
+#include "nv_shader_clock.h"
+#include "ags_shader_clock.h"
 #include "diagnostics.h"
 #include <dxcapi.h>
 #include <d3d12shader.h>
@@ -47,7 +50,7 @@ namespace {
 struct Module {
     HMODULE handle{};
     explicit Module(const std::wstring& path) {
-        handle=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        handle=Common::RuntimeModuleTrace::Load(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
         if(!handle)throw std::runtime_error("Cannot load DXC reflection library");
     }
     ~Module(){if(handle)FreeLibrary(handle);}
@@ -88,12 +91,19 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
             D3D12_SHADER_INPUT_BIND_DESC binding{};Check(DX12_API_CALL(reflection->GetResourceBindingDesc(i,&binding)));
             if(!binding.BindCount||binding.BindCount>1000000||binding.BindPoint>UINT_MAX-binding.BindCount)
                 throw std::runtime_error("Unbounded/oversized DXIL descriptor range is not supported yet");
-            auto type=RangeType(binding.Type);Key key{UINT(type),binding.Space,binding.BindPoint};
-            auto [it,added]=unique.emplace(key,ShaderBinding{type,binding.BindPoint,binding.Space,binding.BindCount});
+            const bool nv_clock=binding.Type==D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER&&
+                IsNvShaderClockBinding(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,binding.BindPoint,binding.Space,binding.BindCount)&&
+                binding.Name&&std::string_view(binding.Name)=="__nv_shader_extensions";
+            const bool amd_clock=binding.Type==D3D_SIT_UAV_RWBYTEADDRESS&&binding.Space==AmdClockSpace&&
+                binding.BindPoint==AmdClockRegister&&binding.BindCount==1&&binding.Name&&
+                std::string_view(binding.Name)=="__ags_shader_clock";
+            auto type=nv_clock?D3D12_DESCRIPTOR_RANGE_TYPE_UAV:RangeType(binding.Type);Key key{UINT(type),binding.Space,binding.BindPoint};
+            auto [it,added]=unique.emplace(key,ShaderBinding{type,binding.BindPoint,binding.Space,binding.BindCount,0,nv_clock,amd_clock});
             if(added)it->second.dimension=binding.Dimension;
             else if(it->second.dimension!=binding.Dimension)
                 throw std::runtime_error("Conflicting DXIL resource dimensions at one register");
-            if(!added&&it->second.count!=binding.BindCount)throw std::runtime_error("Conflicting DXIL descriptor array sizes");
+            if(!added&&(it->second.count!=binding.BindCount||it->second.nv_clock!=nv_clock||it->second.amd_clock!=amd_clock))
+                throw std::runtime_error("Conflicting DXIL descriptor array sizes or driver extension binding");
         }
     }
     std::vector<D3D12_DESCRIPTOR_RANGE> resource_ranges,sampler_ranges;
@@ -120,7 +130,8 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
         parameter.ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
     };
     table(resource_ranges,resource_parameter_);table(sampler_ranges,sampler_parameter_);
-    D3D12_ROOT_SIGNATURE_DESC desc{parameter_count,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
+    D3D12_ROOT_SIGNATURE_DESC desc{parameter_count,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAGS(
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT|D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT)};
     ComPtr<ID3DBlob> blob,errors;auto hr=DX12_API_CALL(D3D12SerializeRootSignature(&desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors));
     if(FAILED(hr))throw std::runtime_error(errors?std::string(static_cast<const char*>(DX12_API_CALL(errors->GetBufferPointer())),DX12_API_CALL(errors->GetBufferSize())):"DX12 root signature serialization failed");
     Check(DX12_API_CALL(device->CreateRootSignature(0,DX12_API_CALL(blob->GetBufferPointer()),DX12_API_CALL(blob->GetBufferSize()),IID_PPV_ARGS(&root_))));
@@ -138,6 +149,15 @@ ResourceBindings::ResourceBindings(ID3D12Device* device,const ResourceLayout& la
     };
     heap(layout.resource_count_,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,resources_,owned_resources_);
     heap(layout.sampler_count_,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,samplers_,owned_samplers_);
+    for(const auto& binding:layout.bindings_)if(binding.nv_clock){
+        D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};desc.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;
+        desc.Buffer.NumElements=1;desc.Buffer.StructureByteStride=256;
+        Uav(binding.reg,binding.space,nullptr,desc);
+    }else if(binding.amd_clock){
+        D3D12_UNORDERED_ACCESS_VIEW_DESC desc{};desc.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;
+        desc.Format=DXGI_FORMAT_R32_TYPELESS;desc.Buffer.NumElements=1;desc.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
+        Uav(binding.reg,binding.space,nullptr,desc);
+    }
 }
 void ResourceBindings::RecycleRetiredHeaps(){
     if(!pool_)return;
@@ -159,11 +179,60 @@ D3D12_CPU_DESCRIPTOR_HANDLE ResourceBindings::Slot(D3D12_DESCRIPTOR_RANGE_TYPE t
     throw std::out_of_range("Register absent from reflected DXIL resource layout");
 }
 void ResourceBindings::Retain(ID3D12Resource* resource){if(resource)keep_alive_.emplace_back(resource);}
+void ResourceBindings::TrackShaderTextureRange(ID3D12Resource* resource,ShaderTextureRange range,SIZE_T descriptor){
+    for(auto& [_,ranges]:shader_texture_ranges_)
+        std::erase_if(ranges,[descriptor](const auto& previous){return previous.descriptor==descriptor;});
+    if(resource&&range.planes){range.descriptor=descriptor;shader_texture_ranges_[resource].push_back(range);}
+}
 void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_SHADER_RESOURCE_VIEW_DESC& desc,UINT index) {
+    // Ordinary buffers/color images do not need depth attachment range data.
+    // Unknown DS views retain conservative whole-resource access.
+    ShaderTextureRange range{};
+    if(resource){
+        const auto texture=DX12_API_CALL(resource->GetDesc());
+        if(texture.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL){
+            range={0,UINT_MAX,0,UINT_MAX,3};bool known=true;
+            switch(desc.ViewDimension){
+            case D3D12_SRV_DIMENSION_TEXTURE2D:
+                range={desc.Texture2D.MostDetailedMip,desc.Texture2D.MipLevels,0,1,3};break;
+            case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
+                range={desc.Texture2DArray.MostDetailedMip,desc.Texture2DArray.MipLevels,
+                    desc.Texture2DArray.FirstArraySlice,desc.Texture2DArray.ArraySize,3};break;
+            case D3D12_SRV_DIMENSION_TEXTURE2DMS:range={0,1,0,1,3};break;
+            case D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY:
+                range={0,1,desc.Texture2DMSArray.FirstArraySlice,desc.Texture2DMSArray.ArraySize,3};break;
+            case D3D12_SRV_DIMENSION_TEXTURECUBE:range={desc.TextureCube.MostDetailedMip,desc.TextureCube.MipLevels,0,6,3};break;
+            case D3D12_SRV_DIMENSION_TEXTURECUBEARRAY:
+                if(desc.TextureCubeArray.NumCubes>UINT_MAX/6)throw std::out_of_range("Native cube SRV range overflow");
+                range={desc.TextureCubeArray.MostDetailedMip,desc.TextureCubeArray.MipLevels,
+                    desc.TextureCubeArray.First2DArrayFace,desc.TextureCubeArray.NumCubes*6,3};break;
+            default:known=false;break;
+            }
+            if(known){
+                if(range.mip>=texture.MipLevels)throw std::out_of_range("Native depth SRV first mip");
+                if(range.mips==UINT_MAX)range.mips=texture.MipLevels-range.mip;
+                if(!range.mips||range.mips>texture.MipLevels-range.mip||range.layer>=texture.DepthOrArraySize||
+                    !range.layers||range.layers>texture.DepthOrArraySize-range.layer)
+                    throw std::out_of_range("Native depth SRV range exceeds resource");
+            }
+            if(desc.Format==DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS||desc.Format==DXGI_FORMAT_R24_UNORM_X8_TYPELESS)range.planes=1;
+            else if(desc.Format==DXGI_FORMAT_X32_TYPELESS_G8X24_UINT||desc.Format==DXGI_FORMAT_X24_TYPELESS_G8_UINT)range.planes=2;
+        }
+    }
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,reg,space,index);DX12_API_CALL(device_->CreateShaderResourceView(resource,&desc,slot));Retain(resource);
+    TrackShaderTextureRange(resource,range,slot.ptr);
+    if(resource){
+        UINT planes=3; // Unknown views conservatively reference both DS planes.
+        if(desc.Format==DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS||desc.Format==DXGI_FORMAT_R24_UNORM_X8_TYPELESS)planes=1;
+        else if(desc.Format==DXGI_FORMAT_X32_TYPELESS_G8X24_UINT||desc.Format==DXGI_FORMAT_X24_TYPELESS_G8_UINT)planes=2;
+        shader_planes_[resource]|=planes;
+    }
 }
 void ResourceBindings::Uav(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc,UINT index) {
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,reg,space,index);DX12_API_CALL(device_->CreateUnorderedAccessView(resource,nullptr,&desc,slot));Retain(resource);
+    if(resource)shader_planes_[resource]|=3;
+    TrackShaderTextureRange(resource,resource&&(DX12_API_CALL(resource->GetDesc()).Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)?
+        ShaderTextureRange{0,UINT_MAX,0,UINT_MAX,3}:ShaderTextureRange{},slot.ptr);
 }
 void ResourceBindings::UnreachableUavTail(UINT reg,UINT space,UINT first){
     if(sealed_||recycled_)throw std::logic_error("Cannot alter recorded descriptor coverage");

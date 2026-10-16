@@ -161,6 +161,8 @@ private:
     bool neoModeSetting;
     bool shadnetEnabledSetting;
     bool connectedNetworkSetting;
+    bool pipelineCacheEnabledSetting{};
+    bool pipelineCacheArchiveSetting{};
     int extraDmemSetting;
     int vblankFrequencySetting;
 };

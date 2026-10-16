@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
+#include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace Serialization {
@@ -38,14 +40,16 @@ struct Archive {
     [[nodiscard]] size_t SizeBytes() const {
         return container.size();
     }
+    [[nodiscard]] size_t RemainingBytes() const {
+        return container.size() - offset;
+    }
 
     u8* CurrPtr() {
         return container.data() + offset;
     }
 
     void Advance(size_t size) {
-        ASSERT_MSG(offset + size <= container.size(),
-                   "Invalid or corrupted deserialization container/shader cache");
+        if (size > RemainingBytes()) throw std::runtime_error("Invalid deserialization extent");
         offset += size;
     }
 
@@ -62,7 +66,7 @@ struct Archive {
     explicit Archive(std::vector<u8>&& v) : container{v} {}
 
 private:
-    u32 offset{};
+    size_t offset{};
     std::vector<u8> container{};
 
     friend struct Writer;
@@ -107,8 +111,7 @@ struct Writer {
 struct Reader {
     template <typename T>
     void Read(T* ptr, size_t size) {
-        ASSERT_MSG(ar.offset + size <= ar.container.size(),
-                   "Invalid or corrupted deserialization container/shader cache");
+        if (size > ar.RemainingBytes()) throw std::runtime_error("Short deserialization input");
         std::memcpy(reinterpret_cast<void*>(ptr), ar.CurrPtr(), size);
         ar.Advance(size);
     }
@@ -123,7 +126,16 @@ struct Reader {
     void Read(auto& v) {
         size_t num_elements{};
         Read(num_elements);
-        for (int i = 0; i < num_elements; ++i) {
+        if (num_elements > ar.RemainingBytes()) throw std::runtime_error("Invalid serialized element count");
+        if constexpr (requires { v.max_size(); }) {
+            if (num_elements > v.max_size()) throw std::runtime_error("Serialized container capacity exceeded");
+        }
+        if constexpr (std::is_trivially_copyable_v<typename std::remove_reference_t<decltype(v)>::value_type>) {
+            if (num_elements > ar.RemainingBytes() / sizeof(typename std::remove_reference_t<decltype(v)>::value_type))
+                throw std::runtime_error("Short serialized container input");
+        }
+        v.clear();
+        for (size_t i = 0; i < num_elements; ++i) {
             v.emplace_back();
             Read(v.back());
         }
@@ -132,6 +144,7 @@ struct Reader {
     void Read(std::string& s) {
         size_t length{};
         Read(length);
+        if (length > ar.RemainingBytes()) throw std::runtime_error("Invalid serialized string length");
         s.resize(length);
         Read(s.data(), length);
     }

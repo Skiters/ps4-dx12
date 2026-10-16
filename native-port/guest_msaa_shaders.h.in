@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+#include <string_view>
+namespace NativeDX12 {
+inline constexpr std::string_view GuestMsaaUploadSource=R"MSAA(@_guest_msaa_upload_source@)MSAA";
+inline constexpr std::string_view GuestMsaaReadbackSource=R"MSAA(@_guest_msaa_readback_source@)MSAA";
+inline constexpr std::string_view GuestMsaaCopySource=R"MSAA(@_guest_msaa_copy_source@)MSAA";
+}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "common/runtime_module_trace.h"
 #include "resources.h"
 #include "shader_recompiler/native_dma.h"
 #include <d3dcompiler.h>
@@ -32,7 +33,7 @@ RWByteAddressBuffer exported : register(u1);
     uint ignored;faults.InterlockedAnd(id.x*4,~consumed,ignored);
 })";
         struct Library {HMODULE handle;~Library(){if(handle)FreeLibrary(handle);}} library{
-            LoadLibraryExW(L"d3dcompiler_47.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32)};
+            Common::RuntimeModuleTrace::Load(L"d3dcompiler_47.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32)};
         if(!library.handle)throw std::runtime_error("System DMA shader compiler unavailable");
         auto compile=reinterpret_cast<decltype(&D3DCompile)>(GetProcAddress(library.handle,"D3DCompile"));
         if(!compile)throw std::runtime_error("System DMA D3DCompile unavailable");

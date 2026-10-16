@@ -10,6 +10,8 @@ struct Capabilities {
     bool barycentrics{};
     bool wave_operations{};
     bool native_16bit{};
+    bool native_float64{};
+    bool pixel_shader_stencil_ref{};
     bool buffer_int64_atomics{};
     UINT min_wave_lanes{},max_wave_lanes{};
     static Capabilities Query(ID3D12Device* device) {
@@ -27,6 +29,8 @@ struct Capabilities {
         D3D12_FEATURE_DATA_D3D12_OPTIONS base{};
         Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &base, sizeof(base))));
         result.resource_binding_tier = base.ResourceBindingTier;
+        result.native_float64 = base.DoublePrecisionFloatShaderOps;
+        result.pixel_shader_stencil_ref = base.PSSpecifiedStencilRefSupported;
         D3D12_FEATURE_DATA_D3D12_OPTIONS1 waves{};
         if (SUCCEEDED(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waves, sizeof(waves))))) {
             result.wave_operations = waves.WaveOps;

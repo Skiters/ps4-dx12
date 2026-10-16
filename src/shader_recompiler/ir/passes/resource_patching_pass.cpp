@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include "shader_recompiler/info.h"
+#include "shader_recompiler/native_sampler.h"
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/ir_emitter.h"
 #include "shader_recompiler/ir/opcodes.h"
@@ -17,18 +18,6 @@
 
 namespace Shader::Optimization {
 namespace {
-
-bool NativeManualAddressing(const AmdGpu::Sampler& sampler, AmdGpu::ImageType view) {
-    const u32 axes = view == AmdGpu::ImageType::Color1D ||
-        view == AmdGpu::ImageType::Color1DArray ? 1 : view == AmdGpu::ImageType::Color3D ? 3 : 2;
-    const std::array clamps{sampler.clamp_x.Value(), sampler.clamp_y.Value(), sampler.clamp_z.Value()};
-    for (u32 axis = 0; axis < axes; ++axis)
-        if (clamps[axis] == AmdGpu::ClampMode::ClampHalfBorder ||
-            clamps[axis] == AmdGpu::ClampMode::MirrorOnceHalfBorder ||
-            clamps[axis] == AmdGpu::ClampMode::MirrorOnceBorder)
-            return true;
-    return false;
-}
 
 IR::Type BufferDataType(const IR::Inst& inst, const Profile& profile) {
     switch (inst.GetOpcode()) {
@@ -144,6 +133,9 @@ public:
                    desc.mip_fallback_mode == existing.mip_fallback_mode &&
                    desc.constant_mip_index == existing.constant_mip_index &&
                    desc.native_srgb_read == existing.native_srgb_read &&
+                   desc.native_msaa_storage == existing.native_msaa_storage &&
+                   desc.native_packed10_raw == existing.native_packed10_raw &&
+                   desc.native_raw32 == existing.native_raw32 &&
                    desc.post_op == existing.post_op;
         })};
         auto& image = image_resources[index];
@@ -248,6 +240,7 @@ void PatchBufferSharp(const ResourceDiscovery& resource, Info& info, Descriptors
                         inst.GetOpcode() == IR::Opcode::StoreBufferFormatF32,
         .post_op = resource.sharps[0].post_op,
         .post_op_dw1_mask = resource.sharps[0].post_op_data.dw1_mask,
+        .post_op_dw2_shift = resource.sharps[0].post_op_data.dw2_shift,
     });
 
     // Replace handle with binding index in buffer resource list.
@@ -256,7 +249,8 @@ void PatchBufferSharp(const ResourceDiscovery& resource, Info& info, Descriptors
 }
 
 void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors& descriptors,
-                     const Profile& profile, bool storage_read = false, bool srgb_read = false) {
+                     const Profile& profile, bool storage_read = false, bool srgb_read = false,
+                     bool packed10_raw = false, bool raw32 = false) {
     IR::Inst& inst = *resource.user;
 
     // Read image sharp.
@@ -277,13 +271,20 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
         .is_written = is_written,
         .is_r128 = bool(inst_info.is_r128),
         .native_srgb_read = srgb_read,
+        .native_packed10_raw = is_written && packed10_raw,
+        .native_raw32 = is_written && raw32,
         .post_op = resource.sharps[0].post_op,
     };
 
     auto image = image_res.GetSharp(info);
     ASSERT(image.GetType() != AmdGpu::ImageType::Invalid);
+    image_res.native_msaa_storage = profile.native_coherent_images && is_written &&
+        (image.GetType() == AmdGpu::ImageType::Color2DMsaa ||
+         image.GetType() == AmdGpu::ImageType::Color2DMsaaArray);
 
-    if (needs_mip_storage_fallback && inst.GetOpcode() == IR::Opcode::ImageSampleRaw) {
+    if (image_res.native_msaa_storage) {
+        image_res.mip_fallback_mode = MipStorageFallbackMode::None;
+    } else if (needs_mip_storage_fallback && inst.GetOpcode() == IR::Opcode::ImageSampleRaw) {
         // Sample's packed address operands differ from IMAGE_LOAD_MIP's body.
         // Never decode them using the load/store layout.
         image_res.mip_fallback_mode = MipStorageFallbackMode::DynamicIndex;
@@ -371,12 +372,14 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
                 lod_prod.IsEmpty() ? UNKNOWN_LOCATION : SharpLocationFromSource(lod_prod.Inst()),
             .is_depth = bool(inst_info.is_depth), // true for the _C (compare) opcodes
             .native_manual_sampling = profile.native_coherent_images &&
-                (image_res.is_written || (inst_info.is_gather && !inst_info.force_level0) ||
+                (image_res.is_written || AmdGpu::IsInteger(image.GetNumberFmt()) ||
+                 (inst_info.is_gather && !inst_info.force_level0) ||
                  (inst_info.is_depth && (inst_info.has_bias || inst_info.has_derivatives))),
         });
         auto& tracked_sampler = info.samplers[sampler_binding];
         tracked_sampler.native_manual_sampling |= profile.native_coherent_images &&
-            NativeManualAddressing(tracked_sampler.GetSharp(info), image.GetViewType(image_res.is_array));
+            (NativeSampler::RequiresManualAddressing(tracked_sampler.GetSharp(info), image.GetViewType(image_res.is_array)) ||
+             (!inst_info.is_gather && NativeSampler::RequiresManualAnisotropy(tracked_sampler.GetSharp(info))));
         inst.SetArg(0, ir.Imm32(image_binding | sampler_binding << 16));
     } else {
         inst.SetArg(0, ir.Imm32(image_binding));
@@ -845,7 +848,9 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
     const IR::F32 lod_clamp = inst_info.has_lod_clamp ? get_addr_reg(addr_reg++) : IR::F32{};
 
     if (profile.native_coherent_images &&
-        (image_res.is_written || NativeManualAddressing(sampler, view_type) || (inst_info.is_gather &&
+        (image_res.is_written || AmdGpu::IsInteger(image.GetNumberFmt()) ||
+         NativeSampler::RequiresManualAddressing(sampler, view_type) ||
+         (!inst_info.is_gather && NativeSampler::RequiresManualAnisotropy(sampler)) || (inst_info.is_gather &&
          (inst_info.has_lod || inst_info.has_bias || inst_info.has_lod_clamp ||
           (!inst_info.force_level0 && sampler.mip_filter == AmdGpu::MipFilter::Point &&
            (view_type == AmdGpu::ImageType::Color2D || view_type == AmdGpu::ImageType::Color2DArray)))) ||
@@ -856,15 +861,23 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
         // their hardware sample operations require SM6.8, above our SM6.6 target.
         // Explicit-LOD Gather uses the same SRV loads because native Gather
         // has no LOD operand; emitting it would silently discard the guest LOD.
-        const bool mag_linear = sampler.xy_mag_filter == AmdGpu::Filter::Bilinear;
-        const bool min_linear = sampler.xy_min_filter == AmdGpu::Filter::Bilinear;
-        const bool integer_gather = inst_info.is_gather && !inst_info.is_depth &&
-                                    AmdGpu::IsInteger(image.GetNumberFmt());
-        const bool integer_components = integer_gather &&
+        const auto linear_filter=[](AmdGpu::Filter filter){
+            return filter==AmdGpu::Filter::Bilinear||filter==AmdGpu::Filter::AnisoLinear;
+        };
+        const auto point_filter=[](AmdGpu::Filter filter){
+            return filter==AmdGpu::Filter::Point||filter==AmdGpu::Filter::AnisoPoint;
+        };
+        const bool mag_linear = linear_filter(sampler.xy_mag_filter.Value());
+        const bool min_linear = linear_filter(sampler.xy_min_filter.Value());
+        const bool anisotropic = AmdGpu::IsAnisoFilter(sampler.xy_mag_filter.Value())||
+                                 AmdGpu::IsAnisoFilter(sampler.xy_min_filter.Value());
+        const bool integer_sample = !inst_info.is_depth && AmdGpu::IsInteger(image.GetNumberFmt());
+        const bool integer_components = integer_sample &&
             image.GetNumberConversion() == AmdGpu::NumberConversion::None;
         const bool one_dimensional = view_type == AmdGpu::ImageType::Color1D ||
                                      view_type == AmdGpu::ImageType::Color1DArray;
         const bool volume = view_type == AmdGpu::ImageType::Color3D;
+        const bool cube = view_type == AmdGpu::ImageType::Cube;
         const u32 spatial_dimensions = one_dimensional ? 1 : volume ? 3 : 2;
         const std::array clamps{sampler.clamp_x.Value(), one_dimensional ?
             AmdGpu::ClampMode::ClampLastTexel : sampler.clamp_y.Value(), volume ?
@@ -879,7 +892,7 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
                    mode == AmdGpu::ClampMode::Wrap || mode == AmdGpu::ClampMode::Mirror;
         };
         const bool array_view = view_type == AmdGpu::ImageType::Color2DArray ||
-                                view_type == AmdGpu::ImageType::Color1DArray;
+                                view_type == AmdGpu::ImageType::Color1DArray || cube;
         if ((view_type != AmdGpu::ImageType::Color2D && !array_view && !one_dimensional && !volume) ||
             (volume && inst_info.is_depth) ||
             (volume && (sampler.z_filter.Value() < 1 || sampler.z_filter.Value() > 2)) ||
@@ -889,20 +902,36 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
                  (!inst_info.force_level0 || sampler.MinLod() != 0.f || image.min_lod != 0)))) ||
             sampler.filter_mode.Value() > AmdGpu::FilterMode::Max ||
             !std::ranges::all_of(clamps, supported_clamp) ||
-            (!inst_info.is_gather && !mag_linear && sampler.xy_mag_filter != AmdGpu::Filter::Point) ||
-            (!inst_info.is_gather && !min_linear && sampler.xy_min_filter != AmdGpu::Filter::Point) ||
-            (AmdGpu::IsInteger(image.GetNumberFmt()) && !integer_gather) ||
-            (integer_gather && (sampler.force_degamma ||
+            (!inst_info.is_gather && !mag_linear && !point_filter(sampler.xy_mag_filter.Value())) ||
+            (!inst_info.is_gather && !min_linear && !point_filter(sampler.xy_min_filter.Value())) ||
+            (anisotropic && sampler.max_aniso.Value() > AmdGpu::AnisoRatio::Sixteen) ||
+            (integer_sample && !inst_info.is_gather && !explicit_lod && anisotropic &&
+             sampler.max_aniso.Value() != AmdGpu::AnisoRatio::One) ||
+            (AmdGpu::IsInteger(image.GetNumberFmt()) && inst_info.is_depth) ||
+            (integer_sample && !inst_info.is_gather &&
+             (mag_linear || min_linear || (volume && sampler.z_filter.Value() != 1) ||
+              sampler.mip_filter == AmdGpu::MipFilter::Linear ||
+              sampler.filter_mode != AmdGpu::FilterMode::Blend)) ||
+            (integer_sample && (sampler.force_degamma ||
                 sampler.border_color_type == AmdGpu::BorderColor::Custom))) {
             throw std::runtime_error("Native manual sampling requires supported dimensions, filtering and shader stage");
         }
         const auto image_only = ir.Imm32(handle.U32() & 0xFFFF);
+        auto manual_coords = coords;
+        if (cube) {
+            const auto face = IR::F32{ir.CompositeExtract(coords, 2)};
+            const auto cube_index = ir.FPFloor(ir.FPDiv(face, ir.Imm32(8.f)));
+            manual_coords = ir.CompositeConstruct(
+                ir.FPSub(IR::F32{ir.CompositeExtract(coords, 0)}, ir.Imm32(1.f)),
+                ir.FPSub(IR::F32{ir.CompositeExtract(coords, 1)}, ir.Imm32(1.f)),
+                ir.FPSub(face, ir.FPMul(cube_index, ir.Imm32(2.f))));
+        }
         IR::U32 array_layer;
         if (array_view) {
             const auto dimensions = ir.ImageQueryDimension(image_only, ir.Imm32(0U), ir.Imm1(false), inst_info);
             const auto count = IR::U32{ir.CompositeExtract(dimensions, spatial_dimensions)};
             const auto last_layer = ir.ConvertUToF(32, 32, ir.ISub(count, ir.Imm32(1U)));
-            const auto layer = IR::F32{ir.CompositeExtract(coords, spatial_dimensions)};
+            const auto layer = IR::F32{ir.CompositeExtract(manual_coords, spatial_dimensions)};
             // Array coordinates are view-relative, unnormalized and never
             // filtered across slices. Clamp before integer conversion.
             array_layer = IR::U32{ir.ConvertFToU(32,
@@ -939,29 +968,57 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
             custom_border = ir.LoadBufferF32(4, ir.Imm32(binding),
                                             ir.Imm32((handle.U32() >> 16) * 4), {});
         }
+        const bool anisotropic_footprint = !inst_info.is_gather && !explicit_lod && anisotropic &&
+            sampler.max_aniso.Value() != AmdGpu::AnisoRatio::One;
+        const u32 maximum_taps = anisotropic_footprint ? u32(sampler.MaxAniso()) : 1;
+        IR::F32 tap_count = ir.Imm32(1.f);
+        std::array<IR::F32, 3> major_gradient{};
         IR::F32 calculated_lod = lod;
         if (!explicit_lod) {
             const auto dimensions = ir.ImageQueryDimension(image_only, ir.Imm32(0U), ir.Imm1(false), inst_info);
-            const auto length_squared = [&](const IR::Value& gradient, bool x_direction) {
+            std::array<IR::F32, 3> normalized_dx{}, normalized_dy{};
+            const auto length_squared = [&](const IR::Value& gradient, bool x_direction,
+                                            std::array<IR::F32, 3>& normalized) {
                 IR::F32 sum = ir.Imm32(0.0f);
                 for (u32 axis = 0; axis < spatial_dimensions; ++axis) {
-                    const auto coordinate = IR::F32{one_dimensional && !array_view ? coords : ir.CompositeExtract(coords, axis)};
+                    const auto coordinate = IR::F32{one_dimensional && !array_view ? manual_coords : ir.CompositeExtract(manual_coords, axis)};
                     IR::F32 component = inst_info.has_derivatives ? IR::F32{one_dimensional ? gradient : ir.CompositeExtract(gradient, axis)} :
                         x_direction ? ir.FPDerivativeX(coordinate) : ir.FPDerivativeY(coordinate);
-                    if (!unnormalized || !inst_info.has_derivatives)
-                        component = IR::F32{ir.FPMul(component,
-                            ir.ConvertUToF(32, 32, IR::U32{ir.CompositeExtract(dimensions, axis)}))};
+                    const auto extent = ir.ConvertUToF(32, 32, IR::U32{ir.CompositeExtract(dimensions, axis)});
+                    const bool texel_gradient = unnormalized && inst_info.has_derivatives;
+                    normalized[axis] = texel_gradient ? IR::F32{ir.FPDiv(component, extent)} : component;
+                    if (!texel_gradient)
+                        component = IR::F32{ir.FPMul(component, extent)};
                     sum = IR::F32{ir.FPAdd(sum, ir.FPMul(component, component))};
                 }
                 return sum;
             };
-            const auto footprint = IR::F32{ir.FPMax(length_squared(derivatives_dx, true), length_squared(derivatives_dy, false))};
-            calculated_lod = IR::F32{ir.FPAdd(ir.FPMul(ir.FPLog2(footprint), ir.Imm32(0.5f)),
-                                             ir.Imm32(sampler.LodBias()))};
+            const auto dx_length = length_squared(derivatives_dx, true, normalized_dx);
+            const auto dy_length = length_squared(derivatives_dy, false, normalized_dy);
+            const auto footprint = IR::F32{ir.FPMax(dx_length, dy_length)};
+            calculated_lod = IR::F32{ir.FPMul(ir.FPLog2(footprint), ir.Imm32(0.5f))};
+            if (anisotropic_footprint) {
+                const auto major = ir.FPSqrt(footprint);
+                const auto minor = ir.FPSqrt(IR::F32{ir.FPMin(dx_length, dy_length)});
+                const auto maximum = ir.Imm32(float(maximum_taps));
+                const auto ratio = ir.FPDiv(major, ir.FPMax(minor, ir.Imm32(std::numeric_limits<float>::min())));
+                const auto positive_minor = ir.FPGreaterThan(minor, ir.Imm32(0.f));
+                const auto bounded_ratio = ir.FPMin(ir.FPMax(ratio, ir.Imm32(1.f)), maximum);
+                const auto eta = IR::F32{ir.Select(ir.FPGreaterThan(major, ir.Imm32(0.f)),
+                    ir.Select(positive_minor, bounded_ratio, maximum), ir.Imm32(1.f))};
+                tap_count = IR::F32{ir.FPCeil(eta)};
+                calculated_lod = ir.FPLog2(IR::F32{ir.FPDiv(major, eta)});
+                const auto x_major = ir.FPGreaterThan(dx_length, dy_length);
+                for (u32 axis = 0; axis < spatial_dimensions; ++axis)
+                    major_gradient[axis] = IR::F32{ir.Select(x_major, normalized_dx[axis], normalized_dy[axis])};
+            }
         }
+        IR::F32 effective_bias = ir.Imm32(NativeSampler::ClampLodBias(sampler.LodBias()));
         const auto last_mip = ir.Imm32(u32(image.last_level - image.base_level));
         if (inst_info.has_bias)
-            calculated_lod = IR::F32{ir.FPAdd(calculated_lod, bias)};
+            effective_bias = IR::F32{ir.FPMin(ir.FPMax(ir.FPAdd(effective_bias, bias),
+                ir.Imm32(NativeSampler::MinLodBias)), ir.Imm32(NativeSampler::MaxLodBias))};
+        calculated_lod = IR::F32{ir.FPAdd(calculated_lod, effective_bias)};
         const bool linear_mip = sampler.mip_filter == AmdGpu::MipFilter::Linear;
         auto clamped_lod = ir.FPMax(ir.FPMin(calculated_lod, ir.Imm32(sampler.MaxLod())), ir.Imm32(sampler.MinLod()));
         if (sampler.mip_filter == AmdGpu::MipFilter::None)
@@ -985,14 +1042,14 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
             return IR::F32{ir.Select(ir.FPLessThanEqual(weight, ir.Imm32(0.0f)), a,
                 ir.Select(ir.FPLessThanEqual(ir.Imm32(1.0f), weight), b, reduced))};
         };
-        const auto sample_level = [&](IR::U32 mip, bool linear) {
+        const auto sample_level = [&](IR::U32 mip, bool linear, const IR::Value& sample_coords) {
         const bool linear_z = volume && sampler.z_filter.Value() == 2;
         const auto size = ir.ImageQueryDimension(image_only, mip, ir.Imm1(false), inst_info);
         std::array<IR::U32, 3> base{}, extent{};
         std::array<IR::F32, 3> weight{};
         for (u32 axis = 0; axis < spatial_dimensions; ++axis) {
             extent[axis] = IR::U32{ir.CompositeExtract(size, axis)};
-            auto coordinate = IR::F32{one_dimensional && !array_view ? coords : ir.CompositeExtract(coords, axis)};
+            auto coordinate = IR::F32{one_dimensional && !array_view ? sample_coords : ir.CompositeExtract(sample_coords, axis)};
             auto position = ir.FPMul(coordinate,
                                      ir.ConvertUToF(32, 32, extent[axis]));
             if (!offset.IsEmpty())
@@ -1135,10 +1192,10 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
         }
         return result;
         };
-        const auto sample_filtered = [&](IR::U32 mip) {
-            const auto magnified = sample_level(mip, mag_linear);
+        const auto sample_filtered = [&](IR::U32 mip, const IR::Value& sample_coords) {
+            const auto magnified = sample_level(mip, mag_linear, sample_coords);
             if (mag_linear == min_linear) return magnified;
-            const auto minified = sample_level(mip, min_linear);
+            const auto minified = sample_level(mip, min_linear, sample_coords);
             const auto magnifying = ir.FPLessThanEqual(clamped_lod, ir.Imm32(0.0f));
             std::array<IR::F32, 4> channels{};
             for (u32 channel = 0; channel < 4; ++channel)
@@ -1147,19 +1204,46 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
             return ir.CompositeConstruct(channels[0], channels[1], channels[2], channels[3]);
         };
         if (inst_info.is_gather) {
-            inst.ReplaceUsesWith(sample_level(first_mip, false));
+            inst.ReplaceUsesWith(sample_level(first_mip, false, manual_coords));
             return;
         }
-        auto result = sample_filtered(first_mip);
+        const auto sample_mips = [&](const IR::Value& sample_coords) {
+        auto result = sample_filtered(first_mip, sample_coords);
         if (linear_mip) {
             const auto next_mip = ir.UMin(ir.IAdd(first_mip, ir.Imm32(1U)), last_mip);
-            const auto next = sample_filtered(next_mip);
+            const auto next = sample_filtered(next_mip, sample_coords);
             const auto fraction = ir.FPSub(clamped_lod, mip_floor);
             std::array<IR::F32, 4> channels{};
             for (u32 channel = 0; channel < 4; ++channel) {
                 const auto a = IR::F32{ir.CompositeExtract(result, channel)};
                 const auto b = IR::F32{ir.CompositeExtract(next, channel)};
                 channels[channel] = combine(a, b, IR::F32{fraction});
+            }
+            result = ir.CompositeConstruct(channels[0], channels[1], channels[2], channels[3]);
+        }
+        return result;
+        };
+        const auto tap_coordinates = [&](u32 index) {
+            if (!anisotropic_footprint) return manual_coords;
+            const auto ordinal = ir.FPMin(ir.Imm32(float(index + 1)), tap_count);
+            const auto distance = ir.FPSub(ir.FPDiv(ordinal, ir.FPAdd(tap_count, ir.Imm32(1.f))), ir.Imm32(0.5f));
+            auto shifted = manual_coords;
+            for (u32 axis = 0; axis < spatial_dimensions; ++axis) {
+                const auto coordinate = IR::F32{one_dimensional && !array_view ? manual_coords : ir.CompositeExtract(manual_coords, axis)};
+                const auto displaced = ir.FPAdd(coordinate, ir.FPMul(major_gradient[axis], distance));
+                shifted = one_dimensional && !array_view ? IR::Value{displaced} : ir.CompositeInsert(shifted, displaced, axis);
+            }
+            return shifted;
+        };
+        auto result = sample_mips(tap_coordinates(0));
+        for (u32 tap = 1; tap < maximum_taps; ++tap) {
+            const auto next = sample_mips(tap_coordinates(tap));
+            const auto active = ir.FPLessThan(ir.Imm32(float(tap)), tap_count);
+            std::array<IR::F32, 4> channels{};
+            for (u32 channel = 0; channel < 4; ++channel) {
+                const auto reduced = combine(IR::F32{ir.CompositeExtract(result, channel)},
+                    IR::F32{ir.CompositeExtract(next, channel)}, ir.Imm32(1.f / float(tap + 1)));
+                channels[channel] = IR::F32{ir.Select(active, reduced, ir.CompositeExtract(result, channel))};
             }
             result = ir.CompositeConstruct(channels[0], channels[1], channels[2], channels[3]);
         }
@@ -1311,6 +1395,53 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
     // Iterate over discovered resources and patch them after finding the sharp.
     // Pass 1: Track resource sharps
     Descriptors descriptors{info};
+    const auto uses_raw32 = [&](const ResourceDiscovery& usage) {
+        if(!profile.native_coherent_images)return false;
+        const auto flags=usage.user->Flags<IR::TextureInstInfo>();
+        if(flags.is_depth)return false;
+        const ImageResource source{.sharp_fetch=ConstructSharpFetch<AmdGpu::Image>(usage.sharps[0]),
+            .is_array=bool(flags.is_array),.is_r128=bool(flags.is_r128),.post_op=usage.sharps[0].post_op};
+        const auto format=source.GetSharp(info).GetDataFmt();
+        if(u32(format)!=4&&u32(format)!=10)return false;
+        for(const auto& other:resources){
+            if(!IsImageInstruction(*other.user))continue;
+            const auto other_flags=other.user->Flags<IR::TextureInstInfo>();
+            if(other_flags.is_depth)continue;
+            const ImageResource candidate{.sharp_fetch=ConstructSharpFetch<AmdGpu::Image>(other.sharps[0]),
+                .is_array=bool(other_flags.is_array),.is_r128=bool(other_flags.is_r128),.post_op=other.sharps[0].post_op};
+            if(candidate.GetSharp(info).GetDataFmt()!=format&&NativeImageViewAliases(source,candidate,info))return true;
+        }
+        return std::ranges::any_of(info.native_pipeline_raw32_views,[&](const auto& view){
+            return !view.is_depth&&view.sharp.GetDataFmt()!=format&&NativeImageViewAliases(source,view,info);
+        });
+    };
+    const auto uses_raw_packed10 = [&](const ResourceDiscovery& usage) {
+        if(!profile.native_coherent_images)return false;
+        const auto flags=usage.user->Flags<IR::TextureInstInfo>();
+        const ImageResource source{.sharp_fetch=ConstructSharpFetch<AmdGpu::Image>(usage.sharps[0]),
+            .is_depth=bool(flags.is_depth),.is_array=bool(flags.is_array),.is_r128=bool(flags.is_r128),
+            .post_op=usage.sharps[0].post_op};
+        const auto sharp=source.GetSharp(info);
+        if(u32(sharp.GetDataFmt())!=9)return false;
+        const auto number=sharp.GetNumberFmt();
+        const auto signed_packed=[](AmdGpu::Image image){return u32(image.GetDataFmt())==9&&
+            (image.GetNumberFmt()==AmdGpu::NumberFormat::Snorm||image.GetNumberFmt()==AmdGpu::NumberFormat::Sint);};
+        if(signed_packed(sharp))return true;
+        if(number!=AmdGpu::NumberFormat::Unorm&&number!=AmdGpu::NumberFormat::Uint)return false;
+        for(const auto& other:resources){
+            if(!IsImageInstruction(*other.user))continue;
+            const auto other_flags=other.user->Flags<IR::TextureInstInfo>();
+            const ImageResource alias{.sharp_fetch=ConstructSharpFetch<AmdGpu::Image>(other.sharps[0]),
+                .is_depth=bool(other_flags.is_depth),.is_array=bool(other_flags.is_array),.is_r128=bool(other_flags.is_r128),
+                .post_op=other.sharps[0].post_op};
+            if(signed_packed(alias.GetSharp(info))&&NativeImageViewAliases(source,alias,info))return true;
+        }
+        for(const auto& write:info.native_pipeline_writes)
+            if(signed_packed(write.sharp)&&NativeImageViewAliases(source,write,info))return true;
+        for(const auto& view:info.native_pipeline_signed_packed_views)
+            if(signed_packed(view.sharp)&&NativeImageViewAliases(source,view,info))return true;
+        return false;
+    };
     const auto reads_written_image = [&](const ResourceDiscovery& usage) {
         const auto opcode = usage.user->GetOpcode();
         const bool query = opcode == IR::Opcode::ImageQueryDimensions;
@@ -1348,7 +1479,7 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
             PatchBufferSharp(usage, info, descriptors, profile);
         } else if (IsImageInstruction(inst)) {
             const auto [storage, srgb] = reads_written_image(usage);
-            PatchImageSharp(usage, info, descriptors, profile, storage, srgb);
+            PatchImageSharp(usage, info, descriptors, profile, storage, srgb, uses_raw_packed10(usage), uses_raw32(usage));
         }
     }
 

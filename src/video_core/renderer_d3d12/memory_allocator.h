@@ -4,17 +4,18 @@
 #include "common/types.h"
 #include <map>
 #include <mutex>
+#include <span>
 
 namespace NativeDX12 {
 class BufferBudgetExhausted : public std::runtime_error {
 public:
     BufferBudgetExhausted():std::runtime_error("D3D12 buffer arena residency budget exhausted"){}
 };
-
 class TextureBudgetExhausted : public std::runtime_error {
 public:
     TextureBudgetExhausted():std::runtime_error("D3D12 texture arena residency budget exhausted"){}
 };
+
 // Buffer heap arena following D3D12 placed-resource alignment and residency
 // rules.  Each lease returns its range when the last Resource copy retires.
 class PlacedBufferAllocator {
@@ -64,6 +65,7 @@ class PlacedTextureAllocator {
         std::map<u64,u64> free_ranges;std::mutex mutex;void Release(u64,u64);
     };
     ComPtr<ID3D12Device> device_;
+    ComPtr<ID3D12Device12> cast_device_;
     std::vector<std::shared_ptr<Page>> pages_;
     std::mutex mutex_;
     u64 page_size_,committed_{},budget_;
@@ -71,7 +73,11 @@ class PlacedTextureAllocator {
 public:
     explicit PlacedTextureAllocator(ID3D12Device*,u64 page_size=256ull*1024*1024,
         u64 budget=1536ull*1024*1024);
-    Resource Allocate(const D3D12_RESOURCE_DESC&,D3D12_RESOURCE_STATES,const D3D12_CLEAR_VALUE* = nullptr);
+    bool SupportsFormatCasting()const{return cast_device_!=nullptr;}
+    D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(const D3D12_RESOURCE_DESC&,
+        std::span<const DXGI_FORMAT> castable_formats={})const;
+    Resource Allocate(const D3D12_RESOURCE_DESC&,D3D12_RESOURCE_STATES,const D3D12_CLEAR_VALUE* = nullptr,
+        std::span<const DXGI_FORMAT> castable_formats={});
     void SetBudget(u64 bytes);
     u64 CommittedBytes()const{return committed_;}
 };

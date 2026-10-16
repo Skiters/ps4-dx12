@@ -12,6 +12,7 @@
 #include "libraries/kernel/time.h"
 #include "libraries/system/msgdialog.h"
 #include "video_core/amdgpu/pm4_cmds.h"
+#include "shader_recompiler/shader_name.h"
 #include <fmt/format.h>
 
 using namespace DebugStateType;
@@ -174,8 +175,7 @@ void DebugStateImpl::PushRegsDump(uintptr_t base_addr, uintptr_t header_addr,
             if (stage->address) {
                 const auto params = AmdGpu::GetParams(*stage);
                 (*dump)->stages[i] = PipelineShaderProgramDump{
-                    .name = fmt::format("stage{}_{}", int(Shader::StageFromIndex(i)),
-                                                                 params.hash),
+                    .name = Shader::GetShaderName(Shader::StageFromIndex(i), params.hash),
                     .hash = params.hash,
                     .user_data = *stage,
                     .code = std::vector<u32>{params.code.begin(), params.code.end()},
@@ -200,7 +200,7 @@ void DebugStateImpl::PushRegsDumpCompute(uintptr_t base_addr, uintptr_t header_a
 
     const auto params = AmdGpu::GetParams(cs);
     (*dump)->cs_data = PipelineComputerProgramDump{
-        .name = fmt::format("compute_{}", params.hash),
+        .name = Shader::GetShaderName(Shader::HwStage::Compute, params.hash),
         .hash = params.hash,
         .cs_program = cs,
         .code = std::vector<u32>{params.code.begin(), params.code.end()},
@@ -211,6 +211,7 @@ void DebugStateImpl::CollectShader(const std::string& name, Shader::SwStage l_st
                                    u64 module, std::span<const u32> spv,
                                    std::span<const u32> raw_code, std::span<const u32> patch_spv,
                                    bool is_patched) {
+    std::lock_guard lock(shader_dump_mutex);
     shader_dump_list.emplace_back(name, l_stage, module, std::vector<u32>{spv.begin(), spv.end()},
                                   std::vector<u32>{raw_code.begin(), raw_code.end()},
                                   std::vector<u32>{patch_spv.begin(), patch_spv.end()}, is_patched);

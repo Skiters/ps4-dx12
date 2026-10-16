@@ -3,11 +3,11 @@
 #include "resources.h"
 #include "common/types.h"
 #include <deque>
-#include <exception>
 #include <functional>
 #include <span>
 #include <thread>
 #include <condition_variable>
+#include <exception>
 
 namespace NativeDX12 {
 
@@ -50,6 +50,8 @@ class CommandScheduler {
     std::deque<PendingOperation> priority_pending_;
     mutable std::mutex pending_mutex_;
     std::condition_variable pending_cv_;
+    bool priority_in_flight_{};
+    std::exception_ptr priority_failure_;
     std::jthread priority_worker_;
 
     size_t AcquireContext();
@@ -72,10 +74,13 @@ public:
     // for further recording so unknown/partially published work is never replayed.
     u64 Submit(std::span<std::function<void(u64)>> retirements = {},
                std::span<std::function<void(u64)>> submitted = {});
-    void Wait(u64 fence) { timeline_.Wait(fence); }
+    void Wait(u64 fence);
     void Finish();
     void Collect();
     void Defer(u64 fence, std::function<void(u64)> callback, bool priority = false);
+    // Caller must release locks needed by priority callbacks before draining.
+    // Completion includes callback-owned resource destruction, not only fence.
+    void DrainPriority();
     // Records into the pending upload list. Completion belongs to the next
     // direct Submit() fence; no independent completed fence exists yet.
     void SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record);

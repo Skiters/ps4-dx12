@@ -12,11 +12,38 @@ class GuestPipelineCache {
     GuestShaderFrontend& frontend_;
     GuestShaderCache& shaders_;
     std::map<u64,std::unique_ptr<ShaderPipeline>> compute_;
-    std::map<std::string,std::unique_ptr<ShaderPipeline>> graphics_;
+    struct GraphicsRecord {
+        GuestGraphicsStages guest;
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};
+        std::vector<D3D12_INPUT_ELEMENT_DESC> inputs;
+        std::vector<std::string> semantics;
+        bool depth_bounds{};
+        ShaderPipeline::StencilFaces stencil{};
+        std::unique_ptr<ShaderPipeline> pipeline;
+        GraphicsRecord(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
+    };
+    std::map<std::string,std::unique_ptr<GraphicsRecord>> graphics_;
+    std::unique_ptr<ShaderPipeline> BuildGraphics(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    bool warming_{};
+    void RegisterPipelineData(const GuestShaderStage&);
+    void RegisterPipelineData(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,
+        bool,ShaderPipeline::StencilFaces);
+#endif
 public:
+    std::optional<u64> ReplaceShader(u64,std::span<const u32>,bool);
     GuestPipelineCache(ID3D12Device* device,std::wstring dxc,
                        GuestShaderFrontend& frontend,GuestShaderCache& shaders)
-        :device_(device),dxc_(std::move(dxc)),frontend_(frontend),shaders_(shaders) {}
+        :device_(device),dxc_(std::move(dxc)),frontend_(frontend),shaders_(shaders) {
+#ifdef SHADPS4_NATIVE_DX12_CORE
+            WarmUp();
+#endif
+        }
+#ifdef SHADPS4_NATIVE_DX12_CORE
+    ~GuestPipelineCache();
+    void WarmUp();
+    void Sync();
+#endif
     const ShaderPipeline& Compute(AmdGpu::Liverpool&);
     const ShaderPipeline& Compute(const GuestShaderStage&);
     const ShaderPipeline& Graphics(AmdGpu::Liverpool&,

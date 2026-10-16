@@ -12,6 +12,14 @@ protected:
     std::function<bool(VAddr,u64)> has_backing_;
     virtual void ResolveImages(VAddr,u64) {}
     virtual void ReleaseImageWatches(VAddr,u64) {}
+    virtual void ReleaseBufferPageWatch(VAddr address,u64 size){page_watch_->Untrack(address,size);}
+    // Separate logical GPU versions need to distinguish exposing a preceding
+    // result to a CPU reader from retiring it before a real CPU store.
+    virtual void ResolveCpuFault(VAddr address,bool writing){
+        ResolveGpuBuffers(address,1);
+        if(writing)InvalidateCpuBufferPages(address,1);
+        ReleaseImageWatches(address,1);ResolveImages(address,1);
+    }
     void CheckGpuBacking(VAddr address,u64 size,bool writing) override {
         // Core's committed/right intervals authorize protected host pages.
         // Also require the physical alias while a watch masks host access.
@@ -34,20 +42,19 @@ protected:
     void SetBufferBackingAccess(std::function<bool(VAddr,u64)> has,
         std::function<bool(VAddr,std::span<const std::byte>)> write){
         has_backing_=std::move(has);
-        if(!page_watch_)page_watch_=std::make_unique<PageWatch>([this](VAddr address){
+        if(!page_watch_)page_watch_=std::make_unique<PageWatch>([this](VAddr address,bool writing){
             std::lock_guard lock(execution_mutex_);
-            ResolveGpuBuffers(address,1);InvalidateCpuBufferPages(address,1);
-            ReleaseImageWatches(address,1);ResolveImages(address,1);
+            ResolveCpuFault(address,writing);
         });
         SetBufferOwnership([this](VAddr address,u64 size){
             if(address%4096||size%4096){Diagnostics::Count("buffer-own.unaligned");return false;}
             if(!has_backing_(address,size)){Diagnostics::Count("buffer-own.no-backing");return false;}
             ReleaseImageWatches(address,size);ResolveImages(address,size);
-            const bool tracked=page_watch_->Track(address,size);
+            const bool tracked=page_watch_->TrackOwned(address,size);
             Diagnostics::Count(tracked?"buffer-own.accepted":"buffer-own.track-conflict");
             Diagnostics::Count(tracked?"buffer-own.accepted-bytes":"buffer-own.rejected-bytes",size);
             return tracked;
-        },std::move(write),[this](VAddr address,u64 size){page_watch_->Untrack(address,size);});
+        },std::move(write),[this](VAddr address,u64 size){ReleaseBufferPageWatch(address,size);});
         SetBufferWriteWatch([this](VAddr address,u64 size){
             if(address%4096||size%4096||!has_backing_(address,size)||page_watch_->Contains(address))return false;
             return page_watch_->Track(address,size,true);
@@ -64,6 +71,7 @@ public:
     using Rasterizer::Rasterizer;
     ~GuestBufferAccess() override {
         // Retire while PageWatch and its callbacks still exist.
+        try{DrainPriorityOperations();}catch(...){}
         try{ResolveGpuBuffers(0,UINT64_MAX);Finish();ReleaseCpuBufferWatches(0,UINT64_MAX);}catch(...){}
     }
 };

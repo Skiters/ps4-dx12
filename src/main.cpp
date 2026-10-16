@@ -31,6 +31,7 @@
 #include "core/libraries/videoout/driver.h"
 #include "core/user_settings.h"
 #include "emulator.h"
+#include "imgui/big_picture/big_picture.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -94,6 +95,8 @@ int main(int argc, char* argv[]) {
     bool showFps = false;
     bool configClean = false;
     bool configGlobal = false;
+    bool bigPicture = false;
+    bool sameProcess = false;
     bool append_log{};
 
     std::optional<std::filesystem::path> addGameFolder;
@@ -109,6 +112,9 @@ int main(int argc, char* argv[]) {
     app.add_option("-p,--patch", patchFile, "Patch file to apply");
     app.add_flag("-i,--ignore-game-patch", ignoreGamePatch,
                  "Disable automatic loading of game patches");
+    app.add_flag("-b,--big-picture", bigPicture, "Start in Big Picture Mode");
+    app.add_flag("--same-process", sameProcess,
+                 "Launch the game in the same process when using Big Picture Mode");
 
 
     app.add_option("-f,--fullscreen", fullscreenStr, "Fullscreen mode (true|false)");
@@ -165,7 +171,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize main log with default config
     Common::Log::Setup("shadps4.log");
-    LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), ""));
+    LOG_INFO(Debug, "Run: {}", fmt::join(std::span(argv, argc), " "));
 
     IPC::Instance().Init();
 
@@ -175,7 +181,10 @@ int main(int argc, char* argv[]) {
     // Load configurations
     EmulatorSettings.Load();
     UserSettings.Load();
-
+    if (bigPicture) {
+        BigPictureMode::Launch(argv[0], sameProcess);
+        return 0;
+    }
 
     // ---- Utility commands ----
     if (addGameFolder) {

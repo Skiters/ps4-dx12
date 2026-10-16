@@ -9,6 +9,7 @@
 #include "shader_recompiler/backend/bindings.h"
 #include "shader_recompiler/frontend/fetch_shader.h"
 #include "shader_recompiler/info.h"
+#include "shader_recompiler/native_sampler.h"
 #include "shader_recompiler/profile.h"
 
 namespace Shader {
@@ -55,6 +56,7 @@ struct ImageSpecialization {
     u32 native_storage_mip_levels = 0;
     u32 native_resource_min_lod = 0;
     u32 native_number_format = 0;
+    u32 native_packed_format = 0;
     bool native_srgb_read = false;
     bool native_slice_view = false;
 
@@ -144,6 +146,13 @@ struct StageSpecialization {
                          if (profile_.native_coherent_images)
                              spec.native_number_format = u32(sharp.GetNumberFmt());
                          spec.is_storage = desc.is_written;
+                         const u32 data_format = u32(sharp.GetDataFmt());
+                         if (profile_.native_coherent_images && desc.is_written &&
+                             (desc.native_raw32 || (data_format == 9 && (desc.native_packed10_raw ||
+                               sharp.GetNumberFmt() == AmdGpu::NumberFormat::Snorm ||
+                               sharp.GetNumberFmt() == AmdGpu::NumberFormat::Sint)) ||
+                              (data_format >= 16 && data_format <= 19)))
+                             spec.native_packed_format = data_format;
                          spec.native_srgb_read = desc.native_srgb_read;
                          spec.native_slice_view = profile_.native_coherent_images && desc.NeedsNativeSliceView(*info);
                          if (spec.is_storage) {
@@ -164,10 +173,14 @@ struct StageSpecialization {
                      });
         if (profile_.native_coherent_images) {
             for (const auto& image : info->images)
-                native_external_image_aliases.push_back(std::ranges::any_of(
+                native_external_image_aliases.push_back(u8(std::ranges::any_of(
                     info->native_pipeline_writes, [&](const auto& write) {
                         return NativeImageViewAliases(image, write, *info);
-                    }));
+                    })) | u8(std::ranges::any_of(info->native_pipeline_signed_packed_views,
+                        [&](const auto& view){return NativeImageViewAliases(image,view,*info);}) ? 2 : 0) |
+                    u8(std::ranges::any_of(info->native_pipeline_raw32_views,
+                        [&](const auto& view){return view.sharp.GetDataFmt()!=image.GetSharp(*info).GetDataFmt()&&
+                            NativeImageViewAliases(image,view,*info);}) ? 4 : 0));
         }
         if (profile_.native_coherent_images && std::ranges::any_of(info->images,
                 [](const auto& image) { return image.is_written; })) {
@@ -190,7 +203,9 @@ struct StageSpecialization {
                      [&](auto& spec, const auto& desc, AmdGpu::Sampler sharp) {
                          spec.force_unnormalized = sharp.force_unnormalized;
                          spec.force_degamma = sharp.force_degamma;
-                         if (profile_.native_coherent_images && desc.native_manual_sampling) {
+                         if (profile_.native_coherent_images && (desc.native_manual_sampling ||
+                             NativeSampler::RequiresManualAnisotropy(sharp) ||
+                             NativeSampler::RequiresManualAddressing(sharp, AmdGpu::ImageType::Color3D))) {
                              spec.native_raw0 = sharp.raw0;
                              spec.native_raw1 = sharp.raw1;
                          }
@@ -235,6 +250,12 @@ struct StageSpecialization {
 
     bool operator==(const StageSpecialization& other) const {
         if (!Valid()) {
+            return false;
+        }
+
+        if (buffers.size() != other.buffers.size() || images.size() != other.images.size() ||
+            samplers.size() != other.samplers.size() || fmasks.size() != other.fmasks.size() ||
+            buffers.size() + images.size() + fmasks.size() > MaxStageResources) {
             return false;
         }
 

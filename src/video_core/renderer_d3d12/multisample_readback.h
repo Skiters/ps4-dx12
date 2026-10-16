@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "common/runtime_module_trace.h"
 #include "compute_pipeline.h"
 #include <d3dcompiler.h>
 
@@ -8,7 +9,7 @@ inline ComPtr<ID3DBlob> CompileMultisampleShader(const char* source,const char* 
     struct Library{HMODULE value;~Library(){if(value)FreeLibrary(value);}};
     // Returned compiler blobs retain vtables implemented by this DLL.
     static const Library library{
-        LoadLibraryExW(L"d3dcompiler_47.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32)};
+        Common::RuntimeModuleTrace::Load(L"d3dcompiler_47.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32)};
     if(!library.value)throw std::runtime_error("System multisample shader compiler unavailable");
     const auto compile=reinterpret_cast<decltype(&D3DCompile)>(GetProcAddress(library.value,"D3DCompile"));
     if(!compile)throw std::runtime_error("Multisample shader compiler entry unavailable");

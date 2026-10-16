@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/microsoft/PixEvents",
+  "revision": "b0caa735f8510f4ff60c29ef1c88101620defc5e",
+  "license": "MIT",
+  "files": ["include/PIXEventsLegacy.h", "LICENSE.txt"],
+  "header_sha256": "0db3f1f13efef9d452598ac0607a6ee703e4d7503f3a68abd301cd114af6da4d",
+  "integration": "Pinned legacy event/string metadata encoders describe native D3D12 metadata version 2. GPU markers retain their original label and ARGB color in a bounded API-sized blob; no PIX CPU runtime DLL or alternate renderer is used."
+}

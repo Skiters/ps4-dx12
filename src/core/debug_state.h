@@ -108,6 +108,7 @@ struct ShaderDump {
         : name{std::move(other.name)}, l_stage(other.l_stage), module{std::move(other.module)},
           spv{std::move(other.spv)}, isa{std::move(other.isa)},
           patch_spv{std::move(other.patch_spv)}, patch_source{std::move(other.patch_source)},
+          loaded_data{other.loaded_data},is_patched{other.is_patched},
           cache_spv_disasm{std::move(other.cache_spv_disasm)},
           cache_isa_disasm{std::move(other.cache_isa_disasm)},
           cache_patch_disasm{std::move(other.cache_patch_disasm)} {}
@@ -122,6 +123,7 @@ struct ShaderDump {
         isa = std::move(other.isa);
         patch_spv = std::move(other.patch_spv);
         patch_source = std::move(other.patch_source);
+        loaded_data=other.loaded_data;is_patched=other.is_patched;
         cache_spv_disasm = std::move(other.cache_spv_disasm);
         cache_isa_disasm = std::move(other.cache_isa_disasm);
         cache_patch_disasm = std::move(other.cache_patch_disasm);
@@ -160,6 +162,7 @@ class DebugStateImpl {
     std::vector<FrameDump> frame_dump_list{};
 
     std::vector<ShaderDump> shader_dump_list{};
+    std::mutex shader_dump_mutex;
 
 public:
     float Framerate = 1.0f / 60.0f;
@@ -260,6 +263,10 @@ public:
     void CollectShader(const std::string& name, Shader::SwStage l_stage, u64 module,
                        std::span<const u32> spv, std::span<const u32> raw_code,
                        std::span<const u32> patch_spv, bool is_patched);
+    void CompleteShaderReplacement(u64 previous,u64 replacement,bool patched){
+        std::lock_guard lock(shader_dump_mutex);
+        for(auto& shader:shader_dump_list)if(shader.module==previous){shader.module=replacement;shader.is_patched=patched;}
+    }
 
 private:
     std::optional<RegDump*> GetRegDump(uintptr_t base_addr, uintptr_t header_addr);

@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+#include <string_view>
+namespace NativeDX12 {
+inline constexpr std::string_view GuestTilingSource=R"TILER(@_guest_tiling_source@)TILER";
+}

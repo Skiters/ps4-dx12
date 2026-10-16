@@ -15,6 +15,10 @@ u64 AlignTexture(u64 value,u64 alignment){
     if(value>UINT64_MAX-(alignment-1))throw std::overflow_error("D3D12 texture allocation size overflow");
     return (value+alignment-1)&~(alignment-1);
 }
+D3D12_RESOURCE_DESC1 Description1(const D3D12_RESOURCE_DESC& d){
+    return {d.Dimension,d.Alignment,d.Width,d.Height,d.DepthOrArraySize,d.MipLevels,
+        d.Format,d.SampleDesc,d.Layout,d.Flags,{}};
+}
 }
 
 PlacedBufferAllocator::Lease::~Lease(){if(page)page->Release(offset,size);}
@@ -109,6 +113,10 @@ void PlacedTextureAllocator::Page::Release(u64 offset,u64 bytes){
 PlacedTextureAllocator::PlacedTextureAllocator(ID3D12Device* device,u64 page_size,u64 budget)
     :device_(device),page_size_(AlignHeap(page_size)),budget_(AlignHeap(budget)){
     if(!device||!page_size||budget_<page_size_)throw std::invalid_argument("invalid placed texture allocator");
+    D3D12_FEATURE_DATA_D3D12_OPTIONS12 options{};
+    if(SUCCEEDED(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12,&options,sizeof(options))))&&
+       options.EnhancedBarriersSupported&&options.RelaxedFormatCastingSupported)
+        DX12_API_CALL(device_->QueryInterface(IID_PPV_ARGS(&cast_device_)));
 }
 void PlacedTextureAllocator::SetBudget(u64 bytes){
     std::lock_guard lock(mutex_);
@@ -141,11 +149,20 @@ std::shared_ptr<PlacedTextureAllocator::Page> PlacedTextureAllocator::CreatePage
     Check(DX12_API_CALL(device_->CreateHeap(&description,IID_PPV_ARGS(&page->heap))));
     committed_+=bytes;pages_.push_back(page);return page;
 }
+D3D12_RESOURCE_ALLOCATION_INFO PlacedTextureAllocator::AllocationInfo(
+    const D3D12_RESOURCE_DESC& description,std::span<const DXGI_FORMAT> formats)const{
+    if(formats.empty())return DX12_API_CALL(device_->GetResourceAllocationInfo(0,1,&description));
+    if(!cast_device_)throw std::runtime_error("Native packed-float bit transfers require supported D3D12 format-list allocation");
+    if(formats.size()>UINT32_MAX)throw std::out_of_range("D3D12 texture format list is too large");
+    const auto extended=Description1(description);const UINT32 count=UINT32(formats.size());
+    const auto* data=formats.data();
+    return DX12_API_CALL(cast_device_->GetResourceAllocationInfo3(0,1,&extended,&count,&data,nullptr));
+}
 Resource PlacedTextureAllocator::Allocate(const D3D12_RESOURCE_DESC& description,
-    D3D12_RESOURCE_STATES initial,const D3D12_CLEAR_VALUE* clear){
+    D3D12_RESOURCE_STATES initial,const D3D12_CLEAR_VALUE* clear,std::span<const DXGI_FORMAT> formats){
     if(description.Dimension==D3D12_RESOURCE_DIMENSION_BUFFER||!description.Width)
         throw std::invalid_argument("invalid placed texture description");
-    const auto info=DX12_API_CALL(device_->GetResourceAllocationInfo(0,1,&description));
+    const auto info=AllocationInfo(description,formats);
     if(!info.SizeInBytes||info.SizeInBytes==UINT64_MAX)throw std::runtime_error("invalid D3D12 texture allocation info");
     const auto alignment=info.Alignment,bytes=AlignTexture(info.SizeInBytes,alignment);
     // Even a small MSAA resource with 64-KiB placement needs a 4-MiB heap.
@@ -167,8 +184,18 @@ Resource PlacedTextureAllocator::Allocate(const D3D12_RESOURCE_DESC& description
         if(selected_offset+bytes<end)selected->free_ranges.emplace(selected_offset+bytes,end-(selected_offset+bytes));}
     auto lease=std::make_shared<Lease>();lease->page=selected;lease->offset=selected_offset;lease->size=bytes;
     Resource resource;resource.state=initial;resource.allocation=lease;
-    try{Check(DX12_API_CALL(device_->CreatePlacedResource(selected->heap.Get(),selected_offset,&description,
-        initial,clear,IID_PPV_ARGS(&resource.handle))));}catch(...){resource.allocation.reset();throw;}
+    try{
+        if(formats.empty())Check(DX12_API_CALL(device_->CreatePlacedResource(selected->heap.Get(),selected_offset,&description,
+            initial,clear,IID_PPV_ARGS(&resource.handle))));
+        else{
+            if(initial!=D3D12_RESOURCE_STATE_COMMON&&initial!=D3D12_RESOURCE_STATE_COPY_DEST)
+                throw std::invalid_argument("Unsupported initial state for native format-list texture");
+            const auto extended=Description1(description);
+            resource.castable_formats=std::make_shared<const std::vector<DXGI_FORMAT>>(formats.begin(),formats.end());
+            Check(DX12_API_CALL(cast_device_->CreatePlacedResource2(selected->heap.Get(),selected_offset,&extended,
+                Resource::EnhancedLayout(initial),clear,UINT32(formats.size()),formats.data(),IID_PPV_ARGS(&resource.handle))));
+        }
+    }catch(...){resource.allocation.reset();throw;}
     return resource;
 }
 

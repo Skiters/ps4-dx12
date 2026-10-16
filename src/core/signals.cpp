@@ -12,6 +12,7 @@
 #include "core/cpu_patches.h" // Windows static guest red-zone protection
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/kernel/threads/exception.h"
+#include "core/libraries/kernel/threads/pthread.h"
 #include "core/signals.h"
 #include "emulator.h"
 
@@ -174,8 +175,13 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
             std::snprintf(fault_path,sizeof(fault_path),"user/log/native-fault-%lu.txt",GetCurrentProcessId());
             FILE* fault_file=std::fopen(fault_path,"wb");
             const auto print_fault=[&](const char* format,auto... values){
-                std::fprintf(stderr,format,values...);
-                if(fault_file)std::fprintf(fault_file,format,values...);
+                if constexpr(sizeof...(values)==0){
+                    std::fputs(format,stderr);
+                    if(fault_file)std::fputs(format,fault_file);
+                }else{
+                    std::fprintf(stderr,format,values...);
+                    if(fault_file)std::fprintf(fault_file,format,values...);
+                }
             };
             const auto& c = *pExp->ContextRecord;
             const auto& e = *pExp->ExceptionRecord;
@@ -384,11 +390,18 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
         UNREACHABLE_MSG("Unhandled signal {} at code address {}", sig, fmt::ptr(code_address));
     }
     case SIGSLEEP: {
+        if (thread) {
+            thread->suspended_context = context.uc_mcontext;
+            thread->is_suspended_in_signal = true;
+        }
         // Sleep thread until signal is received again
         sigset_t sigset;
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGSLEEP);
         sigwait(&sigset, &sig);
+        if (thread) {
+            thread->is_suspended_in_signal = false;
+        }
         break;
     }
     case SIGUSR1:

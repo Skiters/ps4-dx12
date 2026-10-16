@@ -65,6 +65,7 @@ enum class SharpFetchPostOp : u8 {
     // For buffers
     BitwiseOrDw1WithImm,
     OffsetByProgramBase,
+    ClearStrideAndBitshiftDw2WithImm,
     // For images,
     ConvertCubeTo2DArray,
     // For samplers
@@ -93,6 +94,7 @@ struct BufferResource {
     bool is_formatted{};
     SharpFetchPostOp post_op{};
     u32 post_op_dw1_mask{};
+    u32 post_op_dw2_shift{};
 
     bool IsSpecial() const noexcept {
         return buffer_type != BufferType::Guest;
@@ -105,6 +107,9 @@ struct BufferResource {
         }
         if (post_op == SharpFetchPostOp::BitwiseOrDw1WithImm) {
             reinterpret_cast<u32*>(&buffer)[1] |= post_op_dw1_mask;
+        } else if (post_op == SharpFetchPostOp::ClearStrideAndBitshiftDw2WithImm) {
+            buffer.stride = 0;
+            buffer.num_records <<= post_op_dw2_shift;
         } else if (post_op == SharpFetchPostOp::OffsetByProgramBase) {
             buffer.base_address += info.pgm_base;
         }
@@ -130,6 +135,9 @@ struct ImageResource {
     bool is_written{};
     bool is_r128{};
     bool native_srgb_read{};
+    bool native_msaa_storage{};
+    bool native_packed10_raw{};
+    bool native_raw32{};
     u8 constant_mip_index{};
     MipStorageFallbackMode mip_fallback_mode{};
     SharpFetchPostOp post_op{};
@@ -190,6 +198,7 @@ struct ImageResource {
 
     u32 NumBindings(const auto& info) const {
         const AmdGpu::Image tsharp = GetSharp(info);
+        if (native_msaa_storage) return tsharp.NumSamples();
         return (mip_fallback_mode == MipStorageFallbackMode::DynamicIndex)
                    ? (tsharp.last_level - tsharp.base_level + 1)
                    : 1;
@@ -211,7 +220,11 @@ inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
     left.dst_sel_w = right.dst_sel_w = 7;
     // These families have typeless native storage with fully typed UAV views.
     // Packed/compressed families without that representation stay distinct.
-    if (left.data_format == right.data_format) {
+    if ((left.data_format == 4 || left.data_format == 10) &&
+        (right.data_format == 4 || right.data_format == 10)) {
+        left.data_format = right.data_format = 4;
+        left.num_format = right.num_format = 0;
+    } else if (left.data_format == right.data_format) {
         switch (left.data_format) {
         case 1: case 2: case 3: case 4: case 5:
         case 9: case 10: case 11: case 12: case 14:
@@ -235,18 +248,20 @@ struct NativeImageWrite {
 // descriptors but can share the same physical 1D/2D array backing.
 inline bool NativeImageArrayViewsCompatible(AmdGpu::ImageType type, bool a, bool b) {
     return a == b || type == AmdGpu::ImageType::Color1DArray ||
-           type == AmdGpu::ImageType::Color2DArray;
+           type == AmdGpu::ImageType::Color2DArray || type == AmdGpu::ImageType::Color2DMsaaArray;
 }
 inline bool NativeImageViewAliases(const ImageResource& a, const ImageResource& b,
                                    const auto& info) {
     // Comparison is an access operation, not a different physical allocation.
     // GetSharp validates depth formats before matching the actual storage.
+    if ((a.is_depth || b.is_depth) && a.GetSharp(info).GetDataFmt() != b.GetSharp(info).GetDataFmt()) return false;
     return NativeImageArrayViewsCompatible(a.GetSharp(info).GetType(), a.is_array, b.is_array) &&
            NativeImageStorageAliases(a.GetSharp(info), b.GetSharp(info));
 }
 
 inline bool NativeImageViewAliases(const ImageResource& source, const NativeImageWrite& write,
                                    const auto& info) {
+    if ((source.is_depth || write.is_depth) && source.GetSharp(info).GetDataFmt() != write.sharp.GetDataFmt()) return false;
     return NativeImageArrayViewsCompatible(source.GetSharp(info).GetType(), source.is_array, write.is_array) &&
            NativeImageStorageAliases(source.GetSharp(info), write.sharp);
 }

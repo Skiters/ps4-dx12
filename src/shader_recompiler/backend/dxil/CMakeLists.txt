@@ -1,5 +1,4 @@
 # Standalone native-port compiler modules. Include from the separate native-port build.
-# SHADPS4_REFERENCE_BUILD_DIR points to the existing read-only dependency build.
 if(NOT WIN32)
     message(FATAL_ERROR "Native DXIL compiler currently requires Windows")
 endif()
@@ -8,7 +7,7 @@ set(SHADPS4_DXIL_REPO_ROOT "${SHADPS4_DXIL_SOURCE_ROOT}/..")
 set(SHADPS4_DXC_INCLUDE_DIR "${SHADPS4_DXIL_REPO_ROOT}/../fsr-sdk-local/sdk/tools/ffx_shader_compiler/libs/dxc/inc" CACHE PATH "Existing DXC API headers")
 set(SHADPS4_DEPENDENCY_ROOT "${SHADPS4_DXIL_REPO_ROOT}" CACHE PATH "Read-only reference source dependencies")
 add_library(shadps4_dxil_compiler STATIC hlsl_emitter.cpp dxil_compiler.cpp)
-set(SHADPS4_MESA_DXIL_ROOT "${SHADPS4_DXIL_REPO_ROOT}/../mesa-dxil-source" CACHE PATH "Offline Mesa SPIR-V to DXIL source headers")
+set(SHADPS4_MESA_DXIL_ROOT "${SHADPS4_DEPENDENCY_ROOT}/externals/mesa-kosmickrisp/externals/mesa" CACHE PATH "Pinned offline Mesa SPIR-V to DXIL source headers")
 target_sources(shadps4_dxil_compiler PRIVATE spirv_converter.cpp)
 target_include_directories(shadps4_dxil_compiler PRIVATE
     "${SHADPS4_MESA_DXIL_ROOT}/src/microsoft/spirv_to_dxil"

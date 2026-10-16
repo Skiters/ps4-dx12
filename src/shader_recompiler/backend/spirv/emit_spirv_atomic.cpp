@@ -205,9 +205,13 @@ Id FixImageAtomicCoords(EmitContext& ctx, Id coords, AmdGpu::ImageType image_typ
 Id ImageAtomicU32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id value,
                   Id (Sirit::Module::*atomic_func)(Id, Id, Id, Id, Id)) {
     const auto& texture = ctx.images[handle & 0xFFFF];
+    Id image = texture.id;
+    if (texture.native_msaa_storage)
+        image = ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type),
+                                  image, std::array{ctx.u32_zero_value});
     const Id fixed_coords{FixImageAtomicCoords(ctx, coords, texture.view_type, texture.native_slice_view)};
     const Id pointer{
-        ctx.OpImageTexelPointer(ctx.image_u32, texture.id, fixed_coords, ctx.ConstU32(0U))};
+        ctx.OpImageTexelPointer(ctx.image_u32, image, fixed_coords, ctx.ConstU32(0U))};
     const auto [scope, semantics]{AtomicArgs(ctx)};
     return (ctx.*atomic_func)(ctx.U32[1], pointer, scope, semantics, value);
 }
@@ -215,9 +219,13 @@ Id ImageAtomicU32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id va
 Id ImageAtomicF32(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id value,
                   Id (Sirit::Module::*atomic_func)(Id, Id, Id, Id, Id)) {
     const auto& texture = ctx.images[handle & 0xFFFF];
+    Id image = texture.id;
+    if (texture.native_msaa_storage)
+        image = ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type),
+                                  image, std::array{ctx.u32_zero_value});
     const Id fixed_coords{FixImageAtomicCoords(ctx, coords, texture.view_type, texture.native_slice_view)};
     const Id pointer{
-        ctx.OpImageTexelPointer(ctx.image_f32, texture.id, fixed_coords, ctx.ConstU32(0U))};
+        ctx.OpImageTexelPointer(ctx.image_f32, image, fixed_coords, ctx.ConstU32(0U))};
     const auto [scope, semantics]{AtomicArgs(ctx)};
     return (ctx.*atomic_func)(ctx.F32[1], pointer, scope, semantics, value);
 }
@@ -226,9 +234,13 @@ Id ImageAtomicU32CmpSwap(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords
                          Id cmp_value,
                          Id (Sirit::Module::*atomic_func)(Id, Id, Id, Id, Id, Id, Id)) {
     const auto& texture = ctx.images[handle & 0xFFFF];
+    Id image = texture.id;
+    if (texture.native_msaa_storage)
+        image = ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::UniformConstant, texture.image_type),
+                                  image, std::array{ctx.u32_zero_value});
     const Id fixed_coords{FixImageAtomicCoords(ctx, coords, texture.view_type, texture.native_slice_view)};
     const Id pointer{
-        ctx.OpImageTexelPointer(ctx.image_u32, texture.id, fixed_coords, ctx.ConstU32(0U))};
+        ctx.OpImageTexelPointer(ctx.image_u32, image, fixed_coords, ctx.ConstU32(0U))};
     const auto [scope, semantics]{AtomicArgs(ctx)};
     return (ctx.*atomic_func)(ctx.U32[1], pointer, scope, semantics, semantics, value, cmp_value);
 }

@@ -23,7 +23,9 @@ public:
     explicit GuestShaderCache(std::wstring converter,
         Shader::Backend::DX12::SpirvConvertOptions options = {});
     u64 PersistentHits()const{return disk_hits_;}
+    std::span<const std::byte> ConfigurationIdentity()const{return configuration_.bytes;}
     const GuestDxilStages& Graphics(const GuestGraphicsStages&);
     const Shader::Backend::DX12::SpirvConvertResult& Compute(const GuestShaderStage&);
+    void ValidateStage(const GuestShaderStage&);
 };
 }

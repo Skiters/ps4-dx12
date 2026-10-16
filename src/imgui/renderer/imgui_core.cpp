@@ -5,6 +5,7 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
+#include <optional>
 #include <SDL3/SDL_events.h>
 #include <imgui.h>
 
@@ -19,9 +20,14 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_dx12.h"
 #include "video_core/renderer_d3d12/resources.h"
+#include "video_core/renderer_d3d12/presenter.h"
+#include "common/elf_info.h"
+#include "core/libraries/system/systemservice.h"
 #include "imgui_internal.h"
 #include "sdl_window.h"
 #include "texture_manager.h"
+
+bool ImGui_ImplDX12_SetSurfaceFormat(DXGI_FORMAT);
 
 
 
@@ -39,11 +45,42 @@ static NativeDX12::ComPtr<ID3D12DescriptorHeap> srv_heap, rtv_heap;
 static std::array<bool, 2048> srv_used{};
 static UINT srv_stride{};
 static bool initialized{};
+static NativeDX12::ComPtr<ID3D12Fence> submitted_fence;
+static u64 submitted_value{};
+static std::array<u64,3> render_fences{};
+static UINT next_render_slot{},pending_render_slot{};
+static bool pending_render{};
+static bool prepared_display{};
+static std::optional<ImGui::RefCountedTexture> splash_image;
+static const std::function<void()>* game_renderer{};
+static ID3D12GraphicsCommandList* game_commands{};
 static std::atomic<std::uint32_t> force_gamepad_input_capture_count{0};
 
 namespace ImGui {
 
 namespace Core {
+
+static void WaitSubmission(u64 value){
+    if(!submitted_fence||!value)return;
+    const auto completed=submitted_fence->GetCompletedValue();
+    if(completed==UINT64_MAX)throw std::runtime_error("Native UI device removed");
+    if(completed>=value)return;
+    const HANDLE event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+    if(!event)throw std::runtime_error("Native UI fence event allocation failed");
+    const auto result=submitted_fence->SetEventOnCompletion(value,event);
+    if(FAILED(result)){CloseHandle(event);NativeDX12::Check(result);}
+    const auto waited=WaitForSingleObject(event,INFINITE);CloseHandle(event);
+    if(waited!=WAIT_OBJECT_0)throw std::runtime_error("Native UI fence wait failed");
+    if(submitted_fence->GetCompletedValue()==UINT64_MAX)throw std::runtime_error("Native UI device removed during wait");
+}
+
+void Submitted(ID3D12Fence* fence,unsigned long long value){
+    std::lock_guard guard(ui_mutex);if(!initialized||!pending_render)return;
+    if(!fence||!value||(submitted_fence&&submitted_fence.Get()!=fence))
+        throw std::invalid_argument("Native UI submission changed fence domain");
+    submitted_fence=fence;submitted_value=value;
+    render_fences[pending_render_slot]=value;pending_render=false;
+}
 
 void AcquireGamepadInputCapture() {
     force_gamepad_input_capture_count.fetch_add(1, std::memory_order_relaxed);
@@ -163,14 +200,23 @@ void OnResize() {
     Sdl::OnResize();
 }
 
+void OnSurfaceFormatChange(DXGI_FORMAT format){
+    std::lock_guard guard(ui_mutex);if(!initialized)return;
+    WaitSubmission(submitted_value);
+    if(!ImGui_ImplDX12_SetSurfaceFormat(format))throw std::runtime_error("Native UI format pipeline creation failed");
+}
+
 void Shutdown() {
     std::lock_guard guard(ui_mutex);
     if (!initialized) return;
+    WaitSubmission(submitted_value);
+    splash_image.reset();
     TextureManager::StopWorker();
-    TextureManager::Submit();
+    TextureManager::Shutdown(submitted_fence.Get(),submitted_value);
     ImGui_ImplDX12_Shutdown(); Sdl::Shutdown();
     delete[] GetIO().IniFilename; delete[] GetIO().LogFilename;
     DestroyContext(); initialized=false; srv_heap.Reset(); rtv_heap.Reset(); srv_used.fill(false);
+    submitted_fence.Reset();submitted_value=0;render_fences.fill(0);next_render_slot=0;pending_render=false;prepared_display=false;
 }
 
 bool ProcessEvent(SDL_Event* event) {
@@ -233,7 +279,7 @@ ImGuiID NewFrame(bool is_reusing_frame) {
     }
 
     ImGui_ImplDX12_NewFrame();
-    TextureManager::Submit();
+    TextureManager::Submit(submitted_fence.Get(),submitted_value);
     Sdl::NewFrame(is_reusing_frame);
     ImGui::NewFrame();
     SetKeyOwner(ImGuiKey_GamepadFaceUp, ImHashStr("shadps4/pad"));
@@ -252,15 +298,87 @@ ImGuiID NewFrame(bool is_reusing_frame) {
     return dockId;
 }
 
-void Render(ID3D12GraphicsCommandList* commands, ID3D12Resource* target, bool reusing) {
-    std::lock_guard guard(ui_mutex); if (!initialized) return;
-    NewFrame(reusing); ImGui::Render();
+static void RenderPrepared(ID3D12GraphicsCommandList* commands,ID3D12Resource* target){
+    ImGui::Render();prepared_display=false;
     auto device=NativeDX12::ComPtr<ID3D12Device>{}; NativeDX12::Check(target->GetDevice(IID_PPV_ARGS(&device)));
     const auto handle=rtv_heap->GetCPUDescriptorHandleForHeapStart();
     device->CreateRenderTargetView(target,nullptr,handle);
     commands->OMSetRenderTargets(1,&handle,FALSE,nullptr);
     ID3D12DescriptorHeap* heaps[]{srv_heap.Get()}; commands->SetDescriptorHeaps(1,heaps);
-    ImGui_ImplDX12_RenderDrawData(GetDrawData(),commands);
+    auto* data=GetDrawData();
+    if(data->DisplaySize.x>0&&data->DisplaySize.y>0){
+        pending_render_slot=next_render_slot++%UINT(render_fences.size());
+        WaitSubmission(render_fences[pending_render_slot]);pending_render=true;
+        ImGui_ImplDX12_RenderDrawData(data,commands);
+    }
+}
+
+NativeDX12::PresentRegion PrepareDisplay(unsigned width,unsigned height,bool reusing){
+    std::lock_guard guard(ui_mutex);
+    if(!initialized||!width||!height)throw std::invalid_argument("Invalid native UI game extent");
+    if(prepared_display){ImGui::EndFrame();prepared_display=false;}
+    const auto dock=NewFrame(reusing);prepared_display=true;
+    NativeDX12::PresentRegion region{0,0,width,height,{0,0,LONG(width),LONG(height)},false};
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2{0,0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4{0,0,0,1});
+    ImGui::SetNextWindowDockID(dock,ImGuiCond_Once);
+    if(ImGui::Begin("Display##game_display",nullptr,ImGuiWindowFlags_NoNav)){
+        ImTextureID splash_id{};unsigned image_width=width,image_height=height;
+        if(Libraries::SystemService::IsSplashVisible()){
+            if(!splash_image){
+                splash_image.emplace();const auto& data=Common::ElfInfo::Instance().GetSplashData();
+                if(!data.empty())splash_image=ImGui::RefCountedTexture::DecodePngTexture(data);
+            }
+            if(splash_image.value()){
+                const auto image=splash_image->GetTexture();splash_id=image.im_id;
+                image_width=image.width;image_height=image.height;
+            }
+        }
+        const auto available=ImGui::GetContentRegionAvail();
+        if(available.x>=1&&available.y>=1){
+            unsigned fit_width=unsigned(available.x),fit_height=unsigned(available.y);
+            const float aspect=float(image_width)/float(image_height);
+            if(aspect>float(fit_width)/float(fit_height))fit_height=unsigned(float(fit_width)/aspect);
+            else fit_width=unsigned(float(fit_height)*aspect);
+            if(fit_width&&fit_height){
+                const auto start=ImGui::GetCursorStartPos();
+                ImGui::SetCursorPos({start.x+(unsigned(available.x)-fit_width)/2,
+                    start.y+(unsigned(available.y)-fit_height)/2});
+                const auto position=ImGui::GetCursorScreenPos();const auto origin=ImGui::GetMainViewport()->Pos;
+                auto* draws=ImGui::GetWindowDrawList();const auto clip_min=draws->GetClipRectMin(),clip_max=draws->GetClipRectMax();
+                region={LONG(position.x-origin.x),LONG(position.y-origin.y),fit_width,fit_height,
+                    {LONG(clip_min.x-origin.x),LONG(clip_min.y-origin.y),LONG(clip_max.x-origin.x),LONG(clip_max.y-origin.y)},!splash_id};
+                const ImVec2 extent{float(fit_width),float(fit_height)};
+                if(splash_id)ImGui::Image(splash_id,extent);
+                else{
+                    draws->AddCallback([](const ImDrawList*,const ImDrawCmd*){
+                        if(!game_renderer||!game_commands)throw std::logic_error("Native UI game callback has no renderer");
+                        (*game_renderer)();
+                        ID3D12DescriptorHeap* heaps[]{srv_heap.Get()};game_commands->SetDescriptorHeaps(1,heaps);
+                    },nullptr);
+                    ImGui::Dummy(extent);draws->AddCallback(ImDrawCallback_ResetRenderState,nullptr);
+                }
+                if(EmulatorSettings.IsNullGPU())::Core::Devtools::Layer::DrawNullGpuNotice();
+            }
+        }
+    }
+    ImGui::End();ImGui::PopStyleVar(3);ImGui::PopStyleColor();
+    return region;
+}
+
+void RenderDisplay(ID3D12GraphicsCommandList* commands,ID3D12Resource* target,const std::function<void()>& game){
+    std::lock_guard guard(ui_mutex);
+    if(!initialized||!prepared_display||!game)throw std::logic_error("Native UI display was not prepared");
+    game_renderer=&game;game_commands=commands;
+    try{RenderPrepared(commands,target);}catch(...){game_renderer=nullptr;game_commands=nullptr;throw;}
+    game_renderer=nullptr;game_commands=nullptr;
+}
+
+void Render(ID3D12GraphicsCommandList* commands, ID3D12Resource* target, bool reusing) {
+    std::lock_guard guard(ui_mutex); if (!initialized) return;
+    NewFrame(reusing);RenderPrepared(commands,target);
 }
 
 bool MustKeepDrawing() {
