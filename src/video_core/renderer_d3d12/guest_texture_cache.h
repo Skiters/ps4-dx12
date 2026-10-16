@@ -99,6 +99,7 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTexture
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view);
+bool MatchesGuestMipLayout(const GuestTextureLayout&,const GuestTextureLayout&);
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view);
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc>);
 bool CompatibleGuestPackedStorage(GuestTextureDesc source,GuestTextureDesc view);

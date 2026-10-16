@@ -120,7 +120,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::vector<Rasterizer::ShaderBufferRequest> requests;
     struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;bool sample_storage;
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
-        std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;};
+        std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;
+        std::optional<size_t> ordered_transfer;};
     std::vector<ImagePending> images;
     std::vector<std::shared_ptr<void>> writable_block_parent_pins;
     const auto find_block_parent=[textures](const GuestTextureDesc& desc,const GuestTextureLayout& layout){
@@ -397,7 +398,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(!image.null_resource&&b.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<b.address+b.size&&
             image.desc.writable&&b.written){
             if(!textures||!textures->CanRetainBufferAlias(image.desc,image.layout)||
-               b.WriteRange().address!=image.desc.address)
+               (b.WriteRange().address!=image.desc.address&&stages.size()!=1))
                 throw std::runtime_error("Native cross-stage writable buffer/image alias needs shared cache coherency: buffer="+
                 std::to_string(b.address)+" bytes="+std::to_string(b.size)+" written="+std::to_string(b.written)+
                 " image="+std::to_string(image.desc.address)+" bytes="+std::to_string(image.layout.guest_bytes)+" writable="+std::to_string(image.desc.writable));
@@ -544,9 +545,20 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                         image->desc.address<desc.address+layout.guest_bytes&&
                         desc.address<image->desc.address+image->layout.guest_bytes;
                 });
+                // BindTextures follows BindBuffers in the pinned stage. Matching
+                // image descriptors consume I (or the refreshed prewrite B),
+                // while buffer descriptors keep their own arena/stream version.
+                // Distinct physical interpretations still need their transfer
+                // plan; do not infer coherence merely from overlapping addresses.
+                const bool compatible_images=std::ranges::all_of(images,[&](const auto& image){
+                    if(image.null_resource||image.desc.address>=desc.address+layout.guest_bytes||
+                       desc.address>=image.desc.address+image.layout.guest_bytes)return true;
+                    return CompatibleGuestShaderStorage(desc,image.desc)&&
+                        MatchesGuestMipLayout(layout,image.layout)&&
+                        (!image.desc.writable||textures->CanRetainBufferAlias(image.desc,image.layout));
+                });
                 if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
-                   !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
-                     !compatible_uavs||
+                   !compatible_images||candidates!=1||!unique||!compatible_uavs||
                    !pending[i].original_bytes||pending[i].original_bytes!=requests[i].size||
                    (reads_image&&!clean_small&&(!image_fits_reader_arena||
                     (!image_fits_reader_blocks&&!covering_writer)))||
@@ -674,7 +686,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // independent image. Keep I here instead of capturing unrelated B0.
         // Capturing another image can reserve memory, so pin this witness until
         // Upload has selected and retained its descriptor resource.
-        if(!image.desc.writable)if(auto* retained=textures->FindIndependentUploadSource(image.desc,image.layout)){
+        if(auto* retained=textures->FindIndependentUploadSource(image.desc,image.layout)){
             preserved_image_pins.push_back(textures->PinBinding(*retained));continue;
         }
         image.current_buffer_snapshot=!image.desc.writable&&std::ranges::any_of(
@@ -683,6 +695,19 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 return buffer.written&&write.address==image.desc.address&&write.size;
             });
         const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
+        // An earlier formatted buffer bind may already have retiled I into B.
+        // A later exact-base writer invalidates the logical I before images are
+        // bound, but it must not erase that recorded prewrite transfer. Refresh
+        // images from B1, not the older B0 captured before PrepareShaderBuffers.
+        // The immutable tiled result already includes the original B padding.
+        const auto retiled=std::ranges::find_if(ordered_formatted_images,[&](const auto& transfer){
+            return transfer.address==key.first&&transfer.bytes==key.second&&transfer.tiled.handle;
+        });
+        if(retiled!=ordered_formatted_images.end()&&
+           GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)){
+            image.ordered_transfer=size_t(retiled-ordered_formatted_images.begin());
+            continue;
+        }
         if(GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)&&
            rasterizer.IsGpuBufferModified(key.first,key.second)){
             auto existing=gpu_image_snapshots.find(key);
@@ -720,6 +745,19 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // a reselected logical entry, and keep all resident aliases on one arena.
         rasterizer.CopyToPreparedShaderBuffer(transfer.address,transfer.bytes,transfer.tiled,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+    for(auto& image:images)if(image.ordered_transfer){
+        auto& transfer=ordered_formatted_images.at(*image.ordered_transfer);
+        const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
+        auto [existing,inserted]=gpu_image_snapshots.try_emplace(key);
+        if(inserted){
+            // Resource copies carry independent legacy state fields. Publish
+            // the immutable read view only after the final buffer copy, using
+            // the actual COPY_SOURCE -> shader-read transition of this resource.
+            transfer.tiled.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            existing->second=std::make_shared<Resource>(transfer.tiled);
+        }
+        image.gpu_snapshot=existing->second;
     }
     for(const auto& [index,value]:formatted_metadata){
         const auto& request=requests[index];

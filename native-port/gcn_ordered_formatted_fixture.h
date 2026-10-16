@@ -7,6 +7,7 @@
 #include "gcn_bc_mip_expansion_fixture.h"
 #include "gcn_bc_partial_expansion_fixture.h"
 #include "gcn_bc_writable_alias_fixture.h"
+#include "gcn_mixed_formatted_fixture.h"
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include <algorithm>
@@ -597,6 +598,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     drain.armed = false;
     RunOrderedDisjointGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunReadonlyRevalidationGcnFixture(rasterizer, gpu, profile, memory, backing, base);
+    RunMixedFormattedGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunBcBlockExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunBcMipExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunBcPartialExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);

@@ -1251,7 +1251,6 @@ bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const Gue
         layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
-namespace {
 bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLayout& target){
     if(source.guest_bytes!=target.guest_bytes||source.bytes_per_pixel!=target.bytes_per_pixel||
        source.block_extent!=target.block_extent||source.logical_bytes!=target.logical_bytes||
@@ -1262,6 +1261,7 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
     }
     return true;
 }
+namespace {
 bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
     GuestTextureDesc view,const GuestTextureLayout& view_layout){
     // Pinned texture_cache/host_compatibility.cpp groups ordinary uncompressed
