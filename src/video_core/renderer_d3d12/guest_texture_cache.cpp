@@ -1202,19 +1202,30 @@ bool GuestTextureCache::EvictPressureVictim(uint64_t completed,Entry* preserve){
     auto victim=entries_.end();
     for(auto it=entries_.begin();it!=entries_.end();++it)
         if(it->get()!=preserve&&!(*it)->BindingPinned()&&!(*it)->pending&&(*it)->fence<=completed&&
-           // Original GC skips a clean GPU-modified tiled image: its
-           // unsupported download cannot replace the physical buffer domain.
-           // A dirty independent version is also not a valid retirement source.
+           // Pinned GC skips tiled SafeToDownload images, but frees Dirty I
+           // without a download. An invalid independent I cannot replace B.
            !((*it)->gpu_owned&&(*it)->buffer_alias_version&&
-             ((*it)->logical_dirty||(*it)->desc.tile_mode!=uint32_t(AmdGpu::TileMode::DisplayLinearAligned)||(*it)->desc.samples!=1))&&
+             (*it)->HasValidLogicalImage()&&
+             ((*it)->desc.tile_mode!=uint32_t(AmdGpu::TileMode::DisplayLinearAligned)||(*it)->desc.samples!=1))&&
            (!(*it)->readback_pool||(*it)->readback_pool.use_count()==1)&&
            (victim==entries_.end()||(*it)->last_use<(*victim)->last_use))victim=it;
     if(victim==entries_.end())return false;
     auto* chosen=victim->get();const auto uid=chosen->image_uid;
     auto victim_pin=PinBinding(*chosen);
     if(chosen->gpu_owned){
-        const auto& retire=retire_pressure_?retire_pressure_:resolve_owned_;
-        if(!retire)throw std::runtime_error("GPU-owned image has no retirement resolver");retire(*chosen);
+        if(chosen->buffer_alias_version&&!chosen->HasValidLogicalImage()){
+            // The physical buffer domain has already invalidated this I. Drop
+            // only its ownership/witnesses, retaining sibling B/I guards and
+            // pending real CPU-store markers. Never enqueue stale pixels.
+            if(!retire_independent_)throw std::runtime_error("Invalid independent image has no retirement callback");
+            retire_independent_(*chosen);
+            if(chosen->gpu_owned||chosen->buffer_alias_version)
+                throw std::logic_error("Invalid independent image retained ownership during eviction");
+            Diagnostics::Count("image-pressure.discard-invalid-independent");
+        }else{
+            const auto& retire=retire_pressure_?retire_pressure_:resolve_owned_;
+            if(!retire)throw std::runtime_error("GPU-owned image has no retirement resolver");retire(*chosen);
+        }
     }
     if(chosen->cpu_watched&&release_immutable_)release_immutable_(*chosen);
     // A resolver can restore another sample backing, allocate recursively and
@@ -1256,24 +1267,38 @@ Resource GuestTextureCache::AllocateTexture(Entry* preserve,const D3D12_RESOURCE
         }
     }
 }
+bool GuestTextureCache::ReclaimResidentMemory(uint64_t target,uint64_t completed,Entry* preserve){
+    auto preserve_pin=PinPressureEntry(preserve);
+    auto resident=ResidentBytes();
+    if(resident>target)for(auto& entry:entries_){
+        if(entry.get()==preserve)continue;
+        resident-=ReleaseRetiredStorage(*entry,completed);
+        if(resident<=target)break;
+    }
+    while(resident>target){
+        if(!EvictPressureVictim(completed,preserve))return false;
+        resident=ResidentBytes();
+    }
+    return true;
+}
 void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* preserve){
     auto preserve_pin=PinPressureEntry(preserve);
     RefreshMemoryBudget();
-    const auto resident=[&]{const auto total=ResidentBytes();
-        if(total>UINT64_MAX-bytes)throw std::overflow_error("Texture reservation total overflow");return total+bytes;
-    };
-    uint64_t total=resident();
-    if(total>resident_budget_)for(auto& e:entries_){
-        if(e.get()==preserve)continue;
-        total-=ReleaseRetiredStorage(*e,completed);
-        if(total<=resident_budget_)break;
-    }
-    while(total>resident_budget_){
-        if(EvictPressureVictim(completed,preserve)){total=resident();continue;}
+    for(;;){
+        const auto total=ResidentBytes();
+        if(total>UINT64_MAX-bytes)throw std::overflow_error("Texture reservation total overflow");
+        const auto target=bytes<=resident_budget_?resident_budget_-bytes:0;
+        if(total<=target&&bytes<=resident_budget_)return;
+        const auto preceding_budget=resident_budget_;
+        ReclaimResidentMemory(target,completed,preserve);
+        // A resolver can allocate recursively and refresh the DXGI budget.
+        // Recheck the current limit rather than admitting against an old target.
+        if(bytes<=resident_budget_&&ResidentBytes()<=resident_budget_-bytes)return;
+        if(resident_budget_!=preceding_budget)continue;
         const auto retired=PressureRetirementBytes();
         if(retired&&wait_pressure_){
-            completed=std::max(completed,wait_pressure_());Collect(completed);total=resident();
-            if(total<=resident_budget_)break;
+            completed=std::max(completed,wait_pressure_());Collect(completed);
+            if(bytes<=resident_budget_&&ResidentBytes()<=resident_budget_-bytes)return;
             if(PressureRetirementBytes()<retired)continue;
         }
         throw std::runtime_error("Native texture batch exceeds adapter-derived cache budget including transfer pools and in-flight sources");

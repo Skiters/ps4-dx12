@@ -8,6 +8,7 @@
 #include "video_core/renderer_d3d12/memory_surface_provider.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include "common/scope_exit.h"
+#include "invalid_image_pressure_fixture.h"
 #include <cstdio>
 #include <source_location>
 #include <thread>
@@ -46,7 +47,8 @@ int main(int argc,char**){try{
     HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,bytes,nullptr);Require(section!=nullptr);
     auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));
     auto* alias=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));Require(guest&&alias);
-    auto device=CreateHardwareDevice();OwnershipRenderer renderer(device.Get());GuestTextureCache cache(device.Get());
+    auto device=CreateHardwareDevice();RunInvalidImagePressureFixture(device.Get());
+    OwnershipRenderer renderer(device.Get());GuestTextureCache cache(device.Get());
     cache.SetCopySubmission([&](const auto& record){renderer.SubmitCopyCommands(record);});
     const auto address=reinterpret_cast<VAddr>(guest);renderer.MapMemory(address,bytes);renderer.NotifyHostMapping(address,bytes,true,true);
     desc.address=address;

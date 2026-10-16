@@ -309,6 +309,9 @@ public:
     PressureSourceLease RetainPressureSource(Entry&);
     uint64_t PressureRetirementBytes()const{return pressure_retirement_bytes_->load();}
     uint64_t ResidentBytes()const;
+    // Reclaim only retired, unpinned entries; false means live/preserved or
+    // reference-ineligible versions still keep residency above this limit.
+    bool ReclaimResidentMemory(uint64_t target,uint64_t completed,Entry* preserve=nullptr);
     void Submitted(uint64_t fence);
     void Used(Entry& entry,uint64_t fence);
     void Collect(uint64_t completed_fence);
