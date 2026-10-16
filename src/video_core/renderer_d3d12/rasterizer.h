@@ -94,6 +94,8 @@ private:
     PlacedBufferAllocator buffer_allocator_;
     std::unique_ptr<Descriptors> color_descriptors_,depth_descriptors_;
     std::map<VAddr,Mapping> mappings_;
+    Mapping* preparing_buffer_envelope_{};
+    std::vector<const Mapping*> preparing_buffer_contents_;
     auto FirstOverlapping(VAddr address){
         auto it=mappings_.lower_bound(address);
         if(it!=mappings_.begin()&&std::prev(it)->first+std::prev(it)->second.size>address)--it;
@@ -139,6 +141,7 @@ private:
     void Begin();
     Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0);
     void DropCached(VAddr address,u64 size,bool reconcile,const char* reason="overlap");
+    bool RematerializeBufferEnvelope(VAddr,u64);
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);
     void ClearMappings(){for(auto& [_,mapping]:mappings_)RetireBuffer(mapping);mappings_.clear();dirty_mappings_.clear();cached_buffer_bytes_=0;
         std::lock_guard lock(memory_index_mutex_);indexed_buffers_.clear();}
@@ -170,7 +173,7 @@ protected:
     virtual void CheckGpuBacking(VAddr address,u64 size,bool writing){Rasterizer::CheckBacking(address,size,writing);}
     virtual void PrepareGpuBacking(VAddr,u64,bool) {}
     virtual bool HasGpuImageOverlap(VAddr,u64)const {return false;}
-    virtual bool ReadDmaBacking(VAddr,std::span<std::byte>){return false;}
+    virtual bool ReadDmaBacking(VAddr,std::span<std::byte>);
 public:
     void SetBufferOwnership(std::function<bool(VAddr,u64)> own,
         std::function<bool(VAddr,std::span<const std::byte>)> commit,std::function<void(VAddr,u64)> release){

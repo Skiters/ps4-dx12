@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/guest_buffer_access.h"
 #include "common/scope_exit.h"
+#include "buffer_envelope_fixture.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -10,8 +11,14 @@ class Fixture final : public GuestBufferAccess {
     bool opaque_{};
     std::function<bool(VAddr,std::span<std::byte>)> physical_;
     bool HasGpuImageOverlap(VAddr,u64)const override{return opaque_;}
-    bool ReadDmaBacking(VAddr address,std::span<std::byte> bytes)override{return physical_&&physical_(address,bytes);}
+    bool ReadDmaBacking(VAddr address,std::span<std::byte> bytes)override{
+        return physical_?physical_(address,bytes):!opaque_&&Rasterizer::ReadDmaBacking(address,bytes);
+    }
+    void ReleaseBufferPageWatch(VAddr address,u64 bytes)override{
+        ++guard_releases;GuestBufferAccess::ReleaseBufferPageWatch(address,bytes);
+    }
 public:
+    unsigned guard_releases{};
     using GuestBufferAccess::GuestBufferAccess;
     using GuestBufferAccess::SetBufferBackingAccess;
     bool TrackReadOnly(VAddr address,u64 bytes){return page_watch_->TrackReadOnly(address,bytes);}
@@ -21,6 +28,13 @@ public:
     }
     void Untrack(VAddr address,u64 bytes){page_watch_->Untrack(address,bytes);}
     void BeforeRead(std::function<void()> callback){before_read_=std::move(callback);}
+    void PhysicalReader(std::function<bool(VAddr,std::span<std::byte>)> read){physical_=std::move(read);}
+    void BeforeWatch(std::function<void(VAddr,u64)> hook){
+        SetBufferWriteWatch([this,hook=std::move(hook)](VAddr address,u64 bytes){
+            hook(address,bytes);
+            return address%4096==0&&bytes%4096==0&&has_backing_(address,bytes)&&page_watch_->TrackReadOnly(address,bytes);
+        });
+    }
     bool ReadMemory(VAddr a,u64 s,bool assume=false) override {
         if(before_read_){auto callback=std::move(before_read_);before_read_={};callback();}
         return Rasterizer::ReadMemory(a,s,assume);
@@ -68,6 +82,7 @@ void Run(ID3D12Device* device,bool f2){
     Require(guest&&physical,"aliases");const auto base=reinterpret_cast<VAddr>(guest);
     for(u64 i=0;i<bytes;++i)physical[i]=std::byte(i*19+7);
     ProtectedDmaBacking(device,guest,physical,base);
+    RunBufferEnvelopeFixture<Fixture>(device,physical,base,bytes);
     {
         u64 commits{},committed{};bool fail{};
         Fixture renderer(device);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);
