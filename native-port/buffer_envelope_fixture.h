@@ -43,6 +43,10 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
             MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(old),&state,sizeof(state));
             require(state.Protect==PAGE_READONLY,"Buffer growth released the original RO guard");
             ++growth_guards;
+            const Rasterizer::ShaderBufferRequest nested{old,4,false,true,true};bool rejected=false;
+            try{renderer.PrepareShaderBuffers(std::span(&nested,1));}
+            catch(const std::logic_error&){rejected=true;}
+            require(rejected,"A growth witness callback reentered resource materialization");
             if(inject){inject=false;
                 reinterpret_cast<volatile std::byte*>(physical+old-base+4096)[17]=std::byte{0x31};
                 renderer.NotifyCpuWrite(old+4096+17,1);

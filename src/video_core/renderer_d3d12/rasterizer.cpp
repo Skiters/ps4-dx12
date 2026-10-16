@@ -254,6 +254,8 @@ void Rasterizer::ScopedMarkerInsert(const std::string_view& text,bool guest){
     ScopedMarkerInsertColor(text,0,guest);
 }
 Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_budget){
+    if(preparing_buffer_envelope_)
+        throw std::logic_error("Cannot materialize buffers from a growth witness callback");
     if(gds){if(address>gds_.size()||size>gds_.size()-address)throw std::out_of_range("GDS range");address+=reinterpret_cast<VAddr>(gds_.data());}
     if(!size||address>UINT64_MAX-size)throw std::out_of_range("invalid guest range");
     if(!IsMapped(address,size))throw std::out_of_range("unmapped guest memory");
@@ -861,6 +863,7 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
     }
     if(cursor<size)RememberSpan(target.cpu_dirty_ranges,cursor,size);
     std::map<VAddr,VAddr> index;index.emplace(address,end);
+    preparing_buffer_contents_.reserve(preparing_buffer_contents_.size()+sources.size());
     // Allocate callback storage and index/map nodes before any new protection.
     // Old and new placed storage survive copies, exceptional exits and pooling.
     RetainUntilFinish([retained](u64){(void)retained;});
@@ -884,7 +887,9 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
     bool protected_all{};
     {
         auto* previous=std::exchange(preparing_buffer_envelope_,&target);
-        SCOPE_EXIT {preparing_buffer_envelope_=previous;};
+        const auto depth=preparing_buffer_contents_.size();
+        preparing_buffer_contents_.insert(preparing_buffer_contents_.end(),sources.begin(),sources.end());
+        SCOPE_EXIT {preparing_buffer_contents_.resize(depth);preparing_buffer_envelope_=previous;};
         protected_all=watch_buffer_&&watch_buffer_(address,size);
     }
     target.cpu_partial_proof|=protected_all;
@@ -908,6 +913,8 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
 std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::span<const ShaderBufferRequest> requests,
     std::optional<std::span<const BufferWrite>> known_writes) {
     std::lock_guard streaming_lock(execution_mutex_);
+    if(preparing_buffer_envelope_)
+        throw std::logic_error("Cannot prepare resource bindings during buffer guard transfer");
     for(const auto& request:requests)(void)request.WriteRange();
     if(known_writes)for(const auto& write:*known_writes){
         if(!write.size||write.address>UINT64_MAX-write.size||
