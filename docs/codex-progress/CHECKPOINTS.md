@@ -1,5 +1,20 @@
 # Checkpoints
 
+## Ordered writer and original-slot checkpoint - 2026-10-16
+
+Authoritative current section; earlier current/next statements are historical.
+Source work only: no build/configure/package, test execution, GPU/game, profiling,
+XInput or UI operation. All129 groups remain partial/open. No runtime PASS or new FPS.
+
+Source: ccacee9 exact writer ranges; e877a3f ordinal page facts/original Guest slots;
+4f66433 disjoint image domains; f9ec214 legal grouped SSBO annotations;792f3fe original
+image preparation. Authored-only fixtures: fc7515e(21),a895015(22),ce156e7(24 total).
+Final documentation/local/remote SHAs and original-index/archive checks are in
+F:/PS4Dev/handoff/ordered-writers-20261015/CHECKPOINT_FINAL.json. Historical residual
+integration was preserved separately, not swept into these commits. Previous b7129d6
+and ordered-stream-20261015 archive remain intact.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 This section is authoritative; earlier current/next statements are historical.

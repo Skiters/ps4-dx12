@@ -1,5 +1,22 @@
 # Next session
 
+## Current continuation - 2026-10-16
+
+Authoritative current section; earlier current/next statements are historical.
+Source work only: no build/configure/package, test execution, GPU/game, profiling,
+XInput or UI operation. All129 groups remain partial/open. No runtime PASS or new FPS.
+
+Verify HEAD/upstream against F:/PS4Dev/handoff/ordered-writers-20261015/CHECKPOINT_FINAL.json.
+Read NEXT_READONLY_REVALIDATION_SOURCE_PROOF.md there, then implement the confirmed
+Entry logical-modified/dirty history and successful readonly Upload revalidation in
+guest_texture_cache.h/.cpp, guest_rasterizer.cpp and post-Upload integration. Reuse
+original WriteRange, transfer/pin/fence/watch contracts and24 authored cases. Differentiate
+old I, buffer B and physical bytes; include same-base invalidation, readonly refresh,
+shifted interior write, never-modified/CPU-write/remap controls. No-op shader replacement
+procedure already documents unreflected original-slot acceptance; do not repeat its proof.
+No broad audit, build or game run is authorized. Preserve index and push accurate WIP.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 This section is authoritative; earlier current/next statements are historical.

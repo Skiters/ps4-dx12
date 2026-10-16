@@ -1,5 +1,16 @@
 # Benchmarks
 
+## Ordered writer/source continuation - 2026-10-16
+
+No new measurements, build, tests or GPU/game runs.24 authored GCN scenarios are not
+PASS results. Source reviews for exact ranges, binding-order state, disjoint domains,
+grouped annotations and image preparation do not prove frame correctness/performance.
+Historical326/346(native211/229) plus three targeted passes remain old separate evidence.
+No FPS/frame-time/wait/image/control result is attributed to current commits. Packages
+were not rebuilt. Use saved Vulkan/DX12 baseline only after authorization and count
+completed guest frames excluding FG. Evidence: ordered-writers-20261015/EVIDENCE_INDEX.md.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 No measurements were performed for d4b70f9,4210e31 or4ef80fc.16 ordered GCN scenarios

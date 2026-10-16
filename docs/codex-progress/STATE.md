@@ -1,5 +1,20 @@
 # Native DX12 state
 
+## Current ordered ranges and original-slot state - 2026-10-16
+
+Authoritative current section; earlier current/next statements are historical.
+Source work only: no build/configure/package, test execution, GPU/game, profiling,
+XInput or UI operation. All129 groups remain partial/open. No runtime PASS or new FPS.
+
+Pushed ccacee9/e877a3f/4f66433/f9ec214/792f3fe add varying exact writer extents, ordinal
+query-page facts, unreflected Guest/image preparation, multiple disjoint domains and
+valid grouped SSBO annotations.24 GCN scenarios are authored only. Installed packages
+and selection were not modified. Next concrete source gap is sticky image modified
+history across buffer invalidation and readonly refresh; reflection-gate removal alone
+does not restore it. SESSION_HANDOFF.md is authoritative; evidence/final source/index
+manifest: F:/PS4Dev/handoff/ordered-writers-20261015/CHECKPOINT_FINAL.json.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 This section is authoritative; earlier current/next statements are historical.

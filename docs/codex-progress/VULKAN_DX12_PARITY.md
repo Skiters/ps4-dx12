@@ -1,5 +1,25 @@
 # Vulkan / native D3D12 parity audit
 
+## Current source coverage update - 2026-10-16
+
+Authoritative current section; earlier current/next statements are historical.
+Source work only: no build/configure/package, test execution, GPU/game, profiling,
+XInput or UI operation. All129 groups remain partial/open. No runtime PASS or new FPS.
+
+| Contract | Production change | Acceptance |
+|---|---|---|
+| Ordered writer extents | Short/full/long exact WriteRange; conditional readonly envelope | Authored/unrun |
+| Binding-order page state | Earlier original writes and optimized-away Guest slots retained | Authored/unrun |
+| Disjoint images | Per-Entry retile across multiple domains, existing guards intact |2 authored cases |
+| Grouped native SSBO qualifiers | Sanitized groups preserve other targets; no incompatible old cache entries | Source review only |
+| Unreflected images | Original cache preparation survives reflection pruning | Replacement procedure unrun |
+| Readonly revalidation | Sticky modified history still lost after refresh | Confirmed next source gap |
+
+All129 broad groups remain partial/open. Metadata/image operands, cross-stage ordering,
+non-base simultaneous aliases, missing sparse-block history, pressure/failure and full
+regressions/game verification remain open. SESSION_HANDOFF.md gives exact continuation.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 This section is authoritative; earlier current/next statements are historical.

@@ -1,5 +1,96 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-15
 
+## Current ordered ranges, descriptor state and compiler groups - 2026-10-16
+
+Authoritative current section; earlier current/next statements are historical.
+Source work only: no build/configure/package, test execution, GPU/game, profiling,
+XInput or UI operation. All129 groups remain partial/open. No runtime PASS or new FPS.
+
+### Production changes and source evidence
+
+- ccacee9: exact-base DWORD-aligned short/full/long writer sharps preserve original
+  WriteRange and binding bounds. A readonly full-image preparation envelope is added
+  only for a scheduled retile lacking coverage. Reader minimum16KiB-block coverage
+  proves direct sparse backing; the earlier covering-writer branch remains conditional
+  on pending binding history. Already resident Vulkan memory stays shared across arena
+  migration; different handles alone do not separate contents.
+- e877a3f: stream selection includes initial GPU-modified state AND every strictly
+  earlier original writer's4KiB query pages. Byte-disjoint same-page writes can make
+  a later small reader resident. Both formatted image/metadata synchronization gates
+  use this ordinal fact. Optimized-away original Guest buffer slots still prepare
+  cache state, invalidation and declared write spans; actual descriptors require Layout.
+  Fallback access respects a live SRV-only guest class; production uses unified UAVs.
+- 4f66433: multiple disjoint independent image domains can prepare in one compute
+  command. Retile deduplicates by Entry identity, not globally. Per-domain unique image,
+  exact-base UAV, capacity/ownership/format and no-image-operands/DMA guards remain.
+  All private captures and retained retiles precede logical writer invalidation.
+- f9ec214: valid grouped Restrict/NonWritable no longer causes blanket SSBO rejection.
+  Deterministic sanitized groups preserve other annotation payloads and original
+  unrelated targets. Clone annotations precede group declarations, IDs/bound are
+  checked, member pairs survive, empty applications disappear, and Aliased deduplicates.
+  Shared SSBO/UBO pointee members retain the inherited shared-type annotation boundary;
+  UniformBlock remains intrinsically readonly. Malformed group targets are rejected.
+  Previously accepted valid modules rewrite identically, so compatible old DXIL entries
+  remain usable; cache namespace stays native-dxil-cache-20261015-ssbo-alias-v2.
+- 792f3fe: original image slots prepare Upload/cache/ownership/readback/lifetime even
+  without surviving native reflection. Actual descriptor writes still require Layout.
+  Null, zero-count/range validation, FMASK separation and sampler behavior remain.
+  This fixes the preparation gate, not the distinct readonly revalidation gap below.
+
+### Verification and preservation
+
+fc7515e, a895015 and ce156e7 author24 real-GCN scenarios in existing
+ordered-formatted-owned mode:22 single-domain cases plus2 disjoint-domain cases.
+They cover exact writer/OOB bounds, GPU-I-tail versus physical-B-tail, short/long reads,
+prior same-page binding writes, repeated aliases and whole64KiB padding. Case22 now
+establishes a real64KiB raw residency envelope and rejects premature retirement; the
+unwarmed setup defect and exact earlier source are retained. All24 remain uncompiled/
+unrun. Grouped-SPIRV validation/conversion and no-resource replacement acceptance are
+also deferred. Source/manual/Git checks are not runtime evidence.
+
+Evidence: F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md; exact before/after,
+patches/hashes and independent reviews are in production/, fixtures/, binding-order/,
+disjoint-domains/, grouped-ssbo/ and unreflected-images/. CHECKPOINT_FINAL.json records
+actual final local/remote HEAD, commits, original index comparison and archive hash.
+final-residual preserves historical nonignored sources/assets and staged/unstaged/deleted
+state. Restore only in a separate checkout using its README. Original22 staged network
+deletions remain separate; unknown-origin source integration is preserved.
+
+Latest known installed core remains preview24 (source a3f1d5e plus archived dirty patch),
+SHA25670eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf at
+C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe.
+Current source was not built/installed. Selection was not changed (last known preview23).
+PDB/runtime provenance remains eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Vulkan, saves, settings, monitors and the remote session were not changed by this work.
+Historical326/346(native211/229) plus three targeted passes remain separate old results.
+No new guest frame, image, controls, FPS or stability evidence exists; old EOP cause is unknown.
+
+### Exact next production task — readonly image revalidation
+
+Read F:/PS4Dev/handoff/ordered-writers-20261015/NEXT_READONLY_REVALIDATION_SOURCE_PROOF.md.
+Pinned Vulkan keeps GpuModified through same-base buffer invalidation and readonly
+RefreshImage; native ReleaseIndependentImageWatches loses that history and readonly
+Upload never restores formatted-retile eligibility. This is confirmed with live reflected
+images too. Implement sticky logical modified/dirty history separately from current
+ownership in guest_texture_cache.h/.cpp Entry/Own/Upload, guest_rasterizer.cpp invalidation
+and post-Upload revalidation. Preserve compatible identity, PageWatch, exact write spans,
+backing, fences/pins and prewrite snapshots; never mark every sampled image modified.
+Authored acceptance must distinguish same-base refresh then shifted interior writer,
+never-modified, CPU-write and remap controls. Broader offsets/cross-stage/image operands,
+metadata order, pressure/device-loss and full-suite/game acceptance remain open.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue F:/PS4Dev/work/shadps4-dx12-src, fix/mixed-cmask. Read this authoritative top
+section and CHECKPOINT_FINAL.json; verify actual HEAD/upstream and preserve the dirty
+index/tree. Reuse saved Vulkan/DX12 evidence without repeated audits. Implement the
+confirmed readonly-revalidation task from NEXT_READONLY_REVALIDATION_SOURCE_PROOF.md,
+then continue the existing contract queue. Keep all execution deferred until specifically
+authorized. Once authorized, build changed targets, run focused and required regressions,
+then minimal existing-XInput game checks with completed guest frames excluding FG against
+the saved baseline. Checkpoint/push source and exact continuation; do not claim full parity.
+
+
 ## Current ordered streams, native SSBO aliases and readonly extents - 2026-10-15
 
 This section is authoritative; earlier current/next statements are historical.
