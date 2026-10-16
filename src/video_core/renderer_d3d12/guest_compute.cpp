@@ -324,7 +324,6 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     };
     std::vector<OrderedFormattedImage> ordered_formatted_images;
     std::vector<size_t> ordered_stream_reads;
-    GuestTextureCache::Entry* ordered_formatted_version{};
     bool ordered_formatted_writer=false;
     const auto streams_before_binding=[&](size_t index){
         if(!pending[index].guest_read||!pending[index].original_bytes||pending[index].original_bytes>16384)
@@ -428,7 +427,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 });
                 if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
                    !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
-                   (ordered_formatted_version&&ordered_formatted_version!=version)||!same_base_uavs||
+                    !same_base_uavs||
                    !pending[i].original_bytes||pending[i].original_bytes!=requests[i].size||
                    (reads_image&&!clean_small&&(!image_fits_reader_arena||
                     (!image_fits_reader_blocks&&!covering_writer)))||
@@ -440,7 +439,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     !version->expanded_guest_backing.handle||!version->expanded_written_mask.handle||
                     !version->expanded_backing_bytes)))
                     throw std::runtime_error("Ordered buffer/image aliases require exact-base ranges and proven transfer capacity/residency");
-                ordered_formatted_writer=true;ordered_formatted_version=version;
+                ordered_formatted_writer=true;
                 requests[i].resident=true;
                 for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
                     if(pending[j].guest_read&&requests[j].address<desc.address+layout.guest_bytes&&
@@ -448,7 +447,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                        streams_before_binding(j)&&
                        std::ranges::find(ordered_stream_reads,j)==ordered_stream_reads.end())
                         ordered_stream_reads.push_back(j);
-                if(reads_image&&!clean_small&&ordered_formatted_images.empty()){
+                if(reads_image&&!clean_small&&std::ranges::none_of(ordered_formatted_images,
+                    [version](const auto& transfer){return transfer.image==version;})){
                     formatted_image_pins.push_back(textures->PinBinding(*version));
                     ordered_formatted_images.push_back({desc.address,layout.guest_bytes,version,{}});
                 }
