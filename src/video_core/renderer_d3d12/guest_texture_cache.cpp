@@ -1278,8 +1278,8 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
        source_layout.guest_bytes!=view_layout.guest_bytes||
        source_layout.logical_bytes!=view_layout.logical_bytes||source.levels!=view.levels||
        source_layout.mips.size()!=source.levels||view_layout.mips.size()!=view.levels)return false;
-    // An uncompressed view of a compressed image selects one mip in the
-    // pinned block-texel-view contract; a full reverse UINT chain is not it.
+    // This predicate replaces complete independent ownership. Reverse multi-mip
+    // allocation views need a separate path that retains the BC parent below.
     if(source_block&&!view_block&&source.levels!=1)return false;
     for(uint32_t mip=0;mip<source.levels;++mip){
         const auto& a=source_layout.mips[mip];const auto& b=view_layout.mips[mip];
@@ -1303,6 +1303,22 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
     source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
+}
+// A block-texel view selects one mip, not necessarily a one-mip allocation.
+// Materialize a private readonly mip-zero binding; the full BC chain remains
+// the sole authoritative image. This is deliberately not an ownership match.
+bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
+    const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
+    if(view.writable||view.levels!=1||view.first_mip||source.levels<=1||
+       !IsIndependentGuestBlockStorage(source,source_layout)||view_layout.block_extent!=1)return false;
+    auto prefix=source;prefix.levels=1;prefix.first_mip=0;
+    const auto prefix_layout=LayoutGuestTexture(prefix);
+    const auto& actual=source_layout.mips.front();const auto& first=prefix_layout.mips.front();
+    if(prefix_layout.guest_bytes>source_layout.guest_bytes||
+       actual.pitch!=first.pitch||actual.height!=first.height||actual.offset!=first.offset||
+       actual.slice_bytes!=first.slice_bytes||actual.macro!=first.macro||actual.thickness!=first.thickness)
+        return false;
+    return MatchesReferenceBlockImage(prefix,prefix_layout,view,view_layout);
 }
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
@@ -1341,7 +1357,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     Entry* result{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty)continue;
-        const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout);
+        const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout)||
+            MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout);
         if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
             !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout))))continue;
@@ -1482,9 +1499,10 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
+            const bool private_block_view=MatchesReadonlyBlockMipPrefix(existing->desc,existing->layout,d,layout);
             if((existing->layout.block_extent==4||layout.block_extent==4)&&
                !MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&
-               !MatchesGuestUploadStorage(*existing,d,layout)){
+               !private_block_view&&!MatchesGuestUploadStorage(*existing,d,layout)){
                 // A different BC codec is a distinct image class. Refresh it
                 // from B while retaining the old codec's independent I.
                 if(existing->layout.block_extent==4&&layout.block_extent==4&&
@@ -1505,6 +1523,16 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             // new interpretation has acquired its own guard. Pending copies
             // retain the old allocation/descriptors through normal cache fences.
             auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable);
+            if(private_block_view){
+                // Do not publish a second mutable owner or retire the BC parent:
+                // the selected mip is only a binding snapshot of its private I.
+                // Keeping it dirty also prevents RevalidateReadonly from acquiring
+                // ownership and prevents reuse after the parent changes. Upload's
+                // pending resources and the binding pin retain it through fences.
+                converted.MarkLogicalDirty();
+                Diagnostics::Count("image-version.private-block-mip-view");
+                return converted;
+            }
             if(!acquire_independent_(converted))
                 throw std::runtime_error("Converted independent image could not retain ownership");
             retire_independent_(*source);
