@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "guest_texture_cache.h"
+#include <algorithm>
+#include <bit>
 #include <optional>
 #include <utility>
 
@@ -14,14 +16,25 @@ struct GuestImageOwnershipGeometry {
 // image. Keep this separate from BC shader-write or decoded-pixel admission.
 inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout) {
-    return desc.data_format>=35&&desc.data_format<=41&&!desc.writable&&
+    if(!(desc.data_format>=35&&desc.data_format<=41&&!desc.writable&&
         !desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
-        !desc.volume_depth&&!desc.one_dimensional&&desc.samples==1&&desc.levels==1&&
+        !desc.volume_depth&&!desc.one_dimensional&&desc.samples==1&&
+        desc.levels&&desc.levels<=15&&layout.mips.size()==desc.levels&&
         desc.tile_mode!=8&&desc.tile_mode!=31&&
+        desc.width>=4&&desc.height>=4&&desc.pitch>=desc.width&&
         desc.width%4==0&&desc.height%4==0&&desc.pitch%4==0&&
         !desc.pow2_padding&&!desc.storage_height&&!desc.storage_slice_bytes&&
         layout.block_extent==4&&!layout.expanded_bytes_per_pixel&&
-        (layout.bytes_per_pixel==8||layout.bytes_per_pixel==16);
+        (layout.bytes_per_pixel==8||layout.bytes_per_pixel==16)))return false;
+    const auto width=desc.width/4,height=desc.height/4;
+    if(desc.levels>std::bit_width(std::max(width,height)))return false;
+    for(uint32_t mip=0;mip<desc.levels;++mip){
+        // Dividing the base extent is insufficient for non-power-of-two
+        // chains: e.g. 96 texels need two BC blocks at mip4, not one.
+        if((std::max(desc.width>>mip,1u)+3)/4!=std::max(width>>mip,1u)||
+           (std::max(desc.height>>mip,1u)+3)/4!=std::max(height>>mip,1u))return false;
+    }
+    return true;
 }
 
 // Ownership tracks physical guest words independently of the current shader

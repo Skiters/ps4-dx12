@@ -1266,7 +1266,8 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
     if(!source_block&&!view_block)return false;
     const auto word=[](const GuestTextureDesc& d,const GuestTextureLayout& l){
         return !d.render_target&&!d.depth_target&&!d.stencil_address&&!d.volume_depth&&
-            !d.one_dimensional&&d.samples==1&&d.levels==1&&!d.pow2_padding&&
+            !d.one_dimensional&&d.samples==1&&d.levels&&d.levels<=15&&
+            l.mips.size()==d.levels&&!d.pow2_padding&&
             !d.storage_height&&!d.storage_slice_bytes&&!l.expanded_bytes_per_pixel&&
             l.block_extent==1&&d.number_format==4&&
             ((d.data_format==11&&l.bytes_per_pixel==8)||(d.data_format==14&&l.bytes_per_pixel==16));
@@ -1275,11 +1276,21 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
        (source_block&&view_block&&source.data_format!=view.data_format)||
        source_layout.bytes_per_pixel!=view_layout.bytes_per_pixel||
        source_layout.guest_bytes!=view_layout.guest_bytes||
-       source_layout.logical_bytes!=view_layout.logical_bytes||
-       source_layout.mips.size()!=1||view_layout.mips.size()!=1)return false;
-    const auto& a=source_layout.mips[0];const auto& b=view_layout.mips[0];
-    if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
-       a.macro!=b.macro||a.thickness!=b.thickness)return false;
+       source_layout.logical_bytes!=view_layout.logical_bytes||source.levels!=view.levels||
+       source_layout.mips.size()!=source.levels||view_layout.mips.size()!=view.levels)return false;
+    // An uncompressed view of a compressed image selects one mip in the
+    // pinned block-texel-view contract; a full reverse UINT chain is not it.
+    if(source_block&&!view_block&&source.levels!=1)return false;
+    for(uint32_t mip=0;mip<source.levels;++mip){
+        const auto& a=source_layout.mips[mip];const auto& b=view_layout.mips[mip];
+        if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
+           a.macro!=b.macro||a.thickness!=b.thickness)return false;
+        const auto width=[](uint32_t extent,uint32_t level,bool block){
+            const auto texels=std::max(extent>>level,1u);return block?(texels+3)/4:texels;
+        };
+        if(width(source.width,mip,source_block)!=width(view.width,mip,view_block)||
+           width(source.height,mip,source_block)!=width(view.height,mip,view_block))return false;
+    }
     // Pinned ResolveOverlap/ExpandImage copies uncompressed words to BC
     // blocks. Its block-texel view class also permits the reverse UINT view.
     // Same-codec BC numeric views keep those exact bytes; different codecs do
