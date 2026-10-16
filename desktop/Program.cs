@@ -15,6 +15,7 @@ sealed class Settings
     public string NativeCore { get; set; } = Path.Combine(AppContext.BaseDirectory, "native", "shadPS4-DX12.exe");
     public string ProfileRoot { get; set; } = Path.Combine(AppContext.BaseDirectory, "profile-template");
     public string NativeProfileRoot { get; set; } = Path.Combine(DataRoot, "native-profile");
+    public string VulkanProfileRoot { get; set; } = Path.Combine(DataRoot, "vulkan-profile");
     public string InstallRoot { get; set; } = Path.Combine(DataRoot, "Games");
     public List<string> LibraryRoots { get; set; } = [Path.Combine(DataRoot, "Games")];
     public string Python { get; set; } = "python";
@@ -33,27 +34,30 @@ sealed class Settings
 
 static class NativeProfile
 {
-    public static string Ensure(Settings settings)
+    public static string Ensure(Settings settings, string backend = "dx12")
     {
-        string target = Path.GetFullPath(settings.NativeProfileRoot);
+        if (backend is not ("dx12" or "vulkan")) throw new IOException("Неизвестный backend профиля.");
+        string target = Path.GetFullPath(backend == "dx12" ? settings.NativeProfileRoot : settings.VulkanProfileRoot);
+        string other = Path.GetFullPath(backend == "dx12" ? settings.VulkanProfileRoot : settings.NativeProfileRoot);
         string source = Path.GetFullPath(settings.ProfileRoot);
         string sourcePrefix=source.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
         string targetPrefix=target.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+        string otherPrefix=other.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
         if (sourcePrefix.StartsWith(targetPrefix,StringComparison.OrdinalIgnoreCase)||targetPrefix.StartsWith(sourcePrefix,StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Для DX12 нужен отдельный профиль, чтобы сохранить рабочие настройки и сохранения.");
+            throw new IOException("Ядру нужен отдельный профиль, чтобы сохранить исходные настройки и сохранения.");
+        if (otherPrefix.StartsWith(targetPrefix,StringComparison.OrdinalIgnoreCase)||targetPrefix.StartsWith(otherPrefix,StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Профили DX12 и Vulkan должны использовать разные каталоги.");
         if (Directory.Exists(target))
         {
             string configPath = Path.Combine(target, "user", "config.json");
             if (!File.Exists(configPath))
-                throw new IOException("В профиле DX12 отсутствует user/config.json: " + target);
+                throw new IOException("В профиле ядра отсутствует user/config.json: " + target);
             string expectedHome = Path.GetFullPath(Path.Combine(target, "user", "home"));
             var existing = JsonNode.Parse(File.ReadAllText(configPath));
             string? configuredHome = existing?["General"]?["home_dir"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(configuredHome) ||
                 !string.Equals(Path.GetFullPath(configuredHome, target), expectedHome, StringComparison.OrdinalIgnoreCase))
-                throw new IOException("Профиль DX12 должен использовать отдельную папку сохранений: " + expectedHome);
-            NormalizeGraphics(configPath);
-            NormalizeCustomGraphics(Path.Combine(target, "user", "custom_configs"));
+                throw new IOException("Профиль ядра должен использовать отдельную папку сохранений: " + expectedHome);
             return target;
         }
         string staging = target + ".init-" + Guid.NewGuid().ToString("N");
@@ -62,7 +66,7 @@ static class NativeProfile
         {
             string user = Path.Combine(staging, "user");
             Directory.CreateDirectory(user);
-            foreach (string entry in new[] { "config.json", "keys.json", "users.json", "home", "custom_configs", "input_config", "patches", "sys_modules", "custom_modules", "fonts", "licenses", "trophy", "custom_trophy" })
+            foreach (string entry in new[] { "config.json", "keys.json", "users.json", "home", "addcont", "custom_configs", "input_config", "patches", "sys_modules", "custom_modules", "fonts", "licenses", "trophy", "custom_trophy" })
                 Copy(Path.Combine(source, "user", entry), Path.Combine(user, entry));
             string config = Path.Combine(user, "config.json");
             var document = JsonNode.Parse(File.ReadAllText(config)) ?? throw new IOException("Пустой профиль shadPS4");
@@ -72,9 +76,7 @@ static class NativeProfile
             general["sys_modules_dir"] = Path.Combine(target, "user", "sys_modules");
             general["font_dir"] = Path.Combine(target, "user", "fonts");
             general["install_dirs"] = JsonSerializer.SerializeToNode(new[] { new { path = settings.InstallRoot, enabled = true } });
-            document.AsObject().Remove("Vulkan");
             File.WriteAllText(config, document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-            NormalizeGraphics(config);
             string custom = Path.Combine(user, "custom_configs");
             if (Directory.Exists(custom)) foreach (string path in Directory.EnumerateFiles(custom, "*.json"))
             {
@@ -84,34 +86,10 @@ static class NativeProfile
                 if (overrides.ContainsKey("addon_install_dir")) overrides["addon_install_dir"] = Path.Combine(target, "user", "addcont");
                 File.WriteAllText(path, value.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
             }
-            NormalizeCustomGraphics(custom);
             Directory.Move(staging, target);
             return target;
         }
         finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
-    }
-    static void NormalizeCustomGraphics(string directory)
-    {
-        if (Directory.Exists(directory))
-            foreach (string path in Directory.EnumerateFiles(directory, "*.json")) NormalizeGraphics(path);
-    }
-    static void NormalizeGraphics(string path)
-    {
-        var document = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
-            ?? throw new IOException("Некорректный профиль: " + path);
-        bool changed = document.Remove("Vulkan");
-        // These post-processing paths belonged to the removed renderer.
-        if (document["GPU"] is JsonObject gpu)
-            foreach (string option in new[] { "fsr_enabled", "rcas_enabled", "hdr_allowed" })
-                if (gpu[option]?.GetValue<bool>() == true) { gpu[option] = false; changed = true; }
-        if (!changed) return;
-        string temp = path + ".dx12-" + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(temp, document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-            File.Move(temp, path, true);
-        }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
     static void Copy(string source, string target)
     {
@@ -132,8 +110,7 @@ static class NativeLaunchPolicy
     // Explicit diagnostic tools may still opt in when starting the core directly.
     public static void Apply(ProcessStartInfo start)
     {
-        foreach (string name in new[] { "SHADPS4_NATIVE_DIAGNOSTICS", "SHADPS4_NATIVE_D3D12_VALIDATION",
-            "SHADPS4_NATIVE_STARTUP_TRACE", "SHADPS4_NATIVE_LOG_FILTER", "SHADPS4_BENCH_GAMEPAD", "SHADPS4_API_TRACE" })
+        foreach (string name in start.Environment.Keys.Where(name => name.StartsWith("SHADPS4_", StringComparison.OrdinalIgnoreCase)).ToArray())
             start.Environment.Remove(name);
     }
 }
@@ -143,6 +120,7 @@ static class NativeConnection
 {
     public static async Task<NativeStatus> Probe(Settings settings)
     {
+        if (CoreVersions.Backend(settings) != "dx12") throw new IOException("Проверка DX12-устройства недоступна для выбранного Vulkan-ядра.");
         // Saved full cores implement the game CLI, while --probe belongs to the
         // bundled connection host. Validate the selected package first, then
         // probe the device through that host without starting another game.
@@ -255,12 +233,11 @@ sealed class MainWindow : Form
     bool busy, scanning, launching;
     bool nativeProbing, nativeReady;
     ushort previousButtons;
-    internal bool ExperimentalLaunchEnabled => settings.Backend == "dx12" && playButton.Enabled;
+    internal bool ExperimentalLaunchEnabled => playButton.Enabled;
 
     public MainWindow(Settings value)
     {
         settings = value;
-        settings.Backend = "dx12";
         Text = "PS4 DX12 — Experimental · библиотека игр";
         BackColor = Color.FromArgb(18, 21, 28); ForeColor = Color.White;
         Font = new("Segoe UI", 12); MinimumSize = new(1000, 650); Size = new(1280, 800);
@@ -277,13 +254,13 @@ sealed class MainWindow : Form
         AddButton("Обновить · Y", async () => await RefreshLibrary());
         AddButton("Настройки", Configure);
         AddButton("Версии ядра", SelectCore);
-        AddButton("Нативный DX12", async () => { settings.Backend = "dx12"; settings.Save(); await ProbeNative(); });
+        AddButton("Проверить ядро", async () => await ProbeNative());
         AddButton("Отмена", Cancel);
         search.TextChanged += (_, _) => RenderLibrary();
         library.ItemActivate += (_, _) => Launch();
         Controls.Add(library); Controls.Add(progress); Controls.Add(status); Controls.Add(search); Controls.Add(backend); Controls.Add(toolbar);
         UpdateBackend();
-        Shown += async (_, _) => { await RefreshLibrary(); if (settings.Backend == "dx12") await ProbeNative(); library.Focus(); };
+        Shown += async (_, _) => { await RefreshLibrary(); await ProbeNative(); library.Focus(); };
         FormClosing += (_, e) =>
         {
             if (busy) { e.Cancel = true; Cancel(); status.Text = "Отмена установки… Дождитесь завершения, затем закройте окно."; }
@@ -294,29 +271,36 @@ sealed class MainWindow : Form
 
     void UpdateBackend()
     {
-        if (settings.Backend == "dx12")
+        try
         {
+            string selectedBackend = CoreVersions.Backend(settings);
             string selected = string.IsNullOrEmpty(settings.SelectedCoreId) ? "Ранее настроенное ядро" :
                 CoreVersions.Discover().FirstOrDefault(v => v.Id == settings.SelectedCoreId)?.ToString() ?? "Выбранное ядро отсутствует";
             backend.Text = "  " + selected + " · " + (nativeReady ? "Подключение проверено." : "Экспериментальный запуск.");
-            playButton.Text = "▶ Запустить DX12 · A";
+            playButton.Text = "▶ Запустить " + (selectedBackend == "dx12" ? "DX12" : "Vulkan") + " · A";
             playButton.Enabled = true;
         }
-        else throw new InvalidOperationException("Этот форк поддерживает только DirectX 12.");
+        catch (IOException ex) { backend.Text = "  " + ex.Message; playButton.Enabled = false; }
     }
     async Task ProbeNative()
     {
         if (nativeProbing) return;
-        nativeProbing = true; nativeReady = false; UpdateBackend(); status.Text = "Проверка подключения нативного DX12…";
+        nativeProbing = true; nativeReady = false; UpdateBackend(); status.Text = "Проверка выбранного ядра…";
         try
         {
+            if (CoreVersions.Backend(settings) == "vulkan")
+            {
+                _ = CoreVersions.Resolve(settings);
+                UpdateBackend(); status.Text = "Файлы Vulkan-ядра проверены. Устройство проверяется при запуске игры.";
+                return;
+            }
             var result = await NativeConnection.Probe(settings);
             nativeReady = result.GameLaunchReady;
             UpdateBackend();
             backend.Text += " · " + result.Adapter;
             status.Text = "DX12-устройство и вывод кадра проверены. Vulkan не загружен.";
         }
-        catch (Exception ex) { status.Text = "Ошибка подключения DX12: " + ex.Message; }
+        catch (Exception ex) { status.Text = "Ошибка подключения ядра: " + ex.Message; }
         finally { nativeProbing = false; }
     }
     void Error(Exception ex) => MessageBox.Show(this, ex.Message, "PS4", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -385,19 +369,19 @@ sealed class MainWindow : Form
             string validation;
             try { validation = CoreVersions.Validate(version); select.Enabled = true; }
             catch (Exception ex) { validation = ex.Message; select.Enabled = false; }
-            details.Text = $"{version.Name}\r\nСтатус: {version.Status}\r\nДата сборки: {version.BuildDate:O}\r\nBackend: {version.Backend}\r\nВетка: {version.Branch}\r\nCommit: {version.Commit}\r\nИзменения поверх commit: {version.Dirty}\r\nSHA256: {version.Sha256}\r\n{validation}\r\n\r\n{version.Description}\r\n\r\n{version.Results}";
+            details.Text = $"{version.Name}\r\nСтатус: {version.Status}\r\nСохранения: {(version.IsolatedProfile ? "отдельная копия для этой версии" : "общий профиль выбранного backend")}\r\nДата сборки: {version.BuildDate:O}\r\nBackend: {version.Backend}\r\nВетка: {version.Branch}\r\nCommit: {version.Commit}\r\nИзменения поверх commit: {version.Dirty}\r\nSHA256: {version.Sha256}\r\nИсточник: {version.Source?.Repository}\r\nЭталон: {version.Source?.ReferenceRevision}\r\nКомпилятор: {version.Build?.Compiler} {version.Build?.CompilerVersion}\r\n{validation}\r\n\r\n{version.Description}\r\n\r\n{version.Results}";
         };
         select.Click += (_, _) =>
         {
             try
             {
                 var version = (CoreVersion)versions.SelectedItem!;
-                CoreVersions.Validate(version); settings.SelectedCoreId = version.Id; settings.Save();
+                CoreVersions.Validate(version); settings.SelectedCoreId = version.Id; settings.Backend = version.Backend; nativeReady = false; settings.Save();
                 dialog.DialogResult = DialogResult.OK;
             }
             catch (Exception ex) { MessageBox.Show(dialog, ex.Message); }
         };
-        legacy.Click += (_, _) => { settings.SelectedCoreId = ""; settings.Save(); dialog.DialogResult = DialogResult.OK; };
+        legacy.Click += (_, _) => { settings.SelectedCoreId = ""; settings.Backend = "dx12"; nativeReady = false; settings.Save(); dialog.DialogResult = DialogResult.OK; };
         dialog.Controls.Add(details); dialog.Controls.Add(versions); dialog.Controls.Add(select); dialog.Controls.Add(legacy);
         for (int i = 0; i < versions.Items.Count; ++i)
             if (((CoreVersion)versions.Items[i]).Id == settings.SelectedCoreId) versions.SelectedIndex = i;
@@ -423,6 +407,7 @@ sealed class MainWindow : Form
         panel.Controls.Add(mode);
         var profile = Field("Рабочий каталог / user", settings.ProfileRoot);
         var nativeProfile = Field("Отдельный профиль DX12", settings.NativeProfileRoot);
+        var vulkanProfile = Field("Отдельный профиль Vulkan", settings.VulkanProfileRoot);
         var install = Field("Каталог установки PKG", settings.InstallRoot);
         bool bundled = File.Exists(Path.Combine(AppContext.BaseDirectory, "installer", "PS4PackageInstaller.exe"));
         var runtime = Field("Установщик PKG", bundled ? "Встроенный" : settings.Python);
@@ -439,14 +424,15 @@ sealed class MainWindow : Form
                 if (!File.Exists(nativeCore.Text)) throw new IOException("Укажите существующее нативное DX12-ядро.");
                 settings.ProfileRoot = Path.GetFullPath(profile.Text);
                 settings.NativeProfileRoot = Path.GetFullPath(nativeProfile.Text);
+                settings.VulkanProfileRoot = Path.GetFullPath(vulkanProfile.Text);
                 if (!string.Equals(settings.NativeCore, Path.GetFullPath(nativeCore.Text), StringComparison.OrdinalIgnoreCase)) settings.SelectedCoreId = "";
-                settings.NativeCore = Path.GetFullPath(nativeCore.Text); settings.Backend = "dx12";
+                settings.NativeCore = Path.GetFullPath(nativeCore.Text); settings.Backend = CoreVersions.Backend(settings);
                 settings.InstallRoot = Path.GetFullPath(install.Text); if (!bundled) settings.Python = Path.GetFullPath(runtime.Text);
                 settings.Save(); form.DialogResult = DialogResult.OK;
             }
             catch (Exception ex) { MessageBox.Show(form, ex.Message); }
         };
-        form.Controls.Add(panel); if (form.ShowDialog(this) == DialogResult.OK) { UpdateBackend(); if (settings.Backend == "dx12") _ = ProbeNative(); _ = RefreshLibrary(); }
+        form.Controls.Add(panel); if (form.ShowDialog(this) == DialogResult.OK) { UpdateBackend(); _ = ProbeNative(); _ = RefreshLibrary(); }
     }
 
     async void Launch()
@@ -457,17 +443,16 @@ sealed class MainWindow : Form
         {
             launching = true;
             var game = (Game)library.SelectedItems[0].Tag!;
-            if (settings.Backend != "dx12") throw new IOException("В этом форке доступен только DirectX 12.");
-            status.Text = "Загрузка игры… Подготовка профиля DX12";
+            status.Text = "Загрузка игры… Подготовка отдельного профиля " + CoreVersions.Backend(settings);
             var start = await Task.Run(() => NativeGameLaunch.Create(settings, game.Directory));
             gameProcess?.Dispose(); gameProcess = new Process { StartInfo = start, EnableRaisingEvents = true };
             var launched = gameProcess;
             gameProcess.Exited += (_, _) =>
             {
                 int exitCode = launched.ExitCode;
-                if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { status.Text = exitCode == 0 ? "Игра завершена. Библиотека готова." : $"Ядро завершилось с ошибкой {exitCode}. Нативный DX12 ещё дорабатывается."; Activate(); });
+                if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { status.Text = exitCode == 0 ? "Игра завершена. Библиотека готова." : $"Ядро завершилось с ошибкой {exitCode}."; Activate(); });
             };
-            if (!gameProcess.Start()) throw new IOException("Не удалось запустить ядро");
+            if (!NativeGameLaunch.Start(gameProcess)) throw new IOException("Не удалось запустить ядро");
             NativeGameLaunch.Record(settings, gameProcess, Settings.DataRoot);
             status.Text = "Запущено: " + game.Title;
         }
@@ -585,17 +570,30 @@ static class Program
                 int captureIndex = Array.IndexOf(args, "--capture-root");
                 string? captureRoot = captureIndex >= 0 ? args[captureIndex + 1] : null;
                 var start = NativeGameLaunch.Create(launchSettings, args[launchIndex + 1], captureRoot);
-                using var process = Process.Start(start) ?? throw new IOException("Не удалось запустить ядро");
-                NativeGameLaunch.Record(launchSettings, process, captureRoot ?? Settings.DataRoot);
+                using var process = new Process { StartInfo = start };
+                if (!NativeGameLaunch.Start(process)) throw new IOException("Не удалось запустить ядро");
                 if (captureRoot is not null)
                 {
                     var output = process.StandardOutput.ReadToEndAsync();
                     var errors = process.StandardError.ReadToEndAsync();
-                    process.WaitForExit();
-                    File.WriteAllText(Path.Combine(captureRoot, "stdout.txt"), output.GetAwaiter().GetResult());
-                    File.WriteAllText(Path.Combine(captureRoot, "stderr.txt"), errors.GetAwaiter().GetResult());
-                    File.WriteAllText(Path.Combine(captureRoot, "exit.json"), JsonSerializer.Serialize(new { exitCode = process.ExitCode }));
+                    bool runtimeVerified = false;
+                    try
+                    {
+                        NativeGameLaunch.Record(launchSettings, process, captureRoot);
+                        var runtime = NativeGameLaunch.ObserveRuntime(process, captureRoot);
+                        process.WaitForExit(); runtimeVerified = runtime.GetAwaiter().GetResult();
+                    }
+                    finally
+                    {
+                        if (!process.HasExited) process.Kill(entireProcessTree: true);
+                        process.WaitForExit();
+                        File.WriteAllText(Path.Combine(captureRoot, "stdout.txt"), output.GetAwaiter().GetResult());
+                        File.WriteAllText(Path.Combine(captureRoot, "stderr.txt"), errors.GetAwaiter().GetResult());
+                        File.WriteAllText(Path.Combine(captureRoot, "exit.json"), JsonSerializer.Serialize(new { exitCode = process.ExitCode, runtimeVerified }));
+                    }
+                    return process.ExitCode != 0 ? process.ExitCode : runtimeVerified ? 0 : 1;
                 }
+                NativeGameLaunch.Record(launchSettings, process, Settings.DataRoot);
                 return 0;
             }
             if (args.Contains("--prepare-native-profile"))
