@@ -281,7 +281,7 @@ public:
     Entry* FindBlockViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindReadonlyBlockParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindWritableBlockParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
-    // Rebase a standalone physical mip/slice onto its full parent's word chain.
+    // Rebase a standalone physical mip/slice onto its BC or word parent chain.
     // The returned description is a binding view, never another guest owner.
     std::optional<GuestTextureDesc> RebaseBlockSubresource(const GuestTextureDesc&,
         const GuestTextureLayout&,bool array)const;

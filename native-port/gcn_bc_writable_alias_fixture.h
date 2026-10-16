@@ -64,18 +64,20 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     };
     // Keep the first five cases; then mix selected readers and writers.
     // Variant7 controls conservative same-mip storage-read UAV promotion.
-    for(u32 variant=0;variant<20;++variant){const bool dependent=variant>=11,shifted=variant>=15,
-        bc3=variant==1||variant==4||variant==7||variant==8||variant==10||(dependent&&variant!=14&&variant!=16),
+    for(u32 variant=0;variant<24;++variant){const bool dependent=variant>=11,shifted=variant>=15&&variant<=22,
+        native_bc=variant>=20&&variant<=22,bounded_bc=variant==23,
+        bc3=variant==1||variant==4||variant==7||variant==8||variant==10||(dependent&&variant!=14&&variant!=16&&variant!=21),
         group=variant==2||variant==3||variant==19,duplicate=variant==4,
-        mixed=(variant>=5&&variant<=10)||variant==12||variant==13||variant==17||variant==18,
-        bc_reader=variant==9||variant==10,subset=variant==2||variant==7||variant==8||variant==10;
+        mixed=(variant>=5&&variant<=10)||variant==12||variant==13||variant==17||variant==18||variant>=20,
+        bc_reader=variant==9||variant==10||native_bc||bounded_bc,subset=variant==2||variant==7||variant==8||variant==10||variant==22;
         const u32 Layers=dependent&&bc3?2:4,width=dependent?24:bc3?16:32,pitch=dependent?32:width,
             levels=dependent?4:bc3?5:6,components=bc3?4:2,block_bytes=components*4;
         const u64 image_bytes=dependent?36864:bc3?32768:49152;
-        const u32 first_mip=dependent?(variant==13||variant==18?1:2):variant==3||variant==6?3:bc3?2:1,
-            second_mip=variant==13||variant==18?2:variant==19?1:duplicate||variant==7||variant==10?first_mip:variant==3||variant==6||variant==8?1:3;
-        const u32 first_layer=shifted?(variant==16?3:variant==18?0:1):subset?1:0,
-            second_layer=shifted?(variant==18?1:0):subset?2:1,shifted_slot=variant==18?1:0;
+        const u32 first_mip=bounded_bc?3:dependent?(variant==13||variant==18||variant==20||variant==21?1:2):variant==3||variant==6?3:bc3?2:1,
+            second_mip=bounded_bc?1:variant==13||variant==18||native_bc?2:variant==19?1:duplicate||variant==7||variant==10?first_mip:variant==3||variant==6||variant==8?1:3;
+        const u32 first_layer=native_bc?0:shifted?(variant==16?3:variant==18?0:1):subset?1:0,
+            second_layer=native_bc?(bc3?1:3):bounded_bc?0:shifted?(variant==18?1:0):subset?2:1,
+            shifted_slot=variant==18||native_bc?1:0;
         const u32 slot_count=group||duplicate||mixed?2:1;
         const auto hash=[&](u32 phase,u32 index=0){return 0x574243414c000000ULL+u64(variant)*8192+u64(phase)*256+index;};
         rasterizer.ReadMemory(base,Bytes);rasterizer.InvalidateMemory(base,Bytes);std::memset(memory,0x81+int(variant)*13,Bytes);
@@ -103,21 +105,26 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             selected[1].base_array=selected[1].last_array=second_layer;}
         const auto word_selected=selected;
         if(bc_reader){selected[1]=bc;selected[1].base_level=second_mip;
+            if(bounded_bc)selected[1].last_level=2;
             if(subset)selected[1].base_array=selected[1].last_array=second_layer;}
         if(shifted){const u32 layer=shifted_slot?second_layer:first_layer;const auto& physical=layout.mips.at(2);
             const u64 address=base+ImageOffset+physical.offset+layer*physical.slice_bytes;
-            auto& local=selected[shifted_slot];local.base_address=address>>8;local.width=local.height=5;local.pitch=7;
+            auto& local=selected[shifted_slot];local.base_address=address>>8;local.width=local.height=native_bc?23:5;local.pitch=native_bc?31:7;
             local.base_level=0;local.last_level=0;local.depth=0;local.base_array=0;local.last_array=0;
             auto original=DescribeGuestTexture(local);original.writable=shifted_slot==0;const auto local_layout=LayoutGuestTexture(original);
-            if(address%256||original.address!=address||original.width!=6||original.height!=6||original.pitch!=8||
+            if(address%256||original.address!=address||original.width!=(native_bc?24u:6u)||original.height!=(native_bc?24u:6u)||original.pitch!=(native_bc?32u:8u)||
                original.levels!=1||original.first_mip||original.min_lod||original.layers!=1||original.first_layer||original.view_layers!=1||
                local.GetType()!=AmdGpu::ImageType::Color2DArray||local_layout.mips.size()!=1||
                local_layout.guest_bytes!=(bc3?1024u:512u)||local_layout.guest_bytes!=physical.slice_bytes||
                local_layout.mips[0].offset||local_layout.mips[0].pitch!=8||local_layout.mips[0].height!=8||
                local_layout.mips[0].slice_bytes!=physical.slice_bytes||local_layout.mips[0].macro||local_layout.mips[0].thickness!=1||
                layer>=Layers||address+local_layout.guest_bytes>base+ImageOffset+image_bytes)
-                throw std::runtime_error("Shifted BC original sharp lost exact standalone mip/slice geometry");}
-        if(mixed&&first_mip==second_mip&&!(selected[0].last_array<selected[1].base_array||selected[1].last_array<selected[0].base_array))
+                throw std::runtime_error("Shifted BC original sharp lost exact standalone mip/slice geometry");
+            if(native_bc&&(original.writable||original.data_format!=parent_desc.data_format||original.number_format!=parent_desc.number_format||
+               local_layout.format!=parent_layout.format||local_layout.block_extent!=4||local_layout.expanded_bytes_per_pixel))
+                throw std::runtime_error("Shifted native BC source changed codec, number format or actual sampled DXGI storage");}
+        const auto& reader_range=shifted?word_selected[1]:selected[1];
+        if(mixed&&first_mip==second_mip&&!(selected[0].last_array<reader_range.base_array||reader_range.last_array<selected[0].base_array))
             throw std::runtime_error("Mixed BC reader/writer selected subresources overlap");
         bool saw_unaligned_prefix=false;
         for(u32 slot=0;slot<slot_count;++slot){
@@ -125,11 +132,15 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             // independently describe their parent-prefix geometry here.
             auto view=DescribeGuestTexture(shifted&&slot==shifted_slot?word_selected[slot]:selected[slot]);
             view.writable=!mixed||slot==0||variant==7;const auto prefix=LayoutGuestTexture(view);
-            if(bc_reader&&slot==1){auto storage=view;storage.first_mip=parent_desc.first_mip;
+            if(bc_reader&&!native_bc&&slot==1){auto storage=view;storage.first_mip=parent_desc.first_mip;
                 storage.first_layer=parent_desc.first_layer;storage.view_layers=parent_desc.view_layers;
-                if(storage!=parent_desc||prefix.guest_bytes!=parent_layout.guest_bytes||prefix.format!=parent_layout.format||
-                   view.first_mip!=second_mip||view.levels!=levels||view.first_layer!=u32(selected[1].base_array)||
+                if(bounded_bc)storage.levels=parent_desc.levels;
+                if(storage!=parent_desc||prefix.guest_bytes!=(bounded_bc?34816:parent_layout.guest_bytes)||prefix.format!=parent_layout.format||
+                   view.first_mip!=second_mip||view.levels!=(bounded_bc?3u:levels)||view.first_layer!=u32(selected[1].base_array)||
                    view.view_layers!=(subset?1u:Layers))throw std::runtime_error("Direct BC source changed complete parent storage or original SRV range");
+                if(bounded_bc){for(u32 mip=0;mip<view.levels;++mip){const auto& a=prefix.mips[mip];const auto& b=parent_layout.mips[mip];
+                    if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||a.macro!=b.macro||a.thickness!=b.thickness)
+                        throw std::runtime_error("Bounded BC SRV changed physical parent prefix");}saw_unaligned_prefix=true;}
                 continue;}
             if(view.first_mip!=view.levels-1||!view.view_layers||view.first_layer+view.view_layers>Layers||
                (!dependent&&prefix.guest_bytes%4096)||prefix.guest_bytes>image_bytes)
@@ -270,7 +281,14 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         for(u32 slot=0;slot<slot_count;++slot){auto probe=word_selected[slot];probe.base_array=0;probe.last_array=Layers-1;
             for(u32 layer=0;layer<Layers;++layer)
                 probe_uint(uint_probe[slot*Layers+layer],probe,layer,0,1536+(slot*Layers+layer)*32,hash(10,slot*Layers+layer));}
-        if(shifted)probe_uint(shifted_probe,selected[shifted_slot],0,0,1840,hash(14),2,shifted_slot?second_layer:first_layer);
+        if(shifted&&!native_bc)probe_uint(shifted_probe,selected[shifted_slot],0,0,1840,hash(14),2,shifted_slot?second_layer:first_layer);
+        if(native_bc){std::vector<u32> words;for(u32 block=0;block<2;++block){coords(words,0,block*4,0,0,0);
+                words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});
+                for(u32 c=0;c<4;++c){words.insert(words.end(),{0xe0700730u+block*16+c*4,0x80020000u|((4+c)<<8)});
+                    expect(OutputOffset+1840+block*16+c*4,std::bit_cast<u32>(c==3||(block==0?c==1:c==0)?1.f:0.f));}}
+            words.push_back(0xbf810000);initialize(shifted_probe,words,hash(14));auto& p=bind(shifted_probe,12);
+            std::memcpy(p.user_data.data(),&selected[1],sizeof(image));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
+            verify(frontend.BuildCompute(gpu),{{output,true,false}},{{selected[1],false,0}});rasterizer.DispatchDirect();}
         read_gpu();sample_parent(parent_final,512,11,true);read_gpu();
         initialize(formatted,{0xe0002000,0x08000400,0xbf8c0000,0xe0702000,0x80010400,0xbf810000},hash(12));
         auto copied=target;copied.base_address=base+OutputOffset+CopyOffset;copied.num_records=Chunk/4;
@@ -282,6 +300,8 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         rasterizer.ReadMemory(base,Bytes);rasterizer.Finish();rasterizer.ValidateDebugMessages();
         if(std::memcmp(backing,expected.data(),Bytes))throw std::runtime_error("Writable BC encoded words, untouched mips/layers, physical padding or dirty-union mismatch");
         std::printf("PASS: real GCN writable %s %s; selected/grouped UAVs, exact parent blocks and64KiB physical oracle\n",bc3?"BC3":"BC1",
+            bounded_bc?"bounded samebase BC SRV mips1..2/UINT writer mip3":
+            native_bc?(variant==20?"shifted native BC3 SRV/UINT writer mip1":variant==21?"shifted native BC1 SRV/UINT writer mip1":"shifted native BC3 layer1 SRV/UINT mip2 layer0 writer"):
             shifted?(variant==15?"shifted BC3 mip2/layer1 writer":variant==16?"shifted BC1 mip2/layer3 writer":
                 variant==17?"shifted writer/ordinary mip3 SRV":variant==18?"shifted mip2 SRV/ordinary mip1 writer":"shifted writer/ordinary second writer"):
             dependent?(variant==11?"unaligned mip2 single UINT128 writer":variant==12?"unaligned mip2 writer/aligned mip3 SRV":

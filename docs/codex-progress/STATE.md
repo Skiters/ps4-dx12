@@ -1,13 +1,13 @@
 # Native DX12 state
 
-## Current pointer - shifted BC word views, 2026-10-16
+## Current pointer - shifted BC / UINT views, 2026-10-16
 
 SESSION_HANDOFF.md's top section is authoritative; exact HEAD/residual recovery:
-F:/PS4Dev/handoff/bc-shifted-views-20261016/CHECKPOINT_FINAL.json.
-One-level thin microtiled UINT aliases rebase to shared parent-relative views. Full
-multi-layer/base_array Vulkan equivalence remains unproven; reference discrepancy saved.
-Twenty cases authored/unrun, all129 groups partial/open; no builds/tests/game/UI.
-Earlier notes historical. Preview24, original Vulkan and user session unchanged.
+F:/PS4Dev/handoff/bc-shifted-native-20261016/CHECKPOINT_FINAL.json.
+Thin shifted UINT views share a child; native BC prefix SRVs reuse the actual full parent
+with original mip/layer ranges. Twenty-four cases authored/unrun, all129 groups partial.
+No builds/tests/game/UI; broader base_array/graphics/runtime parity remains unverified.
+Preview24 and user session unchanged. Earlier sections historical.
 
 ## Current BC block image bridge - 2026-10-16
 

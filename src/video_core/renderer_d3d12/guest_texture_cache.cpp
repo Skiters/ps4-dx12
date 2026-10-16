@@ -1328,6 +1328,25 @@ bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTex
     }
     return MatchesReferenceBlockStorage(prefix,prefix_layout,view,view_layout);
 }
+bool MatchesReadonlyBcMipPrefix(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
+    const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
+    // A BC SRV can select a prefix of an actual BC allocation without a UINT
+    // representation of its terminal mips. It must retain the exact typed format.
+    if(!IsNativeReadonlyGuestBlockStorage(source,source_layout)||
+       !IsNativeReadonlyGuestBlockStorage(view,view_layout)||view.levels>source.levels||
+       view.first_mip>=view.levels||source.data_format!=view.data_format||
+       source.number_format!=view.number_format||source_layout.format!=view_layout.format)return false;
+    auto prefix=source;prefix.levels=view.levels;prefix.first_mip=0;
+    if(!CompatibleGuestSampledStorage(prefix,view))return false;
+    const auto physical=LayoutGuestTexture(prefix);
+    if(!MatchesGuestMipLayout(physical,view_layout)||physical.guest_bytes>source_layout.guest_bytes)return false;
+    for(uint32_t mip=0;mip<prefix.levels;++mip){
+        const auto& a=source_layout.mips[mip];const auto& b=physical.mips[mip];
+        if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||
+           a.slice_bytes!=b.slice_bytes||a.macro!=b.macro||a.thickness!=b.thickness)return false;
+    }
+    return true;
+}
 // Bounded pinned ExpandImage copy: all source words fit target BC blocks,
 // and complete source physical storage is the same mip-major target prefix.
 bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTextureLayout& a,
@@ -1393,6 +1412,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty)continue;
         const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout)||
             MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout)||
+            (entry->buffer_alias_watch&&CanRetainIndependentImage(entry->desc,entry->layout)&&
+             MatchesReadonlyBcMipPrefix(entry->desc,entry->layout,desc,layout))||
             MatchesReferencePartialBlockExpansion(entry->desc,entry->layout,desc,layout);
         if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
@@ -1411,11 +1432,21 @@ GuestTextureCache::Entry* GuestTextureCache::FindWritableBlockParent(const Guest
 }
 GuestTextureCache::Entry* GuestTextureCache::FindReadonlyBlockParent(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
-    // Direct BC readers keep the actual parent resource. Only a complete
-    // storage match may bypass the UINT-prefix path and its private copy.
+    // Direct BC readers keep the actual parent resource. A selected prefix
+    // proves its physical storage without shortening the parent's allocation.
     if(!IsNativeReadonlyGuestBlockStorage(desc,layout))return nullptr;
     auto* parent=FindValidIndependentImage(desc,layout);
-    return parent&&IsNativeReadonlyGuestBlockStorage(parent->desc,parent->layout)?parent:nullptr;
+    if(parent&&IsNativeReadonlyGuestBlockStorage(parent->desc,parent->layout))return parent;
+    parent=nullptr;
+    auto [first,last]=address_index_.equal_range(desc.address);
+    for(auto it=first;it!=last;++it){auto* candidate=it->second;
+        if(!candidate->gpu_owned||!candidate->buffer_alias_version||!candidate->buffer_alias_watch||
+           candidate->logical_dirty||!MatchesReadonlyBcMipPrefix(candidate->desc,candidate->layout,desc,layout)||
+           !CanRetainIndependentImage(candidate->desc,candidate->layout))continue;
+        if(parent&&parent!=candidate)throw std::runtime_error("Ambiguous readonly BC prefix parent");
+        parent=candidate;
+    }
+    return parent;
 }
 bool GuestTextureCache::CanTransferDependentBlockView(const Entry& parent,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
@@ -1471,6 +1502,7 @@ bool GuestTextureCache::IsLiveWritableBlockAlias(const WritableBlockAlias& alias
 }
 std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
     const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
+    const bool native_bc=IsNativeReadonlyGuestBlockStorage(desc,layout);
     // Pinned ImageInfo::MipOf/SliceOf recognizes a one-level image starting
     // at a physical mip/slice boundary. Rebase it before grouping, so an alias
     // and an ordinary selected-mip view share one child and one parent commit.
@@ -1478,10 +1510,10 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
        !desc.view_layers||desc.view_layers>desc.layers-desc.first_layer||
        desc.render_target||desc.depth_target||desc.stencil_address||desc.one_dimensional||
        desc.volume_depth||desc.samples!=1||desc.pow2_padding||desc.storage_height||
-       desc.storage_slice_bytes||layout.block_extent!=1||layout.expanded_bytes_per_pixel||
-       layout.mips.size()!=1||desc.number_format!=4||
+       desc.storage_slice_bytes||layout.expanded_bytes_per_pixel||layout.mips.size()!=1||
+       (!native_bc&&(layout.block_extent!=1||desc.number_format!=4||
        !((desc.data_format==11&&layout.bytes_per_pixel==8)||
-         (desc.data_format==14&&layout.bytes_per_pixel==16))||
+         (desc.data_format==14&&layout.bytes_per_pixel==16))))||
        !CanUploadGpuSnapshot(desc,layout,true))return std::nullopt;
     // An existing independent version is a separate authority. Never silently
     // replace it with another overlapping image's contents.
@@ -1495,6 +1527,8 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
         if(!parent.gpu_owned||!parent.buffer_alias_version||!parent.buffer_alias_watch||
            parent.logical_dirty||desc.address<=parent.desc.address||
            !IsNativeReadonlyGuestBlockStorage(parent.desc,parent.layout)||
+           (native_bc&&(desc.data_format!=parent.desc.data_format||desc.number_format!=parent.desc.number_format||
+                        layout.format!=parent.layout.format))||
            (!array&&parent.desc.layers!=1)||parent.desc.width%4||
            parent.desc.height%4||parent.desc.pitch%4)continue;
         const auto delta=desc.address-parent.desc.address;
@@ -1502,14 +1536,15 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
         for(uint32_t mip=0;mip<parent.desc.levels;++mip){const auto& physical=parent.layout.mips[mip];
             if(physical.macro||physical.thickness!=1||!physical.slice_bytes||
                physical.pitch!=local.pitch||physical.height!=local.height||
-               physical.slice_bytes!=local.slice_bytes||desc.pitch!=physical.pitch||
+               physical.slice_bytes!=local.slice_bytes||u64(desc.pitch)!=u64(physical.pitch)*layout.block_extent||
                delta<physical.offset)continue;
             const auto layer_bytes=delta-physical.offset;
             if(layer_bytes%physical.slice_bytes)continue;
             const auto layer=layer_bytes/physical.slice_bytes;
             if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer)continue;
             auto view=desc;view.address=parent.desc.address;
-            view.width=parent.desc.width/4;view.height=parent.desc.height/4;view.pitch=parent.desc.pitch/4;
+            const auto divisor=native_bc?1u:4u;
+            view.width=parent.desc.width/divisor;view.height=parent.desc.height/divisor;view.pitch=parent.desc.pitch/divisor;
             if(mip>=std::bit_width(std::max(view.width,view.height))||
                desc.width!=std::max(view.width>>mip,1u)||desc.height!=std::max(view.height>>mip,1u))continue;
             view.levels=mip+1;view.first_mip=mip;view.layers=parent.desc.layers;
@@ -1517,8 +1552,13 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
             // A standalone one-level SRV clamps to its mip0. After rebasing,
             // that is the parent's selected mip, not the parent's mip0.
             view.min_lod=mip*256;
-            auto storage=view;storage.writable=true;storage.first_layer=0;storage.view_layers=storage.layers;
-            if(!CanTransferDependentBlockView(parent,storage,LayoutGuestTexture(storage)))continue;
+            if(native_bc){
+                if(!MatchesReadonlyBcMipPrefix(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
+                   !CanRetainIndependentImage(parent.desc,parent.layout))continue;
+            }else{
+                auto storage=view;storage.writable=true;storage.first_layer=0;storage.view_layers=storage.layers;
+                if(!CanTransferDependentBlockView(parent,storage,LayoutGuestTexture(storage)))continue;
+            }
             if(owner&&owner!=&parent)throw std::runtime_error("Ambiguous shifted BC block-view parent");
             owner=candidate.get();result=view;
         }
@@ -1650,7 +1690,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
     auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
-    auto* independent_reuse=independent_source&&MatchesGuestUploadStorage(*independent_source,d,layout)?
+    auto* independent_reuse=independent_source&&
+        (MatchesGuestUploadStorage(*independent_source,d,layout)||
+         MatchesReadonlyBcMipPrefix(independent_source->desc,independent_source->layout,d,layout))?
         independent_source:nullptr;
     Entry* reuse=independent_reuse;
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;

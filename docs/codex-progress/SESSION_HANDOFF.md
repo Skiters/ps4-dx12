@@ -1,58 +1,56 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
-## Active shifted BC word-view checkpoint - 2026-10-16
+## Active shifted BC / UINT views checkpoint - 2026-10-16
 
 This section supersedes earlier current/next instructions. Full-port goal remains active;
-all129 groups remain partial/open. Source-only gate: no configure/build/compiler/tests/
-GPU/game/XInput/UI. Preview24, Vulkan, saves and user session remain unchanged.
+all129 groups partial/open. No configure/build/compiler/tests/GPU/game/XInput/UI.
+Preview24, original Vulkan, user saves and running session remain unchanged.
 
-Throughb2971ba, dependent UINT prefixes share a maximum-prefix/full-layer child under a
-live full BC parent UID/pin/watch; the public writable upload remains strict. Shared
-readonly UINT and direct full BC readers retain their original descriptor ranges; parent
-SRV state is restored after preparation/before dispatch. Child is dirty/nonowner;
-replacement acquires ownership before old parent retirement. Do not redo that source work.
+Pushedc61e47f rebases standalone one-level thin UINT64/128 mip/slice sharps to the full
+BC parent's canonical selected view before compute alias guards/grouping. Throughb2971ba,
+one maximum-prefix/full-layer child serves its original views; live UID/pin/watch and
+full-parent PageWatch remain, child dirty/nonowner, replacement acquires before retirement.
+The ordinary public writable Upload still requires independent ownership. Do not redo it.
 
-Current production block: GuestTextureCache::RebaseBlockSubresource maps a standalone
-one-level shifted UINT64/128 sharp to a canonical selected-mip/layer view of the retained
-BC parent, before guest_compute.cpp's image guards and grouping. Physical address must
-start at an exact mip/slice boundary; logical block extent, pitch, height, slice stride,
-layer bounds and full canonical prefix must agree. Original shader sharp/specialization,
-registers, SRV swizzle and local view extent remain; native descriptor selects the parent
-mip and inferred physical slice+original first_layer. min_lod follows the selected mip.
-The existing group then uses one child/commit for shifted and ordinary views together.
-A distinct exact independent authority is never displaced. Common owner/watch, device,
-transfer size, budget and lifetime predicates remain. Nonarray shaders cannot be rebound
-to parent arrays. Selected physical slices must be nonmacro/thickness1.
+Current production block extends RebaseBlockSubresource to native readonly BC sharps of
+identical codec/number/DXGI format. MatchesReadonlyBcMipPrefix proves actual BC prefix
+storage independently of UINT correspondence; selected range may contain multiple mips.
+FindIndependentUploadSource and FindReadonlyBlockParent retain full watched parent proof.
+Upload's existing reuse branch returns the actual BC parent, preserving pending/LRU and
+state/lifetime handling; explicit snapshots still bypass independent reuse. No short BC
+owner or BC UAV is introduced. guest_compute.cpp uses original descriptor mip/layer span,
+LOD and swizzle, actual parent mip stride and final BC SRV restoration before dispatch.
+Two same-parent BC SRVs may coexist across graphics stages; mixed BC/UINT keeps the prior
+compute/single-stage/no-DMA and disjoint-write guards. Format casts are not broadened.
 
-Pinned Vulkan ResolveOverlap455-459 and ImageInfo::MipOf/SliceOf identify the subresource.
-A confirmed reference discrepancy remains: SliceOf divides the address delta by the full
-child guest_size, and FindImage590-596 overwrites base.layer with a positive quotient.
-Physical rebase instead uses per-layer slice_bytes and adds local first_layer, consistent
-with GuestPixelOffset. Thus multi-local-layer/nonzero base_array parity is NOT established;
-do not copy the reference quotient/overwrite without verifying the producing contract.
-Source reviews and fixtures/REVIEW.md describe the bounded scope, not runtime acceptance.
+Twenty-four real GCN cases are authored/unrun. New20-23 cover shifted BC3/BC1 SRVs feeding
+UINT writes, same-mip disjoint layers, and a bounded BC mip1..2 SRV with writer mip3.
+Native BC postchecks use normalized RGBA, not raw-word probes; encoded/decoded/padding and
+64KiB physical dirty-union oracles remain. Prior20 scenarios are preserved. Descriptor-span
+proof is source/metadata only, not an executed out-of-range LOD oracle. Independent source
+reviews found no concrete blocker; compilation, descriptors, PageWatch, fences, graphics,
+Bloodborne and performance acceptance remain unverified. No current FPS/PASS claim.
 
-Prepared cases15-19 extend the previous fifteen scenarios: BC3/BC1 shifted single writers,
-shifted writer+ordinary SRV, shifted readonly SRV+ordinary writer, and two shared writers.
-The original standalone sharp has mip0/array0; expected observations use the parent global
-mip/layer independently. Full encoded/decoded/padding and64KiB physical oracles remain.
-All cases are authored/unrun; compilation, descriptors, PageWatch, GPU order/fences and
-Bloodborne acceptance remain unverified. No new game, FPS or performance result.
+Reference discrepancy remains: pinned SliceOf uses full child guest_size quotient, and
+FindImage590-596 overwrites base_array with positive view_slice. Physical rebase uses
+per-layer slice_bytes plus local first_layer, consistent with GuestPixelOffset. Current
+shifted cases use one local layer/base_array0; broader parity is not established. See
+bc-shifted-views-20261016/{SOURCE_CONTRACT.md,REVIEW.md}; do not copy that quotient blindly.
 
-Evidence: F:/PS4Dev/handoff/bc-shifted-views-20261016/{SOURCE_CONTRACT.md,REVIEW.md,
-fixtures,checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Earlier b2971ba
-recovery and measurements remain in bc-dependent-transfer-20261016 and previous evidence.
-Broad inherited integration/22 staged deletions remain separate; source commits alone do
-not reproduce the full core. Restore archives only in a separate checkout of manifest.head.
+Evidence/current recovery: F:/PS4Dev/handoff/bc-shifted-native-20261016/{SOURCE_CONTRACT.md,
+REVIEW.md,fixtures,checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Earlier
+c61e47f/b2971ba snapshots and measurements remain. Broad inherited integration/22 staged
+deletions are separate; clean source commits alone do not reproduce the full core.
+Restore patches/archive only in a separate checkout of manifest.head, never over this tree.
 
-Next production task: shifted native BC-format SRVs using the actual retained parent,
-including their original one-mip/layer descriptor span. Start with RebaseBlockSubresource,
-FindReadonlyBlockParent and guest_compute.cpp readonly binding selection; preserve actual
-parent mip stride/state restoration and disjoint writer checks. Do not bind an independent
-private BC owner or expose tail mips accidentally. Macro/thick slice rotation, nonarray
-view over parent array, terminal mips without canonical word prefix, and the reference
-base_array discrepancy remain open. Full-parent seed reuse is also unimplemented because
-per-entry accounting can double-charge shared buffers. Reuse saved evidence, no new audit.
+Next production task: shifted macro/thick layouts with exact slice rotation/bank-swizzle
+mapping. Start in RebaseBlockSubresource and GuestTileAddress::{Pipe,Bank,Macro}; the current
+local/parent selected-mip guards reject macro/thickness!=1. First prove mip-boundary base
+slice0 (local and parent coordinates agree), then nonzero slice rotation; retain physical
+prefix, full-owner watch, format, descriptor and lifetime checks. Nonarray over parent
+arrays, odd/expanded local BC, single-mip BC parent word slices, numeric format variants
+and base_array discrepancy remain open. Full-parent seed reuse also needs shared resource
+accounting. Reuse saved evidence; keep execution deferred and do not restart general audits.
 
 ## Current independent BC block expansion - 2026-10-16
 

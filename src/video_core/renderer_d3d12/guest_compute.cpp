@@ -295,7 +295,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const bool block_views=block_parent&&
                     find_block_parent(previous.desc,previous.layout)==block_parent&&
                     ((layout.block_extent==4||previous.layout.block_extent==4)?
-                     (pipeline.IsCompute()&&stages.size()==1&&!uses_dma):
+                     ((layout.block_extent==4&&previous.layout.block_extent==4)||
+                      (pipeline.IsCompute()&&stages.size()==1&&!uses_dma)):
                      compatible_block_prefixes(previous.desc,previous.layout,desc,layout));
                 if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views)
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
@@ -835,9 +836,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(!image.null_resource&&image.desc.writable&&!block_alias_view&&
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
             if(!image.null_resource&&separate_input&&!block_alias_view)entry->buffer_alias_version=true;
+            const bool direct_bc_view=!image.null_resource&&!image.desc.writable&&image.layout.block_extent==4&&
+                textures->FindReadonlyBlockParent(image.desc,image.layout)==entry;
             if(!image.null_resource){
-                if(!image.desc.writable&&image.layout.block_extent==4&&
-                   textures->FindReadonlyBlockParent(image.desc,image.layout)==entry&&
+                if(direct_bc_view&&
                    std::ranges::find(bc_readers,entry)==bc_readers.end())bc_readers.push_back(entry);
                 textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
                 if(image.sample_storage&&image.desc.samples>1){
@@ -872,7 +874,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     // Group admission proves the backing prefix. Build the
                     // original SRV range/LOD clamp, rather than expanding its
                     // mip span to the larger shared child allocation.
-                    auto view=block_alias_view?descriptor_entry.Srv():entry->Srv(image.desc);
+                    auto view=block_alias_view||direct_bc_view?descriptor_entry.Srv():entry->Srv(image.desc);
                     if(image.array&&image.desc.layers==1){
                         if(image.desc.one_dimensional){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={image.desc.first_mip,image.desc.levels-image.desc.first_mip,0,1,0};}
                         else if(image.desc.samples>1){view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;view.Texture2DMSArray={0,1};}
