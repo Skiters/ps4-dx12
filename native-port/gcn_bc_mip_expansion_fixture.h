@@ -112,13 +112,16 @@ inline void RunBcMipExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Live
         // Negative shape controls have no fake GPU/history state and no commands.
         auto negative=sampled;negative.width=negative.height=96;negative.pitch=128;negative.levels=5;
         shape.desc=negative;shape.layout=LayoutGuestTexture(negative);
-        if(DescribeGuestImageOwnership(shape))throw std::runtime_error("24->96 overlong fifth mip acquired ownership");
+        if(IsIndependentGuestBlockStorage(shape.desc,shape.layout)||!DescribeGuestImageOwnership(shape))
+             throw std::runtime_error("Actual BC storage must survive without a complete canonical UINT owner");
         negative=sampled;negative.width=128;negative.height=12;negative.pitch=128;negative.levels=2;
         shape.desc=negative;shape.layout=LayoutGuestTexture(negative);
-        if(DescribeGuestImageOwnership(shape))throw std::runtime_error("32x3->128x12 mismatched second mip acquired ownership");
+        if(IsIndependentGuestBlockStorage(shape.desc,shape.layout)||!DescribeGuestImageOwnership(shape))
+             throw std::runtime_error("Actual BC storage must survive without a complete canonical UINT owner");
         negative=sampled;negative.width=negative.height=negative.pitch=128;negative.levels=7;
         shape.desc=negative;shape.layout=LayoutGuestTexture(negative);
-        if(DescribeGuestImageOwnership(shape))throw std::runtime_error("Overlong canonical UINT chain acquired ownership");
+        if(IsIndependentGuestBlockStorage(shape.desc,shape.layout)||!DescribeGuestImageOwnership(shape))
+             throw std::runtime_error("Actual BC storage must survive without a complete canonical UINT owner");
         shape.desc=sampled;shape.layout=bc_layout;shape.layout.mips.back().offset+=256;
         if(DescribeGuestImageOwnership(shape))throw std::runtime_error("Mismatched physical mip offset acquired ownership");
         shape.layout=bc_layout;shape.layout.mips.back().pitch+=8;

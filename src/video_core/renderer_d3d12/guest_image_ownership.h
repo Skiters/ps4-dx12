@@ -12,9 +12,9 @@ struct GuestImageOwnershipGeometry {
     GuestTextureLayout layout;
 };
 
-// One native BC block can retain the same physical words as a UINT64/128
-// image. Keep this separate from BC shader-write or decoded-pixel admission.
-inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
+// Validate actual readonly BC storage independently of whether its entire mip
+// chain can also be represented as a UINT64/128 image. No shader writes allowed.
+inline bool IsNativeReadonlyGuestBlockStorage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout) {
     if(!(desc.data_format>=35&&desc.data_format<=41&&!desc.writable&&
         !desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
@@ -26,6 +26,13 @@ inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
         !desc.pow2_padding&&!desc.storage_height&&!desc.storage_slice_bytes&&
         layout.block_extent==4&&!layout.expanded_bytes_per_pixel&&
         (layout.bytes_per_pixel==8||layout.bytes_per_pixel==16)))return false;
+    return desc.levels<=std::bit_width(std::max(desc.width,desc.height));
+}
+
+// Complete word-image correspondence is stricter than actual BC ownership.
+inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout) {
+    if(!IsNativeReadonlyGuestBlockStorage(desc,layout))return false;
     const auto width=desc.width/4,height=desc.height/4;
     if(desc.levels>std::bit_width(std::max(width,height)))return false;
     for(uint32_t mip=0;mip<desc.levels;++mip){
@@ -43,8 +50,10 @@ inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     const GuestTextureCache::Entry& image) {
     auto owner=image.desc;owner.writable=true;owner.render_target=false;
     const bool block=image.layout.block_extent==4;
-    if(block){
-        if(!IsIndependentGuestBlockStorage(image.desc,image.layout))return std::nullopt;
+    const bool block_words=block&&IsIndependentGuestBlockStorage(image.desc,image.layout);
+    if(block&&!IsNativeReadonlyGuestBlockStorage(image.desc,image.layout))return std::nullopt;
+    if(block&&!block_words)owner=image.desc; // Preserve tiny/partial BC-only mips as actual storage.
+    if(block_words){
         // Validate only physical ownership using one UINT texel per BC block.
         // The real image stays readonly BC; no BC UAV is created or authorized.
         owner.width/=4;owner.height/=4;owner.pitch/=4;
@@ -69,7 +78,7 @@ inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     auto layout=LayoutGuestTexture(owner);
     const auto& source=image.layout;
     if(layout.bytes_per_pixel!=source.bytes_per_pixel||
-       (block?(layout.block_extent!=1||source.block_extent!=4):layout.block_extent!=source.block_extent)||
+       (block_words?(layout.block_extent!=1||source.block_extent!=4):layout.block_extent!=source.block_extent)||
        layout.guest_bytes!=source.guest_bytes||layout.logical_bytes!=source.logical_bytes||
        layout.mips.size()!=source.mips.size())return std::nullopt;
     for(size_t i=0;i<layout.mips.size();++i){

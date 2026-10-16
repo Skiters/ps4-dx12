@@ -1314,7 +1314,7 @@ bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTex
     const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
     if(view.writable||!view.levels||view.levels>source.levels||
        view.first_mip!=view.levels-1||source.levels<=1||
-       !IsIndependentGuestBlockStorage(source,source_layout)||view_layout.block_extent!=1)return false;
+       !IsNativeReadonlyGuestBlockStorage(source,source_layout)||view_layout.block_extent!=1)return false;
     auto prefix=source;prefix.levels=view.levels;prefix.first_mip=0;
     const auto prefix_layout=LayoutGuestTexture(prefix);
     if(prefix_layout.guest_bytes>source_layout.guest_bytes)return false;

@@ -138,7 +138,8 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return page_watch_&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
             !desc.one_dimensional&&(desc.samples==1||
                 GuestTextureCache::CanTransferIndependentMultisample(desc,layout))&&
-            ((desc.data_format==6&&desc.number_format==7)||
+            (IsNativeReadonlyGuestBlockStorage(desc,layout)||
+             (desc.data_format==6&&desc.number_format==7)||
              ((desc.data_format==9)&&(desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5))||
              ((desc.data_format>=16&&desc.data_format<=19)&&desc.number_format==0)||
              ((desc.data_format==4||desc.data_format==11||desc.data_format==13||desc.data_format==14)&&
@@ -155,7 +156,8 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return desc.writable&&retain_image(desc,layout);
     });
     textures_.SetIndependentImageRetention([retain_image](const auto& desc,const auto& layout){
-        return (desc.writable||desc.data_format==13)&&retain_image(desc,layout);
+        return (desc.writable||desc.data_format==13||IsNativeReadonlyGuestBlockStorage(desc,layout))&&
+            retain_image(desc,layout);
     });
 }
 bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
