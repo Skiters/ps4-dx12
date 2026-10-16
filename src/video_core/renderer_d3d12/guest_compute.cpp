@@ -310,7 +310,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                      ((layout.block_extent==4&&previous.layout.block_extent==4)||
                       (pipeline.IsCompute()&&stages.size()==1&&!uses_dma)):
                      compatible_block_prefixes(previous.desc,previous.layout,desc,layout));
-                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views)
+                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views&&
+                    !CompatibleGuestBlockSampledViews(previous.desc,previous.layout,desc,layout))
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
                 if(previous.desc.writable!=desc.writable){
                     const auto previous_end=previous.desc.writable?previous.mip+previous.count:previous.desc.levels;

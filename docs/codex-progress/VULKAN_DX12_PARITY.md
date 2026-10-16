@@ -1,41 +1,43 @@
 # Vulkan / native D3D12 parity audit
 
-## Active native image slice binding checkpoint - 2026-10-16
+## Active BC typed sampled views checkpoint - 2026-10-16
 
-This section supersedes earlier current/next instructions. Full-port goal remains active;
-all129 groups partial/open. Source-only gate: no configure/build/compiler/helper/fixture,
-GPU/game/XInput/UI. No new PASS/FPS; preview24, original Vulkan and saves unchanged.
+Authoritative current section. Full-port goal remains active/all129 groups partial/open.
+Source-only gate: no configure/build/compiler/helper/fixture/tests/GPU/game/XInput/UI.
+No new runtime PASS/FPS/validation. Preview24, original Vulkan and saves unchanged.
 
-Through88a54a4, odd local BC descriptors can reuse a proved native parent mip without
-relaxing standalone allocation/upload rules. Current production block uses physical
-one-slice arrays for logical nonarray native1D/2D/MSAA images, preserving original sharp,
-coordinates, dimensions and LOD. ImageResource::NativeViewType selects the type only
-for native_coherent_images; existing slice-coordinate/query/atomic lowering stays.
-ShaderBinding retains actual DXIL dimension; live imported Texture2D declarations keep
-their existing descriptors. Register/mip dimension conflicts reject. Renderer physical
-array capability now permits shifted nonarray BC/UINT views to use existing parent
-address/owner/watch proofs. Single-layer SRV conversion also preserves minLOD/plane.
+Through68a2bad, native logical nonarray views use reflected one-slice array bindings,
+including shifted6x6 BC SRVs; original shader dimensions/LOD and imported Texture2D
+contracts stay. Current block allocates native BC1/2/3/4/5/6H/7 as typeless families
+and binds fully typed same-codec SRVs (UNORM/sRGB or signed/unsigned variants).
+MatchesReadonlyBcMipPrefix proves logical physical prefixes; CanBindReadonlyBcMipPrefix
+also checks actual resource format and numeric GPU owner's version/watch/full retention.
+FindValidIndependentImage/Upload/rebase/Entry::Srv share that binding proof. Canonical
+parent identity and readonly swizzles/ranges remain; different BC codecs never merge.
+Renderer admits readonly same-family physical prefixes before upload. CPU-coherent
+reuse still checks complete compressed snapshots/watch; retired modified history uses
+logical family proof without requiring a resident resource. Expanded BC rules unchanged.
 
-Existing partial-expansion GCN helper retains DA-array6x6 reads and authors DA=false
-array-T#/plain2D-T# reads of actual BC mip4/layers0,1 plus dimensions6,6,0,1 in both B/P
-branches. Programs90DWORDs fit96DWORD metadata; twelve userSGPRs and disjoint output
-ranges remain. All controls UNRUN; 1D/MSAA/sample/gather/atomic/graphics and shifted UINT
-coverage have not been executed. Cache specialization/image bool and EXE/SPIRV identities
-separate new shader ABI. No end-to-end or full parity acceptance.
+Existing partial BC1 GCN helper now authors a GPU-only565 midtone I block and simultaneous
+UNORM/sRGB reads, repeated after full formatted retile in both B/P branches. Program39
+DWORDs,16 userSGPRs plus literal output V# s16..19; original sharps/roles/bounds retained.
+Finite normalized/sRGB observations use RGB tolerance0.005, then freeze exact bits for
+remaining full output/64KiB physical oracles. New outputs1536..1567 avoid existing ranges.
+All controls UNRUN; other BC families and explicit CPU-coherent numeric-pair execution
+remain unverified. Previous27 writable/shifted controls and address controls remain UNRUN.
 
-Current evidence/recovery: F:/PS4Dev/handoff/native-slice-binding-20261016/{SOURCE_CONTRACT.md,
-checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. resource.h and resource_bindings
-contain inherited work; only owned method/field/reflection deltas are committed. Broad
-integration and exact22 staged deletions remain separately preserved. Restore only in a
-separate checkout at manifest.head using staged.patch --index, unstaged.patch and source
-archive; clean commits alone do not reproduce current core. Previous evidence remains.
+Evidence/recovery: F:/PS4Dev/handoff/bc-typed-views-20261016/{SOURCE_CONTRACT.md,
+checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Broad inherited integration
+and exact22 staged deletions remain separately preserved. Restore only in a separate
+checkout at manifest.head, then staged.patch --index, unstaged.patch and source archive.
+Clean commits alone do not reproduce current core. Previous evidence/measurements remain.
 
-Next production target: typed readonly BC views sharing an existing native BC parent.
-Inspect MatchesReadonlyBcMipPrefix/RebaseBlockSubresource's exact number/DXGI gates,
-existing native typeless BC resource creation and pinned host-format compatibility.
-Prove same-family UNORM/sRGB or signed/unsigned BC reuse before relaxing gates; preserve
-codec, swizzle, physical mapping and ownership. Reuse existing evidence; no general audit.
-Pinned SliceOf multi-local-layer/base_array discrepancy remains open.
+Next production source target: standalone expanded BC1/2/3/7 UNORM/sRGB cached RGBA views.
+Inspect UploadVersion allocation and GuestBcDecoder byte semantics before sharing typed
+SRVs of one decoded typeless resource. Retain compressed-byte snapshots/watch. BC4/5/6H
+signed variants require a different decode and must not reinterpret existing FLOAT pixels.
+Do not relax native prefix guards to expanded images. Reuse saved evidence, no general
+audit or execution. Pinned SliceOf multi-local-layer/base_array discrepancy remains open.
 
 ## Active mixed BC / UINT view coverage - 2026-10-16
 

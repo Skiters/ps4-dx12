@@ -8,6 +8,7 @@
 #include <array>
 #include <bit>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <initializer_list>
 #include <stdexcept>
@@ -24,7 +25,7 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
     std::array<Code,Subresources> seed{},before{},covered{},after{};
     std::array<Code,Layers> complement{};
     std::array<std::array<Code,Layers>,3> shifted_tail{};
-    Code output_init{},warm{},writer{},gap_writer{},raw{},formatted{};
+    Code output_init{},warm{},writer{},gap_writer{},raw{},formatted{},typed_pair{};
     GuestShaderFrontend frontend(profile);
     struct Drain {GuestRasterizer& r;bool armed=true;~Drain(){if(armed)try{r.Finish();}catch(...){}}} drain{rasterizer};
     const auto initialize=[](Code& code,const std::vector<u32>& words,u64 hash){
@@ -93,6 +94,10 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
         const auto old_block=[](u32 index){return std::array<u32,2>{Endpoints|u32(index+1),Green};};
         for(u32 layer=0;layer<Layers;++layer)for(u32 mip=0;mip<Levels;++mip){const auto value=old_block(layer*Levels+mip);
             std::memcpy(logical.data()+GuestPixelOffset(desc,layout,mip,layer,0,0),value.data(),8);}
+        // A non-extreme GPU-only I block distinguishes UNORM from sRGB. Raw
+        // B/P keeps the original red block at this same physical address.
+        constexpr std::array<u32,2> MidBlock{0x07e08410,0};
+        std::memcpy(logical.data()+GuestPixelOffset(desc,layout,0,0,1,0),MidBlock.data(),8);
         AmdGpu::Buffer target{};target.base_address=base+ImageOffset;target.stride=4;target.num_records=ImageBytes/4;target.data_format=4;target.num_format=4;
         target.dst_sel_x=4;target.dst_sel_y=5;target.dst_sel_z=6;target.dst_sel_w=7;
         auto output=target;output.base_address=base+OutputOffset;output.num_records=OutputBytes/4;
@@ -112,7 +117,10 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
         for(u32 layer=0;layer<Layers;++layer)for(u32 mip=0;mip<Levels;++mip){const u32 index=layer*Levels+mip;std::vector<u32> words;
             if(!index){move(words,1,BufferValue);words.insert(words.end(),{0xe0700000,0x80000100});}
             coords(words,2,0,0,layer,mip);const auto value=old_block(index);move(words,8,value[0]);move(words,9,value[1]);
-            words.insert(words.end(),{0xf0244300,0x00010802,0xbf810000});initialize(seed[index],words,hash(2,index));auto& p=bind(seed[index],12);
+            words.insert(words.end(),{0xf0244300,0x00010802});
+            if(!index){coords(words,2,1,0,0,0);move(words,8,MidBlock[0]);move(words,9,MidBlock[1]);
+                words.insert(words.end(),{0xf0244300,0x00010802});}
+            words.push_back(0xbf810000);initialize(seed[index],words,hash(2,index));auto& p=bind(seed[index],12);
             std::memcpy(p.user_data.data(),&target,sizeof(target));std::memcpy(p.user_data.data()+4,&image,sizeof(image));
             if(!index)verify(frontend.BuildCompute(gpu),{{target,true,false}},&image,true,mip);else verify(frontend.BuildCompute(gpu),{},&image,true,mip);
             rasterizer.DispatchDirect();}
@@ -153,13 +161,25 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
             std::memcpy(expected.data()+OutputOffset+CopyOffset,logical.data(),Chunk);}
         if(rasterizer.IsGpuBufferModified(target.base_address,ImageBytes)!=gpu_seed||std::memcmp(backing,physical_before.data(),Bytes))
             throw std::runtime_error("Partial BC target GPU-page query branch or physical checkpoint changed");
+        bool typed_started=false,typed_accepted=false;
         const auto read_gpu=[&]{auto snapshot=rasterizer.CapturePreparedShaderBuffer(output.base_address,OutputBytes);
             ComPtr<ID3D12Device> device;Check(snapshot.handle->GetDevice(IID_PPV_ARGS(&device)));
             auto readback=Buffer(device.Get(),OutputBytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             rasterizer.RetainUntilFinish([snapshot,readback](u64){(void)snapshot;(void)readback;});auto* list=rasterizer.RecordingList();
             snapshot.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);list->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,OutputBytes);
             rasterizer.Finish();rasterizer.ValidateDebugMessages();void* mapped{};D3D12_RANGE range{0,SIZE_T(OutputBytes)};
-            Check(readback.handle->Map(0,&range,&mapped));const bool valid=std::memcmp(mapped,expected.data()+OutputOffset,OutputBytes)==0;
+            Check(readback.handle->Map(0,&range,&mapped));bool typed_valid=true;
+            if(typed_started&&!typed_accepted){
+                for(u32 slot=0;slot<2;++slot)for(u32 component=0;component<4;++component){
+                    float actual{};std::memcpy(&actual,static_cast<const std::byte*>(mapped)+1536+slot*16+component*4,4);
+                    const float linear=component==3?1.f:component==1?32.f/63.f:16.f/31.f;
+                    const float wanted=slot==1&&component<3?std::pow((linear+0.055f)/1.055f,2.4f):linear;
+                    // BC1 endpoint expansion may round through eight-bit UNORM.
+                    // This tolerance is far smaller than the UNORM/sRGB gap.
+                    typed_valid&=std::isfinite(actual)&&std::abs(actual-wanted)<(component==3?1.e-6f:0.005f);}
+                if(typed_valid){std::memcpy(expected.data()+OutputOffset+1536,static_cast<const std::byte*>(mapped)+1536,32);
+                    typed_accepted=true;}}
+            const bool valid=typed_valid&&std::memcmp(mapped,expected.data()+OutputOffset,OutputBytes)==0;
             D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);
             if(!valid||rasterizer.IsGpuBufferModified(target.base_address,ImageBytes)!=gpu_seed||std::memcmp(backing,physical_before.data(),Bytes))
                 throw std::runtime_error("Partial BC GPU observations, physical bytes or exact query branch changed");};
@@ -172,6 +192,32 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
             std::memcpy(p.user_data.data(),&bc,sizeof(bc));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
             verify(frontend.BuildCompute(gpu),{{output,true,false}},&bc,false,mip);rasterizer.DispatchDirect();}};
         sample_covered(covered,512,7);
+        auto srgb=bc;srgb.num_format=9;
+        const auto typed_words=std::bit_cast<std::array<u32,4>>(output);std::vector<u32> typed_code;
+        u64 typed_identity=hash(15);
+        for(u32 c=0;c<4;++c){typed_code.insert(typed_code.end(),{0xbe8003ffu|((16+c)<<16),typed_words[c]});
+            typed_identity=(typed_identity^typed_words[c])*0x100000001b3ULL;}
+        coords(typed_code,0,4,0,0,0);
+        typed_code.insert(typed_code.end(),{0xf0044f00,0x00000400,0xbf8c0000,0xf0044f00,0x00020800,0xbf8c0000});
+        for(u32 slot=0;slot<2;++slot)for(u32 c=0;c<4;++c)
+            typed_code.insert(typed_code.end(),{0xe0700600u+slot*16+c*4,0x80040000u|((4+slot*4+c)<<8)});
+        typed_code.push_back(0xbf810000);initialize(typed_pair,typed_code,typed_identity);
+        const auto sample_typed=[&]{auto& p=bind(typed_pair,16);
+            std::memcpy(p.user_data.data(),&bc,sizeof(bc));std::memcpy(p.user_data.data()+8,&srgb,sizeof(srgb));
+            const auto& stage=frontend.BuildCompute(gpu);
+            if(stage.spirv.empty()||stage.info.translation_failed||stage.info.uses_dma||stage.info.images.size()!=2)
+                throw std::runtime_error("Typed BC readonly pair changed original image/DMA slots");
+            const std::array<AmdGpu::Image,2> originals{bc,srgb};
+            for(u32 slot=0;slot<2;++slot){const auto& resource=stage.info.images[slot];const auto sharp=resource.GetSharp(stage.info);
+                if(resource.is_written||!resource.is_array||resource.native_raw32||std::memcmp(&sharp,&originals[slot],sizeof(sharp)))
+                    throw std::runtime_error("Typed BC pair lost readonly role, original numeric type or sharp");}
+            u32 count=0;for(const auto& resource:stage.info.buffers)if(!resource.IsSpecial()){
+                const auto sharp=resource.GetSharp(stage.info);
+                if(++count!=1||!resource.is_written||resource.is_formatted||std::memcmp(&sharp,&output,sizeof(sharp)))
+                    throw std::runtime_error("Typed BC pair lost literal output buffer bounds/access");}
+            if(count!=1)throw std::runtime_error("Typed BC pair removed output buffer");
+            rasterizer.DispatchDirect();typed_started=true;};
+        sample_typed();read_gpu();
         // Preserve the original DA-array case, then observe logical 2D loads
         // through both an array T# with one slice and a plain Color2D T#.
         // The actual BC mip4 remains the authority in every case.
@@ -227,12 +273,12 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
             std::memcpy(p.user_data.data()+4,&copied,sizeof(copied));p.user_data[8]=offset;
             verify(frontend.BuildCompute(gpu),{{target,false,true},{copied,true,false}});rasterizer.DispatchDirect();
             std::memcpy(expected.data()+OutputOffset+CopyOffset,logical.data()+offset,Chunk);read_gpu();}
-        sample_covered(after,1024,9);read_gpu();
+        sample_covered(after,1024,9);sample_typed();read_gpu();
         if(gpu_seed){std::memcpy(expected.data()+ImageOffset+covered_offset,logical.data()+covered_offset,4);
             std::memcpy(expected.data()+ImageOffset+gap_offset,logical.data()+gap_offset,4);}
         rasterizer.ReadMemory(base,Bytes);rasterizer.Finish();rasterizer.ValidateDebugMessages();
         if(std::memcmp(backing,expected.data(),Bytes))throw std::runtime_error("Partial BC full compressed/padding/physical dirty-union oracle mismatch");
-        std::printf("PASS: real GCN partial BC1 mip4 complement from%s; full compressed bytes/padding and64KiB physical oracle\n",gpu_seed?"GPU B":"physical P");
+        std::printf("PASS: real GCN partial BC1 UNORM/sRGB views and mip4 complement from%s; full compressed bytes/padding and64KiB physical oracle\n",gpu_seed?"GPU B":"physical P");
     }
     rasterizer.Finish();drain.armed=false;
 }

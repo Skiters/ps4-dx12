@@ -91,6 +91,10 @@ GuestTextureDesc DescribeGuestDepthBuffer(const AmdGpu::DepthBuffer&,const AmdGp
 GuestTextureDesc DescribeGuestStencil(const GuestTextureDesc& depth);
 GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& desc);
 bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc sampled);
+// Logical readonly BC view compatibility, including numeric variants/prefixes.
+// Actual native resource casting and ownership must be proved by the cache.
+bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTextureLayout&,
+    const GuestTextureDesc&,const GuestTextureLayout&);
 // Writable descriptors may differ in mip/layer ranges and compatible numeric
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);

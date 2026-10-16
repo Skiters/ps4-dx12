@@ -33,9 +33,23 @@ bool GuestAltTile(bool enabled){
     return false;
 #endif
 }
+DXGI_FORMAT BlockStorageFormat(DXGI_FORMAT format){
+    switch(format){
+    case DXGI_FORMAT_BC1_UNORM:case DXGI_FORMAT_BC1_UNORM_SRGB:return DXGI_FORMAT_BC1_TYPELESS;
+    case DXGI_FORMAT_BC2_UNORM:case DXGI_FORMAT_BC2_UNORM_SRGB:return DXGI_FORMAT_BC2_TYPELESS;
+    case DXGI_FORMAT_BC3_UNORM:case DXGI_FORMAT_BC3_UNORM_SRGB:return DXGI_FORMAT_BC3_TYPELESS;
+    case DXGI_FORMAT_BC4_UNORM:case DXGI_FORMAT_BC4_SNORM:return DXGI_FORMAT_BC4_TYPELESS;
+    case DXGI_FORMAT_BC5_UNORM:case DXGI_FORMAT_BC5_SNORM:return DXGI_FORMAT_BC5_TYPELESS;
+    case DXGI_FORMAT_BC6H_UF16:case DXGI_FORMAT_BC6H_SF16:return DXGI_FORMAT_BC6H_TYPELESS;
+    case DXGI_FORMAT_BC7_UNORM:case DXGI_FORMAT_BC7_UNORM_SRGB:return DXGI_FORMAT_BC7_TYPELESS;
+    default:return DXGI_FORMAT_UNKNOWN;
+    }
+}
+bool CanBindReadonlyBcMipPrefix(const GuestTextureCache::Entry&,const GuestTextureDesc&,
+    const GuestTextureLayout&);
 // PS4 number formats reinterpret the same texel bits. Allocate the DXGI
-// typeless family, then bind a fully typed UAV for each guest descriptor.
-DXGI_FORMAT WritableStorageFormat(uint32_t data,DXGI_FORMAT fallback){
+// typeless family, then bind a fully typed SRV/UAV for each guest descriptor.
+DXGI_FORMAT GuestStorageFormat(uint32_t data,DXGI_FORMAT fallback){
     switch(data){
     case 1:return DXGI_FORMAT_R8_TYPELESS;
     case 2:return DXGI_FORMAT_R16_TYPELESS;
@@ -48,6 +62,8 @@ DXGI_FORMAT WritableStorageFormat(uint32_t data,DXGI_FORMAT fallback){
     case 12:return DXGI_FORMAT_R16G16B16A16_TYPELESS;
     case 13:return DXGI_FORMAT_R32G32B32A32_TYPELESS;
     case 14:return DXGI_FORMAT_R32G32B32A32_TYPELESS;
+    case 35:case 36:case 37:case 38:case 39:case 40:case 41:{
+        const auto block=BlockStorageFormat(fallback);return block==DXGI_FORMAT_UNKNOWN?fallback:block;}
     default:return fallback;
     }
 }
@@ -275,7 +291,7 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
         source.native_packed10_raw=view.native_packed10_raw=false;
     }
     if(source.data_format==view.data_format&&
-       WritableStorageFormat(source.data_format,DXGI_FORMAT_UNKNOWN)!=DXGI_FORMAT_UNKNOWN)
+       GuestStorageFormat(source.data_format,DXGI_FORMAT_UNKNOWN)!=DXGI_FORMAT_UNKNOWN)
         source.number_format=view.number_format=0;
     return source==view;
 }
@@ -820,12 +836,14 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTextureDesc& sampled_view)const{
     if(sampled_view==desc)return Srv();
     const bool shader_alias=!sampled_view.writable&&CompatibleGuestShaderStorage(desc,sampled_view);
-    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias)||sampled_view.first_mip>=sampled_view.levels||
+    const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
+        CanBindReadonlyBcMipPrefix(*this,sampled_view,LayoutGuestTexture(sampled_view));
+    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias)||sampled_view.first_mip>=sampled_view.levels||
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
     Entry view;view.desc=sampled_view;view.desc.stencil_address=desc.stencil_address;
-    view.layout=shader_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
+    view.layout=shader_alias||block_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
 }
 void EncodeGuestSubresource(const GuestTextureDesc& d,const GuestTextureLayout& l,
     std::span<std::byte> guest,std::span<const std::byte> linear,uint32_t mip,uint32_t layer) {
@@ -1333,14 +1351,17 @@ bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTex
 }
 bool MatchesReadonlyBcMipPrefix(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
-    // A BC SRV can select a prefix of an actual BC allocation without a UINT
-    // representation of its terminal mips. It must retain the exact typed format.
+    // A native BC SRV can select a physical prefix without a UINT representation
+    // of terminal mips. Numeric variants must keep the same BC codec family;
+    // actual resource casting and ownership are checked separately below.
     if(!IsNativeReadonlyGuestBlockStorage(source,source_layout)||
        !IsNativeReadonlyGuestBlockStorage(view,view_layout)||view.levels>source.levels||
        view.first_mip>=view.levels||source.data_format!=view.data_format||
-       source.number_format!=view.number_format||source_layout.format!=view_layout.format)return false;
+       BlockStorageFormat(source_layout.format)==DXGI_FORMAT_UNKNOWN||
+       BlockStorageFormat(source_layout.format)!=BlockStorageFormat(view_layout.format))return false;
     auto prefix=source;prefix.levels=view.levels;prefix.first_mip=0;
-    if(!CompatibleGuestSampledStorage(prefix,view))return false;
+    auto physical_view=view;physical_view.number_format=source.number_format;
+    if(!CompatibleGuestSampledStorage(prefix,physical_view))return false;
     const auto physical=LayoutGuestTexture(prefix);
     if(!MatchesGuestMipLayout(physical,view_layout)||physical.guest_bytes>source_layout.guest_bytes)return false;
     for(uint32_t mip=0;mip<prefix.levels;++mip){
@@ -1349,6 +1370,18 @@ bool MatchesReadonlyBcMipPrefix(const GuestTextureDesc& source,const GuestTextur
            a.slice_bytes!=b.slice_bytes||a.macro!=b.macro||a.thickness!=b.thickness)return false;
     }
     return true;
+}
+bool CanBindReadonlyBcMipPrefix(const GuestTextureCache::Entry& source,const GuestTextureDesc& view,
+    const GuestTextureLayout& layout){
+    if(!source.texture.handle||!MatchesReadonlyBcMipPrefix(source.desc,source.layout,view,layout))return false;
+    // Logical compatibility alone cannot authorize a typed cast of a legacy
+    // resource. Numeric reinterpretation retains the complete GPU owner/watch
+    // contract; ordinary CPU-coherent reuse checks complete physical bytes.
+    if(source.gpu_owned&&source.desc.number_format!=view.number_format&&
+       (!source.cache||!source.buffer_alias_version||!source.buffer_alias_watch||
+        !source.cache->CanRetainIndependentImage(source.desc,source.layout)))return false;
+    const auto format=DX12_API_CALL(source.texture.handle->GetDesc()).Format;
+    return format==layout.format||format==BlockStorageFormat(layout.format);
 }
 // Bounded pinned ExpandImage copy: all source words fit target BC blocks,
 // and complete source physical storage is the same mip-major target prefix.
@@ -1381,9 +1414,14 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
         (entry.desc.writable&&CompatibleGuestShaderStorage(entry.desc,desc))||
-        (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc)))&&
+        (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc))||
+        CanBindReadonlyBcMipPrefix(entry,desc,layout))&&
         MatchesGuestMipLayout(entry.layout,layout);
 }
+}
+bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextureLayout& al,
+    const GuestTextureDesc& b,const GuestTextureLayout& bl){
+    return MatchesReadonlyBcMipPrefix(a,al,b,bl)||MatchesReadonlyBcMipPrefix(b,bl,a,al);
 }
 GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
@@ -1416,7 +1454,7 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
         const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout)||
             MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout)||
             (entry->buffer_alias_watch&&CanRetainIndependentImage(entry->desc,entry->layout)&&
-             MatchesReadonlyBcMipPrefix(entry->desc,entry->layout,desc,layout))||
+             CanBindReadonlyBcMipPrefix(*entry,desc,layout))||
             MatchesReferencePartialBlockExpansion(entry->desc,entry->layout,desc,layout);
         if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
@@ -1444,7 +1482,7 @@ GuestTextureCache::Entry* GuestTextureCache::FindReadonlyBlockParent(const Guest
     auto [first,last]=address_index_.equal_range(desc.address);
     for(auto it=first;it!=last;++it){auto* candidate=it->second;
         if(!candidate->gpu_owned||!candidate->buffer_alias_version||!candidate->buffer_alias_watch||
-           candidate->logical_dirty||!MatchesReadonlyBcMipPrefix(candidate->desc,candidate->layout,desc,layout)||
+           candidate->logical_dirty||!CanBindReadonlyBcMipPrefix(*candidate,desc,layout)||
            !CanRetainIndependentImage(candidate->desc,candidate->layout))continue;
         if(parent&&parent!=candidate)throw std::runtime_error("Ambiguous readonly BC prefix parent");
         parent=candidate;
@@ -1534,7 +1572,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
         if(!parent.gpu_owned||!parent.buffer_alias_version||!parent.buffer_alias_watch||
            parent.logical_dirty||desc.address<=parent.desc.address||
            !IsNativeReadonlyGuestBlockStorage(parent.desc,parent.layout)||
-           (native_bc&&(desc.data_format!=parent.desc.data_format||desc.number_format!=parent.desc.number_format))||
+           (native_bc&&desc.data_format!=parent.desc.data_format)||
            (!array&&parent.desc.layers!=1)||parent.desc.width%4||
            parent.desc.height%4||parent.desc.pitch%4)continue;
         const auto delta=desc.address-parent.desc.address;
@@ -1563,7 +1601,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
             // that is the parent's selected mip, not the parent's mip0.
             view.min_lod=mip*256;
             if(native_bc){
-                if(!MatchesReadonlyBcMipPrefix(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
+                if(!CanBindReadonlyBcMipPrefix(parent,view,LayoutGuestTexture(view))||
                    !CanRetainIndependentImage(parent.desc,parent.layout))continue;
             }else{
                 auto storage=view;storage.writable=true;storage.first_layer=0;storage.view_layers=storage.layers;
@@ -1643,7 +1681,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         auto [first,last]=address_index_.equal_range(d.address);
         for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
             const bool block=MatchesReferenceBlockImage(previous.desc,previous.layout,d,layout)||
-                MatchesReferencePartialBlockExpansion(previous.desc,previous.layout,d,layout);
+                MatchesReferencePartialBlockExpansion(previous.desc,previous.layout,d,layout)||
+                MatchesReadonlyBcMipPrefix(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
                (!block&&!MatchesGuestMipLayout(previous.layout,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
@@ -1702,7 +1741,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
     auto* independent_reuse=independent_source&&
         (MatchesGuestUploadStorage(*independent_source,d,layout)||
-         MatchesReadonlyBcMipPrefix(independent_source->desc,independent_source->layout,d,layout))?
+         CanBindReadonlyBcMipPrefix(*independent_source,d,layout))?
         independent_source:nullptr;
     Entry* reuse=independent_reuse;
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;
@@ -1828,7 +1867,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         }
         auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed){auto* existing=indexed->second;
             if(existing->pending||existing->fence>completed||
-               !CompatibleGuestSampledStorage(existing->desc,d)||
+               (!CompatibleGuestSampledStorage(existing->desc,d)&&!CanBindReadonlyBcMipPrefix(*existing,d,layout))||
                existing->layout.guest_bytes!=layout.guest_bytes||
                existing->sampled_snapshot.size()!=layout.guest_bytes)continue;
             bool same_layout=existing->layout.mips.size()==layout.mips.size();
@@ -1901,7 +1940,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(d.stencil_address)new_entry->stencil_layout=stencil_layout;
         D3D12_RESOURCE_DESC r{};r.Dimension=d.volume_depth?D3D12_RESOURCE_DIMENSION_TEXTURE3D:d.one_dimensional?D3D12_RESOURCE_DIMENSION_TEXTURE1D:D3D12_RESOURCE_DIMENSION_TEXTURE2D;r.Width=d.width;r.Height=d.height;r.DepthOrArraySize=UINT16(d.volume_depth?d.volume_depth:d.layers);r.MipLevels=UINT16(d.levels);r.Format=layout.format;r.SampleDesc.Count=d.samples;
         if(layout.format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)r.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
-        if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=WritableStorageFormat(d.data_format,layout.format);
+        if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=GuestStorageFormat(d.data_format,layout.format);
         if(HasExactPackedExpansion(d,layout))r.Format=DXGI_FORMAT_R32G32B32A32_TYPELESS;
         if(d.depth_target) {
             if(d.writable||d.render_target||(d.samples>1&&d.levels!=1)||
@@ -1913,7 +1952,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         }
         if(d.writable) {
             r.Format=d.UsesRaw32()?
-                DXGI_FORMAT_R32_TYPELESS:WritableStorageFormat(d.data_format,layout.format);
+                DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(d.data_format,layout.format);
             if(d.samples==1)r.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
         if(d.render_target||(d.samples>1&&!d.depth_target)) {
