@@ -64,3 +64,7 @@ Finish verifying the committed build script in the clean checkout and persist it
 Production BC continuation commit `6cbaef71857b04275be11013e62c05c2b3c672b3` passed the committed build script from the same clean checkout (exit0, `command-20261017-004316-56776.log`). No primary-checkout inputs in 2282 compile commands; tracked source tree clean.
 
 Preserved complete executable/PDB/runtime/compiler/licenses: `F:/PS4Dev/handoff/integrated-release-20261016/artifacts-6cbaef7`. EXE SHA256 `7751a7b565c94920c3ac15271dba0088308506a1a1717406aa8c1eb2aaf450c8`; PDB SHA256 `ee44494e2fa0dc1ba99d46401966dd365bae5670f332d9d7c964c7239b6132be`. Full manifest/proof: `LATEST_RELEASE_IDENTITY.json` / `LATEST_RELEASE_PROOF.json` in the evidence root. Initial72569a5 artifacts remain separately preserved. This build is untested in game and is not installed as an accepted application core.
+
+## Ordered interior writer build
+
+Clean Release `daa76fc50a3d07978a8804d7a6e3646dbe4c647a` passed the committed build script, log command-20261017-010800-71224.log. Artifacts `F:/PS4Dev/handoff/ordered-offset-writers-20261017/artifacts-daa76fc`, EXE SHA256 `74e783a09fd2e3ed5f7695235acf4eefa99bd515f7e9d4d7d9b21abcb599b9b3`. Full proof/identity in ordered-offset-writers-20261017. No primary checkout inputs. Native fixture C++ typechecks passed separately; no GPU/game acceptance. New manual-folder policy forbids automatic core installation/selection; use the installed folder selector.
