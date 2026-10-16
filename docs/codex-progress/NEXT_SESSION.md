@@ -2,13 +2,13 @@
 
 ## Current continuation pointer - 2026-10-16
 
-Read active SESSION_HANDOFF.md and bc-macro-rebase-20261016/CHECKPOINT_FINAL.json; verify
-actual HEAD and preserve inherited dirty integration/22 staged deletions. Macro/thick
-address-family admission is saved. Next production: single-level BC parent word views,
-starting at MatchesReadonlyBlockMipPrefix's source.levels<=1 rejection. Extend private
-readonly and writable grouping together; readonly-only BC+UINT must not retire a bound
-BC parent. Exact physical identity, owner/watch/pins/fences stay. Add authored one-level
-controls, no execution. Earlier next-task notes below are historical.
+Read active SESSION_HANDOFF.md and bc-single-level-20261016/CHECKPOINT_FINAL.json; verify
+actual HEAD and preserve inherited dirty integration/22 staged deletions. Single-level
+private BC/word predicate is saved. Next: shifted readonly odd/small local BC views of
+an already-native parent mip, starting with RebaseBlockSubresource's native_bc/expanded
+filters and LayoutGuestTexture's BC fallback. Prove physical block mapping and shader/
+descriptor type/span before avoiding binding-only RGBA expansion; generic upload guards
+stay. No compiler/build/tests/GPU/game/UI. Earlier next-task notes are historical.
 
 ## Current BC mip continuation - 2026-10-16
 

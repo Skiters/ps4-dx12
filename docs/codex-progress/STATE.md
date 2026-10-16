@@ -1,12 +1,11 @@
 # Native DX12 state
 
-## Current pointer - macro/thick block-view rebase, 2026-10-16
+## Current pointer - one-level BC / word views, 2026-10-16
 
-SESSION_HANDOFF.md's active section and bc-macro-rebase-20261016/CHECKPOINT_FINAL.json
-are authoritative. Physical group/padding/pipe/bank proofs now gate macro/thick aliases;
-canonical storage adopts parent swizzle only after proof. CPU controls authored/unrun;
-existing24 GCN cases unchanged, macro/thick GCN coverage still absent. All129 groups partial.
-No builds/tests/game/UI; preview24 and user session unchanged. Earlier notes historical.
+SESSION_HANDOFF.md and bc-single-level-20261016/CHECKPOINT_FINAL.json are authoritative.
+Exact sole-mip word views now preserve the BC parent for readonly and writable paths.
+Twenty-seven GCN scenarios plus macro address controls authored/unrun; all129 groups partial.
+No builds/tests/game/UI; preview24 and user session unchanged. Previous sections historical.
 
 ## Current BC block image bridge - 2026-10-16
 

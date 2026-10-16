@@ -16,9 +16,10 @@ All129 groups remain partial/open. Production changes are source-reviewed only.
 | Shifted one-mip UINT views | Exact thin microtiled mip/slice rebase before shared grouping | Authored/unrun; multi-layer/base_array reference discrepancy open |
 | Shifted/bounded native BC SRVs | Actual typed BC parent reuse; original mip/layer spans; BC-only views across graphics stages | Authored/unrun; graphics runtime unverified |
 | Macro/thick shifted views | Aligned group stride, rounded layers and exact pipe/bank correction proof; canonical parent swizzle | CPU address controls authored/unrun; real-GCN coverage absent |
+| One-level BC parent word views | Exact private readonly mip0 and shared dependent write/commit preserve native parent | Authored/unrun, including readonly BC+UINT in one dispatch |
 | Overlapping feedback/DMA/buffers | Unsupported combinations still rejected | Remaining contracts |
 
-Twenty-four GCN cases are prepared, including shifted UINT/native BC and bounded BC mip ranges; none was compiled or run. No new game/FPS evidence or
+Twenty-seven GCN cases are prepared, including one-level parent readonly/writable controls; none was compiled or run. No new game/FPS evidence or
 complete parity claim. Current continuation and exact evidence: SESSION_HANDOFF.md.
 
 ## Current BC block expansion coverage - 2026-10-16

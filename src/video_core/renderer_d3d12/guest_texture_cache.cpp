@@ -1310,11 +1310,13 @@ bool MatchesReferenceBlockImage(GuestTextureDesc source,const GuestTextureLayout
 }
 // A block-texel view selects one mip, not necessarily a one-mip allocation.
 // Materialize a private readonly prefix through the selected mip; the full BC
-// chain remains the sole authoritative image. This is not an ownership match.
+// chain remains the sole authoritative image, including a one-level parent.
+// This is not an ownership match: even a complete readonly word view must not
+// retire a BC parent already bound by another slot in the same dispatch.
 bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
     if(view.writable||!view.levels||view.levels>source.levels||
-       view.first_mip!=view.levels-1||source.levels<=1||
+       view.first_mip!=view.levels-1||
        !IsNativeReadonlyGuestBlockStorage(source,source_layout)||view_layout.block_extent!=1)return false;
     auto prefix=source;prefix.levels=view.levels;prefix.first_mip=0;
     const auto prefix_layout=LayoutGuestTexture(prefix);

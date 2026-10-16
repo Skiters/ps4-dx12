@@ -1,53 +1,52 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
-## Active macro/thick block-view checkpoint - 2026-10-16
+## Active one-level BC / word views checkpoint - 2026-10-16
 
 This section supersedes earlier current/next instructions. Full-port goal remains active;
 all129 groups partial/open. No configure/build/compiler/tests/GPU/game/XInput/UI.
 Preview24, original Vulkan, saves and running user session remain unchanged.
 
-Through5647a13, thin shifted UINT views rebase before shared grouping; native BC prefix
-SRVs reuse the actual typed parent with original descriptor mip/layer ranges. Independent
-UID/pin/watch/full-parent ownership, snapshot isolation, pending/fence accounting and
-acquire-before-retire remain. Earlier24 real GCN streams/oracles are preserved, unrun.
+Through82320ea: thin shifted UINT and native BC prefix views preserve actual parent
+ownership/descriptor spans. Macro/thick admission now proves rounded physical storage,
+aligned groups, bulk stride and pipe/bank corrections before normalizing parent swizzle.
+Nine positive/eighteen negative CPU address controls are authored/unrun; real-GCN
+macro/thick end-to-end coverage remains absent. Prior proofs are not runtime acceptance.
 
-Current source adds guest_subresource_rebase.h::MatchesGuestSliceAddressing and calls it
-from RebaseBlockSubresource. Macro/thick views are admitted only for equal physical shape,
-thickness-aligned slice origins and complete rounded storage fitting the parent mip.
-Micro low-z bits remain equal. For macro, one group's pre-interleave stride must be256-
-aligned and expand to exactly the physical group stride after pipe/bank insertion.
-Pipe and bank slice corrections must agree for every local thick group, using actual
-parent/local swizzles; coordinate/split terms then agree for all texels. Only after this
-proof does canonical storage use the parent's bank swizzle. Padded local layers, bounds,
-mode/sample/format, full-owner watch and prefix/lifetime checks remain. Unsupported pipe
-configs/bank counts are declined before address calls. No new macro-address formula,
-partial-plane rewrite, second guest owner or change to GPU tiling/shader code is introduced.
+Current production block extends MatchesReadonlyBlockMipPrefix to exact mip0 of a one-
+level native BC parent by removing source.levels<=1. Physical prefix, block-word shape,
+readonly role and complete layer matching remain. This common predicate consistently
+routes readonly Upload through a dirty/nonowner private child and writable grouping
+through the existing live parent UID/pin/watch transaction. BC remains the sole owner;
+replacement still acquires before old parent retirement. A writable-only exception would
+leave readonly-only BC+UINT binding able to retire an already-bound BC parent. Source
+review found no concrete blocker; ordinary snapshot/ownership and format gates stay.
 
-New CPU address controls are authored/unrun: positive cases compare every logical absolute
-parent/local GuestPixelOffset independently of admission, with wrong rotation/swizzle,
-thickness origin and corrupted shape/bounds controls. Existing24 GCN cases remain intact;
-real-GCN macro/thick end-to-end cases are NOT yet added. Reviews found no remaining
-concrete source blocker after the unsupported-pipe predicate correction. No compilation,
-address-control execution, descriptors/PageWatch/fences/graphics/game or FPS acceptance.
+Twenty-seven GCN scenarios are prepared, unrun. New24-26 use word12x12/pitch16/layers2,
+BC48x48/pitch64/one mip: BC3=8192B, BC1=4096B, with physical padding. Each includes a
+same-dispatch readonly BC+UINT pair before writing; the last also checks disjoint native
+BC layer1 read/UINT layer0 write. Source I differs from B/P and full physical/output
+oracles remain. Two image sharps use all16 user registers; output buffer constants are
+materialized in scratchSGPRs16..19 and exact GetSharp/output bounds are asserted. No
+out-of-bounds user_data copies or production shader workaround. Prior24 GCN cases and
+the macro/thick address controls remain intact. No compilation, fixture/address execution,
+descriptor/PageWatch/fence/graphics/game or performance acceptance; no current FPS/PASS.
 
-Evidence/recovery: F:/PS4Dev/handoff/bc-macro-rebase-20261016/{SOURCE_CONTRACT.md,REVIEW.md,
-fixtures,checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Previous shifted/native
-proofs and measurements remain in bc-shifted-views-20261016 and bc-shifted-native-20261016.
-The pinned SliceOf/FindImage multi-local-layer/base_array quotient/overwrite discrepancy
-remains open; physical rebasing is not full pinned Vulkan parity. Broad dirty integration
-and22 original staged deletions are separate. Clean commits alone do not reproduce the
-full core; restore archives only into a separate checkout of manifest.head.
+Evidence/current recovery: F:/PS4Dev/handoff/bc-single-level-20261016/{SOURCE_CONTRACT.md,
+REVIEW.md,fixtures,checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Previous
+macro and shifted/native evidence/measurements remain. The pinned SliceOf/FindImage
+multi-local-layer/base_array quotient/overwrite discrepancy is still open; full Vulkan
+parity is unproved. Broad inherited integration/22 staged deletions stay separate. Clean
+commits alone do not reproduce the core; restore only in a separate checkout of manifest.head.
 
-Next coherent production task: single-level BC parent word views. The current
-MatchesReadonlyBlockMipPrefix source.levels<=1 guard blocks their shared dependent path.
-Extend the exact private readonly predicate consistently, then reuse current writable
-transaction/grouping. Do not add a writable-only escape hatch: readonly-only BC+UINT
-binding could still retire the already-bound BC parent via generic ownership conversion.
-Preserve exact complete physical matching, full-parent watch and one child/commit; author
-one-level readonly-only, writable and disjoint-layer controls. See SOURCE_CONTRACT.md's
-next-block proof. Unaligned thick fragments, nonarray-over-array, odd/expanded BC and
-numeric typed variants remain open; full-parent seed reuse needs shared accounting.
-Keep execution deferred; do not restart completed general audits.
+Next production task: shifted readonly BC views whose local base dimensions are odd or
+smaller than4 pixels, while the actual parent already has a valid native BC mip. Inspect
+RebaseBlockSubresource's native_bc detection/expanded rejection and LayoutGuestTexture's
+BC fallback. Prove physical block/slice correspondence, then build the parent-relative
+native descriptor, without requiring CPU RGBA expansion solely for that binding. Preserve
+original shader type/dimensions, typed codec/number format, SRV span, parent I and ownership.
+Do not relax generic odd BC allocation/upload rules. Reuse saved actual-owner/partial-copy
+fixtures for tail provenance. Nonarray-over-array, unaligned thick fragments, numeric
+variants and shared seed accounting remain open. Keep execution deferred; no general audit.
 
 ## Current independent BC block expansion - 2026-10-16
 
