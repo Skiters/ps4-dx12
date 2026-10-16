@@ -53,6 +53,43 @@ static std::array<u32,4> ClassifyPhysicalAliases(Shader::Info& info,std::array<u
     for(u32 i=0;i<4;++i){read_constants[i]=shuffle->Arg(0).Inst()->Arg(i).F32();write_constants[i]=inverse->Arg(0).Inst()->Arg(i).F32();}
     return {shuffle->Arg(2).U32(),shuffle->Arg(3).U32(),shuffle->Arg(4).U32(),shuffle->Arg(5).U32()};
 }
+static void CheckStorageIdentitySpecialization(const Shader::Info& info){
+    Shader::Profile profile{};profile.native_coherent_images=true;
+    Shader::RuntimeInfo runtime{};runtime.sw_stage=Shader::SwStage::Compute;
+    const Shader::Backend::Bindings bindings{};
+    const Shader::StageSpecialization baseline(info,runtime,profile,bindings);
+    if(baseline.native_image_aliases.size()!=2||baseline.native_image_aliases[1]!=0)
+        throw std::runtime_error("T# control bits split the shader's physical alias group");
+    auto plain=info;const auto original=info.images[1].GetSharp(info);
+    std::memcpy(plain.flattened_ud_buf.data(),&original,sizeof(original));
+    const Shader::StageSpecialization plain_key(plain,runtime,profile,bindings);
+    if(!(baseline==plain_key))
+        throw std::runtime_error("Non-storage T# fields caused an unnecessary shader variant");
+    // Each changed storage field must still break alias classification. These
+    // are metadata-only controls; the full dispatch below uses valid geometry.
+    const std::array<void(*)(AmdGpu::Image&),11> different{
+        +[](AmdGpu::Image& image){image.base_address^=1;},
+        +[](AmdGpu::Image& image){image.width+=1;},
+        +[](AmdGpu::Image& image){image.height+=1;},
+        +[](AmdGpu::Image& image){image.depth+=1;},
+        +[](AmdGpu::Image& image){image.pitch+=1;},
+        +[](AmdGpu::Image& image){image.last_level+=1;},
+        +[](AmdGpu::Image& image){image.tiling_index^=1;},
+        +[](AmdGpu::Image& image){image.pow2pad^=1;},
+        +[](AmdGpu::Image& image){image.alt_tile_mode^=1;},
+        +[](AmdGpu::Image& image){image.type=u64(AmdGpu::ImageType::Color3D);},
+        +[](AmdGpu::Image& image){image.data_format=11;}
+    };
+    for(const auto change:different){
+        auto broken=info;auto image=original;change(image);
+        std::memcpy(broken.flattened_ud_buf.data()+8,&image,sizeof(image));
+        const Shader::StageSpecialization separate(broken,runtime,profile,bindings);
+        if(Shader::NativeImageStorageAliases(info.images[0].GetSharp(info),image)||
+           separate.native_image_aliases.size()!=2||separate.native_image_aliases[1]!=1||
+           baseline==separate)
+            throw std::runtime_error("A physical storage change reused a shared image shader variant");
+    }
+}
 static std::vector<u32> EmitAliasShader(Shader::Info& info,bool typed,bool mixed,bool dynamic,bool nonuniform,bool classified,std::array<u32,4> read_swizzle,std::array<u32,4> write_swizzle,std::array<float,4> read_constants,std::array<float,4> write_constants){
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.native_coherent_images=true;
     Shader::RuntimeInfo runtime{};runtime.sw_stage=Shader::SwStage::Compute;
@@ -257,7 +294,8 @@ int wmain(int argc,wchar_t** argv){try {
     const bool classified_one=classified_float_one||classified_signed_one||(argc==5&&std::wstring_view(argv[4])==L"classified-one");
     const bool classified_srgb_swizzle=argc==5&&std::wstring_view(argv[4])==L"classified-srgb-swizzle";
     const bool classified_srgb=classified_srgb_swizzle||(argc==5&&std::wstring_view(argv[4])==L"classified-srgb");
-    const bool classified=classified_srgb||classified_one||classified_swizzle||classified_typed||classified_view||(argc==5&&std::wstring_view(argv[4])==L"classified");
+    const bool classified_identity=argc==5&&std::wstring_view(argv[4])==L"classified-identity";
+    const bool classified=classified_identity||classified_srgb||classified_one||classified_swizzle||classified_typed||classified_view||(argc==5&&std::wstring_view(argv[4])==L"classified");
     std::ifstream file(argv[1],std::ios::binary|std::ios::ate);const auto bytes=file.tellg();
     if(bytes<=0||bytes%4)throw std::runtime_error("Invalid shader fixture");
     std::vector<u32> spirv(size_t(bytes)/4);file.seekg(0);file.read(reinterpret_cast<char*>(spirv.data()),bytes);
@@ -303,6 +341,16 @@ int wmain(int argc,wchar_t** argv){try {
         if(classified_srgb)view.num_format=i==0?9:0;
         if(classified_srgb_swizzle&&i==0){view.dst_sel_x=7;view.dst_sel_w=4;}
         if(classified_swizzle&&i==(classified_write_swizzle?1u:0u)){view.dst_sel_x=5;view.dst_sel_y=4;}
+        if(classified_identity&&i==0){
+            // Pinned ImageInfo ignores cache/perf/counter and unused T# bits.
+            // They must not leave a same-storage read as an overlapping SRV.
+            view.mtype_l2=3;view.mtype=2;view.mtype2=1;view.atc=1;
+            view.perf_modulation=7;view.interlaced=1;
+            view.min_lod_warn=4095;view.counter_bank_id=255;view.lod_hw_cnt_en=1;
+            view.compression_en=1;view.alpha_is_on_msb=1;view.color_transform=1;
+            std::array<u32,8> words{};std::memcpy(words.data(),&view,sizeof(view));
+            words[7]|=0x80000000U;std::memcpy(&view,words.data(),sizeof(view));
+        }
         if(i==2){view.base_level=1;view.base_array=view.last_array=2;}
         memcpy(info.flattened_ud_buf.data()+i*8,&view,sizeof(view));
         Shader::ImageResource image{};image.is_written=!mixed||i!=0;image.is_array=true;
@@ -314,6 +362,7 @@ int wmain(int argc,wchar_t** argv){try {
     std::array<u32,4> write_swizzle{4,5,6,7};
     std::array<float,4> read_constants{0.f,1.f,0.f,0.f},write_constants=read_constants;
     if(classified)read_swizzle=ClassifyPhysicalAliases(info,write_swizzle,read_constants,write_constants);
+    if(classified_identity)CheckStorageIdentitySpecialization(info);
     if(classified_srgb&&(!info.images[0].native_srgb_read||info.images[1].native_srgb_read))
         throw std::runtime_error("sRGB decode was not restricted to the promoted read view");
     if(argc==5){dxil=Shader::Backend::DX12::ConvertSpirv(argv[2],EmitAliasShader(info,typed,mixed,dynamic,nonuniform,classified,read_swizzle,write_swizzle,read_constants,write_constants),options);

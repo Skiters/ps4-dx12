@@ -213,14 +213,6 @@ using ImageResourceList = boost::container::static_vector<ImageResource, NUM_IMA
 // and UAV descriptors retain these fields independently for each access.
 inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
 
-    left.base_level = right.base_level = 0;
-    left.min_lod = right.min_lod = 0;
-    left.base_array = right.base_array = 0;
-    left.last_array = right.last_array = 0;
-    left.dst_sel_x = right.dst_sel_x = 4;
-    left.dst_sel_y = right.dst_sel_y = 5;
-    left.dst_sel_z = right.dst_sel_z = 6;
-    left.dst_sel_w = right.dst_sel_w = 7;
     // These families have typeless native storage with fully typed UAV views.
     // Packed/compressed families without that representation stay distinct.
     if ((left.data_format == 4 || left.data_format == 10) &&
@@ -236,8 +228,19 @@ inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
         default: break;
         }
     }
+    // Pinned ImageInfo(sharp, desc) identifies storage using address, format,
+    // extent/pitch, mip/layer/sample geometry and tiling. Cache policy, perf/
+    // warning counters and reserved T# bits do not create another allocation.
+    // A bytewise T# comparison missed these aliases, leaving reads as SRVs
+    // beside a UAV of the same native subresource. Retain the conservative
+    // type/format families above; view-specific fields stay on each descriptor.
     return left.base_address != 0 && right.base_address != 0 &&
-           std::memcmp(&left, &right, sizeof(left)) == 0;
+           left.base_address == right.base_address && left.data_format == right.data_format &&
+           left.num_format == right.num_format && left.width == right.width &&
+           left.height == right.height && left.depth == right.depth && left.pitch == right.pitch &&
+           left.last_level == right.last_level && left.type == right.type &&
+           left.tiling_index == right.tiling_index && left.pow2pad == right.pow2pad &&
+           left.alt_tile_mode == right.alt_tile_mode;
 }
 
 // Resolved descriptions are independent of another stage's user-data registers.

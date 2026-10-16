@@ -10,7 +10,7 @@
 #include <bit>
 namespace Common::Log { std::array<Level,size_t(Class::Count)> g_class_levels{}; }
 using namespace Shader;
-static void Run(bool dynamic,bool reverse,bool same,bool native,bool loaded,bool alias=false,u32 number_format=4,u32 constant_lod=1,u32 external=0,bool query=false){
+static void Run(bool dynamic,bool reverse,bool same,bool native,bool loaded,bool alias=false,u32 number_format=4,u32 constant_lod=1,u32 external=0,bool query=false,bool controls=false){
     Common::ObjectPool<IR::Inst> pool{256};IR::Block block(pool);Info info;
     const auto add=[&](IR::Opcode op,std::initializer_list<IR::Value> args){block.AppendNewInst(op,args);return IR::Value{&block.back()};};
     const IR::Value zero{u32(0)};
@@ -36,6 +36,12 @@ static void Run(bool dynamic,bool reverse,bool same,bool native,bool loaded,bool
         info.flattened_ud_buf.resize(16);memcpy(info.flattened_ud_buf.data(),words,sizeof(words));
         memcpy(info.flattened_ud_buf.data()+8,words,sizeof(words));info.flattened_ud_buf[8]+=256;
         if(alias)info.flattened_ud_buf[8]-=256;
+        if(alias&&controls){
+            auto control=sharp;control.mtype=3;control.perf_modulation=7;
+            control.counter_bank_id=255;control.min_lod_warn=4095;
+            memcpy(info.flattened_ud_buf.data()+8,&control,sizeof(control));
+            info.flattened_ud_buf[15]|=0x80000000U;
+        }
         for(u32 i=0;i<8;++i){
             r.sharps[0].dwords[i]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(i)}});
             w.sharps[0].dwords[i]=same?r.sharps[0].dwords[i]:add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(i+8)}});
@@ -47,12 +53,16 @@ static void Run(bool dynamic,bool reverse,bool same,bool native,bool loaded,bool
         auto other=sharp;if(external==2)other.base_address+=256;
         if(external==6)other.tiling_index=8;
         if(external==7)other.data_format=14;
+        if(external==8){other.mtype=3;other.mtype_l2=2;other.perf_modulation=7;
+            other.counter_bank_id=255;other.min_lod_warn=4095;}
+        if(external==9){std::array<u32,8> raw{};memcpy(raw.data(),&other,sizeof(other));
+            raw[7]|=0x80000000U;memcpy(&other,raw.data(),sizeof(other));}
         info.native_pipeline_writes.push_back({other,external==3||external==5,external==4});
     }
     Profile profile{};profile.native_coherent_images=native;
     Optimization::ResourcePatchingPass(info,resources,profile);
     if(external){
-        const bool promoted=native&&(external==1||external==4||external==5);
+        const bool promoted=native&&(external==1||external==4||external==5||external==8||external==9);
         if(info.images.size()!=1||info.images[0].is_written!=promoted||
            info.images[0].native_srgb_read!=(promoted&&!query&&number_format==9))
             throw std::runtime_error("External stage write classification lost alias or sRGB semantics");
@@ -146,10 +156,11 @@ int main(){try{for(bool dynamic:{false,true})for(bool reverse:{false,true})for(b
         RunPacked(scalar,rgba,native,true,4,10);RunPacked(rgba,scalar,native,true,10,4);
     }
     for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool native:{false,true})Run(dynamic,reverse,false,native,true,true);
+    for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool native:{false,true})Run(dynamic,reverse,false,native,true,true,4,1,0,false,true);
     for(u32 format:{0U,2U,3U})Run(false,false,true,true,true,false,format);
     Run(false,false,true,true,true,false,9);
     for(u32 level:{2U,256U,UINT32_MAX})for(bool reverse:{false,true})Run(false,reverse,true,true,true,false,4,level);
-    for(u32 external:{1U,2U,3U,4U,5U,6U,7U})for(bool native:{false,true})for(bool dynamic:{false,true})for(u32 format:{4U,9U})Run(dynamic,false,false,native,true,false,format,1,external);
-    for(u32 external:{1U,2U,3U,4U,5U,6U,7U})for(bool native:{false,true})for(u32 format:{4U,9U})Run(false,false,false,native,true,false,format,1,external,true);
+    for(u32 external:{1U,2U,3U,4U,5U,6U,7U,8U,9U})for(bool native:{false,true})for(bool dynamic:{false,true})for(u32 format:{4U,9U})Run(dynamic,false,false,native,true,false,format,1,external);
+    for(u32 external:{1U,2U,3U,4U,5U,6U,7U,8U,9U})for(bool native:{false,true})for(u32 format:{4U,9U})Run(false,false,false,native,true,false,format,1,external,true);
     puts("PASS: image access classification preserves mip selection, resource identity and backend isolation");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
