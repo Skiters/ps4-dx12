@@ -133,6 +133,31 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return version;
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
+    textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
+        // Pinned ObtainBufferForImage chooses B only for GPU-modified target
+        // pages. A resident arena alone is not proof that B is the refresh seed.
+        Resource seed;
+        if(IsGpuBufferModified(desc.address,layout.guest_bytes))
+            seed=CaptureShaderBuffer(desc.address,layout.guest_bytes);
+        else{
+            std::vector<std::byte> bytes(size_t(layout.guest_bytes));
+            if(!read_backing_(desc.address,bytes))throw std::runtime_error("BC refresh lost physical backing");
+            seed=Buffer(device_.Get(),layout.guest_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto upload=Buffer(device_.Get(),layout.guest_bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+            void* mapped{};D3D12_RANGE empty{};Check(upload.handle->Map(0,&empty,&mapped));
+            std::memcpy(mapped,bytes.data(),bytes.size());upload.handle->Unmap(0,nullptr);
+            RetainUntilFinish([seed,upload](u64){(void)seed;(void)upload;});
+            DX12_API_CALL(RecordingList()->CopyBufferRegion(seed.handle.Get(),0,upload.handle.Get(),0,layout.guest_bytes));
+        }
+        // Retile consumes the same R prefix, overwrites only logical source I,
+        // then merges it back. Target-only mips and newly visible padding stay R.
+        auto prefix=textures_.RetileBufferVersion(image,seed,RecordingList(),CompletedFence());
+        prefix.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        seed.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+        DX12_API_CALL(RecordingList()->CopyBufferRegion(seed.handle.Get(),0,prefix.handle.Get(),0,image.layout.guest_bytes));
+        seed.Transition(RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        return seed;
+    });
     textures_.SetImageWriteNotifier([this](auto& image){QueueLinearImageDownload(image);});
     const auto retain_image=[this](const auto& desc,const auto& layout){
         return page_watch_&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&

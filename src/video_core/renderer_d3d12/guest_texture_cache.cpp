@@ -1328,6 +1328,32 @@ bool MatchesReadonlyBlockMipPrefix(const GuestTextureDesc& source,const GuestTex
     }
     return MatchesReferenceBlockStorage(prefix,prefix_layout,view,view_layout);
 }
+// Bounded pinned ExpandImage copy: all source words fit target BC blocks,
+// and complete source physical storage is the same mip-major target prefix.
+bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTextureLayout& a,
+    GuestTextureDesc view,const GuestTextureLayout& b){
+    if(!IsNativeReadonlyGuestBlockStorage(view,b)||a.block_extent!=1||a.expanded_bytes_per_pixel||
+       source.render_target||source.depth_target||source.stencil_address||source.volume_depth||
+       source.one_dimensional||source.samples!=1||source.pow2_padding||source.storage_height||
+       source.storage_slice_bytes||source.number_format!=4||
+       !((source.data_format==11&&a.bytes_per_pixel==8)||(source.data_format==14&&a.bytes_per_pixel==16))||
+       a.bytes_per_pixel!=b.bytes_per_pixel||!source.levels||source.levels>view.levels||
+       a.mips.size()!=source.levels||a.guest_bytes>b.guest_bytes||source.layers!=view.layers)return false;
+    for(uint32_t mip=0;mip<source.levels;++mip){
+        const auto& x=a.mips[mip];const auto& y=b.mips[mip];
+        if(x.pitch!=y.pitch||x.height!=y.height||x.offset!=y.offset||x.slice_bytes!=y.slice_bytes||
+           x.macro!=y.macro||x.thickness!=y.thickness||
+           uint64_t(std::max(source.width>>mip,1u))*4>std::max(view.width>>mip,1u)||
+           uint64_t(std::max(source.height>>mip,1u))*4>std::max(view.height>>mip,1u))return false;
+    }
+    view.width/=4;view.height/=4;view.pitch/=4;view.levels=source.levels;
+    source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.writable=view.writable=false;
+    source.native_raw32=view.native_raw32=source.native_packed10_raw=view.native_packed10_raw=false;
+    source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
+    source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
+    return source==view;
+}
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
@@ -1366,7 +1392,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty)continue;
         const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout)||
-            MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout);
+            MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout)||
+            MatchesReferencePartialBlockExpansion(entry->desc,entry->layout,desc,layout);
         if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
             !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout))))continue;
@@ -1391,7 +1418,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     if(refresh_current){
         auto [first,last]=address_index_.equal_range(d.address);
         for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
-            const bool block=MatchesReferenceBlockImage(previous.desc,previous.layout,d,layout);
+            const bool block=MatchesReferenceBlockImage(previous.desc,previous.layout,d,layout)||
+                MatchesReferencePartialBlockExpansion(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
                (!block&&!MatchesGuestMipLayout(previous.layout,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
@@ -1508,16 +1536,18 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
             const bool private_block_view=MatchesReadonlyBlockMipPrefix(existing->desc,existing->layout,d,layout);
+            const bool partial_block=!MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&
+                MatchesReferencePartialBlockExpansion(existing->desc,existing->layout,d,layout);
             if((existing->layout.block_extent==4||layout.block_extent==4)&&
                !MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&
-               !private_block_view&&!MatchesGuestUploadStorage(*existing,d,layout)){
+               !private_block_view&&!partial_block&&!MatchesGuestUploadStorage(*existing,d,layout)){
                 // A different BC codec is a distinct image class. Refresh it
                 // from B while retaining the old codec's independent I.
                 if(existing->layout.block_extent==4&&layout.block_extent==4&&
                    existing->desc.data_format!=d.data_format)continue;
                 throw std::runtime_error("Independent block image view has no proven word/layout transfer");
             }
-            if(!read_independent_||!acquire_independent_||!retire_independent_||
+            if((partial_block?!expand_block_:!read_independent_)||!acquire_independent_||!retire_independent_||
                !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address)
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
             if((existing->desc.samples>1||d.samples>1)&&
@@ -1526,7 +1556,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
                 !CanTransferIndependentMultisample(d,layout)))
                 throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
             auto* source=existing;auto pin=PinBinding(*source);
-            auto snapshot=read_independent_(*source,d.address,layout.guest_bytes);
+            auto snapshot=partial_block?expand_block_(*source,d,layout):
+                read_independent_(*source,d.address,layout.guest_bytes);
             // Source ownership and its CPU-write guard remain live until the
             // new interpretation has acquired its own guard. Pending copies
             // retain the old allocation/descriptors through normal cache fences.

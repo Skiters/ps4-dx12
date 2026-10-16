@@ -221,6 +221,7 @@ private:
     }
     std::function<void(Entry&)> resolve_owned_;
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
+    std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<bool(Entry&)> acquire_independent_;
     std::function<void(Entry&)> retire_independent_;
     std::function<void(Entry&)> retire_pressure_;
@@ -276,6 +277,10 @@ public:
         std::function<Resource(Entry&,uint64_t,uint64_t)> read,
         std::function<bool(Entry&)> acquire,std::function<void(Entry&)> retire){
         read_independent_=std::move(read);acquire_independent_=std::move(acquire);retire_independent_=std::move(retire);
+    }
+    void SetIndependentBlockExpansion(
+        std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand){
+        expand_block_=std::move(expand);
     }
     void SetPressureRetirement(std::function<void(Entry&)> retirement){retire_pressure_=std::move(retirement);}
     void SetPressureWait(std::function<uint64_t()> wait){wait_pressure_=std::move(wait);}
