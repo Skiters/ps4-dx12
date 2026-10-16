@@ -216,6 +216,15 @@ int wmain(int argc,wchar_t** argv){try{
         auto& dma=late.DmaMemory();std::vector<Rasterizer::ShaderBufferRequest> planned;
         dma.AppendRequests(late,planned);
         if(!planned.empty())throw std::logic_error("Fresh late-residency fixture unexpectedly has a DMA plan");
+        const Rasterizer::ShaderBufferRequest predicted{guest_base,Dma::PageSize,false,true,true};
+        std::vector<Rasterizer::ShaderBufferRequest> reserved;
+        dma.AppendRequests(late,reserved,std::span(&predicted,1));
+        if(reserved.empty()||!dma.ResidentIntersections(guest_base,Dma::PageSize).empty())
+            throw std::runtime_error("Predicting an ordinary descriptor prematurely published DMA residency");
+        late.PrepareShaderBuffers(reserved);
+        (void)late.CaptureShaderBuffer(guest_base,Dma::PageSize,false);
+        if(!dma.ResidentIntersections(guest_base,Dma::PageSize).empty())
+            throw std::runtime_error("Physical DMA reservation/private capture published a semantic page");
         const Rasterizer::ShaderBufferRequest materialized[]{
             {guest_base,Dma::PageSize,false,true,true},
             {guest_base+2*Dma::PageSize-Dma::SubpageSize,Dma::SubpageSize,false,true,true},

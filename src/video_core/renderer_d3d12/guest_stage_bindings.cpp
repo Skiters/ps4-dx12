@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_stage_bindings.h"
 #include "guest_image_ownership.h"
+#include "guest_dma.h"
 #include "diagnostics.h"
 #include <algorithm>
 #include <map>
@@ -156,7 +157,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                        return buffer.formatted&&!buffer.cpu_stream&&
                            Overlaps(address,domain.layout.guest_bytes,requests[index].address,requests[index].size);})){
                     arm();domain.initial_bytes=previous->layout.guest_bytes;
-                    auto initial=rasterizer.CaptureShaderBuffer(address,domain.initial_bytes);
+                    auto initial=rasterizer.CaptureShaderBuffer(address,domain.initial_bytes,false);
                     domain.initial_tiled=textures.RetileBufferVersion(*previous,initial,
                         rasterizer.RecordingList(),rasterizer.CompletedFence());arm();
                 }
@@ -170,27 +171,42 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         // Save clean CPU streams before residency/ownership or any I->B copy.
         // Aliased resident buffers retain one arena, so later copies remain
         // visible through earlier resident descriptors as in the pinned backend.
-        std::map<std::pair<VAddr,uint64_t>,size_t> streams;
+        std::vector<bool> publish;
+        for(const auto& request:requests)publish.push_back(request.publish_dma_residency);
+        for(auto& request:requests)request.publish_dma_residency=false;
+        std::map<std::tuple<VAddr,uint64_t,bool>,size_t> streams;
         for(size_t i=0;i<buffers.size();++i)if(buffers[i].read&&buffers[i].cpu_stream){
             // Keep the original DWORD envelope and byte adjustment. Copying
             // only sharp bytes would move a sub-DWORD stream under its shader.
-            const auto source=requests[i];const auto key=std::pair{source.address,source.size};
+            const auto source=requests[i];const auto key=std::tuple{source.address,source.size,source.unordered_access};
             auto [it,inserted]=streams.try_emplace(key,requests.size());
             if(inserted){
                 const auto address=private_cpu_stream(source.address,source.size);
                 requests.push_back({address,source.size,false,requests[i].unordered_access,true});
+                requests.back().publish_dma_residency=false;
             }
             result.stream_views[i]=it->second;
         }
         for(const auto& [address,domain]:domains){
             bool uav=false;for(const auto& request:requests)if(Overlaps(address,domain.layout.guest_bytes,request.address,request.size))uav|=request.unordered_access;
             requests.push_back({address,domain.layout.guest_bytes,false,uav,true});
+            requests.back().publish_dma_residency=false;
         }
         result.buffers=rasterizer.PrepareShaderBuffers(requests,std::span<const Rasterizer::BufferWrite>{});
+        rasterizer.DmaMemory().PublishPreparedFaults(rasterizer);
+        // Auxiliary inputs retain their caller's original residency intent.
+        for(size_t i=buffers.size();i<publish.size();++i)if(publish[i]){
+            auto request=requests[i];request.publish_dma_residency=true;
+            rasterizer.DmaMemory().ObserveResidentSharps(std::span(&request,1));
+        }
         for(const auto& stage:stages){
             if(stage.end_buffer>buffers.size()||stage.end_image>images.size())throw std::invalid_argument("Ordered stage span overflows metadata");
             for(size_t i=stage.first_buffer;i<stage.end_buffer;++i){
                 const auto& request=requests[i];const auto& buffer=buffers[i];const auto original=request.WriteRange();
+                if(publish[i]&&!result.stream_views[i]){
+                    auto resident=request;resident.publish_dma_residency=true;
+                    rasterizer.DmaMemory().ObserveResidentSharps(std::span(&resident,1));
+                }
                 const auto state=request.unordered_access?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
                 if(buffer.formatted&&!result.stream_views[i]){
@@ -211,11 +227,11 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                         if(((address+bytes-1)>>32)>((original.address+original.size-1)>>32))
                             throw std::runtime_error("Ordered formatted transfer exceeds the reader's original VA arena");
                         arm();
-                        if(old_prefix)rasterizer.CopyToPreparedShaderBuffer(address,bytes,domain.initial_tiled,state);
+                        if(old_prefix)rasterizer.CopyResidentImageToPreparedShaderBuffer(address,bytes,domain.initial_tiled,state);
                         else{
                             auto initial=rasterizer.CapturePreparedShaderBuffer(address,bytes);
                             auto tiled=textures.RetileBufferVersion(*image,initial,rasterizer.RecordingList(),rasterizer.CompletedFence());
-                            rasterizer.CopyToPreparedShaderBuffer(address,bytes,tiled,state);
+                            rasterizer.CopyResidentImageToPreparedShaderBuffer(address,bytes,tiled,state);
                         }
                         arm();
                     }
@@ -236,6 +252,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                         const auto guest=std::span(reinterpret_cast<const std::byte*>(domain.desc.address),size_t(domain.layout.guest_bytes));
                         refreshed=&textures.Upload(domain.desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence());
                     }else{
+                        const Rasterizer::ShaderBufferRequest resident{domain.desc.address,domain.layout.guest_bytes,false,true,true};
+                        rasterizer.DmaMemory().ObserveResidentSharps(std::span(&resident,1));
                         auto snapshot=rasterizer.CapturePreparedShaderBuffer(domain.desc.address,domain.layout.guest_bytes);
                         refreshed=&textures.Upload(domain.desc,{},rasterizer.RecordingList(),rasterizer.CompletedFence(),{},
                             true,&snapshot,domain.desc.writable,true);

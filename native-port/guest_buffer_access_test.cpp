@@ -2,6 +2,7 @@
 #include "video_core/renderer_d3d12/guest_buffer_access.h"
 #include "common/scope_exit.h"
 #include "buffer_envelope_fixture.h"
+#include "semantic_buffer_residency_fixture.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -83,6 +84,7 @@ void Run(ID3D12Device* device,bool f2){
     for(u64 i=0;i<bytes;++i)physical[i]=std::byte(i*19+7);
     ProtectedDmaBacking(device,guest,physical,base);
     RunBufferEnvelopeFixture<Fixture>(device,physical,base,bytes);
+    RunSemanticBufferResidencyFixture<Fixture>(device);
     {
         u64 commits{},committed{};bool fail{};
         Fixture renderer(device);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);

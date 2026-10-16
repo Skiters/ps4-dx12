@@ -8,6 +8,17 @@ namespace NativeDX12 {
 namespace {
 namespace Dma=Shader::NativeDma;
 constexpr u64 FaultBytes=u64(Dma::PageCount)/8;
+void CollectResidentPages(std::set<u64>& pages,
+    std::span<const Rasterizer::ShaderBufferRequest> requests){
+    for(const auto& request:requests){
+        if(!request.publish_dma_residency)continue;
+        const auto source=request.WriteRange();
+        if(!source.size)continue;
+        if(source.address>UINT64_MAX-source.size)throw std::out_of_range("DMA residency range overflow");
+        const auto last=(source.address+source.size-1)>>Dma::PageShift;
+        for(auto page=source.address>>Dma::PageShift;page<=last;++page)pages.insert(page);
+    }
+}
 D3D12_UNORDERED_ACCESS_VIEW_DESC RawView(u64 offset,u64 bytes){
     if(offset%16||bytes%4||!bytes||bytes/4>UINT_MAX)throw std::invalid_argument("Native DMA raw view extent");
     D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_TYPELESS;
@@ -62,23 +73,46 @@ void GuestDmaMemory::ObserveResidentSharps(std::span<const Rasterizer::ShaderBuf
     // EnsureResident publishes ordinary arena pages to the original BDA table,
     // not just pages learned from fault feedback. Clean CPU-only streams are
     // deliberately absent from this list; null/special temporaries are too.
-    for(const auto& request:resident_sharps){
-        const auto source=request.WriteRange();
-        if(!source.size||source.address>=Dma::AddressLimit)continue;
-        const auto end=source.address+std::min(source.size,Dma::AddressLimit-source.address);
-        for(auto page=source.address>>Dma::PageShift;page<=((end-1)>>Dma::PageShift);++page)pages_.insert(u32(page));
+    CollectResidentPages(pages_,resident_sharps);
+}
+std::vector<std::pair<VAddr,u64>> GuestDmaMemory::ResidentIntersections(VAddr address,u64 bytes)const{
+    if(address>UINT64_MAX-bytes)throw std::out_of_range("DMA resident intersection overflow");
+    std::vector<std::pair<VAddr,u64>> spans;
+    if(!bytes)return spans;
+    const auto end=address+bytes,last=(end-1)>>Dma::PageShift;
+    for(auto it=pages_.lower_bound(address>>Dma::PageShift);it!=pages_.end()&&*it<=last;++it){
+        const auto base=*it<<Dma::PageShift;
+        const auto first=std::max(address,base),limit=base+std::min<u64>(Dma::PageSize,end-base);
+        if(!spans.empty()&&spans.back().first+spans.back().second==first)spans.back().second+=limit-first;
+        else spans.emplace_back(first,limit-first);
+    }
+    return spans;
+}
+void GuestDmaMemory::PublishPreparedFaults(Rasterizer& rasterizer){
+    for(auto it=fault_pages_.begin();it!=fault_pages_.end();){
+        const VAddr address=u64(*it)<<Dma::PageShift;
+        bool materialized=rasterizer.IsDmaReadable(address,Dma::PageSize)&&
+            rasterizer.PreparedDmaBuffer(address,Dma::PageSize).has_value();
+        if(!materialized)for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub){
+            const auto first=address+u64(sub)*Dma::SubpageSize;
+            if(rasterizer.IsDmaReadable(first,Dma::SubpageSize)&&
+               rasterizer.PreparedDmaBuffer(first,Dma::SubpageSize)){materialized=true;break;}
+        }
+        if(materialized){pages_.insert(*it);it=fault_pages_.erase(it);}else ++it;
     }
 }
 void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterizer::ShaderBufferRequest>& requests,
     std::span<const Rasterizer::ShaderBufferRequest> resident_sharps){
     ConsumeFaults(rasterizer);
-    ObserveResidentSharps(resident_sharps);
-    PlanRanges(rasterizer);
+    auto planned=pages_;
+    planned.insert(fault_pages_.begin(),fault_pages_.end());
+    CollectResidentPages(planned,resident_sharps);
+    PlanRanges(rasterizer,planned);
     // This pass only plans residency. A raw DMA read must not download a
     // distinct I into B before the ordered image-domain retention pass.
     requests.insert(requests.end(),ranges_.begin(),ranges_.end());
 }
-void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,
+void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,const std::set<u64>& pages,
     std::vector<Rasterizer::ShaderBufferView>* resident_views){
     ranges_.clear();translations_.clear();indirect_entries_.clear();
     if(resident_views)resident_views->clear();
@@ -89,18 +123,21 @@ void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,
         if(ranges_.empty()||ranges_.back().address+ranges_.back().size!=address||
            ranges_.back().size>Dma::BankSize-bytes||!same_backing){
             ranges_.push_back({address,0,false,true});
+            ranges_.back().publish_dma_residency=false;
             if(resident_views){resident_views->push_back(*view);resident_views->back().size=0;}
         }
         translations_.push_back({entry,bytes,ranges_.size()-1,ranges_.back().size});ranges_.back().size+=bytes;
         if(resident_views)resident_views->back().size+=bytes;
     };
     u32 partial_count{};
-    for(auto it=pages_.begin();it!=pages_.end();){
+    std::vector<u64> inaccessible;
+    for(auto it=pages.begin();it!=pages.end();++it){
+        if(*it>=Dma::PageCount)continue; // native fixture addresses are not PS4 BDA entries
         const VAddr address=u64(*it)<<Dma::PageShift;
         const bool readable=rasterizer.IsDmaReadable(address,Dma::PageSize);
         auto full=readable&&resident_views?rasterizer.PreparedDmaBuffer(address,Dma::PageSize):
             std::optional<Rasterizer::ShaderBufferView>{};
-        if(readable&&(!resident_views||full))append(*it,address,Dma::PageSize,full?&*full:nullptr);
+        if(readable&&(!resident_views||full))append(u32(*it),address,Dma::PageSize,full?&*full:nullptr);
         else{
             u32 valid{},readable_subpages{};
             std::array<std::optional<Rasterizer::ShaderBufferView>,Dma::SubpagesPerPage> subviews;
@@ -116,17 +153,17 @@ void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,
                 // A readable candidate can have only a tiny resident sharp.
                 // Do not expose its uninitialized page tail or forget it: the
                 // ordinary fault/materialization pass can fill the page later.
-                if(!readable_subpages)it=pages_.erase(it);else ++it;
+                if(!readable_subpages)inaccessible.push_back(*it);
                 continue;
             }
-            indirect_entries_.emplace(*it,Dma::PartialFlag|u64(partial_count+1));
+            indirect_entries_.emplace(u32(*it),Dma::PartialFlag|u64(partial_count+1));
             for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub)if(valid&(1u<<sub))
                 append(Dma::SecondaryBase+partial_count*Dma::SubpagesPerPage+sub,
                     address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize,subviews[sub]?&*subviews[sub]:nullptr);
             ++partial_count;
         }
-        ++it;
     }
+    for(const auto page:inaccessible){pages_.erase(page);fault_pages_.erase(u32(page));}
     const u64 required=u64(Dma::SecondaryBase)+u64(partial_count)*Dma::SubpagesPerPage;
     if(required>UINT32_MAX||required*sizeof(u64)>Dma::MaxRawViewBytes)
         throw std::out_of_range("Native DMA page-table descriptor extent overflow");
@@ -148,7 +185,8 @@ void GuestDmaMemory::BindResident(Rasterizer& rasterizer,ResourceBindings& bindi
             throw std::logic_error("Late DMA publication cannot replace an already selected buffer");
     }
     std::vector<Rasterizer::ShaderBufferView> views;
-    PlanRanges(rasterizer,&views);
+    PublishPreparedFaults(rasterizer);
+    PlanRanges(rasterizer,pages_,&views);
     for(const auto& view:views){
         if(std::ranges::any_of(shader_srvs,[&](const auto& srv){return srv.resource.Get()==view.resource.Get();}))
             throw std::runtime_error("Late DMA residency needs unified UAV shader buffer access");
@@ -255,7 +293,7 @@ void GuestDmaMemory::ConsumeFaults(Rasterizer& rasterizer){
         const auto count=std::min(words[0],DmaFaultCompactor::Capacity);
         for(u32 i=1;i<=count;++i){
             if(words[i]>=Dma::PageCount)throw std::runtime_error("Native DMA feedback page out of range");
-            pages_.insert(words[i]);
+            fault_pages_.insert(words[i]);
         }
         slot->pending=false;slot->ready=false;
     }

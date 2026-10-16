@@ -193,6 +193,8 @@ public:
     struct ShaderBufferRequest {
         VAddr address;u64 size;bool written=false;bool unordered_access=false;bool resident=false;
         u8 write_byte_adjust=0;u64 original_write_bytes=0;
+        // DEFAULT allocation/reservation is not itself an original EnsureResident.
+        bool publish_dma_residency=true;
         BufferWrite WriteRange()const{
             const auto bytes=original_write_bytes?original_write_bytes:size;
             if(write_byte_adjust>size||bytes>size-write_byte_adjust||address>UINT64_MAX-write_byte_adjust)
@@ -224,11 +226,15 @@ public:
     void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     // Select only fully materialized backing; never reserve, resize or upload.
     std::optional<ShaderBufferView> PreparedDmaBuffer(VAddr,u64)const;
-    Resource CaptureShaderBuffer(VAddr address,u64 bytes);
+    Resource CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency=true);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
     void TransitionPreparedShaderBuffer(VAddr address,u64 bytes,D3D12_RESOURCE_STATES);
-    void CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state);
+    void CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state,
+        bool resident_only=false);
+    void CopyResidentImageToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state){
+        CopyToPreparedShaderBuffer(address,bytes,source,final_state,true);
+    }
     void FillPreparedShaderBuffer(VAddr address,u64 bytes,u32 value,D3D12_RESOURCE_STATES final_state);
     void CommitImageBacking(VAddr,std::span<const std::byte>,
         const std::function<bool(VAddr,std::span<std::byte>)>& read,

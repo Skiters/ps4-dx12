@@ -121,10 +121,10 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     textures_.SetIndependentVersionTransfer([this](auto& image,VAddr address,u64 bytes){
         // Retile into a private GPU buffer seeded from the physical buffer
         // domain. This does not commit image pixels into that buffer domain.
-        auto initial=CaptureShaderBuffer(image.desc.address,image.layout.guest_bytes);
+        auto initial=CaptureShaderBuffer(image.desc.address,image.layout.guest_bytes,false);
         auto version=textures_.RetileBufferVersion(image,initial,RecordingList(),CompletedFence());
         if(address!=image.desc.address||bytes!=image.layout.guest_bytes){
-            auto requested=CaptureShaderBuffer(address,bytes);
+            auto requested=CaptureShaderBuffer(address,bytes,false);
             const auto begin=std::max(address,image.desc.address);
             const auto end=std::min(address+bytes,image.desc.address+image.layout.guest_bytes);
             if(begin>=end)throw std::logic_error("Independent image transfer lost its overlap");
@@ -1140,6 +1140,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         resident_index_format=element==2?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
         if(bytes){const auto first=address&~VAddr(3),last=(address+bytes+3)&~VAddr(3);
             index_requests.push_back({first,last-first,false,false,true});
+            index_requests.back().publish_dma_residency=bytes>16384||IsGpuBufferModified(address,bytes);
         }else{
             resident_index_address=0;
             index_storage=Buffer(device_.Get(),4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);

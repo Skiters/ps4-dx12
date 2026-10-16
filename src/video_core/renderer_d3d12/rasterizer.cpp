@@ -1177,8 +1177,8 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         auto& mapping=Find(request.address,request.size,false,cache_budget);
         views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation});
     }
-    // Only actual DEFAULT cache views become BDA-resident. The CPU-stream
-    // branch returns its own immutable upload views before reaching this path.
+    // DEFAULT storage alone is not residency: private streams and envelopes
+    // reserve physical memory without executing an original EnsureResident.
     DmaMemory().ObserveResidentSharps(requests);
     return views;
 }
@@ -1243,9 +1243,10 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
         }else PrepareBufferContents(mapping,false,uav,false,{},std::span<const BufferWrite>{},diagnostic);
     }
 }
-Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes){
+Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency){
     std::lock_guard lock(execution_mutex_);
-    const ShaderBufferRequest request{address,bytes,false,true,true};
+    ShaderBufferRequest request{address,bytes,false,true,true};
+    request.publish_dma_residency=publish_dma_residency;
     auto views=PrepareShaderBuffers(std::span(&request,1));
     return CapturePreparedShaderBuffer(address,bytes);
 }
@@ -1291,9 +1292,10 @@ void Rasterizer::TransitionPreparedShaderBuffer(VAddr address,u64 bytes,D3D12_RE
         throw std::logic_error("Prepared buffer transition lost its envelope");
     mapping.gpu.Transition(RecordingList(),state);
 }
-void Rasterizer::CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state){
+void Rasterizer::CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state,
+    bool resident_only){
     std::lock_guard lock(execution_mutex_);
-    if(!bytes||address%4||bytes%4||!source.handle||
+    if(!bytes||address>UINT64_MAX-bytes||address%4||bytes%4||!source.handle||
        source.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||source.handle->GetDesc().Width<bytes)
         throw std::invalid_argument("Invalid formatted image/buffer transfer");
     auto found=mappings_.upper_bound(address);
@@ -1302,12 +1304,17 @@ void Rasterizer::CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& so
     if(address-mapping.base>mapping.size||bytes>mapping.size-(address-mapping.base)||
        mapping.gpu.handle.Get()==source.handle.Get())
         throw std::logic_error("Prepared formatted buffer envelope was replaced");
-    RetainUntilFinish([backing=mapping.gpu,source](u64){(void)backing;(void)source;});
-    source.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
-    mapping.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
-    DX12_API_CALL(RecordingList()->CopyBufferRegion(mapping.gpu.handle.Get(),address-mapping.base,
-        source.handle.Get(),0,bytes));
-    mapping.gpu_cpu_diverged=true;
+    const auto spans=resident_only?DmaMemory().ResidentIntersections(address,bytes):
+        std::vector<std::pair<VAddr,u64>>{{address,bytes}};
+    if(!spans.empty()){
+        RetainUntilFinish([backing=mapping.gpu,source](u64){(void)backing;(void)source;});
+        source.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        mapping.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+        for(const auto& [first,size]:spans)
+            DX12_API_CALL(RecordingList()->CopyBufferRegion(mapping.gpu.handle.Get(),first-mapping.base,
+                source.handle.Get(),first-address,size));
+        mapping.gpu_cpu_diverged=true;
+    }
     // This read-only cache synchronization does not mark new guest writes.
     // Existing buffer ownership/dirty ranges decide subsequent CPU visibility.
     mapping.gpu.Transition(RecordingList(),final_state);
