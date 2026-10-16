@@ -1,15 +1,22 @@
 # Vulkan / native D3D12 parity audit
 
-## Active grouped writable BC view delta - 2026-10-16
+## Active mixed BC / UINT view coverage - 2026-10-16
 
-Production WIP now groups selected writable UINT mips per native BC parent into one
-maximum-prefix/full-layer child and one parent replacement. UAVs retain their selected mip
-and layer subsets; array transitions use the child's actual mip count. This extends
-single-view handling to multiple/duplicate writable slots and layer subsets. Multiple
-disjoint parents/unrelated images are allowed; mixed overlapping readonly domains, buffers,
-DMA and broader feedback remain open. Five meaningful GCN cases are authored/unrun.
-Source review only: no build, runtime validation, complete group or new FPS evidence.
-All129 groups remain partial/open. Exact continuation: active SESSION_HANDOFF.md section.
+All129 groups remain partial/open. Production changes are source-reviewed only.
+
+| Contract | Current source | Verification |
+|---|---|---|
+| Multiple writable UINT views | One maximum-prefix/full-layer child and commit per BC parent | Authored/unrun |
+| Disjoint readonly UINT SRVs | Shared child; original view range and LOD preserved | Authored/unrun |
+| Same-mip layer storage reads | Existing conservative frontend UAV promotion preserved | Authored/unrun |
+| Direct readonly native BC SRVs | Actual full parent; disjoint UINT writes remain private | Authored/unrun |
+| Parent resource state | Restore SRV after retile preparation, before compute dispatch | Source review only |
+| Ownership/lifetime | Parent pins; child nonowner; replacement acquires before retirement | Source review only |
+| Unaligned private prefixes | Still coupled to independent ownership admission | Next source task |
+| Overlapping feedback/DMA/buffers | Unsupported combinations still rejected | Remaining contracts |
+
+Eleven GCN cases are prepared; none was compiled or run. No new game/FPS evidence or
+complete parity claim. Current continuation and exact evidence: SESSION_HANDOFF.md.
 
 ## Current BC block expansion coverage - 2026-10-16
 

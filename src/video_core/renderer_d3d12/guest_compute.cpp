@@ -122,6 +122,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;};
     std::vector<ImagePending> images;
     std::vector<std::shared_ptr<void>> writable_block_parent_pins;
+    const auto find_block_parent=[textures](const GuestTextureDesc& desc,const GuestTextureLayout& layout){
+        if(!textures)return static_cast<GuestTextureCache::Entry*>(nullptr);
+        if(auto* parent=textures->FindBlockViewParent(desc,layout))return parent;
+        return textures->FindReadonlyBlockParent(desc,layout);
+    };
     const auto compatible_block_prefixes=[](GuestTextureDesc a,const GuestTextureLayout& first,
         GuestTextureDesc b,const GuestTextureLayout& second){
         // Only use this after both views have proved the same BC parent. A
@@ -269,7 +274,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             auto layout=LayoutGuestTexture(desc);
             if(desc.writable)textures->ValidateWritableFormat(layout.format);
-            auto* block_parent=sharp?textures->FindBlockViewParent(desc,layout):nullptr;
+            auto* block_parent=sharp?find_block_parent(desc,layout):nullptr;
             if(block_parent)writable_block_parent_pins.push_back(textures->PinBinding(*block_parent));
             if(sharp&&!textures->HasOwnedShaderStorage(desc)){
                 // Both access types consume parent I through private GPU
@@ -285,8 +290,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const bool converted_views=(!previous.desc.writable||!desc.writable)&&
                     desc.data_format==9&&CompatibleGuestPackedStorage(previous.desc,desc);
                 const bool block_views=block_parent&&
-                    textures->FindBlockViewParent(previous.desc,previous.layout)==block_parent&&
-                    compatible_block_prefixes(previous.desc,previous.layout,desc,layout);
+                    find_block_parent(previous.desc,previous.layout)==block_parent&&
+                    ((layout.block_extent==4||previous.layout.block_extent==4)?
+                     (pipeline.IsCompute()&&stages.size()==1&&!uses_dma):
+                     compatible_block_prefixes(previous.desc,previous.layout,desc,layout));
                 if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views)
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
                 if(previous.desc.writable!=desc.writable){
@@ -344,9 +351,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             throw std::runtime_error("Writable BC block view cannot overlap any buffer request across its full parent storage");
         for(const auto& other:images)if(!other.null_resource&&
             overlaps(other.desc.address,other.layout.guest_bytes,parent.desc.address,parent.layout.guest_bytes)){
+            const bool readonly_bc=!other.desc.writable&&other.layout.block_extent==4;
             if(other.count!=1||other.mip!=other.desc.first_mip||other.sample_storage||
-               textures->FindBlockViewParent(other.desc,other.layout)!=&parent||
-               !compatible_block_prefixes(image.desc,image.layout,other.desc,other.layout))
+               find_block_parent(other.desc,other.layout)!=&parent||
+               (!readonly_bc&&!compatible_block_prefixes(image.desc,image.layout,other.desc,other.layout)))
                 throw std::runtime_error("Writable BC block views cannot mix parent storage with other image domains");
             else if(!other.desc.writable&&image.mip<other.desc.levels&&other.mip<image.mip+image.count&&
                 image.desc.first_layer<other.desc.first_layer+other.desc.view_layers&&
@@ -725,6 +733,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
     });
     std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers;
+    std::vector<GuestTextureCache::Entry*> bc_readers;
     std::vector<GuestTextureCache::WritableBlockAlias> alias_writers;
     std::vector<std::pair<GuestTextureDesc,GuestTextureCache::Entry*>> uploaded_views;
     // Keep all recorded resources alive on exceptions as well as normal GPU
@@ -824,6 +833,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
             if(!image.null_resource&&separate_input&&!block_alias_view)entry->buffer_alias_version=true;
             if(!image.null_resource){
+                if(!image.desc.writable&&image.layout.block_extent==4&&
+                   textures->FindReadonlyBlockParent(image.desc,image.layout)==entry&&
+                   std::ranges::find(bc_readers,entry)==bc_readers.end())bc_readers.push_back(entry);
                 textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
                 if(image.sample_storage&&image.desc.samples>1){
                     if(std::ranges::none_of(storage_transfers,[entry](const auto& transfer){return transfer.first==entry;}))
@@ -890,6 +902,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(auto* entry:uploaded_writers)owned_images|=textures->Own(*entry);
         for(auto* entry:uploaded)if(entry->buffer_alias_version&&!entry->gpu_owned)
             throw std::runtime_error("Independent buffer/image cache ownership was not acquired");
+        // A later UINT view can privately retile this same BC parent after its
+        // SRV was bound, leaving it in COPY_SOURCE. All such snapshots precede
+        // execution; restore the parent reads after final image preparation.
+        for(auto* entry:bc_readers)entry->texture.Transition(rasterizer.RecordingList(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         submit(bindings);
         for(auto& alias:alias_writers){
             // Dispatch writes only transient UINT storage. Merge it into a

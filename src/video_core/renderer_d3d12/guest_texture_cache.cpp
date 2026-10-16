@@ -1409,6 +1409,14 @@ GuestTextureCache::Entry* GuestTextureCache::FindWritableBlockParent(const Guest
     const GuestTextureLayout& layout)const{
     return desc.writable?FindBlockViewParent(desc,layout):nullptr;
 }
+GuestTextureCache::Entry* GuestTextureCache::FindReadonlyBlockParent(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout)const{
+    // Direct BC readers keep the actual parent resource. Only a complete
+    // storage match may bypass the UINT-prefix path and its private copy.
+    if(!IsNativeReadonlyGuestBlockStorage(desc,layout))return nullptr;
+    auto* parent=FindValidIndependentImage(desc,layout);
+    return parent&&IsNativeReadonlyGuestBlockStorage(parent->desc,parent->layout)?parent:nullptr;
+}
 GuestTextureCache::Entry* GuestTextureCache::FindBlockViewParent(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
     // Querying a readonly image must not reinterpret BC/depth/expanded formats

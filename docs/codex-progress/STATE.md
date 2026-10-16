@@ -1,5 +1,13 @@
 # Native DX12 state
 
+## Current pointer - mixed BC / UINT views, 2026-10-16
+
+The active state is the top section of SESSION_HANDOFF.md and the exact HEAD/residual
+record in F:/PS4Dev/handoff/bc-parent-readers-20261016/CHECKPOINT_FINAL.json.
+Shared word SRV/UAV views and direct BC parent reads are source WIP; all129 groups remain
+partial/open. No compilation/tests/game/UI; preview24 unchanged. Older sections below
+are historical snapshots, not instructions to restart the completed source work.
+
 ## Current BC block image bridge - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

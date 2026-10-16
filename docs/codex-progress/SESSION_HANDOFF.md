@@ -1,42 +1,54 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
-## Active grouped writable BC views - 2026-10-16
+## Active mixed BC / UINT view checkpoint - 2026-10-16
 
 This section supersedes earlier current/next instructions. Full-port goal remains active;
-all129 registry groups remain partial/open. Source only: no configure, build, compiler,
-tests, GPU, game, XInput or desktop execution. Preview24 remains unchanged; no new FPS.
+all129 registry groups remain partial/open. No configure/build/compiler/tests/GPU/game/
+XInput/desktop execution is authorized. Source review is not runtime acceptance or FPS.
+Installed preview24, original Vulkan and user saves/session remain unchanged.
 
-Base4deb8f6 implemented the parent-dependent writable UINT selected-mip transaction.
-The current production continuation groups all eligible writable views of each BC parent
-into ONE transient UINT texture, chooses the largest proved physical mip prefix before
-any Upload, retains all parent pins, and commits each parent once after dispatch. Original
-selected mips and layer ranges remain in each UAV. Array state indices use the allocation's
-actual mip count, preventing shorter-view stride errors. Layer-subset views now initialize
-and retain a full-layer child; untouched layers/mips/padding keep the parent-I seed.
+7e42fba groups writable UINT mip/layer views per BC parent. Pushed4c790c5 extends that
+shared transient to disjoint readonly UINT SRVs: choose the maximum proved prefix across
+readers/writers, initialize one full-layer child, retain each original SRV mip/layer/LOD
+range, and commit once after dispatch. Readonly-only groups retain their private source
+path. Existing NativeImageStorageAliases conservative storage-read UAV promotion is
+intentional and unchanged; is_written can denote a storage read, not an actual store.
 
-Only one compute stage, selected one-mip UINT views and compatible physical prefixes are
-admitted. Unrelated disjoint images and multiple disjoint parent groups may coexist.
-Overlapping buffers, DMA and mixed readonly/image domains over a parent remain rejected.
-This is source-reviewed WIP, not complete alias parity. Native descriptors, PageWatch,
-shader cross-UAV memory ordering, failures and game/performance behavior remain unverified.
+The current production block also admits direct readonly BC SRVs of the same exact full
+parent while UINT writes touch disjoint mips/layers. BC readers bind the actual BC image;
+UINT views retain the separate dependent word texture. RetileBufferVersion leaves parent
+in COPY_SOURCE, so bc_readers restores parent SRV state after all image/ownership
+preparation and immediately before dispatch. Source pins and acquire-before-retire keep
+parent I live until replacement publication after dispatch. Pure-readonly BC/UINT mixtures
+also restore correctly. Cross-format admission is limited to one compute stage, no DMA;
+overlapping SRV/UAV feedback, buffers and incompatible parent layouts remain rejected.
 
-Five GCN scenarios are authored in gcn_bc_writable_alias_fixture.h and wired into the
-existing ordered formatted mode: BC1/BC3 single nonzero mip, both different-prefix slot
-orders (one with separate array-layer subsets), and duplicate same-mip storeA/loadB/storeB.
-Known compressed words, decoded samples, full physical padding, independent I/B/P witnesses
-and64KiB dirty-union oracles are prepared. None is compiled or run. Negative rejection
-controls are not authored. Production and fixture review/evidence are saved under
-F:/PS4Dev/handoff/bc-writable-groups-20261016/{REVIEW.md,fixtures/,checkpoint/}.
-The old scheduler lease/drain commits6f55ea1/0162b5c and their unrun fixture remain intact.
+Eleven real GCN scenarios are authored/unrun in gcn_bc_writable_alias_fixture.h: the five
+original writable controls, three true UINT SRV cases, one promoted storage-read layer
+control, and two direct BC-reader cases. The last two load normalized BC green, store
+its exact float bits through UINT, and check black decoded blocks plus complete encoded
+bytes/padding and64KiB dirty-union oracles. All earlier streams/expectations remain intact.
+Independent code/fixture reviews found no concrete defect within these guarded paths;
+compilation, descriptors, fences, PageWatch, shader ordering and game behavior remain
+unverified. No negative rejection tests or new measurements were run or claimed.
 
-Next source task: adapt mixed readonly UINT views of the SAME parent when selected mip/
-layer ranges are disjoint from every writable view. Reuse MatchesReadonlyBlockMipPrefix's
-private nonowner source and the grouped writer; prove parent retention during readonly
-Upload, early validation and original view bounds before relaxing admission. Overlapping
-SRV/UAV feedback requires shader access unification; never admit it by merely removing
-checks. Keep BC-format feedback separate. Do not rerun prior audits or any execution under
-the current gate. Preserve broad inherited residual edits and22 staged deletions; recovery
-archives are for a separate checkout of their manifest.head, never overlay this tree.
+Evidence: F:/PS4Dev/handoff/bc-mixed-views-20261016 and
+F:/PS4Dev/handoff/bc-parent-readers-20261016, including reviews, fixtures, checkpoint/
+snapshots and CHECKPOINT_FINAL.json/final-residual for exact final HEAD and recovery.
+Broad inherited dirty integration and22 staged deletions remain separate. A clean clone
+alone does not yet reproduce the full core; never sweep unknown residuals into commits.
+Restore archives only into a separate checkout of manifest.head, never over this tree.
+
+Next source task: separate dependent child transfer eligibility from independent page-
+aligned ownership. FindBlockViewParent currently applies CanRetainBufferAlias to each
+prefix; Upload(writable_snapshot) and RetileImageVersion repeat ownership eligibility.
+A valid private UINT prefix can therefore be rejected solely because its guest bytes
+are not4096-aligned, although the full pinned BC parent already owns the watch. Introduce
+an explicit live-parent-dependent upload/retile admission with physical bounds, device
+capabilities, residency, budget and lifetime checks; keep the child unowned/dirty and
+PageWatch on the full parent. Do not merely remove ownership checks or fake ownership.
+Extend meaningful unrun cases for unaligned prefixes, then continue the remaining contract
+queue. Reuse source proof and saved Vulkan/DX12 measurements; no repeat general audit.
 
 ## Current independent BC block expansion - 2026-10-16
 

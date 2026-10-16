@@ -64,11 +64,12 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     };
     // Keep the first five cases; then mix selected readers and writers.
     // Variant7 controls conservative same-mip storage-read UAV promotion.
-    for(u32 variant=0;variant<9;++variant){const bool bc3=variant==1||variant==4||variant>=7,group=variant==2||variant==3,duplicate=variant==4,mixed=variant>=5;
+    for(u32 variant=0;variant<11;++variant){const bool bc3=variant==1||variant==4||variant==7||variant==8||variant==10,
+        group=variant==2||variant==3,duplicate=variant==4,mixed=variant>=5,bc_reader=variant>=9,subset=variant==2||variant==7||variant==8||variant==10;
         const u32 width=bc3?16:32,levels=bc3?5:6,components=bc3?4:2,block_bytes=components*4;
         const u64 image_bytes=bc3?32768:49152;
-        const u32 first_mip=variant==3||variant==6?3:bc3?2:1,second_mip=duplicate||variant==7?first_mip:variant==3||variant==6||variant==8?1:3;
-        const u32 first_layer=variant==2||variant>=7?1:0,second_layer=variant==2||variant>=7?2:1;
+        const u32 first_mip=variant==3||variant==6?3:bc3?2:1,second_mip=duplicate||variant==7||variant==10?first_mip:variant==3||variant==6||variant==8?1:3;
+        const u32 first_layer=subset?1:0,second_layer=subset?2:1;
         const u32 slot_count=group||duplicate||mixed?2:1;
         const auto hash=[&](u32 phase,u32 index=0){return 0x574243414c000000ULL+u64(variant)*8192+u64(phase)*256+index;};
         rasterizer.ReadMemory(base,Bytes);rasterizer.InvalidateMemory(base,Bytes);std::memset(memory,0x81+int(variant)*13,Bytes);
@@ -88,11 +89,20 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
                 throw std::runtime_error("Writable BC full parent physical mip correspondence changed");}
         std::array<AmdGpu::Image,2> selected{image,image};selected[0].base_level=selected[0].last_level=first_mip;
         selected[1].base_level=selected[1].last_level=second_mip;
-        if(variant==2||variant>=7){selected[0].base_array=selected[0].last_array=first_layer;
+        if(subset){selected[0].base_array=selected[0].last_array=first_layer;
             selected[1].base_array=selected[1].last_array=second_layer;}
+        const auto word_selected=selected;
+        if(bc_reader){selected[1]=bc;selected[1].base_level=second_mip;
+            if(subset)selected[1].base_array=selected[1].last_array=second_layer;}
         if(mixed&&first_mip==second_mip&&!(selected[0].last_array<selected[1].base_array||selected[1].last_array<selected[0].base_array))
             throw std::runtime_error("Mixed BC reader/writer selected subresources overlap");
         for(u32 slot=0;slot<slot_count;++slot){auto view=DescribeGuestTexture(selected[slot]);view.writable=!mixed||slot==0||variant==7;const auto prefix=LayoutGuestTexture(view);
+            if(bc_reader&&slot==1){auto storage=view;storage.first_mip=parent_desc.first_mip;
+                storage.first_layer=parent_desc.first_layer;storage.view_layers=parent_desc.view_layers;
+                if(storage!=parent_desc||prefix.guest_bytes!=parent_layout.guest_bytes||prefix.format!=parent_layout.format||
+                   view.first_mip!=second_mip||view.levels!=levels||view.first_layer!=u32(selected[1].base_array)||
+                   view.view_layers!=(subset?1u:Layers))throw std::runtime_error("Direct BC source changed complete parent storage or original SRV range");
+                continue;}
             if(view.first_mip!=view.levels-1||!view.view_layers||view.first_layer+view.view_layers>Layers||
                prefix.guest_bytes%4096||prefix.guest_bytes>image_bytes)
                 throw std::runtime_error("Writable BC selected prefix violates retained page/full-layer limits");
@@ -180,15 +190,19 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             // The s[8:15] load precedes the s[0:7] store. Variant7's
             // same-mip storage-read is conservatively promoted to a UAV;
             // different last_level in variants5/6/8 preserves a true SRV.
+            // Variants9/10 read the actual BC parent, not a UINT child.
             // Both mip values are view-relative zero. Subset array coordinate
             // zero maps to the original T# base_array, rather than layer zero.
-            coords(write_words,2,0,0,variant>=7?0:second_layer,0);
-            write_words.insert(write_words.end(),{bc3?0xf0044f00u:0xf0044300u,0x00020802,0xbf8c0000});
+            coords(write_words,2,0,0,subset?0:second_layer,0);
+            write_words.insert(write_words.end(),{bc3||bc_reader?0xf0044f00u:0xf0044300u,0x00020802,0xbf8c0000});
             coords(write_words,2,1,0,0,0);
             write_words.insert(write_words.end(),{bc3?0xf0244f00u:0xf0244300u,0x00000802,0xbf8c0000});
-            // The CPU oracle copies known seed words, never GPU observations.
-            std::memcpy(logical.data()+GuestPixelOffset(desc,layout,first_mip,first_layer,1,0),
-                logical.data()+GuestPixelOffset(desc,layout,second_mip,second_layer,0,0),block_bytes);
+            // The CPU oracle uses known seed words or exact normalized green
+            // bits, never GPU observations or the production copy result.
+            auto* destination=logical.data()+GuestPixelOffset(desc,layout,first_mip,first_layer,1,0);
+            if(bc_reader){constexpr std::array<u32,4> green_bits{0,0x3f800000,0,0x3f800000};
+                std::memcpy(destination,green_bits.data(),block_bytes);}
+            else std::memcpy(destination,logical.data()+GuestPixelOffset(desc,layout,second_mip,second_layer,0,0),block_bytes);
         }
         coords(write_words,2,0,0,0,0);const auto first_value=block(false,25);
         for(u32 c=0;c<components;++c)move(write_words,8+c,first_value[c]);
@@ -208,13 +222,14 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         if(mixed){std::vector<u32> words;coords(words,0,4,0,first_layer,first_mip);
             words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});
             for(u32 c=0;c<4;++c){words.insert(words.end(),{0xe0700590u+c*4,0x80020000u|((4+c)<<8)});
-                expect(OutputOffset+1424+c*4,std::bit_cast<u32>(c==1||c==3?1.f:0.f));}
+                const bool one=bc_reader?(c==3&&!bc3):(c==1||c==3);
+                expect(OutputOffset+1424+c*4,std::bit_cast<u32>(one?1.f:0.f));}
             words.push_back(0xbf810000);initialize(mixed_copy_probe,words,hash(13));auto& p=bind(mixed_copy_probe,12);
             std::memcpy(p.user_data.data(),&bc,sizeof(bc));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
             verify(frontend.BuildCompute(gpu),{{output,true,false}},{{bc,false,first_mip}});rasterizer.DispatchDirect();read_gpu();}
         // Fresh readonly UINT prefix views must see committed I, while later
         // complete BC binds still retain all untouched parent mips/layers.
-        for(u32 slot=0;slot<slot_count;++slot){auto probe=selected[slot];probe.base_array=0;probe.last_array=Layers-1;
+        for(u32 slot=0;slot<slot_count;++slot){auto probe=word_selected[slot];probe.base_array=0;probe.last_array=Layers-1;
             for(u32 layer=0;layer<Layers;++layer)
                 probe_uint(uint_probe[slot*Layers+layer],probe,layer,0,1536+(slot*Layers+layer)*32,hash(10,slot*Layers+layer));}
         read_gpu();sample_parent(parent_final,512,11,true);read_gpu();
@@ -229,7 +244,8 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         if(std::memcmp(backing,expected.data(),Bytes))throw std::runtime_error("Writable BC encoded words, untouched mips/layers, physical padding or dirty-union mismatch");
         std::printf("PASS: real GCN writable %s %s; selected/grouped UAVs, exact parent blocks and64KiB physical oracle\n",bc3?"BC3":"BC1",
             mixed?(variant==5?"writer mip1/reader mip3 SRV":variant==6?"reader mip1 SRV/writer mip3":
-                variant==7?"same-mip promoted storage-read disjoint layers":"writer mip2 layer1/reader mip1 SRV layer2"):
+                variant==7?"same-mip promoted storage-read disjoint layers":variant==8?"writer mip2 layer1/reader mip1 SRV layer2":
+                variant==9?"BC mip3..last SRV/writer UINT mip1":"BC mip2..last layer2 SRV/writer UINT mip2 layer1"):
             duplicate?"duplicate same-mip coherent slots":group?(variant==2?"smaller-prefix first":"larger-prefix first"):"single nonzero mip");
     }
     rasterizer.Finish();drain.armed=false;
