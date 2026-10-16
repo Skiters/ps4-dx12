@@ -118,6 +118,11 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+92af292 baselines the full fixture output region via fenced GPU readback before chunk writes.
+Earlier source review validates the readback lifetime but not this addition; fixture remains
+unrun and lacks special-operand/sampler-mask and reverse-view assertions. Writable selected
+reverse aliases fail closed; writable parity, nonzero mips, and dirty-parent refresh remain open.
+
 ## Current selected BC mip view - 2026-10-16
 
 923d637 pushed: readonly mip0 UINT view over multi-mip BC parent snapshots privately and

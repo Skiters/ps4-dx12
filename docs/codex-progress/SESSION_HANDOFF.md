@@ -331,6 +331,25 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+## BC mip fixture oracle review update - 2026-10-16
+
+92af292 adds a GPU snapshot baseline of the complete 4 KiB output region before the
+formatted chunk walk. Each chunk still records and compares the full output region after
+Finish, so writes outside the selected 1 KiB destination window are now checked against a
+run-local GPU baseline. The earlier independent review confirmed the readback source and
+destination lifetimes are fence-safe and avoid guest-memory reconciliation. The baseline
+addition itself has not been independently reviewed or run. Fixture still ignores special
+reflected operands and does not assert sampler/component-mask metadata; those are review-noted
+coverage limits. It also still has no reverse multi-mip UINT-view scenario.
+
+The independent production review corrected an earlier concern: writable UINT reverse access
+from a clean multi-mip BC parent fails closed in the block-domain guard before acquiring a
+child or retiring the parent. The real gap is missing writable parity, which needs shared
+parent/subresource authority or explicit writeback. Nonzero views and dirty parents remain
+fail-closed. Review report: F:/PS4Dev/handoff/bc-mip-bridge-20261016/
+SELECTED_MIP_IMPLEMENTATION_REVIEW.md; fixture report: FIXTURE_REVIEW.md.
+
+
 ## Selected BC mip view continuation - 2026-10-16
 
 Source WIP 923d637 is pushed. A readonly UINT block-texel view selecting mip0 from a

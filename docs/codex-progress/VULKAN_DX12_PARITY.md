@@ -151,6 +151,11 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+The 92af292 fixture update adds a full-region GPU baseline before BC chunk writes; authored,
+unreviewed and unrun. Independent reports confirm readonly mip0 parent preservation and that
+writable reverse aliases currently fail closed. Reverse-view fixture coverage, writable parity,
+nonzero mips and dirty-parent behavior remain open.
+
 ## Selected BC view coverage - 2026-10-16
 
 | Contract | Production continuation | Acceptance |

@@ -132,6 +132,11 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Latest: 92af292 adds a full output-region GPU baseline to the authored BC mip fixture. Review
+that delta; add reverse readonly mip0 parent-preservation assertions and tighten reflected
+special operand/component coverage where source semantics are known. No fixture/build execution.
+Writable reverse alias parity remains source work after the readonly case.
+
 ## Continue selected BC mip views - 2026-10-16
 
 923d637 is pushed, source-only. Review the selected mip0 private snapshot path and finish

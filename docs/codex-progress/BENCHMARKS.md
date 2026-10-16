@@ -96,6 +96,9 @@ No new performance result exists. Source admission is not a measured speedup. Hi
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+92af292 only changes authored fixture observation. No build, test, runtime, game or performance
+measurement was performed. Fixture source review for the newly added output baseline is pending.
+
 ## Selected BC view continuation - no new measurements, 2026-10-16
 
 923d637 contains a source-only readonly mip0 BC parent view change. No build, tests, GPU

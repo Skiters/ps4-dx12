@@ -114,6 +114,11 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+92af292 adds a complete output-region GPU readback baseline to the BC mip fixture, with no
+guest-memory resolution. Source change is pushed and unrun; review this new delta before
+relying on untouched-byte assertions. Prior independent production/fixture review reports are
+saved under F:/PS4Dev/handoff/bc-mip-bridge-20261016.
+
 ## Selected BC mip view source checkpoint - 2026-10-16
 
 923d637 pushed a readonly selected-mip0 conversion path that preserves the multi-mip BC
