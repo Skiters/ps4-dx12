@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include "gcn_ordered_disjoint_fixture.h"
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include <algorithm>
@@ -536,5 +537,6 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     }
     rasterizer.Finish();
     drain.armed = false;
+    RunOrderedDisjointGcnFixture(rasterizer, gpu, profile, memory, backing, base);
 }
 } // namespace NativeDX12
