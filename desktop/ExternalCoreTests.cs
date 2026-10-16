@@ -40,10 +40,16 @@ static class ExternalCoreTests
                 CoreVersions.Selected(settings)!.IsolatedProfile, "External selection lost identity/profile isolation");
             Require(!Directory.Exists(CoreVersions.Root) && before.SequenceEqual(
                 Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Order()), "Folder selection copied or wrote a core package");
+            settings.ProfileRoot = Path.Combine(root, "profile-template");
+            settings.NativeProfileRoot = Path.Combine(root, "native-profile");
+            Directory.CreateDirectory(Path.Combine(settings.ProfileRoot, "user"));
+            File.WriteAllText(Path.Combine(settings.ProfileRoot, "user", "config.json"), "{\"General\":{}}");
+            var launch = NativeGameLaunch.Create(settings, root); // Build parameters only; never start the fake executable.
+            NativeGameLaunch.ValidateStart(launch);
             File.WriteAllText(runtime, "changed runtime"); Reject(() => CoreVersions.Resolve(settings));
             File.Delete(runtime); Reject(() => CoreVersions.Resolve(settings)); File.WriteAllText(runtime, "runtime identity");
             string added = Path.Combine(folder, "extra.dll"); File.WriteAllText(added, "unselected runtime");
-            Reject(() => CoreVersions.Resolve(settings)); File.Delete(added);
+            Reject(() => CoreVersions.Resolve(settings)); Reject(() => NativeGameLaunch.ValidateStart(launch)); File.Delete(added);
             File.WriteAllText(executable, "changed executable"); Reject(() => CoreVersions.Resolve(settings));
             File.WriteAllText(executable, "test identity, not an executable");
             string moved = Path.Combine(root, "renamed release"); Directory.Move(folder, moved);

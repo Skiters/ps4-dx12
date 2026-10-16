@@ -316,7 +316,7 @@ static class NativeGameLaunch
             if (backend == "vulkan") CoreVersions.ReferenceCapture(selected ?? throw new IOException("Измерение reference требует пакет ядра."), start, captureRoot);
         }
         var snapshot = selected is null ? null : JsonSerializer.Deserialize<CoreVersion>(JsonSerializer.Serialize(selected));
-        if (snapshot is not null) snapshot.Directory = selected!.Directory;
+        if (snapshot is not null) { snapshot.Directory = selected!.Directory; snapshot.External = selected.External; }
         identities.Add(start, new(backend, Path.GetFullPath(executable), CoreVersions.Hash(executable), profile,
             start.ArgumentList.ToArray(), start.Environment.Where(entry => entry.Key.StartsWith("SHADPS4_", StringComparison.OrdinalIgnoreCase) ||
                 entry.Key.StartsWith("VK_", StringComparison.OrdinalIgnoreCase)).ToDictionary(entry => entry.Key, entry => entry.Value), snapshot));
