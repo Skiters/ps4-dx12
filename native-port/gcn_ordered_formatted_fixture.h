@@ -62,18 +62,20 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     enum class Sequence { ReadWrite, WriteRead, RawWriteRead, ReadWriteRead,
         CleanShortDirtyTail, DirtyShort, CleanLong, MixedShortLong,
         ShortWriterFullRead, ShortWriterDirtyRead, ShortWriterPrivateRead,
-        ShortWriterFirst, LongWriter, BindingOrderResident };
+        ShortWriterFirst, LongWriter, BindingOrderResident, OffsetWriterReadFirst, OffsetWriterFirst };
     for (const auto sequence : {Sequence::ReadWrite, Sequence::WriteRead,
                                Sequence::RawWriteRead, Sequence::ReadWriteRead,
                                Sequence::CleanShortDirtyTail, Sequence::DirtyShort,
                                Sequence::CleanLong, Sequence::MixedShortLong,
                                Sequence::ShortWriterFullRead, Sequence::ShortWriterDirtyRead,
                                Sequence::ShortWriterPrivateRead, Sequence::ShortWriterFirst,
-                               Sequence::LongWriter, Sequence::BindingOrderResident})
-    for (const bool small : {false, true})
+                               Sequence::LongWriter, Sequence::BindingOrderResident,
+                               Sequence::OffsetWriterReadFirst, Sequence::OffsetWriterFirst})
+    for (const bool small_image : {false, true})
     for (const bool clean : {false, true}) {
         const bool short_views = sequence >= Sequence::CleanShortDirtyTail && sequence <= Sequence::MixedShortLong;
         const bool writer_cases = sequence >= Sequence::ShortWriterFullRead;
+        const bool offset_writer = sequence == Sequence::OffsetWriterReadFirst || sequence == Sequence::OffsetWriterFirst;
         const bool binding_order = sequence == Sequence::BindingOrderResident;
         const bool long_writer = sequence == Sequence::LongWriter;
         const bool short_writer = writer_cases && !long_writer;
@@ -81,51 +83,52 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         const bool dirty_tail = sequence == Sequence::CleanShortDirtyTail;
         const bool long_first = sequence == Sequence::CleanLong;
         const bool mixed = sequence == Sequence::MixedShortLong;
-        if (short_views && (dirty_tail ? (small || !clean) :
-            sequence == Sequence::DirtyShort ? (!small || clean) : (!small || !clean))) continue;
-        if (writer_cases && (sequence == Sequence::ShortWriterFullRead ? (small || !clean) :
-            redirty_prefix ? (!small || clean) : (!small || !clean))) continue;
-        const bool read_first = sequence != Sequence::WriteRead && sequence != Sequence::ShortWriterFirst;
+        if (short_views && (dirty_tail ? (small_image || !clean) :
+            sequence == Sequence::DirtyShort ? (!small_image || clean) : (!small_image || !clean))) continue;
+        if (!offset_writer && writer_cases && (sequence == Sequence::ShortWriterFullRead ? (small_image || !clean) :
+            redirty_prefix ? (!small_image || clean) : (!small_image || !clean))) continue;
+        const bool read_first = sequence != Sequence::WriteRead && sequence != Sequence::ShortWriterFirst &&
+            sequence != Sequence::OffsetWriterFirst;
         const bool repeated = writer_cases || short_views || sequence == Sequence::RawWriteRead || sequence == Sequence::ReadWriteRead;
         // The original eight cases already cover the size threshold. Keep the
         // new store/reread cases focused on small private versus resident views.
-        if (!short_views && !writer_cases && repeated && !small) continue;
+        if (!short_views && !writer_cases && repeated && !small_image) continue;
         const bool early_formatted = sequence != Sequence::RawWriteRead;
-        const bool private_early = writer_cases ? sequence == Sequence::ShortWriterPrivateRead :
-            short_views ? (dirty_tail || mixed) : small && clean && read_first;
-        const bool image_tiled = mixed || (read_first && early_formatted && !private_early);
+        const bool private_early = offset_writer ? (small_image && clean && read_first) : writer_cases ? sequence == Sequence::ShortWriterPrivateRead :
+            short_views ? (dirty_tail || mixed) : small_image && clean && read_first;
+        const bool image_tiled = offset_writer || mixed || (read_first && early_formatted && !private_early);
         const bool has_long_tail = long_first || mixed || long_writer;
-        const bool partial_output = small && clean && sequence == Sequence::ReadWriteRead;
+        const bool partial_output = small_image && clean && sequence == Sequence::ReadWriteRead;
         rasterizer.ReadMemory(base, AllocationBytes);
         rasterizer.InvalidateMemory(base, AllocationBytes);
-        std::memset(memory, small ? 0xb6 : 0xa7, AllocationBytes);
+        std::memset(memory, small_image ? 0xb6 : 0xa7, AllocationBytes);
         AmdGpu::Image image{};
         image.base_address = (base + ImageOffset) >> 8;
         image.type = u64(AmdGpu::ImageType::Color2D);
         image.data_format = 4;
         image.num_format = 4; // R32_UINT, exact bits through image and formatted buffer loads.
         image.tiling_index = 5;
-        image.width = small ? 23 : 119;
-        image.height = small ? 31 : 47;
-        image.pitch = small ? 31 : 127;
+        image.width = small_image ? 23 : 119;
+        image.height = small_image ? 31 : 47;
+        image.pitch = small_image ? 31 : 127;
         image.dst_sel_x = 4; image.dst_sel_y = 5; image.dst_sel_z = 6; image.dst_sel_w = 7;
         const auto desc = DescribeGuestTexture(image);
         const auto layout = LayoutGuestTexture(desc);
         if (!layout.guest_bytes || layout.guest_bytes % 4096 ||
             ImageOffset + layout.guest_bytes > ObservationOffset ||
-            (small ? layout.guest_bytes > 16384 : layout.guest_bytes <= 16384) ||
+            (small_image ? layout.guest_bytes > 16384 : layout.guest_bytes <= 16384) ||
             layout.guest_bytes <= u64(desc.width) * desc.height * sizeof(u32))
             throw std::runtime_error("Ordered GCN fixture requires full page-aligned range and real tile padding");
         const auto first = GuestPixelOffset(desc, layout, 0, 0, 0, 0);
         const auto second = GuestPixelOffset(desc, layout, 0, 0, 1, 0);
-        const auto far = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
+        const auto far_offset = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
         if (first != 0 || second != 4)
             throw std::runtime_error("Ordered GCN fixture's fixed first two texels changed");
         for (u32 y = 0; y < desc.height; ++y) for (u32 x = 0; x < desc.width; ++x) {
             const auto value = initial(x, y);
             std::memcpy(memory + ImageOffset + GuestPixelOffset(desc, layout, 0, 0, x, y), &value, 4);
         }
-        if ((short_views || writer_cases) && (far < ShortBytes || far + 4 > layout.guest_bytes))
+        if ((short_views || writer_cases) && (far_offset < ShortBytes || far_offset + 4 > layout.guest_bytes))
             throw std::runtime_error("Short-view fixture needs an image texel outside its readonly prefix");
         if (has_long_tail) {
             if (layout.guest_bytes >= LongBytes || ImageOffset + LongBytes > ObservationOffset)
@@ -150,7 +153,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         // Seed/probe commands always use a full protected page. The last case
         // gives the tested command a separate fresh, partial-page output below.
         observation.num_records = 4096 / 4;
-        const u64 identity = (u64(sequence) << 12) | (u64(small) << 8) | u64(clean);
+        const u64 identity = (u64(sequence) << 12) | (u64(small_image) << 8) | u64(clean);
         std::vector<u32> seed_words{
             0x7e000280, 0x7e0202ff, BufferValue,
             0xe0700000, 0x80000100, // raw store v1, s[0:3]
@@ -323,6 +326,15 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 sequence == Sequence::ShortWriterFullRead ? layout.guest_bytes : ShortBytes) / 4);
             late_sharp.num_records = u32(ShortBytes / 4);
         }
+        if (offset_writer) {
+            // A full formatted reader stays at image base. The DWORD writer
+            // targets the separately seeded I texel at (0,8); both R/W and W/R
+            // binding orders must tile I without invalidating its logical owner.
+            writer_sharp.base_address += far_offset;
+            early_sharp.num_records = late_sharp.num_records = u32(layout.guest_bytes / 4);
+            if (far_offset < 256 || far_offset % 4 || far_offset + 8 > layout.guest_bytes)
+                throw std::runtime_error("Offset writer lost its contained DWORD range and distinct image base");
+        }
         if (binding_order) early_sharp.num_records = u32((layout.guest_bytes + 4) / 4);
         auto command_output = observation;
         if (binding_order) {
@@ -447,7 +459,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             const bool reader = early_reader || late_reader;
             const bool formatted = late_reader || (early_reader && early_formatted);
             const bool output = index == (binding_order ? 0u : guest_buffers.size() - 1);
-            const auto address = output ? command_output.base_address : target.base_address;
+            const auto address = output ? command_output.base_address : reader ? target.base_address : writer_sharp.base_address;
             const auto bytes = output ? command_output.GetSize() : early_reader ? early_sharp.GetSize() :
                 late_reader ? late_sharp.GetSize() : writer_sharp.GetSize();
             if (sharp.base_address != address || sharp.GetSize() != bytes ||
@@ -463,10 +475,10 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         const auto next = image_tiled ? ImageNext : initial(1, 0);
         if (binding_order) expect_word(command_output_offset, TailWrite);
         expect_word(command_output_offset + 16, early_loaded);
-        expect_word(command_output_offset + 20, loaded);
+        expect_word(command_output_offset + 20, offset_writer ? ImageFar : loaded);
         if (repeated) {
-            expect_word(command_output_offset + 24, private_early ? BufferValue : FinalValue);
-            expect_word(command_output_offset + 28, FinalValue);
+            expect_word(command_output_offset + 24, private_early ? BufferValue : offset_writer ? ImageValue : FinalValue);
+            expect_word(command_output_offset + 28, offset_writer ? ImageValue : FinalValue);
         }
         if (short_views || writer_cases) {
             if (mixed) expect_word(command_output_offset + 40, ImageValue);
@@ -488,8 +500,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 throw std::runtime_error("Partial ordered-stream observation did not retire synchronously");
         }
 
-        // Read the image only AFTER the buffer writer invalidated its old entry.
-        // The first pixel detects a stale image; the second detects lost retile.
+        // Exact-base writers invalidate I; offset writers must retain it. Probe
+        // both untouched first texels and the offset writer's independently
+        // seeded I texel, which must not acquire the new physical buffer value.
         std::vector<u32> after_words{
             0x7e000280, 0x7e020280, 0xf0000100, 0x00000400,
             0x7e000281, 0xf0000100, 0x00000500, 0xbf8c0000,
@@ -507,16 +520,25 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::memcpy(after_program.user_data.data(), &image, sizeof(image));
         std::memcpy(after_program.user_data.data() + 8, &after_output, sizeof(after_output));
         rasterizer.DispatchDirect();
-        expect_word(ImageOffset + first, FinalValue);
+        if (offset_writer) {
+            // A prior full dirty B interval publishes the retiled I bytes too.
+            // With clean B, only the current DWORD writer becomes CPU-visible;
+            // synchronization itself must not mark all image bytes as written.
+            if (!clean) {
+                expect_word(ImageOffset + first, ImageValue);
+                expect_word(ImageOffset + second, ImageNext);
+            }
+            expect_word(ImageOffset + far_offset, FinalValue);
+        } else expect_word(ImageOffset + first, FinalValue);
         // A readonly retile is not a CPU write. Only the original W extent
         // publishes I tail to physical memory; a four-byte W leaves that tail B.
         if (image_tiled && !short_writer) expect_word(ImageOffset + second, ImageNext);
-        if ((short_views || writer_cases) && image_tiled && !short_writer) expect_word(ImageOffset + far, ImageFar);
+        if ((short_views || writer_cases) && image_tiled && !short_writer) expect_word(ImageOffset + far_offset, ImageFar);
         // The tiny prior dirty interval at+256 is restored from I by retile.
         // Its seeded I texel equals original B there, so expected stays intact.
         if (dirty_tail) expect_word(ImageOffset + 4096, TailWrite);
         if (long_writer) expect_word(ImageOffset + layout.guest_bytes, TailWrite);
-        expect_word(after_output_offset + 32, FinalValue);
+        expect_word(after_output_offset + 32, offset_writer ? ImageValue : FinalValue);
         expect_word(after_output_offset + 36, next);
         if (writer_cases) expect_word(after_output_offset + 52, image_tiled ? ImageFar : initial(0, 8));
         rasterizer.ReadMemory(base, AllocationBytes);
@@ -534,9 +556,11 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             redirty_prefix ? "dirty64-byteR/4-byteW" :
             sequence == Sequence::ShortWriterPrivateRead ? "private64-byteR/4-byteW" :
             sequence == Sequence::ShortWriterFirst ? "4-byteW/64-byteR" :
-            long_writer ? "clean20KiBR/20KiBW" : "same-page-disjointW/clean4100-byteR/4-byteW";
+            long_writer ? "clean20KiBR/20KiBW" :
+            sequence == Sequence::OffsetWriterReadFirst ? "fullR/interior4-byteW/retainedI" :
+            sequence == Sequence::OffsetWriterFirst ? "interior4-byteW/fullR/retainedI" : "same-page-disjointW/clean4100-byteR/4-byteW";
         std::printf("PASS: ordered-formatted %s %s %s%s bytes=%llu; real GCN, full physical oracle\n",
-            small ? "small" : "large", clean ? "CPU-clean" : "GPU-modified",
+            small_image ? "small" : "large", clean ? "CPU-clean" : "GPU-modified",
             sequence_name, partial_output ? " partial-output sync fallback" : "",
             static_cast<unsigned long long>(layout.guest_bytes));
     }

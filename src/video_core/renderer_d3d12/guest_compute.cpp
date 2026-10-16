@@ -472,21 +472,32 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
                     version->desc.address<buffer.address+buffer.size;});
             if(first_writer!=requests.end()){
-                // Pinned BindBuffers visits descriptors in order. A prior writer
-                // makes this image GpuDirty; only reads before the first writer
-                // may tile the preceding image into the shared buffer arena.
-                const bool reads_image=pending[i].formatted_read&&i<size_t(first_writer-requests.begin());
+                // Pinned InvalidateMemoryFromGPU only dirties an image at the
+                // writer's original sharp base. An interior writer marks buffer
+                // pages but leaves I valid, even when bound before this reader.
+                const auto invalidating_writer=std::ranges::find_if(requests,[&](const auto& buffer){
+                    return buffer.written&&buffer.WriteRange().address==version->desc.address;
+                });
+                const bool reads_image=pending[i].formatted_read&&
+                    (invalidating_writer==requests.end()||i<size_t(invalidating_writer-requests.begin()));
                 const auto ownership=DescribeGuestImageOwnership(*version);
                 const auto& layout=version->layout;const auto& desc=version->desc;
                 // Earlier raw reads also stream a small clean CPU snapshot;
                 // a later formatted read must not turn them into arena aliases.
                 const bool clean_small=streams_before_binding(i);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
-                const bool same_base_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
+                const bool compatible_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
                     const auto original=buffer.WriteRange();
-                    return buffer.unordered_access&&buffer.address==desc.address&&original.address==desc.address&&
-                        original.size&&original.size==buffer.size;
+                    if(!buffer.unordered_access||!original.size||original.size!=buffer.size||
+                       original.address!=buffer.address)return false;
+                    if(buffer.address==desc.address)return true;
+                    // Keep one physical image domain and exact DWORD write
+                    // bounds. Offset formatted readers still require the pinned
+                    // base-address assertion; other layouts/stages stay guarded.
+                    return buffer.written&&buffer.address>desc.address&&
+                        !(buffer.address&3)&&!(buffer.size&3)&&
+                        buffer.size<=desc.address+layout.guest_bytes-buffer.address;
                 });
                 // GetArena in the pinned backend guarantees whole 4-GiB VA
                 // pages only through this reader's end. A later full writer
@@ -518,7 +529,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 });
                 if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
                    !stages.front().info->images.empty()||!images.empty()||candidates!=1||!unique||
-                    !same_base_uavs||
+                     !compatible_uavs||
                    !pending[i].original_bytes||pending[i].original_bytes!=requests[i].size||
                    (reads_image&&!clean_small&&(!image_fits_reader_arena||
                     (!image_fits_reader_blocks&&!covering_writer)))||
@@ -529,10 +540,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    (layout.expanded_bytes_per_pixel&&(!HasExactPackedExpansion(desc,layout)||
                     !version->expanded_guest_backing.handle||!version->expanded_written_mask.handle||
                     !version->expanded_backing_bytes)))
-                    throw std::runtime_error("Ordered buffer/image aliases require exact-base ranges and proven transfer capacity/residency");
+                    throw std::runtime_error("Ordered buffer/image aliases require compatible UAV ranges and proven transfer capacity/residency");
                 ordered_formatted_writer=true;
                 requests[i].resident=true;
-                for(size_t j=0;j<size_t(first_writer-requests.begin());++j)
+                // An interior writer on a different query page need not make a
+                // later small read resident. Preserve every original clean CPU
+                // stream independently of where the first writer was bound.
+                for(size_t j=0;j<ordinary_count;++j)
                     if(pending[j].guest_read&&requests[j].address<desc.address+layout.guest_bytes&&
                        desc.address<requests[j].address+requests[j].size&&
                        streams_before_binding(j)&&
@@ -684,8 +698,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     diagnostic.Stage("buffer-views");
     auto views=rasterizer.PrepareShaderBuffers(requests);
     for(auto& transfer:ordered_formatted_images){
-        // The source image is now invalidated. Consume its retained transfer,
-        // never its old logical entry, and keep every alias on this same arena.
+        // An exact-base writer may have invalidated the source image; interior
+        // writers retain I. Consume the prepared transfer in either case, never
+        // a reselected logical entry, and keep all resident aliases on one arena.
         rasterizer.CopyToPreparedShaderBuffer(transfer.address,transfer.bytes,transfer.tiled,
             D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }

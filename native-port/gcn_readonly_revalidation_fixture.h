@@ -119,13 +119,13 @@ inline void RunReadonlyRevalidationGcnFixture(GuestRasterizer& rasterizer, AmdGp
             if (!same_layout)
                 throw std::runtime_error("Readonly packed fixture changed the image's physical layout");
         }
-        const auto far = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
+        const auto far_offset = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
         if (base % 4096 || layout.guest_bytes != 4096 ||
             layout.guest_bytes <= u64(desc.width) * desc.height * sizeof(u32) ||
             GuestPixelOffset(desc, layout, 0, 0, 0, 0) != 0 ||
             GuestPixelOffset(desc, layout, 0, 0, 1, 0) != 4 ||
-            GuestPixelOffset(desc, layout, 0, 0, 8, 0) != 256 || far < 260 || far + 4 > layout.guest_bytes ||
-            ImageOffset + layout.guest_bytes > ObservationOffset || far > 4095)
+            GuestPixelOffset(desc, layout, 0, 0, 8, 0) != 256 || far_offset < 260 || far_offset + 4 > layout.guest_bytes ||
+            ImageOffset + layout.guest_bytes > ObservationOffset || far_offset > 4095)
             throw std::runtime_error("Readonly revalidation needs an aligned padded 4-KiB image and distinct probes");
         for (u32 y = 0; y < desc.height; ++y) for (u32 x = 0; x < desc.width; ++x) {
             const auto value = initial(x, y);
@@ -281,7 +281,7 @@ inline void RunReadonlyRevalidationGcnFixture(GuestRasterizer& rasterizer, AmdGp
 
         initialize(formatted, {
             0xe0000000, 0x80000400, 0xe0000004, 0x80000500,
-            0xe0000000 | u32(far), 0x80000600, 0xe0000100, 0x80000700, 0xbf8c0000,
+            0xe0000000 | u32(far_offset), 0x80000600, 0xe0000100, 0x80000700, 0xbf8c0000,
             0xe0700020, 0x80010400, 0xe0700024, 0x80010500,
             0xe0700028, 0x80010600, 0xe070002c, 0x80010700, 0xbf810000
         }, 0x524556414c000007ULL + identity);
