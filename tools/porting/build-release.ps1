@@ -5,9 +5,12 @@ param(
     [Parameter(Mandatory)][string]$VsDevCmd,
     [Parameter(Mandatory)][string]$BuildDir,
     [int]$Jobs = 12,
-    [string]$SourceRoot = (Resolve-Path "$PSScriptRoot/../..").Path
+    [string]$SourceRoot
 )
 $ErrorActionPreference = 'Stop'
+if (-not $SourceRoot) {
+    $SourceRoot = Join-Path (Split-Path $MyInvocation.MyCommand.Path) '../..'
+}
 $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 $ExternalsRoot = (Resolve-Path -LiteralPath $ExternalsRoot).Path
 $BuildDir = [IO.Path]::GetFullPath($BuildDir)
