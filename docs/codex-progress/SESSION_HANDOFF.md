@@ -331,6 +331,23 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+Latest source WIP 3bfd8ef (2026-10-16), superseding older ownership limits below:
+actual native readonly BC storage now retains complete real mip layout even when it cannot
+be represented by a complete UINT64/128 chain. Canonical BC-to-UINT matching remains stricter;
+selected private UINT prefixes must still match it. No BC UAV, buffer-writer permission,
+expanded/linear/volume admission or partial-copy conversion was enabled. Existing backing,
+page,64MiB, watch and fence gates remain. Three authored shape controls now distinguish
+valid actual BC ownership from invalid complete UINT correspondence; corrupted physical
+layout controls still reject. Independent source review and exact patches/hashes:
+F:/PS4Dev/handoff/bc-actual-owner-20261016/REVIEW.md. Uncompiled/unrun; no runtime PASS/FPS.
+
+Next production task: add a single target refresh seed R (GPU Bsync iff target-page GPU
+modified, physical P otherwise), feed its prefix to RetileBufferVersion, and merge that
+prefix back into the same full R before BC upload. Implement explicit physical-prefix and
+copy-extent admission from bc-mip-bridge-20261016/NEXT_PARTIAL_BC_COPY_CONTRACT.md first.
+Current callback's separate source/target captures must not serve this partial-copy path.
+All129 contract groups remain partial/open; tests/build/game/UI remain deferred.
+
 Current source continuation: 179972f (2026-10-16), authoritative over older notes below.
 Readonly UINT block-texel views selecting one mip now support nonzero first_mip through an
 exact full physical prefix [0..k]. The helper requires first_mip=levels-1, prefix levels
