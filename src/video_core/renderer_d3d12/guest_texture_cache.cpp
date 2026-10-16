@@ -1405,6 +1405,73 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     }
     return result;
 }
+GuestTextureCache::Entry* GuestTextureCache::FindWritableBlockParent(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout)const{
+    if(!desc.writable||desc.first_layer||desc.view_layers!=desc.layers||
+       !CanRetainBufferAlias(desc,layout))return nullptr;
+    auto view=desc;view.writable=false;
+    Entry* parent{};auto [first,last]=address_index_.equal_range(desc.address);
+    for(auto it=first;it!=last;++it){auto* candidate=it->second;
+        if(!candidate->gpu_owned||!candidate->buffer_alias_version||candidate->logical_dirty||
+           !MatchesReadonlyBlockMipPrefix(candidate->desc,candidate->layout,view,layout))continue;
+        if(parent&&parent!=candidate)throw std::runtime_error("Ambiguous writable BC parent");
+        parent=candidate;
+    }
+    return parent;
+}
+bool GuestTextureCache::IsLiveWritableBlockAlias(const WritableBlockAlias& alias)const{
+    if(!alias.parent||!alias.image||alias.parent==alias.image||!alias.parent_pin||!alias.image_pin)return false;
+    const auto& parent=*alias.parent;const auto& image=*alias.image;
+    if(parent.image_uid!=alias.parent_uid||!parent.BindingPinned()||!image.BindingPinned()||
+       !parent.gpu_owned||!parent.buffer_alias_version||parent.logical_dirty||
+       image.gpu_owned||image.buffer_alias_version||image.cpu_watched||!image.logical_dirty||
+       !image.desc.writable||image.desc.first_layer||image.desc.view_layers!=image.desc.layers)return false;
+    auto view=image.desc;view.writable=false;
+    return MatchesReadonlyBlockMipPrefix(parent.desc,parent.layout,view,image.layout)&&
+        CanRetainBufferAlias(image.desc,image.layout);
+}
+std::optional<GuestTextureCache::WritableBlockAlias> GuestTextureCache::BeginWritableBlockAlias(
+    const GuestTextureDesc& desc,ID3D12GraphicsCommandList* list,uint64_t completed){
+    const auto layout=LayoutGuestTexture(desc);auto* parent=FindWritableBlockParent(desc,layout);
+    if(!parent)return std::nullopt;
+    if(!read_independent_||!acquire_independent_||!retire_independent_||!list)
+        throw std::runtime_error("Writable BC alias has no parent transfer");
+    WritableBlockAlias alias;alias.parent=parent;alias.parent_uid=parent->image_uid;
+    alias.parent_pin=PinBinding(*parent);
+    auto snapshot=read_independent_(*parent,desc.address,layout.guest_bytes);
+    auto& child=Upload(desc,{},list,completed,{},true,&snapshot,true);
+    // Snapshot Upload cannot reuse an owned or binding-pinned image. Do not
+    // convert any preexisting ownership state into a detached child by clearing it.
+    if(child.gpu_owned||child.buffer_alias_version||child.cpu_watched)
+        throw std::runtime_error("Writable BC child unexpectedly retained independent ownership");
+    if(transfer_submission_)transfer_submission_();
+    child.MarkLogicalDirty();alias.image=&child;alias.image_pin=PinBinding(child);
+    if(!IsLiveWritableBlockAlias(alias))throw std::runtime_error("Writable BC alias initialization lost its parent");
+    return alias;
+}
+GuestTextureCache::Entry& GuestTextureCache::CommitWritableBlockAlias(WritableBlockAlias& alias,
+    ID3D12GraphicsCommandList* list,uint64_t completed){
+    if(!IsLiveWritableBlockAlias(alias)||!read_independent_||!acquire_independent_||!retire_independent_)
+        throw std::runtime_error("Writable BC alias lost its parent before writeback");
+    auto& parent=*alias.parent;auto& image=*alias.image;
+    // All untouched blocks/mips come from CURRENT parent I. The private child
+    // may overwrite only its proved prefix and never acquires a physical watch.
+    auto seed=read_independent_(parent,parent.desc.address,parent.layout.guest_bytes);
+    auto prefix=RetileImageVersion(image,seed,list,completed,&alias);
+    prefix.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+    seed.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+    DX12_API_CALL(list->CopyBufferRegion(seed.handle.Get(),0,prefix.handle.Get(),0,image.layout.guest_bytes));
+    seed.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    auto& replacement=Upload(parent.desc,{},list,completed,{},true,&seed);
+    if(transfer_submission_)transfer_submission_();
+    if(!acquire_independent_(replacement))
+        throw std::runtime_error("Writable BC replacement could not acquire parent ownership");
+    replacement.NoteLogicalImageWrite();
+    retire_independent_(parent);
+    alias.parent=nullptr; // A transaction cannot be committed twice.
+    Diagnostics::Count("image-version.writable-block-view");
+    return replacement;
+}
 GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
@@ -1919,9 +1986,14 @@ void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_a
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}
 Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
-    if(image.logical_dirty)throw std::runtime_error("Independent image transfer requires a valid logical version");
+    return RetileImageVersion(image,initial,list,completed,nullptr);
+}
+Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
+    ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias){
+    const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
+    if(image.logical_dirty&&!dependent)throw std::runtime_error("Independent image transfer requires a valid logical version");
     const auto ownership=DescribeGuestImageOwnership(image);
-    if(!list||!image.gpu_owned||!image.buffer_alias_version||!ownership||
+    if(!list||(!dependent&&(!image.gpu_owned||!image.buffer_alias_version))||!ownership||
        !CanRetainIndependentImage(ownership->desc,ownership->layout)||
        !initial.handle||initial.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
        initial.handle->GetDesc().Width<image.layout.guest_bytes)
@@ -1992,6 +2064,9 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
         if(slice.samples)image.multisample_leases.push_back(slice.samples);}
     image.buffer_sync_allocation_bytes+=reservation;
     image.pending=true;
+    // ReserveMemory/recursive Upload may submit internally. Register this
+    // pending lease before recording commands, not only at outer dispatch end.
+    if(transfer_submission_)transfer_submission_();
     if(image.texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)image.texture.UavBarrier(list);
     if(!multisampled)image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
     initial.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);

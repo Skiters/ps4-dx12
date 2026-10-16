@@ -181,7 +181,14 @@ public:
         uint32_t num_samples=1;
         uint32_t clear_mask=UINT32_MAX;
     };
+    struct WritableBlockAlias {
+        Entry* parent{};Entry* image{};uint64_t parent_uid{};
+        std::shared_ptr<void> parent_pin,image_pin;
+    };
 private:
+    bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
+    Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
+        const WritableBlockAlias*);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
     std::shared_ptr<GuestTiler> tiler_;
     std::shared_ptr<GuestMultisample> multisample_;
@@ -221,6 +228,7 @@ private:
     }
     std::function<void(Entry&)> resolve_owned_;
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
+    std::function<void()> transfer_submission_;
     std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<bool(Entry&)> acquire_independent_;
     std::function<void(Entry&)> retire_independent_;
@@ -264,6 +272,12 @@ public:
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
     static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);
+    // Transient writable views never own physical guest memory. The caller
+    // rejects overlapping buffers/mixed image views before recording dispatch.
+    Entry* FindWritableBlockParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    std::optional<WritableBlockAlias> BeginWritableBlockAlias(const GuestTextureDesc&,
+        ID3D12GraphicsCommandList*,uint64_t completed);
+    Entry& CommitWritableBlockAlias(WritableBlockAlias&,ID3D12GraphicsCommandList*,uint64_t completed);
     std::shared_ptr<void> PinBinding(Entry&);
     struct PressureSourceLease {std::shared_ptr<void> lease;uint64_t bytes;};
     PressureSourceLease RetainPressureSource(Entry&);
@@ -282,6 +296,7 @@ public:
         std::function<Resource(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand){
         expand_block_=std::move(expand);
     }
+    void SetTransferSubmissionPublisher(std::function<void()> publish){transfer_submission_=std::move(publish);}
     void SetPressureRetirement(std::function<void(Entry&)> retirement){retire_pressure_=std::move(retirement);}
     void SetPressureWait(std::function<uint64_t()> wait){wait_pressure_=std::move(wait);}
     void SetOwnershipAcquirer(std::function<bool(Entry&)> acquire){acquire_owned_=std::move(acquire);}

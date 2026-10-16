@@ -113,6 +113,9 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     });
     textures_.SetPressureRetirement([this](auto& image){RetireImageForPressure(image);RecordingList();});
     textures_.SetOwnershipAcquirer([this](auto& image){return OwnImage(image);});
+    textures_.SetTransferSubmissionPublisher([this]{
+        NotifyOnSubmission([this](u64 fence){textures_.Submitted(fence);});
+    });
     textures_.SetIndependentVersionTransfer([this](auto& image,VAddr address,u64 bytes){
         // Retile into a private GPU buffer seeded from the physical buffer
         // domain. This does not commit image pixels into that buffer domain.

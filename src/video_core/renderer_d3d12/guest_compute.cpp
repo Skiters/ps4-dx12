@@ -121,6 +121,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;};
     std::vector<ImagePending> images;
+    std::vector<std::shared_ptr<void>> writable_block_parent_pins;
     struct SamplerPending {UINT reg;D3D12_SAMPLER_DESC desc;};std::vector<SamplerPending> samplers;
     auto temporary_lease=std::make_shared<TemporaryMemory>(rasterizer);
     auto& temporary=*temporary_lease;
@@ -245,8 +246,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             auto layout=LayoutGuestTexture(desc);
             if(desc.writable)textures->ValidateWritableFormat(layout.format);
-            if(sharp&&!textures->HasOwnedShaderStorage(desc))
-                rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,source.is_written);
+            auto* block_parent=sharp&&desc.writable?textures->FindWritableBlockParent(desc,layout):nullptr;
+            if(block_parent)writable_block_parent_pins.push_back(textures->PinBinding(*block_parent));
+            if(sharp&&!textures->HasOwnedShaderStorage(desc)){
+                // CPU-write validation invalidates independent image history.
+                // This alias will touch only transient GPU storage before merge.
+                if(block_parent)rasterizer.ValidateGpuBacking(desc.address,layout.guest_bytes,true);
+                else rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,source.is_written);
+            }
             UINT mip=desc.first_mip;
             if(source.mip_fallback_mode==Shader::MipStorageFallbackMode::ConstantIndex)mip+=source.constant_mip_index;
             if(mip>=desc.levels||(!source.native_msaa_storage&&count>desc.levels-mip)||
@@ -299,6 +306,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             shader.address<input.address+input.size&&input.address<shader.address+shader.size)input.unordered_access=true;
         requests.push_back(input);
     }
+    const auto validate_writable_block_alias=[&](const ImagePending& image,const GuestTextureCache::Entry& parent){
+        // A selected UINT writer modifies one BC parent through a private
+        // transient image. Mixed resource domains need a separate contract.
+        if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||images.size()!=1||
+           stages.front().info->images.size()!=1||image.count!=1||image.mip!=image.desc.first_mip||image.sample_storage)
+            throw std::runtime_error("Writable BC block view requires one compute image without DMA or mixed views");
+        const auto overlaps=[](VAddr a,u64 as,VAddr b,u64 bs){return as&&bs&&(a<=b?b-a<as:a-b<bs);};
+        for(const auto& request:requests)if(overlaps(request.address,request.size,parent.desc.address,parent.layout.guest_bytes))
+            throw std::runtime_error("Writable BC block view cannot overlap any buffer request across its full parent storage");
+    };
+    // Pin the authoritative full BC image before buffer preparation or logical
+    // invalidation can retire an unrelated overlap or reserve cache storage.
+    if(textures)for(const auto& image:images)if(!image.null_resource&&image.desc.writable)
+        if(auto* parent=textures->FindWritableBlockParent(image.desc,image.layout)){
+            validate_writable_block_alias(image,*parent);
+            writable_block_parent_pins.push_back(textures->PinBinding(*parent));
+        }
     // The original binds buffers and refreshes sampled images before execution.
     // Two writers likewise keep separate cache domains, when the backend can
     // retain both versions without selecting an arbitrary physical winner.
@@ -663,6 +687,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
     });
     std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers;
+    std::vector<GuestTextureCache::WritableBlockAlias> alias_writers;
     std::vector<std::pair<GuestTextureDesc,GuestTextureCache::Entry*>> uploaded_views;
     // Keep all recorded resources alive on exceptions as well as normal GPU
     // completion. Cache entries own texture uploads; readbacks own their buffers.
@@ -681,6 +706,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             GuestTextureCache::Entry null_entry;
             null_entry.desc=image.desc;null_entry.layout=image.layout;
             GuestTextureCache::Entry* entry=image.null_resource?&null_entry:nullptr;
+            bool writable_block_alias=false;
+            // Recheck after buffer/cache preparation: another source may have
+            // become authoritative since the early parent query above.
+            if(!entry&&image.desc.writable)
+                if(auto* parent=textures->FindWritableBlockParent(image.desc,image.layout)){
+                    validate_writable_block_alias(image,*parent);
+                    auto parent_pin=textures->PinBinding(*parent);
+                    rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+                    auto alias=textures->BeginWritableBlockAlias(image.desc,rasterizer.RecordingList(),rasterizer.CompletedFence());
+                    if(!alias||!alias->image||alias->parent!=parent||alias->parent_uid!=parent->image_uid)
+                        throw std::runtime_error("Writable BC block parent changed before transient image binding");
+                    entry=alias->image;writable_block_alias=true;
+                    if(entry->gpu_owned||entry->buffer_alias_version||!entry->logical_dirty)
+                        throw std::runtime_error("Writable BC block transient acquired independent authority before dispatch");
+                    bindings.RetainAllocation(alias->image_pin);uploaded.push_back(entry);
+                    alias_writers.push_back(std::move(*alias));
+                }
             bool separate_input=image.buffer_writer_alias;
             for(const auto& candidate:images)if(candidate.buffer_writer_alias&&
                 CompatibleGuestShaderStorage(candidate.desc,image.desc))separate_input=true;
@@ -705,9 +747,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 }
                 uploaded_views.emplace_back(storage,entry);
             }
-            if(!image.null_resource&&image.desc.writable&&
+            if(!image.null_resource&&image.desc.writable&&!writable_block_alias&&
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
-            if(!image.null_resource&&separate_input)entry->buffer_alias_version=true;
+            if(!image.null_resource&&separate_input&&!writable_block_alias)entry->buffer_alias_version=true;
             if(!image.null_resource){
                 textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
                 if(image.sample_storage&&image.desc.samples>1){
@@ -765,11 +807,20 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // when all original slots here are readonly. Revalidation is not a new
         // guest image write and must not enqueue a linear-image download.
         for(auto* entry:uploaded)if(std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())
-            textures->RevalidateReadonly(*entry);
+            if(std::ranges::none_of(alias_writers,[entry](const auto& alias){return alias.image==entry;}))
+                textures->RevalidateReadonly(*entry);
         for(auto* entry:uploaded_writers)owned_images|=textures->Own(*entry);
         for(auto* entry:uploaded)if(entry->buffer_alias_version&&!entry->gpu_owned)
             throw std::runtime_error("Independent buffer/image cache ownership was not acquired");
         submit(bindings);
+        for(auto& alias:alias_writers){
+            // Dispatch writes only transient UINT storage. Merge it into a
+            // parent-I-seeded replacement BC before recording later commands;
+            // the child never acquires guest authority or CPU readback fallback.
+            rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+            textures->CommitWritableBlockAlias(alias,rasterizer.RecordingList(),rasterizer.CompletedFence());
+            owned_images=true;
+        }
         for(const auto& [entry,transfer]:storage_transfers)
             transfer->Record(rasterizer.RecordingList(),entry->texture,entry->storage_samples,entry->storage_linear,true);
         if(dma)dma->RecordFaults(rasterizer);
