@@ -309,6 +309,35 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
     source.swizzle=view.swizzle={4,5,6,7};
     return CompatibleGuestWritableStorage(source,view);
 }
+bool CompatibleGuestImageMipGeometry(GuestTextureDesc a,const GuestTextureLayout& al,
+    GuestTextureDesc b,const GuestTextureLayout& bl){
+    if(a.samples!=1||b.samples!=1||al.block_extent!=1||bl.block_extent!=1||
+       a.render_target||b.render_target||a.depth_target||b.depth_target||a.stencil_address||b.stencil_address||
+       (al.expanded_bytes_per_pixel&&!HasExactPackedExpansion(a,al))||
+       (bl.expanded_bytes_per_pixel&&!HasExactPackedExpansion(b,bl))||
+       al.bytes_per_pixel!=bl.bytes_per_pixel||al.mips.size()!=a.levels||bl.mips.size()!=b.levels)
+        return false;
+    const auto count=std::min(a.levels,b.levels);
+    if((a.levels<=b.levels?al.guest_bytes:bl.guest_bytes)>
+       (a.levels<=b.levels?bl.guest_bytes:al.guest_bytes))return false;
+    a.levels=b.levels=std::max(a.levels,b.levels);
+    auto writable_a=a,writable_b=b;writable_a.writable=writable_b.writable=true;
+    if(!CompatibleGuestShaderStorage(writable_a,writable_b)&&!CompatibleGuestPackedStorage(a,b))return false;
+    // Mips are stored mip-major, including all layers/depth slices. Equal
+    // offsets and slice geometry prove the complete prefix, not just texel0.
+    for(UINT mip=0;mip<count;++mip){const auto& x=al.mips[mip];const auto& y=bl.mips[mip];
+        if(x.pitch!=y.pitch||x.height!=y.height||x.offset!=y.offset||x.slice_bytes!=y.slice_bytes||
+           x.macro!=y.macro||x.thickness!=y.thickness)return false;
+    }
+    return true;
+}
+bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc a,const GuestTextureLayout& al,
+    GuestTextureDesc b,const GuestTextureLayout& bl){
+    if(al.expanded_bytes_per_pixel||bl.expanded_bytes_per_pixel||
+       !CompatibleGuestImageMipGeometry(a,al,b,bl))return false;
+    a.levels=b.levels=std::max(a.levels,b.levels);
+    return CompatibleGuestShaderStorage(a,b);
+}
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view){
     if((!source.render_target&&!source.depth_target)||(!view.render_target&&!view.depth_target))return false;
     source.first_mip=view.first_mip=0;
@@ -837,7 +866,10 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
 }
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTextureDesc& sampled_view)const{
     if(sampled_view==desc)return Srv();
-    const bool shader_alias=!sampled_view.writable&&CompatibleGuestShaderStorage(desc,sampled_view);
+    const bool shader_alias=!sampled_view.writable&&
+        (CompatibleGuestShaderStorage(desc,sampled_view)||
+         (desc.levels>=sampled_view.levels&&CompatibleGuestShaderMipPrefixes(desc,layout,
+             sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
         CanBindReadonlyBcView(*this,sampled_view,LayoutGuestTexture(sampled_view));
     if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias)||sampled_view.first_mip>=sampled_view.levels||
@@ -871,7 +903,9 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(uint32_t mip)cons
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextureDesc& writable_view,uint32_t mip)const {
     if(writable_view==desc)return Uav(mip);
-    if(!CompatibleGuestWritableStorage(desc,writable_view)||
+    if((!CompatibleGuestWritableStorage(desc,writable_view)&&
+        !(desc.writable&&writable_view.writable&&desc.levels>=writable_view.levels&&
+          CompatibleGuestShaderMipPrefixes(desc,layout,writable_view,LayoutGuestTexture(writable_view))))||
        writable_view.first_layer>=writable_view.layers||!writable_view.view_layers||
        writable_view.view_layers>writable_view.layers-writable_view.first_layer)
         throw std::invalid_argument("Incompatible native writable view storage/range");
@@ -1716,12 +1750,14 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 MatchesReadonlyBcMipPrefix(previous.desc,previous.layout,d,layout)||
                 MatchesExpandedReadonlyBc(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
-               (!block&&!MatchesGuestMipLayout(previous.layout,layout)))continue;
+                (!block&&!MatchesGuestMipLayout(previous.layout,layout)&&
+                 !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
                !CompatibleGuestPackedStorage(previous.desc,d)&&
                !CompatibleGuestAttachmentStorage(previous.desc,d)&&
                !CompatibleGuestSampledStorage(previous.desc,d)&&
-               !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout)&&!block)continue;
+                !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout)&&
+                !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)&&!block)continue;
             // ReserveMemory may evict cache entries. Keep the logical identity
             // witness alive until the replacement's refresh is published.
             history_pins.push_back(PinBinding(previous));inherited_modified=true;

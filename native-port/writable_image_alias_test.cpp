@@ -21,19 +21,23 @@ namespace Shader::Gcn {
 bool ParseFetchShader(const Shader::Info&,FetchShaderData&){throw std::logic_error("Unexpected fetch shader");}
 }
 static std::array<u32,4> ClassifyPhysicalAliases(Shader::Info& info,std::array<u32,4>& write_swizzle,
-    std::array<float,4>& read_constants,std::array<float,4>& write_constants){
+    std::array<float,4>& read_constants,std::array<float,4>& write_constants,bool prefix_mips=false){
     using namespace Shader;
     Common::ObjectPool<IR::Inst> pool{256};IR::Block block(pool);
     const auto add=[&](IR::Opcode op,std::initializer_list<IR::Value> args){block.AppendNewInst(op,args);return IR::Value{&block.back()};};
     const IR::Value zero{u32(0)};
     const u32 read_lod=u32(info.images[1].GetSharp(info).base_level-info.images[0].GetSharp(info).base_level);
-    const auto coords=add(IR::Opcode::CompositeConstructU32x4,{zero,zero,zero,IR::Value{read_lod}});
+    const auto lod=prefix_mips?add(IR::Opcode::IAdd32,{zero,zero}):IR::Value{read_lod};
+    const auto coords=add(IR::Opcode::CompositeConstructU32x4,{zero,zero,zero,lod});
     const auto color=add(IR::Opcode::CompositeConstructF32x4,{IR::Value{0.f},IR::Value{0.f},IR::Value{0.f},IR::Value{0.f}});
     const auto read=add(IR::Opcode::ImageRead,{zero,coords,{}, {}});
     const auto consumer=add(IR::Opcode::CompositeExtractF32x4,{read,zero});
     const auto write=add(IR::Opcode::ImageWrite,{zero,coords,{}, {},color});
-    IR::TextureInstInfo flags{};flags.is_array.Assign(true);write.Inst()->SetFlags(flags);
-    flags.has_lod.Assign(read_lod!=0);read.Inst()->SetFlags(flags);
+    IR::TextureInstInfo flags{};flags.is_array.Assign(true);flags.has_lod.Assign(prefix_mips);write.Inst()->SetFlags(flags);
+    // Full-array probes use their real slice coordinate. Only a single-slice
+    // T# deliberately exercises non-array lowering and its native zero slice.
+    flags.is_array.Assign(info.images[0].GetSharp(info).NumViewLayers(true)>1);
+    flags.has_lod.Assign(prefix_mips||read_lod!=0);read.Inst()->SetFlags(flags);
     Optimization::ResourceDiscoveryList resources;
     for(u32 i=0;i<2;++i){Optimization::ResourceDiscovery usage{};usage.user=i?write.Inst():read.Inst();usage.sharps[0].num_dwords=8;
         for(u32 d=0;d<8;++d)usage.sharps[0].dwords[d]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(i*8+d)}});
@@ -67,13 +71,12 @@ static void CheckStorageIdentitySpecialization(const Shader::Info& info){
         throw std::runtime_error("Non-storage T# fields caused an unnecessary shader variant");
     // Each changed storage field must still break alias classification. These
     // are metadata-only controls; the full dispatch below uses valid geometry.
-    const std::array<void(*)(AmdGpu::Image&),11> different{
+    const std::array<void(*)(AmdGpu::Image&),10> different{
         +[](AmdGpu::Image& image){image.base_address^=1;},
         +[](AmdGpu::Image& image){image.width+=1;},
         +[](AmdGpu::Image& image){image.height+=1;},
         +[](AmdGpu::Image& image){image.depth+=1;},
         +[](AmdGpu::Image& image){image.pitch+=1;},
-        +[](AmdGpu::Image& image){image.last_level+=1;},
         +[](AmdGpu::Image& image){image.tiling_index^=1;},
         +[](AmdGpu::Image& image){image.pow2pad^=1;},
         +[](AmdGpu::Image& image){image.alt_tile_mode^=1;},
@@ -89,6 +92,16 @@ static void CheckStorageIdentitySpecialization(const Shader::Info& info){
            baseline==separate)
             throw std::runtime_error("A physical storage change reused a shared image shader variant");
     }
+    auto prefix=info;auto extended=original;extended.last_level+=1;
+    std::memcpy(prefix.flattened_ud_buf.data()+8,&extended,sizeof(extended));
+    const Shader::StageSpecialization prefix_key(prefix,runtime,profile,bindings);
+    if(!Shader::NativeImageStorageAliases(info.images[0].GetSharp(info),extended)||
+       prefix_key.native_image_aliases[1]!=0||baseline==prefix_key)
+        throw std::runtime_error("Mip-prefix aliases lost their original view-count specialization");
+    auto msaa=original;msaa.type=u64(AmdGpu::ImageType::Color2DMsaaArray);
+    auto other_samples=msaa;other_samples.last_level+=1;
+    if(Shader::NativeImageStorageAliases(msaa,other_samples))
+        throw std::runtime_error("Sample-count changes were confused with mip prefixes");
 }
 static std::vector<u32> EmitAliasShader(Shader::Info& info,bool typed,bool mixed,bool dynamic,bool nonuniform,bool classified,std::array<u32,4> read_swizzle,std::array<u32,4> write_swizzle,std::array<float,4> read_constants,std::array<float,4> write_constants){
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.native_coherent_images=true;
@@ -178,6 +191,22 @@ static std::vector<u32> EmitAliasShader(Shader::Info& info,bool typed,bool mixed
         write(0,floating?c.OpBitcast(c.U32[1],c.OpFAdd(c.F32[1],read_float(),c.ConstF32(2.f))):c.OpIAdd(c.U32[1],read(),c.ConstU32(1U)));
         c.OpMemoryBarrier(c.ConstU32(u32(spv::Scope::Device)),c.ConstU32(u32(spv::MemorySemanticsMask::AcquireRelease|spv::MemorySemanticsMask::ImageMemory)));
         write(1,floating?c.OpConvertFToU(c.U32[1],c.OpFMul(c.F32[1],read_float(),c.ConstF32(2.f))):c.OpIAdd(c.U32[1],read(),c.ConstU32(100U)));
+        const auto read_levels=info.images[0].GetSharp(info).NumLevels();
+        const auto write_levels=info.images[1].GetSharp(info).NumLevels();
+        if(read_levels!=write_levels){
+            // Both resources came from real dynamic-mip resource patching.
+            // Their arrays and query results must retain each original range,
+            // despite binding one larger native allocation.
+            const auto read_dims=EmitImageQueryDimensions(c,nullptr,0,c.u32_zero_value,true);
+            const auto write_dims=EmitImageQueryDimensions(c,nullptr,1,c.u32_zero_value,true);
+            write(2,c.OpCompositeExtract(c.U32[1],read_dims,3));
+            write(3,c.OpCompositeExtract(c.U32[1],write_dims,3));
+            const u32 short_handle=read_levels<write_levels?0:1;
+            const auto invalid=EmitImageRead(c,nullptr,short_handle,c.ConstU32(0U,0U,0U),c.ConstU32(1U),{});
+            write(4,c.OpBitcast(c.U32[1],c.OpCompositeExtract(c.F32[1],invalid,0)));
+            const auto poison=c.ConstU32(0xdeadbeefU,0xdeadbeefU,0xdeadbeefU,0xdeadbeefU);
+            EmitImageWrite(c,nullptr,short_handle,c.ConstU32(0U,0U,0U),c.ConstU32(1U),{},c.OpBitcast(c.F32[4],poison));
+        }
         c.OpReturn();c.OpFunctionEnd();c.AddEntryPoint(spv::ExecutionModel::GLCompute,fn,"main",c.interfaces);
         c.AddExecutionMode(fn,spv::ExecutionMode::LocalSize,1U,1U,1U);return c.Assemble();
     }
@@ -295,7 +324,9 @@ int wmain(int argc,wchar_t** argv){try {
     const bool classified_srgb_swizzle=argc==5&&std::wstring_view(argv[4])==L"classified-srgb-swizzle";
     const bool classified_srgb=classified_srgb_swizzle||(argc==5&&std::wstring_view(argv[4])==L"classified-srgb");
     const bool classified_identity=argc==5&&std::wstring_view(argv[4])==L"classified-identity";
-    const bool classified=classified_identity||classified_srgb||classified_one||classified_swizzle||classified_typed||classified_view||(argc==5&&std::wstring_view(argv[4])==L"classified");
+    const bool prefix_read=argc==5&&std::wstring_view(argv[4])==L"classified-prefix-read";
+    const bool prefix_write=argc==5&&std::wstring_view(argv[4])==L"classified-prefix-write";
+    const bool classified=prefix_read||prefix_write||classified_identity||classified_srgb||classified_one||classified_swizzle||classified_typed||classified_view||(argc==5&&std::wstring_view(argv[4])==L"classified");
     std::ifstream file(argv[1],std::ios::binary|std::ios::ate);const auto bytes=file.tellg();
     if(bytes<=0||bytes%4)throw std::runtime_error("Invalid shader fixture");
     std::vector<u32> spirv(size_t(bytes)/4);file.seekg(0);file.read(reinterpret_cast<char*>(spirv.data()),bytes);
@@ -336,6 +367,7 @@ int wmain(int argc,wchar_t** argv){try {
         if(classified_view&&i==0)view.base_array=view.last_array=1;
         if(classified_mip&&i==1)view.base_level=1;
         if(classified_typed&&i==0)view.num_format=7;
+        if((prefix_read&&i==0)||(prefix_write&&i==1))view.last_level=0;
         if(classified_one&&i==0)view.dst_sel_x=1;
         if(classified_signed_one)view.num_format=5;
         if(classified_srgb)view.num_format=i==0?9:0;
@@ -361,7 +393,7 @@ int wmain(int argc,wchar_t** argv){try {
     std::array<u32,4> read_swizzle{4,5,6,7};
     std::array<u32,4> write_swizzle{4,5,6,7};
     std::array<float,4> read_constants{0.f,1.f,0.f,0.f},write_constants=read_constants;
-    if(classified)read_swizzle=ClassifyPhysicalAliases(info,write_swizzle,read_constants,write_constants);
+    if(classified)read_swizzle=ClassifyPhysicalAliases(info,write_swizzle,read_constants,write_constants,prefix_read||prefix_write);
     if(classified_identity)CheckStorageIdentitySpecialization(info);
     if(classified_srgb&&(!info.images[0].native_srgb_read||info.images[1].native_srgb_read))
         throw std::runtime_error("sRGB decode was not restricted to the promoted read view");
@@ -372,6 +404,12 @@ int wmain(int argc,wchar_t** argv){try {
         const u32 first=classified_srgb_swizzle?0x37010d80U:classified_srgb?0x80010d37U:classified_float_one?0x40400000U:classified_one?2U:classified_write_swizzle?3U:classified_swizzle?8U:classified_typed?0x40600000U:41,second=classified_srgb_swizzle?0x37000137U:classified_srgb?0x8000010aU:classified_float_one?2U:classified_one?101U:classified_write_swizzle?9U:classified_swizzle?108U:classified_typed?7U:141;
         memcpy(expected.data()+GuestPixelOffset(desc,layout,classified_mip?1:0,1,0,0),&first,4);
         memcpy(expected.data()+GuestPixelOffset(desc,layout,classified_mip?1:0,1,1,0),&second,4);
+        if(prefix_read||prefix_write){
+            const u32 read_levels=prefix_read?1:2,write_levels=prefix_write?1:2,zero=0;
+            memcpy(expected.data()+GuestPixelOffset(desc,layout,0,1,2,0),&read_levels,4);
+            memcpy(expected.data()+GuestPixelOffset(desc,layout,0,1,3,0),&write_levels,4);
+            memcpy(expected.data()+GuestPixelOffset(desc,layout,0,1,4,0),&zero,4);
+        }
         if(classified_swizzle){
             const u32 first_green=classified_write_swizzle?41U:first,second_green=classified_write_swizzle?103U:second;
             memcpy(expected.data()+GuestPixelOffset(desc,layout,0,1,0,0)+4,&first_green,4);

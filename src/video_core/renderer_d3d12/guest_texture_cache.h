@@ -99,6 +99,13 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTexture
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view);
+// Uncompressed mip-major storage can share a complete physical mip prefix.
+bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc,const GuestTextureLayout&,
+    GuestTextureDesc,const GuestTextureLayout&);
+// Physical I transfer/growth can reinterpret packed storage; this does not
+// authorize binding the same native texture under incompatible typed views.
+bool CompatibleGuestImageMipGeometry(GuestTextureDesc,const GuestTextureLayout&,
+    GuestTextureDesc,const GuestTextureLayout&);
 bool MatchesGuestMipLayout(const GuestTextureLayout&,const GuestTextureLayout&);
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view);
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc>);

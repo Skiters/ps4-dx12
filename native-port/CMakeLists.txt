@@ -430,6 +430,8 @@ add_test(NAME native_classified_image_float_one COMMAND native-writable-image-al
 add_test(NAME native_classified_image_srgb_alias COMMAND native-writable-image-alias-test "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" classified-srgb)
 add_test(NAME native_classified_image_srgb_swizzle COMMAND native-writable-image-alias-test "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" classified-srgb-swizzle)
 add_test(NAME native_classified_image_storage_identity COMMAND native-writable-image-alias-test "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" classified-identity)
+add_test(NAME native_classified_image_mip_prefix_read COMMAND native-writable-image-alias-test "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" classified-prefix-read)
+add_test(NAME native_classified_image_mip_prefix_write COMMAND native-writable-image-alias-test "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" classified-prefix-write)
 add_executable(native-image-access-classification-test image_access_classification_test.cpp
     "${PORT_ROOT}/src/shader_recompiler/ir/passes/resource_patching_pass.cpp"
     "${PORT_ROOT}/src/shader_recompiler/ir/ir_emitter.cpp"

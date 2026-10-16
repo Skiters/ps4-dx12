@@ -121,8 +121,17 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;bool sample_storage;
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;
-        std::optional<size_t> ordered_transfer;};
+        std::optional<size_t> ordered_transfer;std::optional<size_t> storage_group;};
     std::vector<ImagePending> images;
+    struct ShaderImageStorage {GuestTextureDesc desc;GuestTextureLayout layout;};
+    std::vector<ShaderImageStorage> shader_image_storage;
+    std::vector<std::shared_ptr<void>> shader_storage_pins;
+    const auto storage_desc=[&](const ImagePending& image)->const GuestTextureDesc&{
+        return image.storage_group?shader_image_storage[*image.storage_group].desc:image.desc;
+    };
+    const auto storage_layout=[&](const ImagePending& image)->const GuestTextureLayout&{
+        return image.storage_group?shader_image_storage[*image.storage_group].layout:image.layout;
+    };
     std::vector<std::shared_ptr<void>> writable_block_parent_pins;
     const auto find_block_parent=[textures](const GuestTextureDesc& desc,const GuestTextureLayout& layout){
         if(!textures)return static_cast<GuestTextureCache::Entry*>(nullptr);
@@ -296,12 +305,6 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(desc.writable)textures->ValidateWritableFormat(layout.format);
             auto* block_parent=sharp?find_block_parent(desc,layout):nullptr;
             if(block_parent)writable_block_parent_pins.push_back(textures->PinBinding(*block_parent));
-            if(sharp&&!textures->HasOwnedShaderStorage(desc)){
-                // Both access types consume parent I through private GPU
-                // storage; physical B synchronization must not retire it.
-                if(block_parent)rasterizer.ValidateGpuBacking(desc.address,layout.guest_bytes,source.is_written);
-                else rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,source.is_written);
-            }
             UINT mip=desc.first_mip;
             if(source.mip_fallback_mode==Shader::MipStorageFallbackMode::ConstantIndex)mip+=source.constant_mip_index;
             if(mip>=desc.levels||(!source.native_msaa_storage&&count>desc.levels-mip)||
@@ -316,6 +319,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                       (pipeline.IsCompute()&&stages.size()==1&&!uses_dma)):
                      compatible_block_prefixes(previous.desc,previous.layout,desc,layout));
                 if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views&&
+                    !CompatibleGuestShaderMipPrefixes(previous.desc,previous.layout,desc,layout)&&
                     !CompatibleGuestBlockSampledViews(previous.desc,previous.layout,desc,layout))
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
                 if(previous.desc.writable!=desc.writable){
@@ -347,6 +351,45 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
         ++image_reg;
     }
+    }
+    // Plan the maximum physical chain before validation, snapshots or uploads.
+    // Original metadata/descriptors keep their own mip count and view window.
+    // Include an already owned larger chain so a narrow writable bind does not
+    // discard its untouched I tail or initialize it from unrelated B bytes.
+    if(textures)for(auto& image:images){
+        if(image.null_resource||!CompatibleGuestShaderMipPrefixes(image.desc,image.layout,image.desc,image.layout))continue;
+        auto found=std::ranges::find_if(shader_image_storage,[&](const auto& group){
+            return CompatibleGuestShaderMipPrefixes(group.desc,group.layout,image.desc,image.layout);
+        });
+        if(found==shader_image_storage.end()){
+            image.storage_group=shader_image_storage.size();
+            shader_image_storage.push_back({image.desc,image.layout});
+        }else{
+            image.storage_group=size_t(found-shader_image_storage.begin());
+            const auto levels=std::max(found->desc.levels,image.desc.levels);
+            if(image.desc.writable&&!found->desc.writable)found->desc=image.desc;
+            found->desc.levels=levels;found->layout=LayoutGuestTexture(found->desc);
+        }
+    }
+    if(textures)for(auto& group:shader_image_storage){
+        for(const auto& cached:textures->Entries())if(cached->gpu_owned&&
+            CompatibleGuestImageMipGeometry(group.desc,group.layout,cached->desc,cached->layout)){
+            shader_storage_pins.push_back(textures->PinBinding(*cached));
+            if(cached->desc.levels>group.desc.levels){
+                group.desc.levels=cached->desc.levels;group.layout=LayoutGuestTexture(group.desc);
+            }
+        }
+    }
+    if(textures)for(const auto& image:images)if(!image.null_resource){
+        const auto& desc=storage_desc(image);const auto& layout=storage_layout(image);
+        const bool owned_prefix=std::ranges::any_of(textures->Entries(),[&](const auto& cached){
+            return cached->gpu_owned&&CompatibleGuestImageMipGeometry(desc,layout,cached->desc,cached->layout);
+        });
+        if(!owned_prefix&&!textures->HasOwnedShaderStorage(desc)){
+            if(find_block_parent(image.desc,image.layout))
+                rasterizer.ValidateGpuBacking(desc.address,layout.guest_bytes,image.desc.writable);
+            else rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,image.desc.writable);
+        }
     }
     const auto ordinary_count=requests.size();
     if(dma)dma->AppendRequests(rasterizer,requests);
@@ -395,20 +438,33 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Two writers likewise keep separate cache domains, when the backend can
     // retain both versions without selecting an arbitrary physical winner.
     for(auto& image:images)for(const auto& b:requests)
-        if(!image.null_resource&&b.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<b.address+b.size&&
-            image.desc.writable&&b.written){
-            if(!textures||!textures->CanRetainBufferAlias(image.desc,image.layout)||
+        if(!image.null_resource&&b.address<storage_desc(image).address+storage_layout(image).guest_bytes&&storage_desc(image).address<b.address+b.size&&
+            storage_desc(image).writable&&b.written){
+            if(!textures||!textures->CanRetainBufferAlias(storage_desc(image),storage_layout(image))||
                (b.WriteRange().address!=image.desc.address&&stages.size()!=1))
                 throw std::runtime_error("Native cross-stage writable buffer/image alias needs shared cache coherency: buffer="+
                 std::to_string(b.address)+" bytes="+std::to_string(b.size)+" written="+std::to_string(b.written)+
                 " image="+std::to_string(image.desc.address)+" bytes="+std::to_string(image.layout.guest_bytes)+" writable="+std::to_string(image.desc.writable));
             image.buffer_writer_alias=true;
         }
+    // A buffer touching only a cached parent's extra mips still shares its
+    // physical domain. Preserve that valid I before buffer preparation can
+    // acquire the same pages. Exact-base invalidation below remains original.
+    if(textures)for(const auto& group:shader_image_storage){
+        const bool writer=std::ranges::any_of(requests,[&](const auto& buffer){return buffer.written&&
+            buffer.address<group.desc.address+group.layout.guest_bytes&&group.desc.address<buffer.address+buffer.size;});
+        if(!writer)continue;
+        for(const auto& cached:textures->Entries())if(cached->gpu_owned&&!cached->buffer_alias_version&&
+            cached->HasValidLogicalImage()&&CompatibleGuestImageMipGeometry(group.desc,group.layout,cached->desc,cached->layout)){
+            if(!textures->RevalidateReadonly(*cached))
+                throw std::runtime_error("Mip-prefix buffer/image parent cannot retain its independent version");
+        }
+    }
     const auto separate_overlap=[&](VAddr address,u64 bytes){
         if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
             address<entry->desc.address+entry->layout.guest_bytes&&entry->desc.address<address+bytes)return true;
         return std::ranges::any_of(images,[&](const auto& image){return image.buffer_writer_alias&&
-            address<image.desc.address+image.layout.guest_bytes&&image.desc.address<address+bytes;});
+            address<storage_desc(image).address+storage_layout(image).guest_bytes&&storage_desc(image).address<address+bytes;});
     };
     std::vector<std::pair<size_t,GuestTextureCache::Entry*>> formatted_images;
     std::vector<std::shared_ptr<void>> formatted_image_pins;
@@ -553,9 +609,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const bool compatible_images=std::ranges::all_of(images,[&](const auto& image){
                     if(image.null_resource||image.desc.address>=desc.address+layout.guest_bytes||
                        desc.address>=image.desc.address+image.layout.guest_bytes)return true;
-                    return CompatibleGuestShaderStorage(desc,image.desc)&&
-                        MatchesGuestMipLayout(layout,image.layout)&&
-                        (!image.desc.writable||textures->CanRetainBufferAlias(image.desc,image.layout));
+                    return (CompatibleGuestShaderStorage(desc,storage_desc(image))&&
+                        MatchesGuestMipLayout(layout,storage_layout(image))||
+                        (desc.levels<=storage_desc(image).levels&&CompatibleGuestShaderMipPrefixes(
+                            desc,layout,storage_desc(image),storage_layout(image))))&&
+                        (!storage_desc(image).writable||textures->CanRetainBufferAlias(storage_desc(image),storage_layout(image)));
                 });
                 if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||!read_buffers.empty()||
                    !compatible_images||candidates!=1||!unique||!compatible_uavs||
@@ -679,22 +737,43 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::map<std::pair<VAddr,u64>,std::shared_ptr<Resource>> gpu_image_snapshots;
     u64 gpu_snapshot_bytes{};
     std::vector<std::shared_ptr<void>> preserved_image_pins;
-    for(auto& image:images)if(!image.null_resource&&(!image.desc.writable||image.buffer_writer_alias)&&
+    // Grow/reinterpret an independent cached prefix before final buffer views
+    // exist. Upload's private I/B transfer can extend native buffer envelopes;
+    // doing that later would invalidate already selected shader descriptors.
+    // Exact-base writers above have already retired I and therefore refresh
+    // from current B through the ordinary prewrite snapshot path instead.
+    for(const auto& group:shader_image_storage){
+        const bool needs_transfer=std::ranges::any_of(textures->Entries(),[&](const auto& cached){
+            return cached->gpu_owned&&cached->buffer_alias_version&&!cached->logical_dirty&&
+                CompatibleGuestImageMipGeometry(group.desc,group.layout,cached->desc,cached->layout)&&
+                (cached->desc.levels<group.desc.levels||
+                 !CompatibleGuestShaderStorage(cached->desc,group.desc));
+        });
+        if(!needs_transfer)continue;
+        rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+        const auto bytes=std::span(reinterpret_cast<const std::byte*>(group.desc.address),size_t(group.layout.guest_bytes));
+        auto& expanded=textures->Upload(group.desc,bytes,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        preserved_image_pins.push_back(textures->PinBinding(expanded));
+        rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+    }
+    for(auto& image:images){
+        const auto& input=storage_desc(image);const auto& input_layout=storage_layout(image);
+        if(!image.null_resource&&(!input.writable||image.buffer_writer_alias)&&
         std::ranges::any_of(requests,[&](const auto& buffer){return buffer.written&&
-            buffer.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<buffer.address+buffer.size;})){
+            buffer.address<input.address+input_layout.guest_bytes&&input.address<buffer.address+buffer.size;})){
         // An interior buffer writer does not invalidate the pinned same-base
         // independent image. Keep I here instead of capturing unrelated B0.
         // Capturing another image can reserve memory, so pin this witness until
         // Upload has selected and retained its descriptor resource.
-        if(auto* retained=textures->FindIndependentUploadSource(image.desc,image.layout)){
+        if(auto* retained=textures->FindIndependentUploadSource(input,input_layout)){
             preserved_image_pins.push_back(textures->PinBinding(*retained));continue;
         }
         image.current_buffer_snapshot=!image.desc.writable&&std::ranges::any_of(
             std::span(requests).first(ordinary_count),[&](const auto& buffer){
                 const auto write=buffer.WriteRange();
-                return buffer.written&&write.address==image.desc.address&&write.size;
+                return buffer.written&&write.address==input.address&&write.size;
             });
-        const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
+        const auto key=std::pair{input.address,input_layout.guest_bytes};
         // An earlier formatted buffer bind may already have retiled I into B.
         // A later exact-base writer invalidates the logical I before images are
         // bound, but it must not erase that recorded prewrite transfer. Refresh
@@ -704,11 +783,36 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             return transfer.address==key.first&&transfer.bytes==key.second&&transfer.tiled.handle;
         });
         if(retiled!=ordered_formatted_images.end()&&
-           GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)){
+           GuestTextureCache::CanUploadGpuSnapshot(input,input_layout,image.buffer_writer_alias)){
             image.ordered_transfer=size_t(retiled-ordered_formatted_images.begin());
             continue;
         }
-        if(GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)&&
+        const auto prefix=std::ranges::find_if(ordered_formatted_images,[&](const auto& transfer){
+            return transfer.address==key.first&&transfer.bytes<key.second&&transfer.tiled.handle&&
+                CompatibleGuestShaderMipPrefixes(transfer.image->desc,transfer.image->layout,input,input_layout);
+        });
+        if(prefix!=ordered_formatted_images.end()&&
+           GuestTextureCache::CanUploadGpuSnapshot(input,input_layout,image.buffer_writer_alias)){
+            // BindBuffers retiled only the old image prefix. BindTextures then
+            // grows I from that B1 prefix plus current B0 tail/padding. Capture
+            // before final views: native arena growth must not replace them.
+            auto owner=input;owner.writable=true;
+            if(!textures->CanRetainIndependentImage(owner,LayoutGuestTexture(owner)))
+                throw std::runtime_error("Ordered image mip growth needs independent range ownership");
+            auto [existing,inserted]=gpu_image_snapshots.try_emplace(key);
+            if(inserted){
+                auto extended=rasterizer.CaptureShaderBuffer(key.first,key.second);
+                prefix->tiled.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+                extended.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+                rasterizer.RetainUntilFinish([source=prefix->tiled,destination=extended](u64){(void)source;(void)destination;});
+                DX12_API_CALL(rasterizer.RecordingList()->CopyBufferRegion(extended.handle.Get(),0,
+                    prefix->tiled.handle.Get(),0,prefix->bytes));
+                extended.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                existing->second=std::make_shared<Resource>(std::move(extended));
+            }
+            image.gpu_snapshot=existing->second;continue;
+        }
+        if(GuestTextureCache::CanUploadGpuSnapshot(input,input_layout,image.buffer_writer_alias)&&
            rasterizer.IsGpuBufferModified(key.first,key.second)){
             auto existing=gpu_image_snapshots.find(key);
             const auto capacity=(key.second+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
@@ -737,6 +841,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
         image.guest_snapshot=snapshot;
     }
+    }
     diagnostic.Stage("buffer-views");
     auto views=rasterizer.PrepareShaderBuffers(requests);
     for(auto& transfer:ordered_formatted_images){
@@ -748,7 +853,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     for(auto& image:images)if(image.ordered_transfer){
         auto& transfer=ordered_formatted_images.at(*image.ordered_transfer);
-        const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
+        const auto key=std::pair{storage_desc(image).address,storage_layout(image).guest_bytes};
         auto [existing,inserted]=gpu_image_snapshots.try_emplace(key);
         if(inserted){
             // Resource copies carry independent legacy state fields. Publish
@@ -910,18 +1015,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 throw std::runtime_error("Writable BC parent appeared after group planning");
             bool separate_input=image.buffer_writer_alias;
             for(const auto& candidate:images)if(candidate.buffer_writer_alias&&
-                CompatibleGuestShaderStorage(candidate.desc,image.desc))separate_input=true;
+                (CompatibleGuestShaderStorage(candidate.desc,image.desc)||
+                 (candidate.storage_group&&candidate.storage_group==image.storage_group)))separate_input=true;
             if(!entry)for(const auto& [description,previous]:uploaded_views)
-                if((description==image.desc||CompatibleGuestShaderStorage(description,image.desc))&&
-                   (previous->desc==image.desc||CompatibleGuestShaderStorage(previous->desc,image.desc))){entry=previous;break;}
+                if((description==image.desc||CompatibleGuestShaderStorage(description,image.desc)||
+                    (description.levels>=image.desc.levels&&CompatibleGuestShaderMipPrefixes(description,
+                        LayoutGuestTexture(description),image.desc,image.layout)))&&
+                   (previous->desc==image.desc||CompatibleGuestShaderStorage(previous->desc,image.desc)||
+                    (previous->desc.levels>=image.desc.levels&&CompatibleGuestShaderMipPrefixes(previous->desc,
+                        previous->layout,image.desc,image.layout)))){entry=previous;break;}
             if(!entry) {
                 // Allocate with UAV capability even if a sampled descriptor is
                 // encountered first. All group members bind this same storage.
-                auto storage=image.desc;
-                for(const auto& candidate:images)if(!candidate.null_resource&&candidate.desc.writable&&
+                auto storage=storage_desc(image);
+                if(!image.storage_group)for(const auto& candidate:images)if(!candidate.null_resource&&candidate.desc.writable&&
                     CompatibleGuestShaderStorage(candidate.desc,image.desc)){storage=candidate.desc;break;}
                 const auto guest=image.guest_snapshot?std::span<const std::byte>(*image.guest_snapshot):
-                    std::span(reinterpret_cast<const std::byte*>(image.desc.address),size_t(image.layout.guest_bytes));
+                    std::span(reinterpret_cast<const std::byte*>(storage.address),size_t(storage_layout(image).guest_bytes));
                 entry=&textures->Upload(storage,image.gpu_snapshot?std::span<const std::byte>{}:guest,
                     rasterizer.RecordingList(),rasterizer.CompletedFence(),{},
                     bool(image.guest_snapshot)||bool(image.gpu_snapshot),image.gpu_snapshot.get(),

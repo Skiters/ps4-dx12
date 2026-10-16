@@ -234,11 +234,13 @@ inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
     // A bytewise T# comparison missed these aliases, leaving reads as SRVs
     // beside a UAV of the same native subresource. Retain the conservative
     // type/format families above; view-specific fields stay on each descriptor.
+    const bool mip_prefix = left.type != u64(AmdGpu::ImageType::Color2DMsaa) &&
+        left.type != u64(AmdGpu::ImageType::Color2DMsaaArray) && left.data_format < 35;
     return left.base_address != 0 && right.base_address != 0 &&
            left.base_address == right.base_address && left.data_format == right.data_format &&
            left.num_format == right.num_format && left.width == right.width &&
            left.height == right.height && left.depth == right.depth && left.pitch == right.pitch &&
-           left.last_level == right.last_level && left.type == right.type &&
+           (mip_prefix || left.last_level == right.last_level) && left.type == right.type &&
            left.tiling_index == right.tiling_index && left.pow2pad == right.pow2pad &&
            left.alt_tile_mode == right.alt_tile_mode;
 }
