@@ -236,8 +236,13 @@ static std::vector<u32> EmitAliasShader(Shader::Info& info,bool typed,bool mixed
     c.OpReturn();c.OpFunctionEnd();c.AddEntryPoint(spv::ExecutionModel::GLCompute,fn,"main",c.interfaces);
     c.AddExecutionMode(fn,spv::ExecutionMode::LocalSize,1U,1U,1U);return c.Assemble();
 }
+int RunNativePackedImage(const wchar_t*,const wchar_t*,std::wstring_view);
+int RunNativePacked10(const wchar_t*,const wchar_t*,std::wstring_view);
 int wmain(int argc,wchar_t** argv){try {
     if(argc!=4&&argc!=5)throw std::invalid_argument("Expected fixture, converter and DXC");
+    if(argc==5&&std::wstring_view(argv[4]).starts_with(L"packed-"))return RunNativePackedImage(argv[2],argv[3],argv[4]);
+    if(argc==5&&(std::wstring_view(argv[4]).starts_with(L"packed10-")||
+        std::wstring_view(argv[4]).starts_with(L"raw32-")))return RunNativePacked10(argv[2],argv[3],argv[4]);
     const bool typed=argc==5&&std::wstring_view(argv[4])==L"typed";
     const bool mixed=argc==5&&std::wstring_view(argv[4])==L"mixed";
     const bool nonuniform=argc==5&&std::wstring_view(argv[4])==L"nonuniform";

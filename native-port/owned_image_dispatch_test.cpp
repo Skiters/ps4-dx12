@@ -46,7 +46,7 @@ int wmain(int argc,wchar_t** argv){try{
         GuestImageReadback readback(device.Get(),entry,renderer.RecordingList());
         const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
         readback.Resolve(renderer.CompletedFence(),result);memcpy(backing.alias+offset,result.data(),result.size());
-        entry.gpu_owned=false;watcher->Untrack(entry.desc.address,entry.layout.guest_bytes);++resolves;
+        entry.SetGpuOwned(false);watcher->Untrack(entry.desc.address,entry.layout.guest_bytes);++resolves;
     };
     PageWatch watch([&](u64 fault){++faults;for(auto& entry:cache.Entries())if(entry->gpu_owned&&
         fault>=entry->desc.address&&fault-entry->desc.address<entry->layout.guest_bytes)resolve(*entry);});watcher=&watch;

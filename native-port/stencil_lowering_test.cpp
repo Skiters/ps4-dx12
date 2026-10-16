@@ -80,6 +80,22 @@ int main(){try {
     regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Always;
     state=BuildGuestGraphicsState(regs,{},DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
     Require(state.stencil_write_mask_front==0xaa,"Unreachable stencil-fail operation constrained mask");
+    regs.stencil_ref_front={0x11,255,255,0x77};
+    regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Equal;
+    regs.stencil_control.stencil_fail_front=F::ReplaceOp;
+    regs.stencil_control.stencil_zfail_front=F::ReplaceTest;
+    regs.stencil_control.stencil_zpass_front=F::ReplaceTest;
+    state=BuildGuestGraphicsState(regs,{},DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+    Require(state.stencil_reference==0x77&&state.pipeline.DepthStencilState.FrontFace.StencilFunc==D3D12_COMPARISON_FUNC_EQUAL&&
+        state.pipeline.DepthStencilState.FrontFace.StencilPassOp==D3D12_STENCIL_OP_REPLACE,
+        "Pinned ReplaceOp reference was not shared by comparison and ReplaceTest");
+    regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Always;
+    state=BuildGuestGraphicsState(regs,{},DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+    Require(state.stencil_reference==0x77,"Unreachable ReplaceOp changed the original face reference selection");
+    regs.depth_render_control.stencil_clear_enable=1;
+    state=BuildGuestGraphicsState(regs,{},DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+    Require(!state.stencil_write_mask_front&&!state.stencil_write_mask_back&&!state.WritesDepthStencil(),
+        "Explicit stencil clear allowed a subsequent raster stencil write");
     std::printf("PASS: %u exact stencil byte comparisons; independent faces and incompatible branch masks\n",checked);
     return 0;
 }catch(const std::exception& e){std::fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

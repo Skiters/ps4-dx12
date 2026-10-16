@@ -1,5 +1,5 @@
 get_filename_component(MESA_PATCHED_CONVERTER "${SHADPS4_MESA_CONVERTER_DLL}" ABSOLUTE)
-if(EXISTS "${MESA_PATCHED_CONVERTER}")
+if(SHADPS4_GLSLANG_EXECUTABLE)
     set(_shader_fixtures "${PORT_ROOT}/src/shader_recompiler/backend/dxil/tests/barycentric")
     set(_glslang "${SHADPS4_GLSLANG_EXECUTABLE}")
     set(_spv_outputs)

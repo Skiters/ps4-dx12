@@ -98,7 +98,53 @@ static void Run(bool dynamic,bool reverse,bool same,bool native,bool loaded,bool
             throw std::runtime_error("Converted image forced channels do not select exact one and zero");
     }
 }
+static void RunPacked(u32 read_number,u32 write_number,bool native,bool external_hint,u32 read_format=9,u32 write_format=9){
+    Common::ObjectPool<IR::Inst> pool{128};IR::Block block(pool);Info info;
+    const auto add=[&](IR::Opcode op,std::initializer_list<IR::Value> args){block.AppendNewInst(op,args);return IR::Value{&block.back()};};
+    const IR::Value zero{u32(0)};
+    auto coords=add(IR::Opcode::CompositeConstructU32x4,{zero,zero,zero,zero});
+    auto color=add(IR::Opcode::CompositeConstructF32x4,{IR::Value{1.f},IR::Value{1.f},IR::Value{1.f},IR::Value{1.f}});
+    auto read=add(IR::Opcode::ImageRead,{zero,coords,{}, {}});
+    auto write=add(IR::Opcode::ImageWrite,{zero,coords,{}, {},color});
+    IR::TextureInstInfo flags{};read.Inst()->SetFlags(flags);write.Inst()->SetFlags(flags);
+    AmdGpu::Image sharp{};sharp.base_address=0x100000;sharp.width=sharp.height=sharp.pitch=7;
+    sharp.type=u64(AmdGpu::ImageType::Color2D);sharp.data_format=read_format;sharp.num_format=read_number;sharp.tiling_index=13;
+    sharp.dst_sel_x=4;sharp.dst_sel_y=5;sharp.dst_sel_z=6;sharp.dst_sel_w=7;
+    auto writer_sharp=sharp;writer_sharp.num_format=write_number;writer_sharp.data_format=write_format;
+    info.flattened_ud_buf.resize(16);memcpy(info.flattened_ud_buf.data(),&sharp,sizeof(sharp));
+    memcpy(info.flattened_ud_buf.data()+8,&writer_sharp,sizeof(writer_sharp));
+    Optimization::ResourceDiscovery r{},w{};r.user=read.Inst();w.user=write.Inst();
+    r.sharps[0].num_dwords=w.sharps[0].num_dwords=8;
+    for(u32 index=0;index<8;++index){
+        r.sharps[0].dwords[index]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(index)}});
+        w.sharps[0].dwords[index]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(index+8)}});
+    }
+    Optimization::ResourceDiscoveryList resources;
+    if(external_hint){
+        auto hint=sharp;
+        if(read_format==9){hint.num_format=1;info.native_pipeline_signed_packed_views.push_back({hint,false,false});}
+        else info.native_pipeline_raw32_views.push_back({hint,false,false});
+        resources.push_back(w);
+    }
+    else{resources.push_back(r);resources.push_back(w);}
+    Profile profile{};profile.native_coherent_images=native;
+    Optimization::ResourcePatchingPass(info,resources,profile);
+    const auto signed_number=[](u32 number){return number==1||number==5;};
+    const bool raw=native&&read_format==9&&(external_hint||signed_number(read_number)||signed_number(write_number));
+    const bool raw32=native&&read_format!=write_format;
+    if(info.images.size()!=(external_hint?1u:2u))throw std::runtime_error("Packed numeric access descriptions lost their T# identity");
+    for(u32 index=0;index<info.images.size();++index){const auto& image=info.images[index];
+        if(image.native_packed10_raw!=raw||image.native_raw32!=raw32||image.is_written!=(external_hint||index==1||native))
+            throw std::runtime_error("Mixed packed numeric aliases lost common raw storage classification");
+    }
+}
 int main(){try{for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool same:{false,true})for(bool native:{false,true})for(bool loaded:{false,true})Run(dynamic,reverse,same,native,loaded);
+    for(u32 read_number:{0U,1U,4U,5U})for(u32 write_number:{0U,1U,4U,5U})for(bool native:{false,true})RunPacked(read_number,write_number,native,false);
+    for(u32 write_number:{0U,4U})for(bool native:{false,true})RunPacked(0,write_number,native,true);
+    for(u32 scalar:{4U,5U,7U})for(u32 rgba:{0U,1U,4U,5U,9U})for(bool native:{false,true}){
+        RunPacked(scalar,rgba,native,false,4,10);RunPacked(rgba,scalar,native,false,10,4);
+        RunPacked(scalar,rgba,native,true,4,10);RunPacked(rgba,scalar,native,true,10,4);
+    }
     for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool native:{false,true})Run(dynamic,reverse,false,native,true,true);
     for(u32 format:{0U,2U,3U})Run(false,false,true,true,true,false,format);
     Run(false,false,true,true,true,false,9);

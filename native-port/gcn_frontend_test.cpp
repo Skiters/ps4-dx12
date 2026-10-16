@@ -10,6 +10,7 @@
 #include <d3d12sdklayers.h>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 int main(int argc,char** argv){try{
     if(argc!=3&&argc!=4)throw std::invalid_argument("Expected converter and DXC paths");
     const std::string requested_mode=argc==4?argv[3]:"base";
@@ -17,6 +18,26 @@ int main(int argc,char** argv){try{
     const bool dynamic_operand=buffer_atomic&&requested_mode.ends_with("-dynamic");
     const std::string normalized=dynamic_operand?requested_mode.substr(0,requested_mode.size()-8):requested_mode;
     const std::string mode=buffer_atomic?"atomic-"+normalized.substr(7):normalized;
+    const bool aniso_case=mode.find("-aniso-2")!=std::string::npos||mode.find("-aniso-4")!=std::string::npos||
+        mode.find("-aniso-8")!=std::string::npos||mode.find("-aniso-16")!=std::string::npos;
+    const u32 aniso_limit=mode.find("-aniso-16")!=std::string::npos?16:
+        mode.find("-aniso-8")!=std::string::npos?8:mode.find("-aniso-4")!=std::string::npos?4:2;
+    const bool aniso_linear=aniso_case&&mode.find("-linear")!=std::string::npos;
+    const bool aniso_mip_linear=aniso_case&&mode.ends_with("-mip");
+    const bool aniso_cube=aniso_case&&mode.find("-cube")!=std::string::npos;
+    const bool aniso_cube_array=aniso_cube&&mode.find("-cube-array")!=std::string::npos;
+    const size_t sample_destination_offset=aniso_cube?262144:32768;
+    const size_t allocation_bytes=aniso_cube?524288:65536;
+    const u32 aniso_sample_layer=aniso_cube_array?11:aniso_cube?5:0;
+    std::array<float,2> aniso_dx{1.f,0.f},aniso_dy{0.f,0.125f};
+    if(mode.ends_with("-y")){aniso_dx={0.125f,0.f};aniso_dy={0.f,1.f};}
+    if(mode.ends_with("-zero")){aniso_dx={0.f,0.f};aniso_dy={0.f,0.f};}
+    if(mode.ends_with("-negative"))aniso_dx[0]=-1.f;
+    if(mode.ends_with("-degenerate"))aniso_dy={0.f,0.f};
+    if(mode.ends_with("-three"))aniso_dx[0]=0.375f;
+    if(mode.ends_with("-skew")||aniso_mip_linear)aniso_dx={0.75f,0.75f};
+    const float aniso_uv=mode.ends_with("-mirror")?-0.625f:mode.ends_with("-wrap")?1.625f:
+        aniso_cube&&mode.ends_with("-edge")?0.f:0.5f;
     const bool atomic64=buffer_atomic&&mode.ends_with("64");
     const bool sample_volume=mode.starts_with("sample-feedback-volume-");
     const bool sample_gather=mode.starts_with("sample-feedback-gather-");
@@ -35,7 +56,8 @@ int main(int argc,char** argv){try{
     const bool depth_array=sample_depth&&mode.find("-array")!=std::string::npos;
     const bool depth_1d=sample_depth&&mode.find("-1d")!=std::string::npos;
     const bool depth_shared=sample_depth&&mode.find("-shared")!=std::string::npos;
-    const bool sample_readonly=(sample_depth&&!depth_shared)||mode.find("-resource-readonly")!=std::string::npos||mode=="sample-feedback-grad-clamp-readonly"||mode=="sample-feedback-implicit-clamp-readonly";
+    const bool sample_readonly=(sample_depth&&!depth_shared)||mode.find("-resource-readonly")!=std::string::npos||
+        (aniso_case&&mode.ends_with("-readonly"))||mode=="sample-feedback-grad-clamp-readonly"||mode=="sample-feedback-implicit-clamp-readonly";
     const bool resource_alias=mode=="sample-feedback-lod-resource-alias";
     if(buffer_atomic&&!atomic64&&!mode.starts_with("atomic-f")&&!mode.starts_with("atomic-inc")&&!mode.starts_with("atomic-dec")&&!mode.starts_with("atomic-sub"))
         throw std::invalid_argument("Unsupported buffer fixture");
@@ -79,6 +101,27 @@ int main(int argc,char** argv){try{
         "sample-feedback-lod-resource-none","sample-feedback-lod-resource-readonly-none",
         "sample-feedback-lod-resource-alias",
         "sample-feedback-grad","sample-feedback-grad-zero","sample-feedback-grad-negative",
+        "sample-feedback-grad-aniso-one","sample-feedback-grad-aniso-one-zero",
+        "sample-feedback-grad-aniso-one-linear","sample-feedback-grad-aniso-one-linear-zero",
+        "sample-feedback-grad-aniso-2","sample-feedback-grad-aniso-4",
+        "sample-feedback-grad-aniso-8","sample-feedback-grad-aniso-16",
+        "sample-feedback-grad-aniso-4-y","sample-feedback-grad-aniso-4-linear",
+        "sample-feedback-grad-aniso-4-linear-y","sample-feedback-grad-aniso-8-linear-zero",
+        "sample-feedback-grad-aniso-16-linear-zero","sample-feedback-grad-aniso-4-linear-negative",
+        "sample-feedback-grad-aniso-4-linear-degenerate","sample-feedback-grad-aniso-4-linear-three",
+        "sample-feedback-grad-aniso-4-linear-skew","sample-feedback-grad-aniso-4-linear-mip",
+        "sample-feedback-grad-aniso-4-linear-min","sample-feedback-grad-aniso-4-linear-max",
+        "sample-feedback-grad-aniso-4-linear-resource","sample-feedback-grad-aniso-4-linear-unnormalized",
+        "sample-feedback-grad-aniso-4-linear-mirror","sample-feedback-grad-aniso-4-linear-wrap",
+        "sample-feedback-grad-aniso-4-linear-reduce-min","sample-feedback-grad-aniso-4-linear-reduce-max",
+        "sample-feedback-lod-aniso-4-bias","sample-feedback-lz-aniso-4-bias",
+        "sample-feedback-grad-aniso-4-readonly","sample-feedback-grad-aniso-4-linear-readonly",
+        "sample-feedback-grad-aniso-4-linear-resource-readonly",
+        "sample-feedback-lod-aniso-4-bias-cancel-high","sample-feedback-lod-aniso-4-bias-cancel-low",
+        "sample-feedback-grad-aniso-4-cube","sample-feedback-grad-aniso-4-linear-cube",
+        "sample-feedback-grad-aniso-4-linear-cube-array","sample-feedback-grad-aniso-4-linear-cube-array-readonly",
+        "sample-feedback-grad-aniso-4-linear-cube-readonly","sample-feedback-grad-aniso-4-linear-cube-edge",
+        "sample-feedback-grad-aniso-4-linear-cube-mip",
         "sample-feedback-grad-y","sample-feedback-grad-bias","sample-feedback-grad-unnormalized",
         "sample-feedback-grad-skew",
         "sample-feedback-grad-clamp","sample-feedback-grad-clamp-low",
@@ -214,7 +257,7 @@ int main(int argc,char** argv){try{
     const auto again=frontend.BuildGraphics(regs);
     if(again.stages[u32(Shader::SwStage::Vertex)]!=stage)
         throw std::runtime_error("Unchanged GCN program missed frontend cache");
-    alignas(256) std::array<u32,128> reader{},writer{};
+    alignas(256) std::array<u32,128> reader{},writer{},integer_sampler_program{};
     const auto initialize=[&](auto& program,std::initializer_list<u32> words,u64 hash){
         std::copy(words.begin(),words.end(),program.begin());
         auto header=binary;header.length=u32(words.size()*4);header.shader_hash=hash;
@@ -242,7 +285,7 @@ int main(int argc,char** argv){try{
         if(dimension_query||(atomic_image&&!mode.ends_with("-float")))write_view.num_format=4;
         memcpy(regs.ps_program.user_data.data(),&write_view,sizeof(write_view));
         if(sample_readonly){
-            write_view.base_address+=128; // Separate destination at +32768 bytes.
+            write_view.base_address+=sample_destination_offset/256;
             memcpy(regs.ps_program.user_data.data()+8,&write_view,sizeof(write_view));
         }
         if(independent_query)memcpy(regs.ps_program.user_data.data()+8,&write_view,sizeof(write_view));
@@ -280,6 +323,101 @@ int main(int argc,char** argv){try{
        dxil.stages[u32(Shader::SwStage::Fragment)].bytecode.empty())
         throw std::runtime_error("GCN cross-stage pipeline did not produce DXIL");
     if(&cache.Graphics(shared)!=&dxil)throw std::runtime_error("Cross-stage DXIL cache missed");
+    if(mode=="base"){
+        const auto signed_number=[](u32 number){return number==1||number==5;};
+        auto packed_regs=regs;
+        for(const u32 read_number:{0U,1U,4U,5U})for(const u32 write_number:{0U,1U,4U,5U}){
+            const Shader::Info* alias_info{};
+            for(const bool aliases:{true,false,true}){
+                auto read_view=image;read_view.data_format=9;read_view.num_format=read_number;
+                read_view.base_address=0x100000;
+                auto write_view=read_view;write_view.num_format=write_number;
+                write_view.base_address=aliases?read_view.base_address:read_view.base_address+0x100;
+                memcpy(packed_regs.vs_program.user_data.data(),&read_view,sizeof(read_view));
+                memcpy(packed_regs.ps_program.user_data.data(),&write_view,sizeof(write_view));
+                const auto pipeline=frontend.BuildGraphics(packed_regs);
+                const auto* vertex=pipeline.stages[u32(Shader::SwStage::Vertex)];
+                const auto* fragment=pipeline.stages[u32(Shader::SwStage::Fragment)];
+                if(vertex->info.images.size()!=1||fragment->info.images.size()!=1)
+                    throw std::runtime_error("Packed GCN stage resources changed unexpectedly");
+                const auto& read=vertex->info.images[0];const auto& write=fragment->info.images[0];
+                const bool raw=aliases&&(signed_number(read_number)||signed_number(write_number));
+                if(read.is_written!=aliases||!write.is_written||read.native_packed10_raw!=raw||
+                   write.native_packed10_raw!=(raw||signed_number(write_number)))
+                    throw std::runtime_error("Cross-stage packed GCN aliases lost numeric storage coherence");
+                if(aliases){
+                    if(alias_info&&alias_info!=&vertex->info)
+                        throw std::runtime_error("Restored packed GCN alias missed frontend cache");
+                    alias_info=&vertex->info;
+                }
+                const auto& compiled=cache.Graphics(pipeline);
+                if(compiled.stages[u32(Shader::SwStage::Vertex)].bytecode.empty()||
+                   compiled.stages[u32(Shader::SwStage::Fragment)].bytecode.empty())
+                    throw std::runtime_error("Packed GCN pipeline did not produce both DXIL stages");
+            }
+        }
+        const auto cross_format=[&](u32 read_format,u32 read_number,u32 write_format,u32 write_number){
+            const NativeDX12::GuestShaderStage* shared_vertex{};
+            const NativeDX12::GuestShaderStage* shared_fragment{};
+            for(const bool aliases:{true,false,true}){
+                auto read_view=image;read_view.data_format=read_format;read_view.num_format=read_number;
+                read_view.base_address=0x100000;
+                auto write_view=read_view;write_view.data_format=write_format;write_view.num_format=write_number;
+                write_view.base_address+=aliases?0:0x100;
+                memcpy(packed_regs.vs_program.user_data.data(),&read_view,sizeof(read_view));
+                memcpy(packed_regs.ps_program.user_data.data(),&write_view,sizeof(write_view));
+                const auto pipeline=frontend.BuildGraphics(packed_regs);
+                const auto* vertex=pipeline.stages[u32(Shader::SwStage::Vertex)];
+                const auto* fragment=pipeline.stages[u32(Shader::SwStage::Fragment)];
+                if(vertex->info.images.size()!=1||fragment->info.images.size()!=1||
+                   vertex->info.images[0].is_written!=aliases||!fragment->info.images[0].is_written||
+                   vertex->info.images[0].native_raw32!=aliases||fragment->info.images[0].native_raw32!=aliases)
+                    throw std::runtime_error("R32/RGBA8 GCN stage resources lost shared/separate representation");
+                if(aliases){
+                    if(shared_vertex&&(shared_vertex!=vertex||shared_fragment!=fragment))
+                        throw std::runtime_error("Restored R32/RGBA8 GCN alias missed stage caches");
+                    shared_vertex=vertex;shared_fragment=fragment;
+                }
+                const auto& compiled=cache.Graphics(pipeline);
+                if(compiled.stages[u32(Shader::SwStage::Vertex)].bytecode.empty()||
+                   compiled.stages[u32(Shader::SwStage::Fragment)].bytecode.empty())
+                    throw std::runtime_error("R32/RGBA8 GCN pipeline did not produce both DXIL stages");
+            }
+        };
+        for(u32 scalar:{4U,5U,7U})for(u32 rgba:{0U,1U,4U,5U,9U}){
+            cross_format(4,scalar,10,rgba);cross_format(10,rgba,4,scalar);
+        }
+        AmdGpu::Sampler nearest{};
+        nearest.xy_mag_filter.Assign(AmdGpu::Filter::Point);
+        nearest.xy_min_filter.Assign(AmdGpu::Filter::Point);
+        nearest.mip_filter.Assign(AmdGpu::MipFilter::None);
+        nearest.max_lod.Assign(3840);
+        nearest.clamp_x.Assign(AmdGpu::ClampMode::ClampLastTexel);
+        nearest.clamp_y.Assign(AmdGpu::ClampMode::ClampLastTexel);
+        initialize(integer_sampler_program,{0xBEEB03FF,15,
+            0xbe9003ff,u32(nearest.raw0),0xbe9103ff,u32(nearest.raw0>>32),
+            0xbe9203ff,u32(nearest.raw1),0xbe9303ff,u32(nearest.raw1>>32),
+            0x7e0002ff,std::bit_cast<u32>(0.25f),0x7e0202ff,std::bit_cast<u32>(0.25f),
+            0xf09c0f00,0x00800400,0xf80008cf,0x07060504,0xbf810000},
+            0x4e41544956455479ULL);
+        packed_regs.vs_program.address=reinterpret_cast<u64>(integer_sampler_program.data())>>8;
+        for(const u32 format:{4U,9U})for(const u32 number:{4U,5U})for(const bool aliases:{true,false}){
+            auto read_view=image;read_view.data_format=format;read_view.num_format=number;
+            read_view.base_address=0x100000;
+            auto write_view=read_view;write_view.base_address+=aliases?0:0x100;
+            memcpy(packed_regs.vs_program.user_data.data(),&read_view,sizeof(read_view));
+            memcpy(packed_regs.ps_program.user_data.data(),&write_view,sizeof(write_view));
+            const auto pipeline=frontend.BuildGraphics(packed_regs);
+            const auto* vertex=pipeline.stages[u32(Shader::SwStage::Vertex)];
+            if(vertex->info.images.size()!=1||vertex->info.images[0].is_written!=aliases||
+               vertex->info.samplers.size()!=1||!vertex->info.samplers[0].native_manual_sampling)
+                throw std::runtime_error("Integer GCN nearest sampling did not use typed loads");
+            const auto& compiled=cache.Graphics(pipeline);
+            if(compiled.stages[u32(Shader::SwStage::Vertex)].bytecode.empty()||
+               compiled.stages[u32(Shader::SwStage::Fragment)].bytecode.empty())
+                throw std::runtime_error("Integer GCN nearest pipeline did not produce both DXIL stages");
+        }
+    }
     using namespace NativeDX12;
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)));
@@ -295,7 +433,7 @@ int main(int argc,char** argv){try{
         throw std::runtime_error("Native device lacks descriptor-backed buffer int64 atomics");
     ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
     auto* memory=static_cast<std::byte*>(VirtualAlloc(buffer_atomic?reinterpret_cast<void*>(0x6000000000ULL):nullptr,
-        65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+        allocation_bytes,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     if(!memory)throw std::runtime_error("Guest fixture allocation failed");
     struct Allocation {void* p;~Allocation(){VirtualFree(p,0,MEM_RELEASE);}} allocation{memory};
     const bool float_compare=mode.starts_with("atomic-fcmp");
@@ -331,6 +469,7 @@ int main(int argc,char** argv){try{
     if(depth_array||gather_array){image.type=u64(AmdGpu::ImageType::Color2DArray);image.depth=2;image.base_array=1;image.last_array=2;}
     if(depth_1d){image.type=u64(depth_array?AmdGpu::ImageType::Color1DArray:AmdGpu::ImageType::Color1D);image.height=0;}
     if(sample_volume){image.type=u64(AmdGpu::ImageType::Color3D);image.depth=7;}
+    if(aniso_cube){image.type=u64(AmdGpu::ImageType::Cube);image.depth=1;image.last_array=11;}
     const bool sample_lz=mode.starts_with("sample-feedback-lz-");
     const bool sample_grad=mode.starts_with("sample-feedback-grad");
     const bool sample_implicit=mode.starts_with("sample-feedback-implicit");
@@ -361,7 +500,7 @@ int main(int argc,char** argv){try{
         mode.ends_with("-down")||mode.ends_with("-combined")?2:3;
     const bool sample_lod=sample_depth||sample_reduce||sample_filter||sample_implicit||sample_grad||sample_lz||mode.starts_with("sample-feedback-lod-");
     const bool sample_lod_linear=mode.starts_with("sample-feedback-lod-linear")||mode.starts_with("sample-feedback-lz-linear")||
-        (shader_clamp&&mode.ends_with("-linear"));
+        (shader_clamp&&mode.ends_with("-linear"))||aniso_mip_linear;
     const bool sample_lod_dynamic=mode=="sample-feedback-lod-linear-dynamic";
     const bool resource_lod=sample_lod&&mode.find("-resource")!=std::string::npos;
     if(mode.starts_with("sample-feedback")){
@@ -387,8 +526,24 @@ int main(int argc,char** argv){try{
             sampler.xy_min_filter.Assign(AmdGpu::Filter::Bilinear);
             sampler.xy_mag_filter.Assign(AmdGpu::Filter::Bilinear);
         }
+        if(mode.find("-aniso-one")!=std::string::npos){
+            sampler.xy_min_filter.Assign(linear?AmdGpu::Filter::AnisoLinear:AmdGpu::Filter::AnisoPoint);
+            sampler.xy_mag_filter.Assign(linear?AmdGpu::Filter::AnisoLinear:AmdGpu::Filter::AnisoPoint);
+            sampler.max_aniso.Assign(AmdGpu::AnisoRatio::One);
+        }
+        if(aniso_case){
+            sampler.xy_min_filter.Assign(aniso_linear?AmdGpu::Filter::AnisoLinear:AmdGpu::Filter::AnisoPoint);
+            sampler.xy_mag_filter.Assign(aniso_linear?AmdGpu::Filter::AnisoLinear:AmdGpu::Filter::AnisoPoint);
+            sampler.max_aniso.Assign(aniso_limit==16?AmdGpu::AnisoRatio::Sixteen:
+                aniso_limit==8?AmdGpu::AnisoRatio::Eight:aniso_limit==4?AmdGpu::AnisoRatio::Four:AmdGpu::AnisoRatio::Two);
+            if(mode.ends_with("-reduce-min"))sampler.filter_mode.Assign(AmdGpu::FilterMode::Min);
+            if(mode.ends_with("-reduce-max"))sampler.filter_mode.Assign(AmdGpu::FilterMode::Max);
+        }
         if(mode.ends_with("-unnormalized"))sampler.force_unnormalized.Assign(1);
         if(sample_grad&&mode.ends_with("-bias"))sampler.lod_bias.Assign(256);
+        if(aniso_case&&mode.ends_with("-bias"))sampler.lod_bias.Assign(256);
+        if(aniso_case&&mode.ends_with("-cancel-high"))sampler.lod_bias.Assign(20*256);
+        if(aniso_case&&mode.ends_with("-cancel-low"))sampler.lod_bias.Assign(u32(-20*256)&0x3fff);
         if(sample_bias&&mode.ends_with("-combined"))sampler.lod_bias.Assign(256);
         if(sample_lod){
             image.last_level=3;
@@ -397,8 +552,8 @@ int main(int argc,char** argv){try{
                     sample_lod_linear?384:512;
                 if(mode.ends_with("-base"))image.base_level=1;
             }
-            sampler.max_lod.Assign(mode.ends_with("-max")?256:3840);
-            sampler.min_lod.Assign(mode.ends_with("-min")?512:0);
+            sampler.max_lod.Assign(mode.ends_with("-max")&&mode.find("-reduce-")==std::string::npos?256:3840);
+            sampler.min_lod.Assign(mode.ends_with("-min")&&mode.find("-reduce-")==std::string::npos?512:0);
             sampler.mip_filter.Assign(mode.ends_with("-none")?AmdGpu::MipFilter::None:
                 sample_lod_linear?AmdGpu::MipFilter::Linear:AmdGpu::MipFilter::Point);
         }
@@ -426,7 +581,7 @@ int main(int argc,char** argv){try{
         }
         memcpy(regs.vs_program.user_data.data()+8,&sampler,sizeof(sampler));
         memcpy(regs.ps_program.user_data.data()+8,&sampler,sizeof(sampler));
-        const float uv=sample_border?(border_inside?-0.03125f:mode.find("-high-")!=std::string::npos?4.f:border_linear||border_half?-4.f:border_edge?0.f:-4.f):mirror_once?(mode.ends_with("-low")?-1.e30f:mode.ends_with("-high")?1.e30f:
+        const float uv=aniso_case?(aniso_uv+(aniso_cube?1.f:0.f))*(mode.ends_with("-unnormalized")?8.f:1.f):sample_border?(border_inside?-0.03125f:mode.find("-high-")!=std::string::npos?4.f:border_linear||border_half?-4.f:border_edge?0.f:-4.f):mirror_once?(mode.ends_with("-low")?-1.e30f:mode.ends_with("-high")?1.e30f:
             (mode.ends_with("-negative")?-1.f:1.f)*(linear?0.125f:0.0625f)):
             sample_reduce?(reduce_mip?0.f:reduce_zero?0.0625f:0.125f):sample_filter?(filter_min?0.25f:0.125f):sample_lod?0.f:mode.ends_with("-seam")?1.f:
             wrap?(mode.ends_with("-negative")?-0.875f:1.125f):
@@ -434,7 +589,8 @@ int main(int argc,char** argv){try{
             mode.ends_with("-low")?-1.e30f:mode.ends_with("-high")?1.e30f:
             mode.ends_with("-unnormalized")?1.f:linear?0.125f:0.f;
         const u32 coordinate=std::bit_cast<u32>(uv);
-        const float explicit_level=sample_reduce?(reduce_mip?(reduce_zero?1.f:1.5f):0.f):sample_filter?(filter_min&&mode.find("-clamp-")==std::string::npos?1.f:0.f):sample_implicit?float(implicit_level):resource_lod?0.f:mode.ends_with("-round-low")?1.25f:mode.ends_with("-round-high")?1.75f:
+        const float explicit_level=aniso_case&&mode.ends_with("-cancel-high")?-16.f:aniso_case&&mode.ends_with("-cancel-low")?20.f:
+            sample_reduce?(reduce_mip?(reduce_zero?1.f:1.5f):0.f):sample_filter?(filter_min&&mode.find("-clamp-")==std::string::npos?1.f:0.f):sample_implicit?float(implicit_level):resource_lod?0.f:mode.ends_with("-round-low")?1.25f:mode.ends_with("-round-high")?1.75f:
             mode.ends_with("-low")?-8.f:mode.ends_with("-high")?99.f:
             mode.ends_with("-min")?0.f:mode.ends_with("-max")?3.f:
             sample_lod_linear?1.5f:1.f;
@@ -465,6 +621,46 @@ int main(int argc,char** argv){try{
             initialize(writer,{0xBEEB03FF,15,0x7e0002ff,dx,0x7e0202ff,dx_v,0x7e040280,0x7e0602ff,dy,
                 0x7e080280,0x7e0a0280,0xf0880f00,0x00400400,0x7e000282,0x7e020280,
                 0xf0200f00,0x00000400,0xbf810000},0x4e41544956455474ULL);
+            if(aniso_case){
+                const float scale=mode.ends_with("-unnormalized")?8.f:1.f;
+                const auto literal=[&](float value){return std::bit_cast<u32>(value*scale);};
+                initialize(reader,{0xBEEB03FF,15,0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                    0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                    0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0xf0880f00,0x00400400,
+                    0xf80008cf,0x07060504,0xbf810000},0x4e415449564554e0ULL);
+                initialize(writer,{0xBEEB03FF,15,0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                    0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                    0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0xf0880f00,0x00400400,
+                    0x7e000282,0x7e020280,0xf0200f00,0x00000400,0xbf810000},0x4e415449564554e1ULL);
+                if(sample_readonly)
+                    initialize(writer,{0xBEEB03FF,15,
+                        0xbe9003ff,u32(sampler.raw0),0xbe9103ff,u32(sampler.raw0>>32),
+                        0xbe9203ff,u32(sampler.raw1),0xbe9303ff,u32(sampler.raw1>>32),
+                        0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                        0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                        0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0xf0880f00,0x00800400,
+                        0x7e000282,0x7e020280,0xf0200f00,0x00020400,0xbf810000},0x4e415449564554e2ULL);
+                if(aniso_cube){
+                    const u32 face=std::bit_cast<u32>(aniso_cube_array?13.f:5.f);
+                    initialize(reader,{0xBEEB03FF,15,0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                        0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                        0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0x7e0c02ff,face,
+                        0xf0880f00,0x00400400,0xf80008cf,0x07060504,0xbf810000},0x4e415449564554e3ULL);
+                    if(sample_readonly)
+                        initialize(writer,{0xBEEB03FF,15,
+                            0xbe9003ff,u32(sampler.raw0),0xbe9103ff,u32(sampler.raw0>>32),
+                            0xbe9203ff,u32(sampler.raw1),0xbe9303ff,u32(sampler.raw1>>32),
+                            0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                            0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                            0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0x7e0c02ff,face,0xf0880f00,0x00800400,
+                            0x7e000282,0x7e020280,0x7e040280,0xf0200f00,0x00020400,0xbf810000},0x4e415449564554e4ULL);
+                    else
+                        initialize(writer,{0xBEEB03FF,15,0x7e0002ff,literal(aniso_dx[0]),0x7e0202ff,literal(aniso_dx[1]),
+                            0x7e0402ff,literal(aniso_dy[0]),0x7e0602ff,literal(aniso_dy[1]),
+                            0x7e0802ff,coordinate,0x7e0a02ff,coordinate,0x7e0c02ff,face,0xf0880f00,0x00400400,
+                            0x7e000282,0x7e020280,0x7e040280,0xf0200f00,0x00000400,0xbf810000},0x4e415449564554e5ULL);
+                }
+            }
             if(shader_clamp){
                 const u32 minimum=std::bit_cast<u32>(mode.ends_with("-low")?-1.f:sample_lod_linear?1.5f:2.f);
                 // IMAGE_SAMPLE_D_CL consumes dx.xy, dy.xy, uv.xy, then MinLOD.
@@ -911,6 +1107,30 @@ int main(int argc,char** argv){try{
             [](const auto& resource){return resource.is_written;}))
             throw std::runtime_error("Gather did not join the writable image alias");
     }
+    if(aniso_case&&sample_readonly){
+        const auto* sampled=gpu_stages.stages[u32(Shader::SwStage::Vertex)];
+        if(!sampled->info.samplers[0].native_manual_sampling)
+            throw std::runtime_error("Read-only anisotropic point/mip filter was sent to the fixed linear sampler");
+        AmdGpu::Sampler original{};memcpy(&original,regs.vs_program.user_data.data()+8,sizeof(original));
+        auto changed=original;
+        changed.xy_min_filter.Assign(AmdGpu::Filter::AnisoLinear);
+        changed.xy_mag_filter.Assign(AmdGpu::Filter::AnisoLinear);
+        changed.mip_filter.Assign(AmdGpu::MipFilter::Linear);
+        memcpy(regs.vs_program.user_data.data()+8,&changed,sizeof(changed));
+        const auto* hardware=frontend.BuildGraphics(regs).stages[u32(Shader::SwStage::Vertex)];
+        if(hardware==sampled||hardware->info.samplers[0].native_manual_sampling)
+            throw std::runtime_error("Linear read-only anisotropy did not retain the native sampler path");
+        changed.xy_min_filter.Assign(AmdGpu::Filter::AnisoPoint);
+        changed.xy_mag_filter.Assign(AmdGpu::Filter::AnisoPoint);
+        memcpy(regs.vs_program.user_data.data()+8,&changed,sizeof(changed));
+        const auto* point=frontend.BuildGraphics(regs).stages[u32(Shader::SwStage::Vertex)];
+        if(point==hardware||!point->info.samplers[0].native_manual_sampling)
+            throw std::runtime_error("Hardware-to-manual anisotropy reused stale sampler specialization");
+        memcpy(regs.vs_program.user_data.data()+8,&original,sizeof(original));
+        gpu_stages=frontend.BuildGraphics(regs);
+        if(gpu_stages.stages[u32(Shader::SwStage::Vertex)]!=sampled)
+            throw std::runtime_error("Restored read-only anisotropic sampler missed frontend cache");
+    }
     if(mode.starts_with("sample-feedback")&&!sample_readonly&&!sample_border&&!implicit_clamp&&!sample_depth&&!sample_gather){
         const auto* sampled=gpu_stages.stages[u32(Shader::SwStage::Vertex)];
         if(!sampled->info.images[0].is_written)
@@ -927,6 +1147,18 @@ int main(int argc,char** argv){try{
         gpu_stages=frontend.BuildGraphics(regs);
         if(gpu_stages.stages[u32(Shader::SwStage::Vertex)]!=sampled)
             throw std::runtime_error("Restored manual sampler missed frontend cache");
+        if(aniso_case){
+            changed=original;
+            changed.max_aniso.Assign(original.max_aniso==AmdGpu::AnisoRatio::Two?
+                AmdGpu::AnisoRatio::Four:AmdGpu::AnisoRatio::Two);
+            memcpy(regs.vs_program.user_data.data()+8,&changed,sizeof(changed));
+            if(frontend.BuildGraphics(regs).stages[u32(Shader::SwStage::Vertex)]==sampled)
+                throw std::runtime_error("Anisotropic tap limit reused stale shader specialization");
+            memcpy(regs.vs_program.user_data.data()+8,&original,sizeof(original));
+            gpu_stages=frontend.BuildGraphics(regs);
+            if(gpu_stages.stages[u32(Shader::SwStage::Vertex)]!=sampled)
+                throw std::runtime_error("Restored anisotropic limit missed frontend cache");
+        }
     }
     if(slice&&!mixed_slice){
         const auto* layered=gpu_stages.stages[u32(Shader::SwStage::Vertex)];
@@ -941,6 +1173,9 @@ int main(int argc,char** argv){try{
     }
     const auto& gpu_dxil=cache.Graphics(gpu_stages);
     const auto desc=DescribeGuestTexture(image);const auto layout=LayoutGuestTexture(desc);
+    if(layout.guest_bytes>(sample_readonly?sample_destination_offset:allocation_bytes)||
+        (sample_readonly&&layout.guest_bytes>allocation_bytes-sample_destination_offset))
+        throw std::runtime_error("GCN image fixture exceeds its guest allocation");
     std::fill_n(memory,layout.guest_bytes,std::byte{0x5a});
     const float position[]{0.f,0.f,0.f,1.f};
     const auto offset=GuestPixelOffset(desc,layout,0,slice?1:0,0,0);
@@ -1030,12 +1265,88 @@ int main(int argc,char** argv){try{
         }
         }
     }
+    std::array<float,4> anisotropic_reference{};
+    if(aniso_case){
+        for(u32 mip=0;mip<4;++mip){
+            const u32 size=8U>>mip;
+            for(u32 layer=0;layer<(aniso_cube?image.NumLayers():1U);++layer)
+            for(u32 y=0;y<size;++y)for(u32 x=0;x<size;++x){
+                const float value[]{float(int((x*3+y*5+mip*7+layer*2)%9)-4)/16.f,
+                    float(int((x+y*2+mip+layer)%5)-2)/16.f,0.f,1.f};
+                memcpy(memory+GuestPixelOffset(desc,layout,mip,layer,x,y),value,sizeof(value));
+            }
+        }
+        const double rho_x=8.0*std::hypot(aniso_dx[0],aniso_dx[1]);
+        const double rho_y=8.0*std::hypot(aniso_dy[0],aniso_dy[1]);
+        const double major=std::max(rho_x,rho_y),minor=std::min(rho_x,rho_y);
+        const double eta=!sample_grad||major==0?1.0:
+            minor==0?double(aniso_limit):std::clamp(major/minor,1.0,double(aniso_limit));
+        const u32 count=u32(std::ceil(eta));
+        double level=sample_grad?(major==0?-100.0:std::log2(major/eta)):sample_lz?0.0:
+            mode.ends_with("-cancel-high")?-16.0:mode.ends_with("-cancel-low")?20.0:1.0;
+        if(mode.ends_with("-bias"))level+=1.0;
+        if(mode.ends_with("-cancel-high"))level+=15.99;
+        if(mode.ends_with("-cancel-low"))level-=16.0;
+        level=std::clamp(level,mode.ends_with("-min")&&mode.find("-reduce-")==std::string::npos?2.0:0.0,
+            mode.ends_with("-max")&&mode.find("-reduce-")==std::string::npos?1.0:15.0);
+        if(resource_lod)level=std::max(level,2.0);
+        level=std::clamp(level,0.0,3.0);
+        const bool minimum=mode.ends_with("-reduce-min"),maximum=mode.ends_with("-reduce-max");
+        const auto merge=[&](double a,double b,double weight){
+            if(weight==0.0)return a;
+            if(weight==1.0)return b;
+            return minimum?std::min(a,b):maximum?std::max(a,b):a+(b-a)*weight;
+        };
+        const auto address_texel=[&](int coordinate,int size){
+            if(mode.ends_with("-wrap"))return (coordinate%size+size)%size;
+            if(mode.ends_with("-mirror")){
+                const int folded=(coordinate%(2*size)+2*size)%(2*size);
+                return folded<size?folded:2*size-1-folded;
+            }
+            return std::clamp(coordinate,0,size-1);
+        };
+        const auto sample_mip=[&](u32 mip,double u,double v){
+            const int size=8>>mip;
+            const double px=u*size-(aniso_linear?0.5:0.0),py=v*size-(aniso_linear?0.5:0.0);
+            const int bx=int(std::floor(px)),by=int(std::floor(py));
+            const auto texel=[&](int x,int y){
+                std::array<float,4> value{};
+                memcpy(value.data(),memory+GuestPixelOffset(desc,layout,mip,aniso_sample_layer,
+                    u32(address_texel(x,size)),u32(address_texel(y,size))),sizeof(value));
+                return value;
+            };
+            const auto a=texel(bx,by),b=texel(bx+1,by),c=texel(bx,by+1),d=texel(bx+1,by+1);
+            std::array<double,4> result{};
+            for(u32 component=0;component<4;++component)
+                result[component]=aniso_linear?merge(merge(a[component],b[component],px-bx),
+                    merge(c[component],d[component],px-bx),py-by):double(a[component]);
+            return result;
+        };
+        const auto& direction=rho_x>rho_y?aniso_dx:aniso_dy;
+        std::array<double,4> accumulated{};
+        for(u32 tap=0;tap<count;++tap){
+            const double shift=sample_grad?-0.5+double(tap+1)/double(count+1):0.0;
+            const double u=aniso_uv+direction[0]*shift,v=aniso_uv+direction[1]*shift;
+            const u32 mip=u32(std::floor(aniso_mip_linear?level:level+0.5));
+            auto value=sample_mip(mip,u,v);
+            if(aniso_mip_linear){
+                const auto next=sample_mip(std::min(mip+1,3U),u,v);
+                for(u32 component=0;component<4;++component)
+                    value[component]=merge(value[component],next[component],level-std::floor(level));
+            }
+            for(u32 component=0;component<4;++component)
+                accumulated[component]=tap?merge(accumulated[component],value[component],1.0/double(tap+1)):value[component];
+        }
+        for(u32 component=0;component<4;++component)anisotropic_reference[component]=float(accumulated[component]);
+    }
     std::vector<std::byte> expected(memory,memory+layout.guest_bytes);
     std::fill_n(expected.data()+offset,texel_bytes,std::byte{});
     if(mode.starts_with("sample-feedback")){
         expected.assign(memory,memory+layout.guest_bytes);
         if(!sample_readonly)memcpy(expected.data()+GuestPixelOffset(desc,layout,desc.first_mip,0,2,0),position,sizeof(position));
     }
+    if(aniso_case&&!sample_readonly)memcpy(expected.data()+GuestPixelOffset(desc,layout,0,0,2,0),
+        anisotropic_reference.data(),sizeof(anisotropic_reference));
     if(sample_border){
         const float weight=border_weight;
         const float rgb=border_white?weight:0.f;
@@ -1108,14 +1419,16 @@ int main(int argc,char** argv){try{
     }
     std::vector<std::byte> sampled_destination;
     if(sample_readonly){
-        if(layout.guest_bytes>32768)throw std::runtime_error("Sample source overlaps separate output");
-        std::fill_n(memory+32768,layout.guest_bytes,std::byte{0x5a});
-        sampled_destination.assign(memory+32768,memory+32768+layout.guest_bytes);
+        if(layout.guest_bytes>sample_destination_offset)throw std::runtime_error("Sample source overlaps separate output");
+        std::fill_n(memory+sample_destination_offset,layout.guest_bytes,std::byte{0x5a});
+        sampled_destination.assign(memory+sample_destination_offset,memory+sample_destination_offset+layout.guest_bytes);
         const float compare_result=mode.ends_with("-linear")?(depth_1d?0.5f:0.25f):
             mode.ends_with("-false")||mode.ends_with("-never")||mode.ends_with("-greater")||mode.ends_with("-not-equal")||
             (depth_array&&(mode.ends_with("-half")||mode.ends_with("-low")))?0.f:1.f;
         memcpy(sampled_destination.data()+GuestPixelOffset(desc,layout,desc.first_mip,depth_array?1:0,2,0),
             sample_depth?&compare_result:position,sample_depth?sizeof(float):sizeof(position));
+        if(aniso_case)memcpy(sampled_destination.data()+GuestPixelOffset(desc,layout,0,0,2,0),
+            anisotropic_reference.data(),sizeof(anisotropic_reference));
         if(sample_border){
             const auto output=GuestPixelOffset(desc,layout,0,0,2,0);
             memcpy(sampled_destination.data()+output,expected.data()+output,4*sizeof(float));
@@ -1183,7 +1496,7 @@ int main(int argc,char** argv){try{
     }
     if(dimension_query){const u32 dimensions[]{8,one_dimensional?0U:8U,0,1};
         memcpy(expected.data()+offset,dimensions,sizeof(dimensions));}
-    Rasterizer rasterizer(device.Get());rasterizer.MapMemory(address,65536);
+    Rasterizer rasterizer(device.Get());rasterizer.MapMemory(address,allocation_bytes);
     GuestTextureCache textures(device.Get());
     const auto state=BuildGuestGraphicsState(regs,{});
     ShaderPipeline pipeline(device.Get(),std::filesystem::path(argv[2]).wstring(),
@@ -1207,8 +1520,16 @@ int main(int argc,char** argv){try{
         if(memcmp(memory+32768,buffer_expected.data(),sizeof(buffer_expected)))
             throw std::runtime_error("GCN buffer atomic destination/previous value mismatch");
     }
-    if(sample_readonly&&memcmp(memory+32768,sampled_destination.data(),sampled_destination.size()))
-        throw std::runtime_error("Hardware sampler ignored resource minimum LOD");
+    if(aniso_case){
+        const auto output=GuestPixelOffset(desc,layout,0,0,2,0);
+        std::array<float,4> actual{};memcpy(actual.data(),memory+(sample_readonly?sample_destination_offset:0)+output,sizeof(actual));
+        for(u32 component=0;component<4;++component)
+            if(!std::isfinite(actual[component])||std::abs(actual[component]-anisotropic_reference[component])>1.e-5f)
+                throw std::runtime_error("Anisotropic GCN sample disagrees with independent footprint/mip/tap oracle");
+        memcpy((sample_readonly?sampled_destination:expected).data()+output,actual.data(),sizeof(actual));
+    }
+    if(sample_readonly&&memcmp(memory+sample_destination_offset,sampled_destination.data(),sampled_destination.size()))
+        throw std::runtime_error("Read-only sample destination or unrelated bytes changed");
     const bool constant_depth=sample_depth&&(mode.ends_with("-never")||mode.ends_with("-always"));
     if(memcmp(memory,expected.data(),expected.size())||textures.Entries().size()!=(sample_readonly&&!constant_depth?2:1))
         throw std::runtime_error("GCN graphics draw lost shared texture writeback or changed unrelated bytes");

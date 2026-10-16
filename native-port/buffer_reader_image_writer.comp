@@ -1,0 +1,12 @@
+#version 450
+layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
+layout(set=0,binding=0,std430) readonly buffer Input {uint values[];} source;
+layout(set=0,binding=1,std430) buffer Output {uint values[];} result;
+layout(set=0,binding=2,r32ui) uniform uimage2D target;
+void main() {
+    ivec2 pixel=ivec2(gl_GlobalInvocationID.xy);
+    uint index=uint(pixel.y*8+pixel.x);
+    uint value=source.values[index]^(0x1f000000u+index*3u);
+    result.values[index]=value;
+    imageStore(target,pixel,uvec4(value,0,0,0));
+}

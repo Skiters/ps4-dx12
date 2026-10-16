@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/guest_buffer_access.h"
+#include "common/scope_exit.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -9,6 +10,8 @@ class Fixture final : public GuestBufferAccess {
 public:
     using GuestBufferAccess::GuestBufferAccess;
     using GuestBufferAccess::SetBufferBackingAccess;
+    bool TrackReadOnly(VAddr address,u64 bytes){return page_watch_->TrackReadOnly(address,bytes);}
+    void Untrack(VAddr address,u64 bytes){page_watch_->Untrack(address,bytes);}
     void BeforeRead(std::function<void()> callback){before_read_=std::move(callback);}
     bool ReadMemory(VAddr a,u64 s,bool assume=false) override {
         if(before_read_){auto callback=std::move(before_read_);before_read_={};callback();}
@@ -33,8 +36,171 @@ void Run(ID3D12Device* device,bool f2){
                 ++commits;committed+=data.size();memcpy(physical+a-base,data.data(),data.size());return true;});
         const Rasterizer::ShaderBufferRequest writable[]{{base,4096,true,true}};
         if(f2){
+            Require(renderer.TrackReadOnly(base+49152,12288),"image-only protected range setup");
+            const std::pair<VAddr,u64> retained_image[]{std::pair{base+53248,u64(4096)}};
+            renderer.ReleaseUnusedReadOnlyWatches(base+49152,12288,retained_image);
+            for(u32 page=0;page<3;++page){MEMORY_BASIC_INFORMATION protection{};
+                VirtualQuery(guest+49152+page*4096,&protection,sizeof(protection));
+                Require(protection.Protect==(page==1?PAGE_READONLY:PAGE_READWRITE),
+                    "image retirement released another image witness or retained an unused gap");
+            }
+            renderer.Untrack(base+53248,4096);
+            const Rasterizer::ShaderBufferRequest formatted_arena[]{{base+32768,16384,false,true,true}};
+            renderer.PrepareShaderBuffers(formatted_arena);
+            renderer.FillPreparedShaderBuffer(base+32768,16384,0xa5a5a5a5,
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            const Rasterizer::ShaderBufferRequest partial_writer[]{
+                {base+32768,4,true,true},{base+32768,16384,false,true,true}};
+            renderer.PrepareShaderBuffers(partial_writer);
+            // A read fault reconciles the four logical GPU-written bytes only.
+            // The remaining GPU-only metadata arena must survive that read.
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+32768)==0xa5,
+                "formatted arena read did not reconcile its logical GPU span");
+            const auto store_uploads=Counter("buffer-snapshot.cpu-store-upload.bytes");
+            renderer.PrepareShaderBuffers(formatted_arena);
+            Require(Counter("buffer-snapshot.cpu-store-upload.bytes")==store_uploads,
+                "CPU read incorrectly created actual-store upload markers");
+            const auto read_arena=[&](u32 cpu_pages){
+                auto arena=renderer.CapturePreparedShaderBuffer(base+32768,16384);
+                auto readback=Buffer(device,16384,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+                arena.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+                renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,arena.handle.Get(),0,16384);
+                renderer.Finish();void* contents{};D3D12_RANGE all{0,16384};
+                Check(readback.handle->Map(0,&all,&contents));
+                SCOPE_EXIT {D3D12_RANGE none{};readback.handle->Unmap(0,&none);};
+                for(u64 byte=0;byte<16384;++byte){
+                    const auto expected=cpu_pages&(1u<<u32(byte/4096))?physical[32768+byte]:std::byte{0xa5};
+                    Require(static_cast<const std::byte*>(contents)[byte]==expected,
+                        "actual-store upload changed an untouched GPU-only page or missed its CPU page");
+                }
+            };
+            read_arena(0);
+            const auto old_byte=std::to_integer<unsigned char>(physical[32768+4096+9]);
+            *reinterpret_cast<volatile unsigned char*>(guest+32768+4096+9)=old_byte;
+            renderer.PrepareShaderBuffers(formatted_arena);
+            Require(Counter("buffer-snapshot.cpu-store-upload.bytes")-store_uploads==4096,
+                "same-value CPU store did not upload precisely its CPU page");
+            read_arena(1u<<1);
+            renderer.NotifyCpuWrite(base+32768+4096+9,1);
+            renderer.BeforeRead([&]{renderer.NotifyCpuWrite(base+32768+8192+11,1);});
+            renderer.PrepareShaderBuffers(formatted_arena);
+            read_arena((1u<<1)|(1u<<2));
+            // A GPU image download changes physical CPU bytes without becoming
+            // a CPU store into the independently resident raw buffer arena.
+            std::vector<std::byte> image_bytes(4096,std::byte{0x6c});
+            const auto image_read=[&](VAddr a,std::span<std::byte> data){
+                memcpy(data.data(),physical+a-base,data.size());return true;};
+            const auto image_write=[&](VAddr a,std::span<const std::byte> data){
+                memcpy(physical+a-base,data.data(),data.size());return true;};
+            bool image_failed{};
+            try{renderer.CommitImageBacking(base+32768+12288,image_bytes,image_read,
+                [](VAddr,std::span<const std::byte>){return false;});}
+            catch(const std::runtime_error&){image_failed=true;}
+            Require(image_failed,"failed image backing commit did not report failure");
+            read_arena((1u<<1)|(1u<<2));
+            renderer.CommitImageBacking(base+32768+12288,image_bytes,image_read,image_write);
+            Require(memcmp(physical+32768+12288,image_bytes.data(),4096)==0,"image backing download was lost");
+            Require(!renderer.IsGpuBufferModified(base+32768+12288,4096),
+                "physical image download or read-only arena synthesis became a guest GPU buffer modification");
+            const auto image_store_uploads=Counter("buffer-snapshot.cpu-store-upload.bytes");
+            renderer.PrepareShaderBuffers(formatted_arena);
+            Require(Counter("buffer-snapshot.cpu-store-upload.bytes")==image_store_uploads,
+                "image download became a CPU buffer store");
+            read_arena((1u<<1)|(1u<<2));
+            *reinterpret_cast<volatile unsigned char*>(guest+32768+12288+9)=0x6c;
+            renderer.PrepareShaderBuffers(formatted_arena);
+            Require(Counter("buffer-snapshot.cpu-store-upload.bytes")-image_store_uploads==4096,
+                "same-value CPU store after image download did not upload its page");
+            read_arena((1u<<1)|(1u<<2)|(1u<<3));
+            // Remove the intentionally divergent arena before the existing
+            // ordinary CPU-copy/proof cases create their own resident version.
+            Require(renderer.InvalidateMemory(base+32768,16384),"formatted arena cleanup failed");
             const Rasterizer::ShaderBufferRequest paged[]{{base+32768,16384,false,true,true}};
             renderer.PrepareShaderBuffers(paged);
+            // Queue an actual GPU readback while the resident arena still
+            // equals CPU backing. A same-value CPU store before its deferred
+            // image commit must remain an upload marker after rebasing.
+            auto image_upload=Buffer(device,4096,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+            auto image_download=Buffer(device,4096,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            void* image_mapped{};D3D12_RANGE image_none{};
+            Check(image_upload.handle->Map(0,&image_none,&image_mapped));memset(image_mapped,0x59,4096);
+            image_upload.handle->Unmap(0,nullptr);
+            renderer.RecordingList()->CopyBufferRegion(image_download.handle.Get(),0,image_upload.handle.Get(),0,4096);
+            renderer.Finish();
+            const auto deferred_stores=Counter("buffer-snapshot.cpu-store-upload.bytes");
+            {
+                std::lock_guard lock(renderer.ExecutionMutex());
+                renderer.DeferImageBacking(renderer.CompletedFence(),base+32768,4096,65536,image_read,image_write,
+                    [image_download](u64,std::span<std::byte> data){void* mapped{};D3D12_RANGE all{0,4096};
+                        Check(image_download.handle->Map(0,&all,&mapped));memcpy(data.data(),mapped,data.size());
+                        D3D12_RANGE none{};image_download.handle->Unmap(0,&none);});
+                Require(renderer.PendingImageCommitBytes()==4096+65536,"priority backing budget was not retained");
+                renderer.ReleaseUnusedReadOnlyWatches(base+32768,16384);
+                MEMORY_BASIC_INFORMATION retained_proof{};
+                VirtualQuery(guest+32768,&retained_proof,sizeof(retained_proof));
+                Require(retained_proof.Protect==PAGE_READONLY,"image retirement removed the live CPU buffer witness");
+                const auto value=std::to_integer<unsigned char>(physical[32768+9]);
+                *reinterpret_cast<volatile unsigned char*>(guest+32768+9)=value;
+            }
+            renderer.DrainPriorityOperations();
+            Require(!renderer.PendingImageCommitBytes(),"priority image backing budget did not retire");
+            // A submitted copy may still be blocked on an external GPU fence.
+            // Physical backing replacement must cancel its eventual CPU write,
+            // even when the same guest address is immediately mapped again.
+            for(u32 replacement=0;replacement<4;++replacement){
+                std::vector<std::byte> backing(4096,std::byte{0x93});
+                const auto target=reinterpret_cast<VAddr>(backing.data());
+                Rasterizer queued(device);queued.MapMemory(target,backing.size());
+                auto readback=Buffer(device,4096,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+                ComPtr<ID3D12Fence> gate;Check(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate)));
+                SCOPE_EXIT {gate->Signal(1);};
+                u32 reads{},writes{},resolves{};
+                {
+                    std::lock_guard lock(queued.ExecutionMutex());
+                    queued.WaitExternalFence(gate.Get(),1);
+                    queued.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,image_upload.handle.Get(),0,4096);
+                    const auto fence=queued.Flush();
+                    Require(queued.CompletedFence()<fence,"external GPU gate did not retain the submitted copy");
+                    queued.DeferImageBacking(fence,target,4096,65536,
+                        [&](VAddr,std::span<std::byte> data){++reads;memcpy(data.data(),backing.data(),data.size());return true;},
+                        [&](VAddr,std::span<const std::byte> data){++writes;memcpy(backing.data(),data.data(),data.size());return true;},
+                        [&,readback](u64,std::span<std::byte> data){++resolves;void* mapped{};D3D12_RANGE all{0,4096};
+                            Check(readback.handle->Map(0,&all,&mapped));memcpy(data.data(),mapped,data.size());
+                            D3D12_RANGE none{};readback.handle->Unmap(0,&none);});
+                    Require(queued.PendingImageCommitBytes()==4096+65536,"in-flight GPU copy lost its priority budget");
+                    if(replacement==0)queued.RegisterMemory(target,4096);
+                    else if(replacement==1)queued.MapMemory(target,4096);
+                    else if(replacement==2){queued.UnmapMemory(target,4096);queued.MapMemory(target,4096);}
+                    else queued.NotifyHostMapping(target,4096,true,true);
+                    Check(gate->Signal(1));
+                }
+                queued.DrainPriorityOperations();
+                Require(!reads&&!writes&&!resolves&&!queued.PendingImageCommitBytes(),
+                    "retired GPU image wrote into replacement physical backing");
+                for(const auto byte:backing)Require(byte==std::byte{0x93},"replacement physical bytes were changed");
+            }
+            for(u32 byte=0;byte<4096;++byte)Require(physical[32768+byte]==std::byte{0x59},"priority GPU readback commit contents");
+            renderer.PrepareShaderBuffers(paged);
+            Require(Counter("buffer-snapshot.cpu-store-upload.bytes")-deferred_stores==4096,
+                "pending image commit erased a preceding same-value CPU store");
+            const Rasterizer::BufferCopy deferred_copy{base+24576+317,base+32768+9,1};
+            renderer.CopyBufferBatch(std::span(&deferred_copy,1));
+            Require(*reinterpret_cast<volatile unsigned char*>(guest+24576+317)==0x59,
+                "rebased CPU store did not reach the independent raw arena");
+            const auto cp_cached=renderer.CachedBufferBytes(),cp_fence=renderer.SubmittedFence();
+            renderer.CopyBuffer(base+32768+4096+5,base+64,35,false,false);
+            Require(memcmp(physical+32768+4096+5,physical+64,35)==0,"cold CP copy contents");
+            Require(renderer.CachedBufferBytes()==cp_cached&&renderer.SubmittedFence()==cp_fence,
+                "cold CP copy allocated or submitted a GPU buffer");
+            MEMORY_BASIC_INFORMATION cp_neighbour{};VirtualQuery(guest+32768,&cp_neighbour,sizeof(cp_neighbour));
+            Require(cp_neighbour.Protect==PAGE_READONLY,"cold CP copy released a clean neighbouring page");
+            const auto cp_compared=Counter("buffer-snapshot.bytes");
+            renderer.PrepareShaderBuffers(paged);
+            Require(Counter("buffer-snapshot.bytes")-cp_compared==4096,
+                "cold CP copy lost the remaining page equality proof");
+            const Rasterizer::BufferCopy cp_readback{base+24576+128,base+32768+4096+5,35};
+            renderer.CopyBufferBatch(std::span(&cp_readback,1));
+            Require(memcmp(guest+24576+128,physical+64,35)==0,"cold CP copy stayed stale in the GPU cache");
             *reinterpret_cast<volatile unsigned char*>(guest+32768+4096+9)=0x67;
             MEMORY_BASIC_INFORMATION neighbour{};VirtualQuery(guest+32768,&neighbour,sizeof(neighbour));
             Require(neighbour.Protect==PAGE_READONLY,"one CPU store released the neighbouring clean page");

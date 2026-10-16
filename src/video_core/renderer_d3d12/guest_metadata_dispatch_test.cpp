@@ -1,7 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_compute.h"
-#include "guest_depth_metadata.h"
+#include "guest_texture_cache.h"
 #include "shader_recompiler/backend/dxil/spirv_converter.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -10,14 +10,6 @@
 #include <cstring>
 using namespace NativeDX12;
 int wmain(int argc,wchar_t** argv){try {
-    GuestDepthMetadata metadata;metadata.Register(0);metadata.Register(0x1000);
-    if(metadata.Contains(0)||!metadata.Consume(0x1000,0)||metadata.Consume(0x1000,0)||
-       !metadata.Consume(0x1000,1))throw std::runtime_error("HTile initial clear/slice consumption mismatch");
-    metadata.Register(0x1000);
-    if(metadata.Consume(0x1000,0)||!metadata.Clear(0x1000)||!metadata.Consume(0x1000,0)||
-       metadata.Clear(0x2000)||metadata.Consume(0x1000,32))throw std::runtime_error("HTile repeat clear/registration mismatch");
-    metadata.Remove(0x1000,1);
-    if(metadata.Contains(0x1000))throw std::runtime_error("Unmapped HTile metadata survived retirement");
     ComPtr<ID3D12Debug> debug;if(SUCCEEDED(DX12_API_CALL(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)))))DX12_API_CALL(debug->EnableDebugLayer());
     if(argc!=4&&argc!=5)throw std::invalid_argument("usage: guest-metadata-dispatch fixture.spv converter.dll dxc.dll [wave32]");
     std::ifstream input(argv[1],std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Cannot read fixture");
@@ -54,6 +46,39 @@ int wmain(int argc,wchar_t** argv){try {
     if(!VirtualAlloc(guest+1024,4096,MEM_COMMIT,PAGE_READWRITE))throw std::runtime_error("Cannot recommit test backing");
     rasterizer.RegisterMemory(address+4096,4096);rasterizer.ValidateHostMemory(address,8192,true);
     std::fill_n(guest,2048,0xdeadbeef);
+    GuestTextureCache metadata(device.Get());
+    GuestTextureDesc metadata_desc;metadata_desc.address=address+4096;
+    metadata_desc.width=metadata_desc.height=metadata_desc.pitch=8;
+    metadata_desc.data_format=4;metadata_desc.number_format=7;
+    metadata_desc.tile_mode=5;metadata_desc.depth_target=true;
+    const auto metadata_bytes=std::span(reinterpret_cast<const std::byte*>(metadata_desc.address),
+        size_t(LayoutGuestTexture(metadata_desc).guest_bytes));
+    auto& metadata_owner=metadata.Upload(metadata_desc,metadata_bytes,rasterizer.RecordingList(),rasterizer.CompletedFence());
+    metadata.RegisterMeta(metadata_owner,GuestTextureCache::MetaType::HTile,0);
+    metadata.RegisterMeta(metadata_owner,GuestTextureCache::MetaType::HTile,0x1000);
+    if(metadata.GetMetaInfo(0)||!metadata.ConsumeMeta(0x1000,0)||metadata.ConsumeMeta(0x1000,0)||
+       !metadata.ConsumeMeta(0x1000,1))throw std::runtime_error("HTile initial clear/slice consumption mismatch");
+    metadata.RegisterMeta(metadata_owner,GuestTextureCache::MetaType::HTile,0x1000);
+    if(metadata.ConsumeMeta(0x1000,0)||!metadata.ClearMeta(0x1000)||!metadata.ConsumeMeta(0x1000,0)||
+       metadata.ClearMeta(0x2000)||metadata.ConsumeMeta(0x1000,32))throw std::runtime_error("HTile repeat clear/registration mismatch");
+    const auto owner_uid=metadata_owner.image_uid;
+    const auto registered=metadata.GetMetaInfo(0x1000);
+    if(!registered||registered->owner_uid!=owner_uid||registered->num_samples!=metadata_desc.samples)
+        throw std::runtime_error("HTile owner/sample identity mismatch");
+    metadata.RemoveMeta(0x1000,1);
+    if(metadata.GetMetaInfo(0x1000))throw std::runtime_error("Unmapped HTile metadata survived retirement");
+    metadata.RegisterMeta(metadata_owner,GuestTextureCache::MetaType::HTile,0x1000);
+    metadata.RegisterMeta(metadata_owner,GuestTextureCache::MetaType::HTile,0x2000);
+    if(metadata.GetMetaInfo(0x1000)||!metadata.GetMetaInfo(0x2000))
+        throw std::runtime_error("Rebound HTile retained its previous address");
+    const auto metadata_fence=rasterizer.Flush();metadata.Submitted(metadata_fence);rasterizer.Finish();
+    metadata.Invalidate(metadata_desc.address,metadata_bytes.size(),rasterizer.CompletedFence());
+    if(metadata.GetMetaInfo(0x2000))throw std::runtime_error("Deleted image retained HTile ownership");
+    auto& replacement_owner=metadata.Upload(metadata_desc,metadata_bytes,rasterizer.RecordingList(),rasterizer.CompletedFence());
+    metadata.RegisterMeta(replacement_owner,GuestTextureCache::MetaType::HTile,0x2000);
+    if(replacement_owner.image_uid==owner_uid||!metadata.ConsumeMeta(0x2000,0))
+        throw std::runtime_error("Recycled image inherited deleted metadata identity/state");
+    const auto replacement_fence=rasterizer.Flush();metadata.Submitted(replacement_fence);rasterizer.Finish();
     ShaderPipeline pipeline(device.Get(),argv[3],dxil.bytecode);
     Shader::Info info;info.sw_stage=Shader::SwStage::Compute;
     Shader::BufferResource source{};source.buffer_type=Shader::BufferType::Guest;source.is_written=true;

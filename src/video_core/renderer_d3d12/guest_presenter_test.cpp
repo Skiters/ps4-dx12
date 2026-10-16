@@ -24,7 +24,10 @@ int main(){try{
     HWND window=CreateWindowW(wc.lpszClassName,L"Native VideoOut test",WS_POPUP,0,0,67,39,nullptr,nullptr,wc.hInstance,nullptr);
     if(!window)throw std::runtime_error("create window failed");
     {
+        SetEnvironmentVariableW(L"SHADPS4_DX12_INDEPENDENT_VBLANK",nullptr);
         Provider provider;auto backend=CreateBackend({"dx12",window,67,39},provider);
+        if(backend->presenter->IndependentVblank()||backend->presenter->UngatedDisplayCadence())
+            throw std::runtime_error("Default native presenter changed original guest timing");
         provider.device=backend->device.Get();provider.queue=backend->presentation_queue.Get();
         Libraries::VideoOut::BufferAttributeGroup group{};group.attrib.width=67;group.attrib.height=39;group.attrib.pitch_in_pixel=67;group.attrib.tiling_mode=Libraries::VideoOut::TilingMode::Linear;group.attrib.pixel_format=Libraries::VideoOut::PixelFormat::A8B8G8R8Srgb;
         backend->presenter->RegisterSurface(group,0x10000);
@@ -43,5 +46,12 @@ int main(){try{
         guard=false;try{CreateBackend({"vulkan",window,67,39},provider);}catch(const std::invalid_argument&){guard=true;}
         if(!guard||GetModuleHandleW(L"vulkan-1.dll"))throw std::runtime_error("backend selection/Vulkan guard failed");
     }
-    DestroyWindow(window);puts("PASS native DX12 backend startup, guest VideoOut register/snapshot/producer-ready/present/GPU-drain/repeat/blank lifecycle; Vulkan not loaded. Synthetic provider, not game texture cache.");return 0;
+    {
+        SetEnvironmentVariableW(L"SHADPS4_DX12_INDEPENDENT_VBLANK",L"1");
+        Provider provider;auto backend=CreateBackend({"dx12",window,67,39},provider);
+        SetEnvironmentVariableW(L"SHADPS4_DX12_INDEPENDENT_VBLANK",nullptr);
+        if(!backend->presenter->IndependentVblank()||!backend->presenter->UngatedDisplayCadence())
+            throw std::runtime_error("Explicit native timing extension was not retained for its lifetime");
+    }
+    DestroyWindow(window);puts("PASS native DX12 backend startup, guest VideoOut register/snapshot/producer-ready/present/GPU-drain/repeat/blank lifecycle and default/explicit timing; Vulkan not loaded. Synthetic provider, not game texture cache.");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL %s\n",e.what());return 1;}}

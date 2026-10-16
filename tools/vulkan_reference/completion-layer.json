@@ -1,0 +1,11 @@
+{
+  "file_format_version": "1.2.0",
+  "layer": {
+    "name": "VK_LAYER_CODEX_guest_completion",
+    "type": "GLOBAL",
+    "library_path": "guest-completion-layer.dll",
+    "api_version": "1.3.0",
+    "implementation_version": "1",
+    "description": "Opt-in exact-reference VideoOut flip timeline completion observer"
+  }
+}

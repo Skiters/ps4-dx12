@@ -7,9 +7,14 @@
 #include <fstream>
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 using namespace NativeDX12;
 int wmain(int argc,wchar_t** argv){try {
-    if(argc!=4)throw std::invalid_argument("usage: guest-image-compute fixture.spv converter.dll dxc.dll");
+    if(argc!=4&&argc!=5)throw std::invalid_argument("usage: guest-image-compute fixture.spv converter.dll dxc.dll [buffer-image-alias|buffer-image-partial]");
+    const bool alias=argc==5;
+    const bool partial=alias&&std::wstring_view(argv[4])==L"buffer-image-partial";
+    if(alias&&!partial&&std::wstring_view(argv[4])!=L"buffer-image-alias")throw std::invalid_argument("Unknown guest image fixture mode");
+    const u32 output_offset=partial?128:0,input_offset=alias?0:0x20000;
     std::ifstream file(argv[1],std::ios::binary|std::ios::ate);if(!file)throw std::runtime_error("Cannot read fixture");
     auto bytes=file.tellg();if(bytes<=0||bytes%4)throw std::runtime_error("Invalid fixture");
     std::vector<u32> spirv(size_t(bytes)/4);file.seekg(0);file.read(reinterpret_cast<char*>(spirv.data()),bytes);
@@ -27,12 +32,12 @@ int wmain(int argc,wchar_t** argv){try {
     Shader::Info info;info.sw_stage=Shader::SwStage::Compute;info.flattened_ud_buf.resize(24);
     Shader::BufferResource output{};output.buffer_type=Shader::BufferType::Guest;output.is_written=true;
     output.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Buffer>::Summary::SingleLoad;output.sharp_fetch.offsets[0]=0;
-    info.buffers.push_back(output);AmdGpu::Buffer buffer{};buffer.base_address=reinterpret_cast<VAddr>(memory);buffer.num_records=256;
+    info.buffers.push_back(output);AmdGpu::Buffer buffer{};buffer.base_address=reinterpret_cast<VAddr>(memory+output_offset);buffer.num_records=256;
     memcpy(info.flattened_ud_buf.data(),&buffer,sizeof(buffer));
     auto make_image=[&](u32 offset,u32 data,u32 number){AmdGpu::Image sharp{};sharp.base_address=reinterpret_cast<VAddr>(memory+offset)>>8;
         sharp.width=7;sharp.height=7;sharp.pitch=7;sharp.type=u64(AmdGpu::ImageType::Color2D);sharp.data_format=data;sharp.num_format=number;sharp.tiling_index=13;
         sharp.dst_sel_x=4;sharp.dst_sel_y=5;sharp.dst_sel_z=6;sharp.dst_sel_w=7;return sharp;};
-    auto target=make_image(0x10000,4,4),input=make_image(0x20000,10,0);
+    auto target=make_image(0x10000,4,4),input=make_image(input_offset,10,0);
     Shader::ImageResource image{};image.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Image>::Summary::SingleLoad;
     image.sharp_fetch.offsets[0]=4;image.is_written=true;info.images.push_back(image);memcpy(info.flattened_ud_buf.data()+4,&target,sizeof(target));
     image.sharp_fetch.offsets[0]=12;image.is_written=false;info.images.push_back(image);memcpy(info.flattened_ud_buf.data()+12,&input,sizeof(input));
@@ -43,7 +48,67 @@ int wmain(int argc,wchar_t** argv){try {
     const auto input_desc=DescribeGuestTexture(input),target_desc=DescribeGuestTexture(target);
     const auto input_layout=LayoutGuestTexture(input_desc),target_layout=LayoutGuestTexture(target_desc);
     for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){auto offset=GuestPixelOffset(input_desc,input_layout,0,0,x,y);
-        memory[0x20000+offset]=std::byte(y*8+x);memory[0x20000+offset+3]=std::byte{255};}
+        memory[input_offset+offset]=std::byte(y*8+x);memory[input_offset+offset+3]=std::byte{255};}
+    if(alias){
+        UINT watches{},releases{};
+        textures.SetImmutableWatch([&](auto& entry){if(entry.desc.address==reinterpret_cast<VAddr>(memory)){++watches;entry.cpu_watched=true;}},
+            [&](auto& entry){if(entry.desc.address==reinterpret_cast<VAddr>(memory))++releases;entry.cpu_watched=false;});
+        textures.Upload(input_desc,{memory,size_t(input_layout.guest_bytes)},rasterizer.RecordingList(),rasterizer.CompletedFence());
+        textures.Submitted(rasterizer.Flush());rasterizer.Finish();
+        if(watches!=1)throw std::runtime_error("Alias fixture did not establish its prior sampled-cache witness");
+        auto prior_input=make_image(0x20000,10,0);
+        auto prior_info=info;memcpy(prior_info.flattened_ud_buf.data()+12,&prior_input,sizeof(prior_input));
+        const auto prior_desc=DescribeGuestTexture(prior_input);
+        const auto prior_layout=LayoutGuestTexture(prior_desc);
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){const auto offset=GuestPixelOffset(prior_desc,prior_layout,0,0,x,y);
+            memory[0x20000+offset]=std::byte(y*8+x+37);memory[0x20000+offset+3]=std::byte{255};}
+        ExecuteGuestBufferCompute(device.Get(),rasterizer,pipeline,prior_info,{},ComputeInvocation{},&textures);
+        for(UINT repeat=0;repeat<3;++repeat){
+            rasterizer.ReadMemory(reinterpret_cast<VAddr>(memory),0x30000);
+            std::vector<std::byte> before(memory,memory+0x30000),expected=before;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                const auto index=y*8+x;
+                const u32 value=std::to_integer<u32>(before[GuestPixelOffset(input_desc,input_layout,0,0,x,y)])+index*3+7;
+                memcpy(expected.data()+output_offset+index*4,&value,4);
+                memcpy(expected.data()+0x10000+GuestPixelOffset(target_desc,target_layout,0,0,x,y),&value,4);
+            }
+            ExecuteGuestBufferCompute(device.Get(),rasterizer,pipeline,info,{},ComputeInvocation{},&textures);
+            const auto sampled=std::ranges::find_if(textures.Entries(),[&](const auto& entry){
+                return entry->desc.address==input_desc.address&&!entry->desc.writable;});
+            if(sampled==textures.Entries().end()||(*sampled)->tiler_input_pool.empty()||!(*sampled)->sampled_snapshot.empty())
+                throw std::runtime_error("Aliased image did not retain its GPU prewrite snapshot");
+            D3D12_HEAP_PROPERTIES snapshot_heap{};D3D12_HEAP_FLAGS snapshot_flags{};
+            Check((*sampled)->tiler_input_pool[0].handle->GetHeapProperties(&snapshot_heap,&snapshot_flags));
+            if(snapshot_heap.Type!=D3D12_HEAP_TYPE_DEFAULT)
+                throw std::runtime_error("Aliased image snapshot fell back to a CPU upload heap");
+            if(memcmp(expected.data(),memory,expected.size()))throw std::runtime_error("Sampled buffer/image alias changed its prewrite contents, output or padding");
+            if(watches!=1||releases!=1)throw std::runtime_error("Sampled buffer/image snapshot reused or installed a mutable guest-memory witness");
+            if(repeat==1){
+                auto& cpu_sample=textures.Upload(input_desc,{memory,size_t(input_layout.guest_bytes)},
+                    rasterizer.RecordingList(),rasterizer.CompletedFence(),{},true);
+                D3D12_HEAP_PROPERTIES cpu_heap{};D3D12_HEAP_FLAGS cpu_flags{};
+                Check(cpu_sample.tiler_input_pool[0].handle->GetHeapProperties(&cpu_heap,&cpu_flags));
+                if(cpu_heap.Type!=D3D12_HEAP_TYPE_UPLOAD)
+                    throw std::runtime_error("GPU-to-CPU snapshot transition retained an unmappable default heap");
+                auto detached=info;auto separate_buffer=buffer;
+                separate_buffer.base_address=reinterpret_cast<VAddr>(memory+0x28000);
+                memcpy(detached.flattened_ud_buf.data(),&separate_buffer,sizeof(separate_buffer));
+                std::vector<std::byte> cpu_before(memory,memory+0x30000),cpu_expected=cpu_before;
+                for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                    const auto index=y*8+x;
+                    const u32 value=std::to_integer<u32>(cpu_before[GuestPixelOffset(input_desc,input_layout,0,0,x,y)])+index*3+7;
+                    memcpy(cpu_expected.data()+0x28000+index*4,&value,4);
+                    memcpy(cpu_expected.data()+0x10000+GuestPixelOffset(target_desc,target_layout,0,0,x,y),&value,4);
+                }
+                ExecuteGuestBufferCompute(device.Get(),rasterizer,pipeline,detached,{},ComputeInvocation{},&textures);
+                if(memcmp(cpu_expected.data(),memory,cpu_expected.size()))
+                    throw std::runtime_error("CPU snapshot transition changed sampled contents or unrelated guest bytes");
+                memory[GuestPixelOffset(input_desc,input_layout,0,0,5,3)]=std::byte{137};
+            }
+        }
+        if(GetModuleHandleW(L"vulkan-1.dll"))throw std::runtime_error("Vulkan runtime unexpectedly loaded");
+        puts("PASS: sampled tiled image observes pre-dispatch aliased buffer contents; prior GPU writer, three warm passes, CPU edit, exact target/output/padding, snapshot cache witness retirement");return 0;
+    }
     for(UINT repeat=0;repeat<2;++repeat) {
         ExecuteGuestBufferCompute(device.Get(),rasterizer,pipeline,info,{},ComputeInvocation{},&textures);
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x) {

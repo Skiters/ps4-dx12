@@ -7,6 +7,7 @@
 #include <cstring>
 using namespace NativeDX12;
 int main(int argc,char** argv){try{
+    const bool large=argc>1&&std::string_view(argv[1])=="large";
     const bool texture_heaps=argc>1&&std::string_view(argv[1])=="texture-heaps";
     ComPtr<ID3D12Debug> debug;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)));ComPtr<ID3D12Device> device;
@@ -36,11 +37,11 @@ int main(int argc,char** argv){try{
         desc.Width=128;auto restored=textures.Allocate(desc,D3D12_RESOURCE_STATE_COMMON);
         if(textures.CommittedBytes()!=page)throw std::runtime_error("Texture allocator did not reclaim idle heaps under pressure");
     }
-    constexpr u64 Bytes=320ull*1024*1024;
+    const u64 Bytes=(large?832ull:320ull)*1024*1024;
     struct Allocation {void* memory{};~Allocation(){if(memory)VirtualFree(memory,0,MEM_RELEASE);}} allocations[3];
     Rasterizer rasterizer(device.Get());
     printf("Adapter buffer cache budget: %llu bytes\n",static_cast<unsigned long long>(rasterizer.BufferCacheBudget()));
-    if(rasterizer.BufferCacheBudget()<3*Bytes){puts("SKIP: adapter budget cannot hold the 960-MiB test batch");return 77;}
+    if(!large&&rasterizer.BufferCacheBudget()<3*Bytes){puts("SKIP: adapter budget cannot hold the 960-MiB test batch");return 77;}
     std::vector<Rasterizer::ShaderBufferRequest> requests;
     for(u32 i=0;i<3;++i){
         allocations[i].memory=VirtualAlloc(nullptr,Bytes,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
@@ -77,5 +78,5 @@ int main(int argc,char** argv){try{
     for(u32 i=0;i<3;++i)if(first[i].resource.Get()!=second[i].resource.Get())
         throw std::runtime_error("Unchanged large cache backing was unnecessarily replaced");
     rasterizer.ValidateDebugMessages();
-    puts("PASS: buffer/texture budget shrink and heap reclamation; real 960-MiB cache batch with 320-MiB bindings and overlapping view, endpoint contents, incremental CPU refresh and allocation reuse");return 0;
+    printf("PASS: buffer/texture budget shrink and heap reclamation; real %llu-MiB cache batch, overlapping views, endpoint contents, incremental CPU refresh and allocation reuse\n",3*Bytes/MemoryMiB);return 0;
 }catch(const std::exception& error){fprintf(stderr,"FAIL: %s\n",error.what());return 1;}}

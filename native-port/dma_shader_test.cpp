@@ -7,6 +7,7 @@
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "video_core/renderer_d3d12/compute_pipeline.h"
 #include "video_core/renderer_d3d12/guest_compute.h"
+#include "video_core/renderer_d3d12/guest_dma.h"
 #include "video_core/renderer_d3d12/dma_fault_compactor.h"
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
@@ -103,12 +104,13 @@ int wmain(int argc,wchar_t** argv){try{
     auto flat=upload(std::as_bytes(std::span(&fallback,1)));
     std::vector<u64> page_table(Dma::TableEntries);const u32 first_page=16u<<(32-Dma::PageShift);
     page_table[Dma::BankCountEntry]=Dma::BankCount;
+    page_table[Dma::PartialCapacityEntry]=Dma::InitialPartialPages;
     page_table[first_page]=1;page_table[first_page+1]=u64(Dma::BankSize)+1;
     page_table[first_page+2]=u64(Dma::BankSize)*(Dma::BankCount-1)+1;
     page_table[17u<<(32-Dma::PageShift)]=u64(Dma::BankSize)+1;
     page_table[first_page+3]=Dma::CacheBytes+1;page_table[first_page+4]=2;
     page_table[first_page+5]=u64(Dma::BankSize)-Dma::PageSize+5; // aligned but crosses a bank
-    page_table[first_page+6]=Dma::PartialFlag|u64(Dma::PartialPageCount+1); // invalid secondary slot
+    page_table[first_page+6]=Dma::PartialFlag|u64(Dma::InitialPartialPages+1); // invalid secondary slot
     auto table=upload(std::as_bytes(std::span(page_table)));
     std::vector<u32> zeros(Dma::PageCount/32);auto faults=upload(std::as_bytes(std::span(zeros)));
     zeros.resize(256);auto output=upload(std::as_bytes(std::span(zeros)));
@@ -264,6 +266,29 @@ int wmain(int argc,wchar_t** argv){try{
             throw std::runtime_error("Scattered DMA backing failed beyond 64 independent resource banks");
     }
     scattered_runtime.ValidateDebugMessages();
+    {
+        Rasterizer growing(device.Get());growing.MapMemory(guest_base,guest_bytes);growing.MapMemory(output_base,1024);
+        const auto grow_run=[&]{ExecuteGuestBufferCompute(device.Get(),growing,pipeline,metadata,{},{{1,1,1}});};
+        grow_run();grow_run();const auto initial_bytes=growing.DmaMemory().PageTableBytes();
+        for(u32 page=0;page<62;++page){const auto base=guest_base+u64(page)*Dma::PageSize;
+            Check(VirtualFree(reinterpret_cast<void*>(base),Dma::SubpageSize,MEM_DECOMMIT)?S_OK:E_FAIL);
+            growing.RegisterMemory(base,Dma::SubpageSize);
+        }
+        grow_run();
+        if(growing.DmaMemory().PageTableBytes()<=initial_bytes)throw std::runtime_error("DMA partial page table did not grow past initial capacity");
+        for(u32 i=0;i<62;++i)if(result[i]!=0xcafe0000+i||result[i+64]!=0xcafe0000+i)
+            throw std::runtime_error("Growing DMA partial-page table lost an accessible tail");
+        if(result[192]!=0)throw std::runtime_error("Growing DMA table retained an inaccessible subpage");
+        for(u32 page=0;page<62;++page){const auto base=guest_base+u64(page)*Dma::PageSize;
+            if(!VirtualAlloc(reinterpret_cast<void*>(base),Dma::SubpageSize,MEM_COMMIT,PAGE_READWRITE))
+                throw std::runtime_error("Cannot recommit growing DMA fixture subpage");
+            growing.RegisterMemory(base,Dma::SubpageSize);
+        }
+        guest[0]=0x24681357;grow_run();grow_run();
+        for(u32 i=0;i<62;++i)if(result[i]!=0xcafe0000+i)throw std::runtime_error("DMA partial-to-full transition lost contents after growth");
+        if(result[192]!=0x24681357)throw std::runtime_error("DMA table growth did not recover a recommitted subpage");
+        growing.ValidateDebugMessages();
+    }
     Rasterizer deferred(device.Get());deferred.MapMemory(guest_base,guest_bytes);deferred.MapMemory(output_base,1024);
     deferred.SetBufferOwnership([&](VAddr address,u64 bytes){return address==output_base&&bytes==1024;},
         [](VAddr address,std::span<const std::byte> bytes){memcpy(reinterpret_cast<void*>(address),bytes.data(),bytes.size());return true;},

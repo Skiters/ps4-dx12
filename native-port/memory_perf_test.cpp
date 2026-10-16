@@ -26,6 +26,11 @@ int main(int argc,char** argv){try{
     const auto pressure=config.Budget(8*1024*MemoryMiB,7*1024*MemoryMiB,2*1024*MemoryMiB);
     Require(pressure.arena==1024*MemoryMiB&&pressure.cache<pressure.arena,"pressure preserves other allocations and reserve");
     Require(config.Budget(1024*MemoryMiB,2*1024*MemoryMiB,0).cache==0,"budget subtraction underflow");
+    MemoryPerfConfig automatic;
+    const auto roomy=automatic.Budget(16*1024*MemoryMiB,2*1024*MemoryMiB,0);
+    Require(roomy.cache>2048*MemoryMiB&&roomy.cache<roomy.arena&&roomy.arena<=14*1024*MemoryMiB,
+        "automatic residency cannot use the available adapter budget beyond 2 GiB");
+    Require(automatic.Budget(1024*MemoryMiB,2*1024*MemoryMiB,0).cache==0,"automatic budget subtraction underflow");
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)));ComPtr<ID3D12Device> device;
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1> a;if(factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&a))==DXGI_ERROR_NOT_FOUND)break;

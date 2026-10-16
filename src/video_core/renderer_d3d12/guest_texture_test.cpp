@@ -107,7 +107,14 @@ int main(int argc,char**){try{
     for(UINT l=0;l<desc.layers;++l)for(UINT m=0;m<desc.levels;++m){UINT64 total;D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};UINT sub=m+l*desc.levels;DX12_API_CALL(device->GetCopyableFootprints(&rd,sub,1,0,&fp,nullptr,nullptr,&total));auto rb=Buffer(device.Get(),total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=entry.texture.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;src.SubresourceIndex=sub;D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=rb.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;dst.PlacedFootprint=fp;DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));reads.push_back({std::move(rb),fp,m,l});}
     Reject([&]{cache.Invalidate(desc.address,layout.guest_bytes,0);});Check(DX12_API_CALL(list->Close()));Timeline timeline(device.Get());auto token=timeline.Submit(queue.Get(),list.Get());cache.Submitted(token);views.Retire(slot,token);timeline.Wait(token);
     for(auto& r:reads){void* data=nullptr;Check(DX12_API_CALL(r.buffer.handle->Map(0,nullptr,&data)));auto w=std::max(desc.width>>r.m,1u),h=std::max(desc.height>>r.m,1u);auto bytes=static_cast<std::byte*>(data)+r.fp.Offset;for(UINT y=0;y<h;++y)for(UINT x=0;x<w;++x)for(UINT c=0;c<4;++c)Require(bytes[y*r.fp.Footprint.RowPitch+x*4+c]==Value(r.m,r.l,x,y,c));D3D12_RANGE empty{0,0};DX12_API_CALL(r.buffer.handle->Unmap(0,&empty));}
-    cache.Collect(timeline.Completed());Require(entry.uploads.empty());cache.Invalidate(desc.address,layout.guest_bytes,timeline.Completed());
+    // The fence can retire during later binding uploads while a caller still
+    // holds this entry for descriptors/readback bookkeeping. Invalidation must
+    // wait for that binding lease, independently of already completed GPU work.
+    auto binding_lease=cache.PinBinding(entry);auto second_reference=binding_lease;
+    cache.Collect(timeline.Completed());Require(entry.uploads.empty());
+    Reject([&]{cache.Invalidate(desc.address,layout.guest_bytes,timeline.Completed());});
+    binding_lease.reset();Reject([&]{cache.Invalidate(desc.address,layout.guest_bytes,timeline.Completed());});
+    second_reference.reset();cache.Invalidate(desc.address,layout.guest_bytes,timeline.Completed());
     puts("PASS: actual AmdGpu image metadata, PS4 golden thin1D tiles -> native 3mip 2layer RGBA texture -> all-subresource exact GPU readback; display32 golden offsets; unsupported/short/in-flight rejection");return 0;
 }catch(const std::exception&e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
 
