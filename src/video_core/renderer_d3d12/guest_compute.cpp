@@ -137,14 +137,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
            first.mips.size()!=a.levels||second.mips.size()!=b.levels)
             return false;
         const auto common_levels=std::min(a.levels,b.levels);
-        const auto& small=a.levels<=b.levels?first:second;
+        const auto& prefix_layout=a.levels<=b.levels?first:second;
         const auto& large=a.levels<=b.levels?second:first;
         a.levels=b.levels=std::max(a.levels,b.levels);
         a.writable=b.writable=true;
         if(!CompatibleGuestWritableStorage(a,b))return false;
-        if(small.guest_bytes>large.guest_bytes)return false;
+        if(prefix_layout.guest_bytes>large.guest_bytes)return false;
         for(UINT mip=0;mip<common_levels;++mip){
-            const auto& x=small.mips[mip];const auto& y=large.mips[mip];
+            const auto& x=prefix_layout.mips[mip];const auto& y=large.mips[mip];
             if(x.pitch!=y.pitch||x.height!=y.height||x.offset!=y.offset||x.slice_bytes!=y.slice_bytes||
                x.macro!=y.macro||x.thickness!=y.thickness)return false;
         }
