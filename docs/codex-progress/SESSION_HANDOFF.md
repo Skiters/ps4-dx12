@@ -1,5 +1,104 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
+## Current texture heap pressure and idle reclamation - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+No configure/build/package/compiler/test/GPU/game/XInput/UI execution. All129 groups
+remain partial/open; source/Git/hash reviews do not establish runtime correctness/FPS.
+
+### Production continuation
+
+Pushedc6e5429 integrates typed TextureBudgetExhausted with actual placed-heap pressure.
+Reduced budgets no longer clamp to256MiB. Heap size fits remaining commitment with
+checked64KiB/4MiB alignment; MSAA heap alignment is independent of resource placement,
+so small64KiB MSAA cannot reuse an incompatible64KiB-aligned heap. Device/format/
+arithmetic failures retain their own errors. Cache AllocateTexture routes all ordinary,
+sample-backing and packed-clear/conversion allocations through retired-pool reclamation,
+existing eligible LRU eviction and bounded GPU-source retirement retry. No retry spins
+without changed budget, reclaimed storage, an erased victim or retired source bytes.
+
+ReserveMemory and AllocateTexture retain registered caller pins transitively; a chosen
+victim is pinned across callbacks. A resolver can restore sample backing and recursively
+evict another Entry, so eviction rechecks the chosen UID and reacquires its vector
+iterator after callbacks. Newly acquired external bindings fail closed before erase.
+This fixes the independently found recursive lifetime issue. Dirty independent images,
+valid tiled independent images and unsupported MSAA pressure victims remain excluded.
+
+Pushed50860ef additionally reclaims wholly unleased texture heaps inside over-budget
+SetBudget, without waiting or invalidating live Resource/shared leases. Otherwise a
+fully empty256MiB page could be reused indefinitely after a64KiB budget reduction,
+never reaching CreatePage's trim. Allocation retry recognizes actual commitment
+reclaimed by refresh as well as a larger limit.
+
+Pushede00c72d authors native_texture_heap_pressure / native-buffer-budget-test texture-heaps.
+This optional mode returns before the original large buffer batches. It covers live
+Resource copy then standalone allocation lease, budget shrink/eager idle release,
+remaining-capacity/RT-class fitting, exact tiny GPU texels, typed-versus-invalid failures
+and conditional small-MSAA alignment. It is uncompiled/unrun. The earlier28 ordered
+GCN scenarios are separate authored/unrun acceptance, not additional PASS results.
+
+### Exact evidence and preservation
+
+F:/PS4Dev/handoff/pressure-retirement-20261016 contains REFERENCE_CONTRACT.md,
+INDEPENDENT_REVIEW.md, allocator/ and fixtures/ exact snapshots/patches/hashes/reviews.
+The initial review's recursive-victim finding was corrected; its final disposition
+supersedes that earlier blocker. allocator/eager-trim and NEXT_IDLE_HEAP_CONTRACT.md
+retain the follow-up proof. NEXT_MAPPING_CONTRACT.md confirms existing cancellation
+covers notified unmap/remap; do not reimplement native-priority-inflight-backing-generation.
+
+Allocator format-casting and buffer fixture large-mode changes were inherited dirty
+integration. Isolated indexes committed only owned changes; main argc/argv is a necessary
+new fixture-mode dependency. Foreign casting/large behavior stayed residual; original22
+staged deletions remain unchanged. These commits alone are NOT a standalone reproducible
+full-core source publication. CHECKPOINT_FINAL.json records actual final local/remote
+SHA, exact staged/index/source hashes and final-residual archive. Restore only in a
+separate checkout using its README; never overwrite the live dirty tree. Older archives
+remain intact.
+
+Installed preview24 still has SHA25670eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf
+at C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe.
+Source provenance remains a3f1d5e plus archived integration, not current source. Selection
+was unchanged (last known preview23). PDB/runtime paths remain in the prior installation
+manifest. Vulkan, original saves, settings, monitoring and remote session were untouched.
+Historical326/346(native211/229) and three targeted passes remain old separate evidence.
+Bloodborne final-world/image/FPS/controls acceptance and historical EOP cause remain open.
+
+### Exact next production change
+
+Read NEXT_PLACED_ALIAS_CONTRACT.md. Normal fence-retired heap reuse fits Microsoft's
+advanced placed-resource model across distinct ExecuteCommandLists; no blanket missing
+alias-barrier fix is justified by absent Aliasing call sites. The separate confirmed gap
+is new placed MSAA DEPTH initialization: Upload accepts depth-only R32 samples2, then
+GuestMultisample::Lease::Record(upload=true) transitions to DEPTH_WRITE and DrawInstanced
+while its discard path explicitly excludes depth. No required clear/discard/full copy
+precedes that initial depth draw. Implement correct first-use depth metadata initialization
+in guest_multisample.cpp / Upload integration, preserving full-layer versus partial
+regions and every other depth/stencil plane. Reuse existing transfer leases/state/DSVs;
+never discard stencil or old layer contents merely to initialize a different plane.
+Author exact per-sample depth/stencil/layer acceptance without executing it while gated.
+
+Pinned GC valid modified LINEAR single-sample download writes compact mip0 physical
+prefix without merging resident B; tiled valid modified images are retained. Generic
+linear-MSAA download in pinned source attempts an invalid multisampled copyImageToBuffer
+without extraction/resolve/sample multiplier. This is a reference limitation, not proof
+for lifting native MSAA eviction guards. Continue the existing registry after the depth
+initialization fix; broader formats, identity/aliases/pressure/device-loss and runtime
+acceptance remain open.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask. Read this authoritative top
+and pressure-retirement-20261016/CHECKPOINT_FINAL.json; verify current HEAD/upstream and
+preserve the dirty/index split. Reuse saved Vulkan/DX12 data and completed source proofs.
+Implement the confirmed initial MSAA depth initialization gap from NEXT_PLACED_ALIAS_CONTRACT.md,
+then continue production contracts. Do not repeat completed mapping/heap-budget/alias-
+synchronization investigations. All execution stays deferred. When authorized, build
+changed targets, run focused and required regressions, then minimal existing-XInput
+Bloodborne checks with completed guest frames excluding FG against saved baseline.
+Preserve Vulkan/saves, checkpoint/push coherent WIP and exact residual source. Full port
+and reproducible publication remain incomplete until all applicable acceptance succeeds.
+
+
 ## Current readonly history and packed-source continuation - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

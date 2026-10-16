@@ -1,5 +1,20 @@
 # Native DX12 state
 
+## Current actual heap pressure - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+No configure/build/package/compiler/test/GPU/game/XInput/UI execution. All129 groups
+remain partial/open; source/Git/hash reviews do not establish runtime correctness/FPS.
+
+c6e5429/50860ef are pushed: typed actual-heap admission, adaptive remaining-budget pages,
+independent MSAA heap alignment, shared retired-pool/LRU recovery, transitive caller/victim
+pins across recursive resolution and eager unleased-heap reclamation after budget shrink.
+e00c72d adds one authored/unrun focused heap mode; ordered28 cases remain separately unrun.
+No core was rebuilt/installed. Inherited casting/large-mode integration remains residual.
+Next confirmed source gap: first MSAA depth upload draw needs legal metadata initialization
+with layer/plane preservation. Read SESSION_HANDOFF.md and the new pressure evidence.
+
+
 ## Current readonly history and source selection - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

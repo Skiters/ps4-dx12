@@ -1,5 +1,18 @@
 # Checkpoints
 
+## Actual texture heap pressure checkpoint - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+No configure/build/package/compiler/test/GPU/game/XInput/UI execution. All129 groups
+remain partial/open; source/Git/hash reviews do not establish runtime correctness/FPS.
+
+Sourcec6e5429/50860ef and authored-fixturee00c72d are pushed. Exact final SHA/remote,
+original22-path index proof, reviewed worktree versus isolated staged hashes, partial-
+commit provenance and residual archive are in pressure-retirement-20261016. The casting/
+large-mode inherited integration was not swept into commits. Previous4ab70c5 and its
+326-file residual archive remain immutable. SESSION_HANDOFF.md gives the new depth task.
+
+
 ## Readonly history checkpoint - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

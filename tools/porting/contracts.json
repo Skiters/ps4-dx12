@@ -53,14 +53,15 @@
         "verification_prepared": "The existing exact tiled/mip/layer GPU texture fixture additionally rejects invalidation after the actual GPU fence has completed while either shared reference of a binding lease remains, then permits it after the final release. New full-core image/depth alias modes also exercise descriptor bindings across ownership and attachment uploads. Compile/link only; no execution.",
         "open_contracts": "Actual pressure/eviction/lifetime contents and validation remain unexecuted. Broader reinterpretation/backing replacement, cache shutdown, exception paths and peak memory require final acceptance. This supplies native binding lifetime protection; no completed full cache equivalence is claimed.",
         "original_slot_continuation_20261016": "e877a3f/792f3fe preserve original Guest buffer/image cache preparation despite no surviving native reflection. Coverage/emission follows actual Layout; buffers retain logical invalidation/dirty-page effects, images run existing Upload/Own/readback/pin/retirement. Null/count/mip/format/backing/FMASK/sampler policies remain. No-resource ReplaceShader retains original info, providing a concrete deferred acceptance scenario. Full readonly sticky-modified revalidation is a separate confirmed gap, not claimed fixed by liveness gate removal.",
-        "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open."
+        "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_review_pending",
       "final_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016"
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
       },
       "previous_final_verification_20261016": {
         "state": "not_run",
@@ -71,6 +72,12 @@
         "date": "2026-10-16",
         "reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016"
       }
     },
     {
@@ -1983,10 +1990,20 @@
         "outputs": "Mip-zero active texels download into original compact pitch/height/depth/array rows, retaining row padding and bytes beyond the compact span. RGB32 drops host alpha and native packed16 fields return to physical guest representation. Physical CPU download updates resident buffer comparison baselines without uploading the independent GPU arena or creating CPU-store markers.",
         "ordering": "Readback allocation and actual backing sample validation precede commands. Source resource and copies remain alive through the fence; mapped results are assembled before any guest mutation. Commit holds the execution mutex, captures missing CPU baselines before physical write, preserves actual CPU upload markers/proof holes/GPU dirty ranges, and installs baselines only after successful write. Current pressure integration waits synchronously before retiring ownership/watches.",
         "verification_prepared": "Twelve API cases cover R32 float, raw RGBA8, RGB32 and packed16 across restricted three-mip 2D/1D arrays and volumes. Independent compact CPU indexing requires every mip-zero texel, preserved row padding and untouched full-mip-chain tail. Real protected resident-buffer fixture prepares failed commit, changed physical image bytes with unchanged raw arena, no CPU-store upload and a subsequent same-value store requiring precisely one 4 KiB page upload. Production core/checks compile; no execution.",
-        "open_contracts": "Deferred priority readback, original legacy OnSubmit/OnFence download queue, cache refresh source domain, asynchronous lifetime/budget/exception handling, expanded/BC/depth/MSAA readback, wider ownership envelope and actual GPU differential acceptance remain open. No semantic closure."
+        "open_contracts": "Deferred priority readback, original legacy OnSubmit/OnFence download queue, cache refresh source domain, asynchronous lifetime/budget/exception handling, expanded/BC/depth/MSAA readback, wider ownership envelope and actual GPU differential acceptance remain open. No semantic closure.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "reason": "Full implementation boundary remains open."
+      }
     },
     {
       "id": "native-queued-independent-image-downloads",
@@ -2028,10 +2045,20 @@
         "outputs": "Pressure retirement schedules mapped/physical CPU write on the priority worker while retaining readback resources and CPU assembly memory in a bounded 64 MiB account. Source texture lease releases after the GPU fence, before cache eviction. CPU baseline rebasing preserves resident raw bytes and actual CPU-store page markers, including stores preceding the deferred physical write.",
         "ordering": "First integration intentionally retains the synchronous GPU wait so source device allocation can be freed immediately under pressure. Native cache has a separate pressure retirement callback; ordinary upload/fault resolution remains synchronous. Pending physical ranges exist before worker scheduling, so same-value stores force upload even when the preceding arena was equal to CPU. Image watch retirement unprotects only gaps outside resident buffer ownership/equality witnesses, preserving their protection without a restore/rearm store window. Successful, unmapped and failed callbacks retire pending range counts and allocation leases. Excess retained memory falls back synchronously. All rasterizer/derived destructors drain outside execution locks before callback-needed fields disappear.",
         "verification_prepared": "Protected production buffer fixture queues an actual GPU readback while arena/CPU are equal, holds the execution mutex to delay worker commit, performs a real same-value protected store, then requires physical bytes, precise 4 KiB GPU upload and zero retained budget after drain. Compact image cases release the source fence lease before mapping. Core/checks and fixtures compile only; no execution.",
-        "open_contracts": "Nonblocking GPU pressure retirement and cache/source allocation accounting during in-flight copies, ordinary image/attachment ownership, broad format/depth/expanded/MSAA/BC downloads, cache refresh source domain, memory unmap/remap and worker/CPU/guest race/failure/performance behavior require further adaptation and actual differential acceptance. No semantic closure."
+        "open_contracts": "Nonblocking GPU pressure retirement and cache/source allocation accounting during in-flight copies, ordinary image/attachment ownership, broad format/depth/expanded/MSAA/BC downloads, cache refresh source domain, memory unmap/remap and worker/CPU/guest race/failure/performance behavior require further adaptation and actual differential acceptance. No semantic closure.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "reason": "Full implementation boundary remains open."
+      }
     },
     {
       "id": "native-rgb32-and-wide-readonly-clears",
@@ -2103,10 +2130,20 @@
         "outputs": "Supported pressure eviction records/submits the GPU copy without an unconditional GPU wait. The evicted texture remains alive through a shared source lease and actual allocation-byte residency account until the copy fence; CPU map/commit retires through the existing bounded priority worker. Cache residency includes in-flight sources rather than treating erased entries as immediately freed GPU storage.",
         "ordering": "Source accounting/lease precedes copy recording. Ordinary fence retirement can release source storage while the priority worker is blocked on the execution mutex; worker resolution also releases its source after the copy fence. Priority budget includes source, actual readback allocations and compact CPU bytes. If in-flight sources prevent satisfying cache budget with any remaining eligible victim, a GPU-only wait/ordinary collection retries residency without draining worker callbacks under the execution mutex. Fence-retirement registration failure waits before releasing resources.",
         "verification_prepared": "Actual GPU R32 3-layer/3-mip fixture clears the source, holds an external fence unsignaled, checks exact source accounting and shared lease copies, destroys the source cache/allocator/entries before signaling, then requires source-plus-readback priority budget, full compact physical contents, preserved padding/tail and zero priority budget after drain/collection. Compile/link only; no execution.",
-        "open_contracts": "Actual pressure/reuse budgets and peak heap allocation, ordinary ownership/attachments, wide/expanded/depth/MSAA/BC domains, memory mapping/CPU/worker ordering and callback/device-loss failures, sustained asynchronous performance and full original/native differential acceptance remain open. No semantic closure."
+        "open_contracts": "Actual pressure/reuse budgets and peak heap allocation, ordinary ownership/attachments, wide/expanded/depth/MSAA/BC domains, memory mapping/CPU/worker ordering and callback/device-loss failures, sustained asynchronous performance and full original/native differential acceptance remain open. No semantic closure.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "reason": "Full implementation boundary remains open."
+      }
     },
     {
       "id": "native-queued-linear-color-attachment-domains",
@@ -2148,10 +2185,20 @@
         "outputs": "One checked cache residency total includes in-flight source allocations in ordinary reservations, temporary clear admission and packed conversion admission. New sample backings reserve their actual allocation before creation rather than bypassing cache budget. Existing current-entry/binding pins remain preserved through pressure handling.",
         "ordering": "Residency summation and reservation addition reject overflow. Packed clear/conversion checks account source leases before recording new guest operations. Sample allocation admission preserves its current entry and uses the last known completed cache fence; source-pressure fallback may wait/collect completed GPU sources through the existing path.",
         "verification_prepared": "All 24 compact real-GPU image cases additionally require the cache residency total to include a retained actual texture allocation and zero retired-source bytes after its copy fence/release. Existing shared source-copy/cache-destruction and sample-backing GPU fixtures compile against the unified admission path. No execution.",
-        "open_contracts": "Adapter budget changes, allocator committed heap versus logical allocation totals, partial failure/pinned and pending source contention, sample transitions/format clear pressure fallback and peak GPU/CPU memory, sustained original/native performance and full runtime acceptance remain open. No semantic closure."
+        "open_contracts": "Adapter budget changes, allocator committed heap versus logical allocation totals, partial failure/pinned and pending source contention, sample transitions/format clear pressure fallback and peak GPU/CPU memory, sustained original/native performance and full runtime acceptance remain open. No semantic closure.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "reason": "Full implementation boundary remains open."
+      }
     },
     {
       "id": "native-image-source-gpu-modification-selection",
@@ -2208,10 +2255,20 @@
         "outputs": "Exact-expanded pressure retirement uses the existing nonblocking compact path. Its source lease retains and accounts for both the native texture allocation and the canonical packed GPU buffer allocation through the copy fence, including after cache/allocator destruction.",
         "ordering": "Both Resource copies are retained before residency is added. Ordinary fence collection releases both and decrements the shared account independently of worker CPU locking; priority admission includes their actual allocation sizes. The preceding raw buffer domain and compact mip-zero padding policy remain unchanged.",
         "verification_prepared": "Six externally gated cache-destruction GPU cases cover R32 float, signed packed10 and four expanded packed16 volumes. They require actual summed source allocations, shared lease accounting, source/cache destruction before gate signal, exact compact packed words/padding and zero pending commit bytes after drain. Existing 24 compact source-accounting cases compile against the wider lease. No execution.",
-        "open_contracts": "Actual pressure victim selection/adapter budgets, heap versus resource accounting, pending physical commit ordering/CPU races/remapping, nonexact/depth/MSAA formats and full original/native GPU/runtime differential acceptance remain open. No semantic closure."
+        "open_contracts": "Actual pressure victim selection/adapter budgets, heap versus resource accounting, pending physical commit ordering/CPU races/remapping, nonexact/depth/MSAA formats and full original/native GPU/runtime differential acceptance remain open. No semantic closure.",
+        "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open."
       },
       "implementation_status": "integrated_partial_review_pending",
-      "final_verification": {"state": "not_run", "reason": "Full implementation boundary remains open."}
+      "final_verification": {
+        "state": "not_run",
+        "date": "2026-10-16",
+        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+      },
+      "previous_final_verification_heap_pressure_20261016": {
+        "state": "not_run",
+        "reason": "Full implementation boundary remains open."
+      }
     },
     {
       "id": "native-multisample-storage-uav-image-clears",

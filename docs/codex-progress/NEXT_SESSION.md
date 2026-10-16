@@ -1,5 +1,21 @@
 # Next session
 
+## Current MSAA depth continuation - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+No configure/build/package/compiler/test/GPU/game/XInput/UI execution. All129 groups
+remain partial/open; source/Git/hash reviews do not establish runtime correctness/FPS.
+
+Verify HEAD against pressure-retirement-20261016/CHECKPOINT_FINAL.json. c6e5429/50860ef/
+e00c72d already cover actual heap-pressure recovery, eager idle trim and authored focused
+acceptance; do not redo them. Read NEXT_PLACED_ALIAS_CONTRACT.md and implement first-use
+MSAA depth initialization in GuestMultisample::Lease::Record / GuestTextureCache::Upload,
+protecting untouched layers and stencil/other planes and retaining descriptor/transfer
+leases. Prepare exact content controls, without execution. Existing unmap/remap generation
+cancellation is source-covered; no speculative global alias barriers or MSAA pressure
+guard lift. Continue the existing contract queue, preserve dirty integration/index, push WIP.
+
+
 ## Current readonly continuation - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

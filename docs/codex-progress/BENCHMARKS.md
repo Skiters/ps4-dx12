@@ -1,5 +1,15 @@
 # Benchmarks
 
+## Texture heap pressure source continuation - 2026-10-16
+
+No configure/build/package/compiler/test/fixture/GPU/game/UI run or new measurement for
+c6e5429/50860ef/e00c72d. The new focused heap mode and prior28 ordered GCN scenarios are
+uncompiled/unrun. No FPS/frame-time/CPU-GPU wait/image/controls/stability improvement is
+attributed to these source changes. Historical326/346(native211/229) plus three targeted
+passes remain old separate data. Installed preview24 was unchanged. Evidence root:
+F:/PS4Dev/handoff/pressure-retirement-20261016; source/Git/hash/index review is not PASS.
+
+
 ## Readonly-history source continuation - 2026-10-16
 
 No measurements, build/tests/compiler execution or GPU/game/UI runs were performed for
