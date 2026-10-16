@@ -339,7 +339,10 @@ def main():
                 symbol["adaptation_group"]=group["id"]
                 symbol["final_verification"]=group.get("final_verification")
                 symbol["contract_associations"].append({"group":group["id"],"contract":group["contract"],
-                    "native_paths":group.get("native_paths",[]),"final_verification":group.get("final_verification")})
+                    "native_paths":group.get("native_paths",[]),"final_verification":group.get("final_verification"),
+                    "implementation":group.get("implementation"),
+                    "behavior_verification":group.get("behavior_verification"),
+                    "prepared_checks":group.get("prepared_checks",[])})
     link_callers(symbols)
     link_dispatch_targets(dispatch,symbols)
     reconcile_dispatch(dispatch,native_dispatch)
@@ -359,7 +362,13 @@ def main():
             "unresolved_call_names":sum(len(s["unresolved_calls"]) for s in symbols.values()),
             "contracted_functions":sum(s["contract"] is not None for s in symbols.values()),
             "declared_function_mappings":sum("declared_mapping_groups" in s for s in symbols.values()),
-            "closed_semantic_contracts": 0}}
+            "implementation_states":dict(collections.Counter(
+                group.get("implementation",{}).get("state","not_recorded")
+                for group in contracts.get("groups",[]))),
+            "known_production_gaps":len(contracts.get("known_production_gaps",{})),
+            "closed_semantic_contracts":sum(
+                group.get("behavior_verification",{}).get("state")=="verified"
+                for group in contracts.get("groups",[]))}}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result["summary"]))
