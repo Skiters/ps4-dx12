@@ -100,7 +100,7 @@ No new performance result exists. Source admission is not a measured speedup. Hi
 
 923d637 contains a source-only readonly mip0 BC parent view change. No build, tests, GPU
 execution, game run, FPS, frame-time, image, stability, or performance measurements were
-obtained. Fixture oracle/review are pending. Earlier benchmark identities remain unchanged.
+obtained. Fixture ac3ca48 is authored but unreviewed/unrun. Earlier benchmark identities remain unchanged.
 
 
 SESSION_HANDOFF.md's top section is authoritative; older next-task entries are historical.

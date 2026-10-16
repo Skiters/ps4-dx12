@@ -118,7 +118,8 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 923d637 pushed a readonly selected-mip0 conversion path that preserves the multi-mip BC
 parent's authority and lifetime. It is WIP/source-only; the authored fixture oracle still
-needs independent GPU readback and review. Evidence and exact source snapshot are in
+uses independent GPU readback, but remains unreviewed/unrun and lacks reverse selected-view
+coverage. Evidence and exact source snapshot are in
 F:/PS4Dev/handoff/bc-mip-bridge-20261016. Original staged network deletions are preserved.
 
 
