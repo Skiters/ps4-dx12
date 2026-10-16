@@ -372,32 +372,15 @@ set(NETWORK_LIBS src/core/libraries/network/http.cpp
                  src/core/libraries/network/http_error.h
                  src/core/libraries/network/http2.cpp
                  src/core/libraries/network/http2.h
-                 src/core/libraries/network/net.cpp
                  src/core/libraries/network/netctl.cpp
                  src/core/libraries/network/netctl.h
                  src/core/libraries/network/net_ctl_obj.cpp
                  src/core/libraries/network/net_ctl_obj.h
                  src/core/libraries/network/net_ctl_codes.h
-                 src/core/libraries/network/net_util.cpp
-                 src/core/libraries/network/net_util.h
-                 src/core/libraries/network/net_epoll.cpp
-                 src/core/libraries/network/net_epoll.h
-                 src/core/libraries/network/net_resolver.cpp
-                 src/core/libraries/network/net_resolver.h
-                 src/core/libraries/network/net_upnp.cpp
-                 src/core/libraries/network/net_upnp.h
-                 src/core/libraries/network/net_error.h
-                 src/core/libraries/network/net.h
                  src/core/libraries/network/ssl.cpp
                  src/core/libraries/network/ssl.h
                  src/core/libraries/network/ssl2.cpp
                  src/core/libraries/network/ssl2.h
-                 src/core/libraries/network/sys_net.cpp
-                 src/core/libraries/network/sys_net.h
-                 src/core/libraries/network/posix_sockets.cpp
-                 src/core/libraries/network/p2p_sockets.cpp
-                 src/core/libraries/network/unix_sockets.cpp
-                 src/core/libraries/network/sockets.h
 )
 
 set(AVPLAYER_LIB src/core/libraries/avplayer/avplayer_common.cpp
@@ -660,8 +643,17 @@ set(NP_LIBS src/core/libraries/np/np_error.h
             src/core/libraries/np/np_partner.cpp
             src/core/libraries/np/np_partner.h
             src/core/libraries/np/object_manager.h
-            src/core/libraries/np/np_handler.cpp
-            src/core/libraries/np/np_handler.h
+            src/core/libraries/np/np_handler/np_handler.cpp
+            src/core/libraries/np/np_handler/np_handler.h
+            src/core/libraries/np/np_handler/np_handler_friends.cpp
+            src/core/libraries/np/np_handler/np_handler_invitation.cpp
+            src/core/libraries/np/np_handler/np_handler_score.cpp
+            src/core/libraries/np/np_handler/np_handler_trophy.cpp
+            src/core/libraries/np/np_handler/np_handler_tus.cpp
+            src/core/libraries/np/np_handler/np_handler_web_api.cpp
+            src/core/libraries/np/signaling_handler.cpp
+            src/core/libraries/np/signaling_handler.h
+            src/core/libraries/np/np_signaling/np_signaling_transport.cpp
             src/core/libraries/np/np_commerce/np_commerce.cpp
             src/core/libraries/np/np_commerce/np_commerce.h
             src/core/libraries/np/np_commerce/np_commerce_ui.cpp
@@ -729,6 +721,13 @@ set(MISC_LIBS  src/core/libraries/screenshot/screenshot.cpp
 
 set(CAMERA_LIBS  src/core/libraries/camera/camera.cpp
                  src/core/libraries/camera/camera.h
+                 src/core/libraries/camera/camera_helpers.h
+                 src/core/libraries/camera/camera_helpers.cpp
+                 src/core/libraries/camera/camera_audio.cpp
+                 src/core/libraries/camera/camera_calibration.cpp
+                 src/core/libraries/camera/camera_config.cpp
+                 src/core/libraries/camera/camera_config_types.h
+                 src/core/libraries/camera/camera_device.cpp
                  src/core/libraries/camera/camera_error.h
 )
 
@@ -766,6 +765,8 @@ set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/widget/reg_view.h
               src/core/devtools/widget/text_editor.cpp
               src/core/devtools/widget/text_editor.h
+              src/core/devtools/widget/shader_list.cpp
+              src/core/devtools/widget/shader_list.h
 )
 
 set(COMMON src/common/logging/classes.cpp
@@ -1137,6 +1138,12 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/big_picture/settings_dialog_imgui.h
           src/imgui/big_picture/settings_dialog_layer.cpp
           src/imgui/big_picture/settings_dialog_layer.h
+          src/imgui/big_picture/big_picture.cpp
+          src/imgui/big_picture/big_picture.h
+          src/imgui/big_picture/imgui_impl_sdl3_big_picture.cpp
+          src/imgui/big_picture/imgui_impl_sdl3_big_picture.h
+          src/imgui/big_picture/imgui_impl_sdlrenderer3.cpp
+          src/imgui/big_picture/imgui_impl_sdlrenderer3.h
 )
 
 set(INPUT src/input/controller.cpp
@@ -1335,8 +1342,10 @@ cmrc_add_resource_library(embedded-resources
         src/resources/platinum.png
         src/resources/shadps4.png
         src/resources/silver.png
-        src/resources/trophy.wav)
-target_link_libraries(shadps4 PRIVATE res::embedded)
+        src/resources/trophy.wav
+        src/resources/amd_rcp_index_table.bin.zstd
+        src/resources/amd_rsqrt_index_table.bin.zstd)
+target_link_libraries(shadps4 PRIVATE res::embedded libzstd_static)
 
 # ImGui resources
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/imgui/renderer)
@@ -1356,3 +1365,42 @@ else()
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+set(NET_CORE  src/core/net/guest_net.cpp
+              src/core/net/guest_net.h
+              src/core/net/host_net.cpp
+              src/core/net/host_net.h
+              src/core/net/p2p_codec.cpp
+              src/core/net/p2p_codec.h
+              src/core/net/p2p_crypto.cpp
+              src/core/net/p2p_crypto.h
+              src/core/net/p2p_tcp.cpp
+              src/core/net/p2p_tcp.h
+              src/core/net/p2p_transport.cpp
+              src/core/net/p2p_transport.h
+)
+
+set(NET_LIB   src/core/libraries/net/net.cpp
+              src/core/libraries/net/net.h
+              src/core/libraries/net/net_error.h
+              src/core/libraries/net/net_kernel.cpp
+              src/core/libraries/net/net_kernel.h
+              src/core/libraries/net/net_log.cpp
+              src/core/libraries/net/net_log.h
+              src/core/libraries/net/net_p2p.cpp
+              src/core/libraries/net/net_p2p.h
+              src/core/libraries/net/net_p2p_ioctl.cpp
+              src/core/libraries/net/net_p2p_ioctl.h
+              src/core/libraries/net/net_resolver.cpp
+              src/core/libraries/net/net_resolver.h
+              src/core/libraries/net/net_translate.cpp
+              src/core/libraries/net/net_translate.h
+              src/core/libraries/net/net_types.h
+              src/core/libraries/net/net_util.cpp
+              src/core/libraries/net/net_util.h
+              src/core/libraries/net/net_upnp.cpp
+              src/core/libraries/net/net_upnp.h
+)
+
+target_sources(shadps4 PRIVATE ${NET_CORE} ${NET_LIB}
+    src/core/libraries/kernel/threads/barrier.cpp)
