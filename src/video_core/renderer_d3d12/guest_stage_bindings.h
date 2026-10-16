@@ -39,5 +39,6 @@ struct OrderedGuestBindings {
 OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*, Rasterizer&, GuestTextureCache&,
     std::span<const GuestStageBindingSpan>, std::vector<Rasterizer::ShaderBufferRequest>&,
     std::span<const OrderedGuestBuffer>, std::span<const OrderedGuestImage>, bool exact_buffer_bounds,
-    const std::function<VAddr(VAddr,uint64_t)>& private_cpu_stream);
+    const std::function<VAddr(VAddr,uint64_t)>& private_cpu_stream,
+    std::span<const Rasterizer::ShaderBufferRequest> dma_reads={});
 }

@@ -93,6 +93,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         require(prepared.stream_views[0].has_value()&&prepared.images[0]);
         require(prepared.images[0]->desc.levels==desc.levels);
         if(refresh)require(prepared.images[0]==prepared.images[1]);
+        rasterizer.SynchronizePreparedDmaBuffers(requests,prepared.buffers);
         // The last exact-base buffer bind leaves I dirty. Final draw preparation
         // must not revive it or download its independent pixels over B.
         require(prepared.images[0]->logical_dirty&&!prepared.images[0]->gpu_owned);

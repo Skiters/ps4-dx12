@@ -2,6 +2,7 @@
 #pragma once
 #include "rasterizer.h"
 #include "page_watch.h"
+#include "guest_page_range.h"
 #include "diagnostics.h"
 namespace NativeDX12 {
 // Production buffer/CPU access contract shared by GuestRasterizer and the
@@ -12,7 +13,15 @@ protected:
     std::function<bool(VAddr,u64)> has_backing_;
     virtual void ResolveImages(VAddr,u64) {}
     virtual void ReleaseImageWatches(VAddr,u64) {}
-    virtual void ReleaseBufferPageWatch(VAddr address,u64 size){page_watch_->Untrack(address,size);}
+    virtual void ReleaseBufferPageWatch(VAddr address,u64 size){
+        // A borrowed read-only range may span more than this mapping. Split
+        // its exact pages rather than restoring protection for a neighbour.
+        const auto pages=GuestProtectionPages(address,size);
+        if(!pages)throw std::invalid_argument("Invalid buffer protection retirement extent");
+        (void)page_watch_->ChangeMode(pages->address,pages->size,true);
+        if(!page_watch_->UntrackReadOnly(pages->address,pages->size))
+            throw std::runtime_error("Cannot retire a buffer guard with unresolved GPU ownership");
+    }
     // Separate logical GPU versions need to distinguish exposing a preceding
     // result to a CPU reader from retiring it before a real CPU store.
     virtual void ResolveCpuFault(VAddr address,bool writing){
@@ -56,8 +65,8 @@ protected:
             return tracked;
         },std::move(write),[this](VAddr address,u64 size){ReleaseBufferPageWatch(address,size);});
         SetBufferWriteWatch([this](VAddr address,u64 size){
-            if(address%4096||size%4096||!has_backing_(address,size)||page_watch_->Contains(address))return false;
-            return page_watch_->Track(address,size,true);
+            if(address%4096||size%4096||!has_backing_(address,size))return false;
+            return page_watch_->TrackReadOnly(address,size);
         });
         SetBufferPageRewatch([this](VAddr address,u64 size){
             return has_backing_(address,size)&&page_watch_->TrackReadOnly(address,size);
@@ -69,6 +78,11 @@ protected:
     }
 public:
     using Rasterizer::Rasterizer;
+    bool IsDmaReadable(VAddr address,u64 size)override{
+        // Renderer-only host temporaries may have a mapped native address, but
+        // ReadConst guest pointers require real physical guest backing.
+        return (!has_backing_||has_backing_(address,size))&&Rasterizer::IsDmaReadable(address,size);
+    }
     ~GuestBufferAccess() override {
         // Retire while PageWatch and its callbacks still exist.
         try{DrainPriorityOperations();}catch(...){}

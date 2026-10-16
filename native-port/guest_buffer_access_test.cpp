@@ -34,6 +34,10 @@ void Run(ID3D12Device* device,bool f2){
         renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=bytes&&n<=bytes-(a-base);},
             [&](VAddr a,std::span<const std::byte> data){if(fail){fail=false;return false;}
                 ++commits;committed+=data.size();memcpy(physical+a-base,data.data(),data.size());return true;});
+        Require(renderer.IsDmaReadable(base,4096),"guest-backed memory was rejected by DMA");
+        const auto host_only=renderer.AcquireTemporaryBuffer(4096);
+        Require(host_only&&!renderer.IsDmaReadable(reinterpret_cast<VAddr>(host_only->words.data()),4096),
+            "renderer-only host temporary escaped into the guest DMA address table");
         const Rasterizer::ShaderBufferRequest writable[]{{base,4096,true,true}};
         if(f2){
             Require(renderer.TrackReadOnly(base+49152,12288),"image-only protected range setup");

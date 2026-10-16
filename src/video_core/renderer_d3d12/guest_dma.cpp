@@ -52,8 +52,27 @@ void GuestDmaMemory::Initialize(Rasterizer& rasterizer){
     DX12_API_CALL(list->CopyBufferRegion(faults_.handle.Get(),0,zero_faults_.handle.Get(),0,FaultBytes));
     faults_.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
-void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterizer::ShaderBufferRequest>& requests){
+bool GuestDmaMemory::HasReadOverlap(VAddr address,u64 size)const{
+    if(!size)return false;
+    if(address>UINT64_MAX-size)throw std::out_of_range("DMA overlap range overflow");
+    auto it=std::lower_bound(ranges_.begin(),ranges_.end(),address,[](const auto& range,VAddr first){return range.address+range.size<=first;});
+    return it!=ranges_.end()&&it->address<address+size;
+}
+void GuestDmaMemory::ObserveResidentSharps(std::span<const Rasterizer::ShaderBufferRequest> resident_sharps){
+    // EnsureResident publishes ordinary arena pages to the original BDA table,
+    // not just pages learned from fault feedback. Clean CPU-only streams are
+    // deliberately absent from this list; null/special temporaries are too.
+    for(const auto& request:resident_sharps){
+        const auto source=request.WriteRange();
+        if(!source.size||source.address>=Dma::AddressLimit)continue;
+        const auto end=source.address+std::min(source.size,Dma::AddressLimit-source.address);
+        for(auto page=source.address>>Dma::PageShift;page<=((end-1)>>Dma::PageShift);++page)pages_.insert(u32(page));
+    }
+}
+void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterizer::ShaderBufferRequest>& requests,
+    std::span<const Rasterizer::ShaderBufferRequest> resident_sharps){
     ConsumeFaults(rasterizer);ranges_.clear();translations_.clear();indirect_entries_.clear();
+    ObserveResidentSharps(resident_sharps);
     const auto append=[&](u32 entry,VAddr address,u32 bytes){
         if(ranges_.empty()||ranges_.back().address+ranges_.back().size!=address||ranges_.back().size>Dma::BankSize-bytes)
             ranges_.push_back({address,0,false,true});
@@ -78,9 +97,8 @@ void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterize
     if(required>UINT32_MAX||required*sizeof(u64)>Dma::MaxRawViewBytes)
         throw std::out_of_range("Native DMA page-table descriptor extent overflow");
     required_entries_=UINT(std::max<u64>(Dma::TableEntries,required));
-    // Resolve image/CPU ownership before preparing any views. Buffer and DMA
-    // aliases in this submission are then materialized together in one batch.
-    for(const auto& range:ranges_)rasterizer.ReadMemory(range.address,range.size);
+    // This pass only plans residency. A raw DMA read must not download a
+    // distinct I into B before the ordered image-domain retention pass.
     requests.insert(requests.end(),ranges_.begin(),ranges_.end());
 }
 void GuestDmaMemory::Bind(Rasterizer& rasterizer,ResourceBindings& bindings,

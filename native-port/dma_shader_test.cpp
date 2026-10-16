@@ -208,6 +208,31 @@ int wmain(int argc,wchar_t** argv){try{
     output_metadata.sharp_fetch.offsets[0]=4;metadata.buffers.push_back(output_metadata);
     AmdGpu::Buffer sharp{};sharp.base_address=output_base;sharp.num_records=1024;
     memcpy(metadata.flattened_ud_buf.data()+4,&sharp,sizeof(sharp));
+    {
+        // EnsureResident must expose an ordinary cached page on the first DMA
+        // command, without requiring a prior failed ReadConst on that page.
+        Rasterizer resident(device.Get());resident.MapMemory(guest_base,guest_bytes);resident.MapMemory(output_base,1024);
+        const Rasterizer::ShaderBufferRequest source[]{{guest_base,Dma::PageSize,false,true,true}};
+        resident.PrepareShaderBuffers(source);
+        const auto first_read=[&]{ExecuteGuestBufferCompute(device.Get(),resident,pipeline,metadata,{},{{1,1,1}});};
+        first_read();
+        if(result[0]!=0xface0000||result[64]!=0xface0000||result[1]!=0||result[65]!=fallback)
+            throw std::runtime_error("An ordinary resident buffer page was absent from the first DMA table");
+        first_read(); // materialize the other faulted pages before retaining final views
+        const auto source_views=resident.PrepareShaderBuffers(source);
+        resident.FillPreparedShaderBuffer(guest_base,Dma::PageSize,0xa5a5a5a5,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        resident.SynchronizePreparedDmaBuffers(source,source_views);
+        first_read();
+        if(result[0]!=0xa5a5a5a5||result[192]!=0xa5a5a5a5)
+            throw std::runtime_error("DMA synchronization replaced a GPU-only formatted B version with unchanged CPU bytes");
+        guest[Dma::PageSize/4-1]=0x31415926;
+        resident.SynchronizePreparedDmaBuffers(source,source_views);
+        first_read();
+        if(result[0]!=0x31415926||result[192]!=0xa5a5a5a5)
+            throw std::runtime_error("Post-stage DMA upload lost a CPU-dirty page or replaced an untouched GPU-only page");
+        guest[Dma::PageSize/4-1]=0xface0000;
+        resident.ValidateDebugMessages();
+    }
     const auto run=[&](const ShaderPipeline& active){ExecuteGuestBufferCompute(device.Get(),runtime,active,metadata,{},{{1,1,1}});};
     run(pipeline);
     for(u32 i=0;i<64;++i)if(result[i]!=0||result[i+64]!=fallback)throw std::runtime_error("Cold runtime DMA fallback mismatch");

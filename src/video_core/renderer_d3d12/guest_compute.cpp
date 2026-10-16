@@ -388,8 +388,32 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             else rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,image.desc.writable);
         }
     }
+    const auto streams_before_binding=[&](size_t index){
+        if(!pending[index].guest_read||!pending[index].original_bytes||pending[index].original_bytes>16384)
+            return false;
+        const auto source=requests[index].WriteRange();
+        if(source.address>UINT64_MAX-source.size)
+            throw std::out_of_range("Ordered buffer stream range overflows");
+        if(rasterizer.IsGpuBufferModified(source.address,source.size))return false;
+        const auto first_page=source.address>>12,last_page=(source.address+source.size-1)>>12;
+        // Pinned ObtainBuffer marks each writer's original range before binding
+        // the next descriptor. Even byte-disjoint writes can share query pages.
+        for(size_t j=0;j<index;++j)if(requests[j].written){
+            const auto write=requests[j].WriteRange();
+            if(!write.size||write.address>UINT64_MAX-write.size)
+                throw std::out_of_range("Ordered buffer writer range overflows");
+            if((write.address>>12)<=last_page&&first_page<=((write.address+write.size-1)>>12))
+                return false;
+        }
+        return true;
+    };
     const auto ordinary_count=requests.size();
-    if(dma)dma->AppendRequests(rasterizer,requests);
+    if(dma){
+        std::vector<Rasterizer::ShaderBufferRequest> resident_sharps;
+        for(size_t i=0;i<ordinary_count;++i)if(pending[i].original_bytes&&
+            (requests[i].written||!streams_before_binding(i)))resident_sharps.push_back(requests[i]);
+        dma->AppendRequests(rasterizer,requests,resident_sharps);
+    }
     const auto dma_count=requests.size()-ordinary_count;
     for(const auto& buffer:read_buffers){
         if(buffer.written||buffer.unordered_access||!buffer.resident)
@@ -431,32 +455,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             validate_writable_block_alias(image,*parent);
             writable_block_parent_pins.push_back(textures->PinBinding(*parent));
         }
-    const auto streams_before_binding=[&](size_t index){
-        if(!pending[index].guest_read||!pending[index].original_bytes||pending[index].original_bytes>16384)
-            return false;
-        const auto source=requests[index].WriteRange();
-        if(source.address>UINT64_MAX-source.size)
-            throw std::out_of_range("Ordered buffer stream range overflows");
-        if(rasterizer.IsGpuBufferModified(source.address,source.size))return false;
-        const auto first_page=source.address>>12,last_page=(source.address+source.size-1)>>12;
-        // Pinned ObtainBuffer marks each writer's original range before binding
-        // the next descriptor. Even byte-disjoint writes can share query pages.
-        for(size_t j=0;j<index;++j)if(requests[j].written){
-            const auto write=requests[j].WriteRange();
-            if(!write.size||write.address>UINT64_MAX-write.size)
-                throw std::out_of_range("Ordered buffer writer range overflows");
-            if((write.address>>12)<=last_page&&first_page<=((write.address+write.size-1)>>12))
-                return false;
-        }
-        return true;
-    };
     const auto stage_image_domain=[&](const ImagePending& image){
         if(image.null_resource)return false;
         if(storage_desc(image).writable)return true;
         return textures&&std::ranges::any_of(textures->Entries(),[&](const auto& cached){return cached->logical_gpu_modified&&
             CompatibleGuestImageMipGeometry(storage_desc(image),storage_layout(image),cached->desc,cached->layout);});
     };
-    const bool ordered_stages=stages.size()>1&&textures&&(
+    bool ordered_stages=stages.size()>1&&textures&&(
         std::ranges::any_of(images,[&](const auto& image){return stage_image_domain(image)&&
             std::ranges::any_of(std::span(requests).first(ordinary_count),[&](const auto& buffer){
                 const auto index=size_t(&buffer-requests.data());
@@ -467,8 +472,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             std::ranges::any_of(std::span(requests).first(ordinary_count),[&](const auto& buffer){
                 const auto index=size_t(&buffer-requests.data());return pending[index].formatted_read&&!streams_before_binding(index)&&
                     buffer.address<image->desc.address+image->layout.guest_bytes&&image->desc.address<buffer.address+buffer.size;});}));
-    if(ordered_stages&&uses_dma)
-        throw std::runtime_error("Ordered multi-stage image/buffer domains require a DMA synchronization phase");
+    ordered_stages|=uses_dma&&textures;
     // The original binds buffers and refreshes sampled images before execution.
     // Two writers likewise keep separate cache domains, when the backend can
     // retain both versions without selecting an arbitrary physical winner.
@@ -877,7 +881,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto [copy,capacity]=temporary.Make(bytes,reinterpret_cast<const void*>(address));
                 if(capacity<bytes)throw std::logic_error("Ordered stage CPU stream is shorter than its original sharp");
                 return copy;
-            });
+            },dma?std::span(requests).subspan(ordinary_count,dma_count):std::span<const Rasterizer::ShaderBufferRequest>{});
         for(size_t i=0;i<ordinary_count;++i)pending[i].stream_view=stage_bindings->stream_views[i];
         for(size_t i=0;i<images.size();++i)images[i].ordered_entry=stage_bindings->images[i];
     }
@@ -962,7 +966,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Allocate only once their ownership resolution has ended, immediately
     // before the command binds its descriptors and executes on the GPU.
     bindings.BeforeBind([&rasterizer,push,buffer_limits,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
-        buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end())](ResourceBindings& table){
+        buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end()),
+        buffer_views=views,dma](ResourceBindings& table){
+        if(dma)rasterizer.SynchronizePreparedDmaBuffers(buffer_requests,buffer_views);
         // Attachment uploads may Finish after buffer preparation. Mark actual
         // shader writes at bind time so such retirement cannot clear this draw.
         rasterizer.MarkShaderBufferWrites(buffer_requests);

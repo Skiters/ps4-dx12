@@ -50,9 +50,11 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     GuestTextureCache& textures,std::span<const GuestStageBindingSpan> stages,
     std::vector<Rasterizer::ShaderBufferRequest>& requests,std::span<const OrderedGuestBuffer> buffers,
     std::span<const OrderedGuestImage> images,bool exact_buffer_bounds,
-    const std::function<VAddr(VAddr,uint64_t)>& private_cpu_stream){
+    const std::function<VAddr(VAddr,uint64_t)>& private_cpu_stream,
+    std::span<const Rasterizer::ShaderBufferRequest> dma_reads){
     std::lock_guard lock(rasterizer.ExecutionMutex());
-    if(stages.size()<2||buffers.size()>requests.size())throw std::invalid_argument("Invalid ordered guest stage set");
+    if(stages.empty()||buffers.size()>requests.size())throw std::invalid_argument("Invalid ordered guest stage set");
+    const std::vector<Rasterizer::ShaderBufferRequest> dma_ranges(dma_reads.begin(),dma_reads.end());
     size_t next_buffer=0,next_image=0;
     for(const auto& stage:stages){
         if(stage.first_buffer!=next_buffer||stage.first_image!=next_image||
@@ -122,6 +124,18 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     };
     arm();
     try{
+        // ReadConst consumes B, not a formatted I snapshot. Retain every
+        // overlapping image before DMA residency can acquire the same pages,
+        // even when that image is absent from this command's shader metadata.
+        for(const auto& entry:textures.Entries())if(entry->gpu_owned&&
+            std::ranges::any_of(dma_ranges,[&](const auto& range){return Overlaps(
+                entry->desc.address,entry->layout.guest_bytes,range.address,range.size);})){
+            const auto owner=DescribeGuestImageOwnership(*entry);
+            if(!owner||!textures.CanRetainIndependentImage(owner->desc,owner->layout)||
+               !textures.RevalidateReadonly(*entry))
+                throw std::runtime_error("DMA-visible image has no independent physical-B read domain");
+            result.pins->push_back(textures.PinBinding(*entry));
+        }
         // Protect I as a distinct version before preparing/owning overlapping B.
         for(const auto& [address,domain]:domains){
             for(const auto& entry:textures.Entries())if(entry->gpu_owned&&entry->HasValidLogicalImage()&&

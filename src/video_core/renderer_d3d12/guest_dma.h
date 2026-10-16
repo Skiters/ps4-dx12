@@ -23,7 +23,10 @@ class GuestDmaMemory {
 public:
     explicit GuestDmaMemory(ID3D12Device* device):device_(device){}
     u64 PageTableBytes()const{return table_.handle?table_.handle->GetDesc().Width:0;}
-    void AppendRequests(Rasterizer&,std::vector<Rasterizer::ShaderBufferRequest>&);
+    void ObserveResidentSharps(std::span<const Rasterizer::ShaderBufferRequest>);
+    void AppendRequests(Rasterizer&,std::vector<Rasterizer::ShaderBufferRequest>&,
+        std::span<const Rasterizer::ShaderBufferRequest> resident_sharps={});
+    bool HasReadOverlap(VAddr,u64)const;
     void Bind(Rasterizer&,ResourceBindings&,std::span<const Rasterizer::ShaderBufferView>);
     void BindMetadata(ResourceBindings&,UINT reg,bool fault);
     void RecordFaults(Rasterizer&);

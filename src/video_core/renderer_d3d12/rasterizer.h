@@ -16,6 +16,7 @@
 #include <optional>
 #include <atomic>
 namespace NativeDX12 {
+namespace Diagnostics {class Scope;}
 class ShaderPipeline;
 class ResourceBindings;
 class DescriptorHeapPool;
@@ -175,7 +176,8 @@ public:
         own_buffer_=std::move(own);commit_buffer_=std::move(commit);release_buffer_=std::move(release);}
     void ResolveGpuBuffers(VAddr,u64);
     void ReleaseCpuBufferWatches(VAddr,u64);
-    void ReleaseUnusedReadOnlyWatches(VAddr,u64,std::span<const std::pair<VAddr,u64>> retained={});
+    void ReleaseUnusedReadOnlyWatches(VAddr,u64,std::span<const std::pair<VAddr,u64>> retained={},
+        std::optional<VAddr> retiring_buffer={});
     void InvalidateCpuBufferPages(VAddr,u64);
     void SetBufferWriteWatch(std::function<bool(VAddr,u64)> watch){watch_buffer_=std::move(watch);}
     void SetBufferPageRewatch(std::function<bool(VAddr,u64)> watch){rewatch_buffer_=std::move(watch);}
@@ -207,10 +209,15 @@ public:
         // Keep placed memory alive and prevent pool reuse until the last GPU view retires.
         std::shared_ptr<void> allocation;
     };
+private:
+    void PrepareBufferContents(Mapping&,bool written,bool uav,bool fresh,
+        std::span<const ShaderBufferRequest>,std::optional<std::span<const BufferWrite>>,Diagnostics::Scope&);
+public:
     // Coalesce and pin guest buffers. Guarded GPU-owned versions remain resident;
     // CPU-visible fallbacks reconcile writes before taking their next snapshot.
     std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>,
         std::optional<std::span<const BufferWrite>> known_writes=std::nullopt);
+    void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     Resource CaptureShaderBuffer(VAddr address,u64 bytes);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
@@ -260,7 +267,8 @@ public:
     void ValidateHostMemory(VAddr,u64,bool writing=false);
     // Legality only: no CPU reconciliation, ownership change or commands.
     void ValidateGpuBacking(VAddr,u64,bool writing=false);
-    bool IsDmaReadable(VAddr,u64);
+    virtual bool IsDmaReadable(VAddr,u64);
+    bool HasDmaReadOverlap(VAddr,u64)const;
     GuestDmaMemory& DmaMemory();
     // Caller holds ExecutionMutex through the copy and GPU retirement. Never
     // expose a cached image unless its CPU snapshot still matches guest memory.

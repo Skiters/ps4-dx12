@@ -109,6 +109,10 @@ bool Rasterizer::IsDmaReadable(VAddr address,u64 size){
     try{CheckHostSpan(address,size,false);return true;}
     catch(const std::runtime_error&){return false;}
 }
+bool Rasterizer::HasDmaReadOverlap(VAddr address,u64 size)const{
+    std::lock_guard lock(execution_mutex_);
+    return dma_memory_&&dma_memory_->HasReadOverlap(address,size);
+}
 DescriptorHeapPool& Rasterizer::BindingHeapPool(){
     if(!binding_heap_pool_)binding_heap_pool_=std::make_unique<DescriptorHeapPool>(device_.Get());
     return *binding_heap_pool_;
@@ -378,7 +382,8 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
             mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();}
     }
 }
-void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<const std::pair<VAddr,u64>> retained){
+void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<const std::pair<VAddr,u64>> retained,
+    std::optional<VAddr> retiring_buffer){
     std::lock_guard lock(execution_mutex_);
     const auto pages=GuestProtectionPages(address,size);
     if(!pages||!release_cpu_pages_)
@@ -394,8 +399,9 @@ void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<c
     }
     for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<end;++it){
         const auto& mapping=it->second;
+        if(retiring_buffer&&mapping.base==*retiring_buffer)continue;
         const auto first=std::max(address,mapping.base),last=std::min(end,mapping.base+mapping.size);
-        if(mapping.gpu_owned||mapping.cpu_watched){keep.emplace_back(first,last);continue;}
+        if(mapping.gpu_owned||mapping.cpu_watched||mapping.cpu_watch_pending){keep.emplace_back(first,last);continue;}
         if(!mapping.cpu_partial_proof)continue;
         auto cursor=first;
         for(const auto& [begin,finish]:mapping.cpu_dirty_ranges){
@@ -602,6 +608,134 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     }
     range.gpu.Transition(scheduler_.Begin(),D3D12_RESOURCE_STATE_COPY_DEST);
     DX12_API_CALL(scheduler_.Begin()->CopyBufferRegion(range.gpu.handle.Get(),offset,upload_resource,0,size));
+}
+void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bool fresh,
+    std::span<const ShaderBufferRequest> requests,std::optional<std::span<const BufferWrite>> known_writes,
+    Diagnostics::Scope& diagnostic){
+    const auto base=mapping.base;
+    diagnostic.Stage("backing-validation");
+    diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
+        (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
+    ValidateGpuBacking(base,mapping.size,written);
+    bool cpu_proven_unchanged=mapping.cpu_watched;
+    if(written&&mapping.cpu_watched){
+        if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
+            mapping.cpu_watched=false;mapping.gpu_owned=true;
+            Diagnostics::Count("buffer-watch.upgraded");
+        }else{
+            // No proof survives a release of protection. Use the snapshot
+            // fallback after a rejected or unavailable atomic transfer.
+            ReleaseCpuBufferWatches(base,mapping.size);cpu_proven_unchanged=false;
+            Diagnostics::Count("buffer-watch.transfer-fallback");
+        }
+    }
+    const auto* cpu=reinterpret_cast<const std::byte*>(base);
+    // For a read-only binding, establish protection before comparing or
+    // uploading. CPU writers then fault until this execution lock is
+    // released, so a second whole-buffer comparison is unnecessary.
+    // Pending protection is deliberately separate from a published proof:
+    // reentrant alias reconciliation must be able to invalidate it, and
+    // neither a nested binding nor an exception may reuse unfinished data.
+    const auto& compare_watch=mapping.cpu_partial_proof&&rewatch_buffer_?rewatch_buffer_:watch_buffer_;
+    const bool protected_compare=!mapping.gpu_owned&&!mapping.cpu_watched&&
+        compare_watch&&compare_watch(base,mapping.size);
+    if(protected_compare)mapping.cpu_watch_pending=true;
+    bool proof_published=false;
+    SCOPE_EXIT {
+        if(protected_compare&&!proof_published&&(mapping.cpu_watch_pending||mapping.cpu_watched)){
+            ReleaseCpuBufferWatches(base,mapping.size);
+        }
+    };
+    diagnostic.Stage("snapshot-compare");
+    if(!mapping.gpu_owned&&!mapping.cpu_upload_ranges.empty()){
+        // Original CPU dirty tracking uploads whole touched pages. The
+        // GPU-only formatted version is not a CPU equality proof; a
+        // same-value store must restore its CPU page without replacing
+        // untouched GPU-only pages. Keep markers if an upload throws.
+        while(!mapping.cpu_upload_ranges.empty()){
+            const auto generation=mapping.cpu_upload_generation;
+            const auto cpu_pages=mapping.cpu_upload_ranges;
+            for(const auto& [begin,end]:cpu_pages){
+                Upload(mapping,begin,end-begin,cpu+begin);
+                Diagnostics::Count("buffer-snapshot.cpu-store-upload.bytes",end-begin);
+            }
+            // A physical-alias callback can report another actual CPU
+            // store while Upload reads protected memory. Revisit the
+            // marker set before publishing a prepared GPU view.
+            if(generation==mapping.cpu_upload_generation)mapping.cpu_upload_ranges.clear();
+        }
+    }
+    if(!mapping.gpu_owned&&!mapping.cpu_watched&&!cpu_proven_unchanged){
+        if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_partial_proof&&
+           mapping.cpu_snapshot.size()==mapping.size){
+            // Only holes lost their protection. Protect them again BEFORE
+            // looking at data, then compare/upload those pages alone.
+            const auto dirty_pages=mapping.cpu_dirty_ranges;
+            for(const auto& [begin,end]:dirty_pages){
+                Diagnostics::Count("buffer-snapshot.bytes",end-begin);
+                if(memcmp(mapping.cpu_snapshot.data()+begin,cpu+begin,size_t(end-begin)))
+                    Upload(mapping,begin,end-begin,cpu+begin);
+            }
+            Diagnostics::Count("buffer-snapshot.partial-proof");
+        }
+        // Reentrant reconciliation can invalidate the partial proof while
+        // Upload reads memory. In that case rescan the complete snapshot.
+        if(!protected_compare||!mapping.cpu_watch_pending||!mapping.cpu_partial_proof||
+           mapping.cpu_snapshot.size()!=mapping.size){
+        Diagnostics::Count("buffer-snapshot.bytes",mapping.size);
+        const bool unchanged=mapping.cpu_snapshot.size()==mapping.size&&
+            memcmp(mapping.cpu_snapshot.data(),cpu,size_t(mapping.size))==0;
+        Diagnostics::Count(unchanged?"buffer-snapshot.unchanged":"buffer-snapshot.changed");
+        if(!unchanged){
+            Diagnostics::Count("buffer-content.changed");
+            diagnostic.Stage("snapshot-upload");
+            if(!fresh&&mapping.cpu_snapshot.size()==mapping.size){
+                constexpr u64 block=4096;
+                for(u64 offset=0;offset<mapping.size;){
+                    const auto bytes=std::min(block,mapping.size-offset);
+                    if(memcmp(mapping.cpu_snapshot.data()+offset,cpu+offset,size_t(bytes))==0){offset+=bytes;continue;}
+                    const auto first=offset;offset+=bytes;
+                    while(offset<mapping.size){
+                        const auto next=std::min(block,mapping.size-offset);
+                        if(memcmp(mapping.cpu_snapshot.data()+offset,cpu+offset,size_t(next))==0)break;
+                        offset+=next;
+                    }
+                    Upload(mapping,first,offset-first,cpu+first);
+                }
+            }else{
+                Upload(mapping,0,mapping.size,cpu);
+            }
+        }
+        }
+    }else if(cpu_proven_unchanged)Diagnostics::Count("buffer-snapshot.watch-hit");
+    if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_snapshot.size()==mapping.size){
+        mapping.cpu_watch_pending=false;mapping.cpu_watched=true;
+        mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();
+        Diagnostics::Count("buffer-watch.protected-compare");
+        Diagnostics::Count("buffer-watch.establish-compare-avoided.bytes",mapping.size);
+    }
+    // A read-only use of a preceding GPU result must retain dirty ownership.
+    diagnostic.Stage("ownership-and-transition");
+    if(written&&mapping.cpu_watched&&!mapping.gpu_owned){
+        if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
+            mapping.cpu_watched=false;mapping.gpu_owned=true;Diagnostics::Count("buffer-watch.upgraded");
+        }else{ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");}
+    }
+    if(mapping.cpu_watch_pending)ReleaseCpuBufferWatches(base,mapping.size);
+    if(written){if(!mapping.gpu_owned&&own_buffer_){
+        mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
+        Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
+    }
+        if(known_writes){
+            for(const auto& write:*known_writes)if(write.address>=mapping.base&&write.address+write.size<=mapping.base+mapping.size)
+                MarkDirty(mapping,true,write.address-mapping.base,write.size);
+        }else for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
+            request.address+request.size<=mapping.base+mapping.size){const auto write=request.WriteRange();
+            MarkDirty(mapping,true,write.address-mapping.base,write.size);}}
+    else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
+    mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    proof_published=true;
 }
 std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::span<const ShaderBufferRequest> requests,
     std::optional<std::span<const BufferWrite>> known_writes) {
@@ -821,129 +955,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         bool active=false,written=false,uav=false;for(const auto& r:requests)if(r.address>=base&&r.address+r.size<=base+mapping.size){active=true;written|=r.written;uav|=r.unordered_access;}
         if(!active)continue;
         const bool fresh=std::find(created.begin(),created.end(),base)!=created.end();
-        diagnostic.Stage("backing-validation");
-        diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
-            (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
-        ValidateGpuBacking(base,mapping.size,written);
-        bool cpu_proven_unchanged=mapping.cpu_watched;
-        if(written&&mapping.cpu_watched){
-            if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
-                mapping.cpu_watched=false;mapping.gpu_owned=true;
-                Diagnostics::Count("buffer-watch.upgraded");
-            }else{
-                // No proof survives a release of protection. Use the snapshot
-                // fallback after a rejected or unavailable atomic transfer.
-                ReleaseCpuBufferWatches(base,mapping.size);cpu_proven_unchanged=false;
-                Diagnostics::Count("buffer-watch.transfer-fallback");
-            }
-        }
-        const auto* cpu=reinterpret_cast<const std::byte*>(base);
-        // For a read-only binding, establish protection before comparing or
-        // uploading. CPU writers then fault until this execution lock is
-        // released, so a second whole-buffer comparison is unnecessary.
-        // Pending protection is deliberately separate from a published proof:
-        // reentrant alias reconciliation must be able to invalidate it, and
-        // neither a nested binding nor an exception may reuse unfinished data.
-        const auto& compare_watch=mapping.cpu_partial_proof&&rewatch_buffer_?rewatch_buffer_:watch_buffer_;
-        const bool protected_compare=!mapping.gpu_owned&&!mapping.cpu_watched&&
-            compare_watch&&compare_watch(base,mapping.size);
-        if(protected_compare)mapping.cpu_watch_pending=true;
-        bool proof_published=false;
-        SCOPE_EXIT {
-            if(protected_compare&&!proof_published&&(mapping.cpu_watch_pending||mapping.cpu_watched)){
-                ReleaseCpuBufferWatches(base,mapping.size);
-            }
-        };
-        diagnostic.Stage("snapshot-compare");
-        if(!mapping.gpu_owned&&!mapping.cpu_upload_ranges.empty()){
-            // Original CPU dirty tracking uploads whole touched pages. The
-            // GPU-only formatted version is not a CPU equality proof; a
-            // same-value store must restore its CPU page without replacing
-            // untouched GPU-only pages. Keep markers if an upload throws.
-            while(!mapping.cpu_upload_ranges.empty()){
-                const auto generation=mapping.cpu_upload_generation;
-                const auto cpu_pages=mapping.cpu_upload_ranges;
-                for(const auto& [begin,end]:cpu_pages){
-                    Upload(mapping,begin,end-begin,cpu+begin);
-                    Diagnostics::Count("buffer-snapshot.cpu-store-upload.bytes",end-begin);
-                }
-                // A physical-alias callback can report another actual CPU
-                // store while Upload reads protected memory. Revisit the
-                // marker set before publishing a prepared GPU view.
-                if(generation==mapping.cpu_upload_generation)mapping.cpu_upload_ranges.clear();
-            }
-        }
-        if(!mapping.gpu_owned&&!mapping.cpu_watched&&!cpu_proven_unchanged){
-            if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_partial_proof&&
-               mapping.cpu_snapshot.size()==mapping.size){
-                // Only holes lost their protection. Protect them again BEFORE
-                // looking at data, then compare/upload those pages alone.
-                const auto dirty_pages=mapping.cpu_dirty_ranges;
-                for(const auto& [begin,end]:dirty_pages){
-                    Diagnostics::Count("buffer-snapshot.bytes",end-begin);
-                    if(memcmp(mapping.cpu_snapshot.data()+begin,cpu+begin,size_t(end-begin)))
-                        Upload(mapping,begin,end-begin,cpu+begin);
-                }
-                Diagnostics::Count("buffer-snapshot.partial-proof");
-            }
-            // Reentrant reconciliation can invalidate the partial proof while
-            // Upload reads memory. In that case rescan the complete snapshot.
-            if(!protected_compare||!mapping.cpu_watch_pending||!mapping.cpu_partial_proof||
-               mapping.cpu_snapshot.size()!=mapping.size){
-            Diagnostics::Count("buffer-snapshot.bytes",mapping.size);
-            const bool unchanged=mapping.cpu_snapshot.size()==mapping.size&&
-                memcmp(mapping.cpu_snapshot.data(),cpu,size_t(mapping.size))==0;
-            Diagnostics::Count(unchanged?"buffer-snapshot.unchanged":"buffer-snapshot.changed");
-            if(!unchanged){
-                Diagnostics::Count("buffer-content.changed");
-                diagnostic.Stage("snapshot-upload");
-                if(!fresh&&mapping.cpu_snapshot.size()==mapping.size){
-                    constexpr u64 block=4096;
-                    for(u64 offset=0;offset<mapping.size;){
-                        const auto bytes=std::min(block,mapping.size-offset);
-                        if(memcmp(mapping.cpu_snapshot.data()+offset,cpu+offset,size_t(bytes))==0){offset+=bytes;continue;}
-                        const auto first=offset;offset+=bytes;
-                        while(offset<mapping.size){
-                            const auto next=std::min(block,mapping.size-offset);
-                            if(memcmp(mapping.cpu_snapshot.data()+offset,cpu+offset,size_t(next))==0)break;
-                            offset+=next;
-                        }
-                        Upload(mapping,first,offset-first,cpu+first);
-                    }
-                }else{
-                    Upload(mapping,0,mapping.size,cpu);
-                }
-            }
-            }
-        }else if(cpu_proven_unchanged)Diagnostics::Count("buffer-snapshot.watch-hit");
-        if(protected_compare&&mapping.cpu_watch_pending&&mapping.cpu_snapshot.size()==mapping.size){
-            mapping.cpu_watch_pending=false;mapping.cpu_watched=true;
-            mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();
-            Diagnostics::Count("buffer-watch.protected-compare");
-            Diagnostics::Count("buffer-watch.establish-compare-avoided.bytes",mapping.size);
-        }
-        // A read-only use of a preceding GPU result must retain dirty ownership.
-        diagnostic.Stage("ownership-and-transition");
-        if(written&&mapping.cpu_watched&&!mapping.gpu_owned){
-            if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
-                mapping.cpu_watched=false;mapping.gpu_owned=true;Diagnostics::Count("buffer-watch.upgraded");
-            }else{ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");}
-        }
-        if(mapping.cpu_watch_pending)ReleaseCpuBufferWatches(base,mapping.size);
-        if(written){if(!mapping.gpu_owned&&own_buffer_){
-            mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
-            Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
-        }
-            if(known_writes){
-                for(const auto& write:*known_writes)if(write.address>=mapping.base&&write.address+write.size<=mapping.base+mapping.size)
-                    MarkDirty(mapping,true,write.address-mapping.base,write.size);
-            }else for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
-                request.address+request.size<=mapping.base+mapping.size){const auto write=request.WriteRange();
-                MarkDirty(mapping,true,write.address-mapping.base,write.size);}}
-        else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
-        mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        proof_published=true;
+        PrepareBufferContents(mapping,written,uav,fresh,requests,known_writes,diagnostic);
     }
     diagnostic.Stage("emit-buffer-views");
     std::vector<ShaderBufferView> views;views.reserve(requests.size());
@@ -951,7 +963,34 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         auto& mapping=Find(request.address,request.size,false,cache_budget);
         views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation});
     }
+    // Only actual DEFAULT cache views become BDA-resident. The CPU-stream
+    // branch returns its own immutable upload views before reaching this path.
+    DmaMemory().ObserveResidentSharps(requests);
     return views;
+}
+void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest> requests,
+    std::span<const ShaderBufferView> views){
+    std::lock_guard lock(execution_mutex_);
+    if(requests.size()!=views.size())throw std::invalid_argument("DMA synchronization range/view count mismatch");
+    std::map<VAddr,bool> active;
+    for(size_t i=0;i<requests.size();++i){
+        const auto& request=requests[i];const auto& view=views[i];
+        if(view.lease)continue; // immutable CPU streams are not resident arenas
+        if(!request.size||request.address>UINT64_MAX-request.size)
+            throw std::invalid_argument("DMA synchronization range overflow");
+        auto it=mappings_.upper_bound(request.address);
+        if(it==mappings_.begin())throw std::logic_error("DMA synchronization lost a prepared mapping");--it;
+        const auto& mapping=it->second;
+        if(request.address-mapping.base>mapping.size||request.size>mapping.size-(request.address-mapping.base)||
+           view.resource.Get()!=mapping.gpu.handle.Get()||view.offset!=request.address-mapping.base||view.size!=request.size)
+            throw std::logic_error("DMA synchronization cannot replace an already bound resource");
+        active[mapping.base]|=request.unordered_access;
+    }
+    // Pinned SynchronizeDmaBuffers runs after BindTextures and only uploads
+    // CPU-dirty B. It does not format-sync I, declare writes or recreate arenas.
+    Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"post-stage-dma-content");
+    for(const auto& [base,uav]:active)
+        PrepareBufferContents(mappings_.at(base),false,uav,false,{},std::span<const BufferWrite>{},diagnostic);
 }
 Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes){
     std::lock_guard lock(execution_mutex_);

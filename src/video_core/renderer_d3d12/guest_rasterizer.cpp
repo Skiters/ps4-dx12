@@ -192,9 +192,16 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
 }
 bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
     if(image.gpu_owned)return true;
+    if(HasDmaReadOverlap(image.desc.address,image.layout.guest_bytes)){
+        // A bound ReadConst bank continues to read B while this attachment
+        // writes I. Do not replace B's authority with exclusive image pages.
+        if(!OwnIndependentImage(image))
+            throw std::runtime_error("DMA-visible attachment has no independent image ownership transfer");
+        return true;
+    }
     if(image.buffer_alias_version){
         if(!textures_.CanRetainBufferAlias(image.desc,image.layout))return false;
-        image.SetGpuOwned(true);return true;
+        image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;
     }
     // Ownership is a coherence rule, not a size optimization. A 640x360
     // color target is below 1 MiB; eagerly downloading it after every draw
@@ -221,7 +228,7 @@ bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     if(!owner||!textures_.CanRetainIndependentImage(owner->desc,owner->layout))return false;
     // Repeated image uses validate the physical owner, including a retained
     // read-only descriptor, without changing an overlapping buffer's guard.
-    if(image.buffer_alias_version){image.SetGpuOwned(true);return true;}
+    if(image.buffer_alias_version){image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;}
     if(image.gpu_owned&&!page_watch_->ChangeMode(image.desc.address,image.layout.guest_bytes,true))
         throw std::runtime_error("Cannot transfer independent image ownership to read-only protection");
     // The image equality witness ends, but protection stays in place. CPU
@@ -279,8 +286,12 @@ void GuestRasterizer::ReleaseIndependentImageWatches(GuestTextureCache::Entry& i
     ReleaseImageProtection(image);
 }
 void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
+    const auto retained=ImageProtectionRanges(&image);
+    ReleaseUnusedReadOnlyWatches(image.desc.address,image.layout.guest_bytes,retained);
+}
+std::vector<std::pair<VAddr,u64>> GuestRasterizer::ImageProtectionRanges(const GuestTextureCache::Entry* exclude)const{
     std::vector<std::pair<VAddr,u64>> retained;
-    for(const auto& other:textures_.Entries())if(other.get()!=&image&&(other->gpu_owned||other->cpu_watched)){
+    for(const auto& other:textures_.Entries())if(other.get()!=exclude&&(other->gpu_owned||other->cpu_watched)){
         const auto pages=GuestProtectionPages(other->desc.address,other->layout.guest_bytes);
         if(!pages)throw std::runtime_error("Invalid retained image protection envelope");
         auto cursor=pages->address;
@@ -291,7 +302,7 @@ void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
         if(cursor<pages->address+pages->size)retained.emplace_back(cursor,pages->address+pages->size-cursor);
         if(other->desc.stencil_address)retained.emplace_back(other->desc.stencil_address,other->stencil_layout.guest_bytes);
     }
-    ReleaseUnusedReadOnlyWatches(image.desc.address,image.layout.guest_bytes,retained);
+    return retained;
 }
 void GuestRasterizer::RememberImageBoundary(GuestTextureCache::Entry& image,VAddr address,u64 size){
     if(!image.gpu_owned||!image.buffer_alias_version)return;
@@ -457,7 +468,22 @@ void GuestRasterizer::WatchBufferImageVersions(VAddr address,u64 size){
     }
 }
 void GuestRasterizer::ReleaseBufferPageWatch(VAddr address,u64 size){
-    page_watch_->Untrack(address,size);WatchBufferImageVersions(address,size);
+    const auto retained=ImageProtectionRanges();
+    // Transfer a strong B guard to surviving I witnesses without restoring RW
+    // between Untrack and Track. Read-only partial proofs may already have holes.
+    if(!page_watch_->ChangeMode(address,size,true)){
+        const auto pages=GuestProtectionPages(address,size);
+        if(!pages)throw std::runtime_error("Invalid shared buffer protection retirement");
+        for(auto page=pages->address;page<pages->address+pages->size;){
+            MEMORY_BASIC_INFORMATION region{};
+            if(!VirtualQuery(reinterpret_cast<void*>(page),&region,sizeof(region))||region.Protect==PAGE_NOACCESS)
+                throw std::runtime_error("Cannot demote a shared GPU buffer protection range");
+            page=std::min(pages->address+pages->size,
+                u64(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+        }
+    }
+    ReleaseUnusedReadOnlyWatches(address,size,retained,address);
+    WatchBufferImageVersions(address,size);
 }
 void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
     ValidateIndependentImageWatches();
