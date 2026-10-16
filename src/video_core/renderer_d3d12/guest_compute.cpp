@@ -122,6 +122,28 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;};
     std::vector<ImagePending> images;
     std::vector<std::shared_ptr<void>> writable_block_parent_pins;
+    const auto compatible_block_prefixes=[](GuestTextureDesc a,const GuestTextureLayout& first,
+        GuestTextureDesc b,const GuestTextureLayout& second){
+        // Only use this after both views have proved the same BC parent. A
+        // longer transient UINT allocation can serve the shorter physical mip
+        // prefix without creating another independently writable cache entry.
+        if(first.block_extent!=1||second.block_extent!=1||
+           first.bytes_per_pixel!=second.bytes_per_pixel||
+           first.mips.size()!=a.levels||second.mips.size()!=b.levels)
+            return false;
+        const auto common_levels=std::min(a.levels,b.levels);
+        const auto& small=a.levels<=b.levels?first:second;
+        const auto& large=a.levels<=b.levels?second:first;
+        a.levels=b.levels=std::max(a.levels,b.levels);
+        if(!CompatibleGuestWritableStorage(a,b))return false;
+        if(small.guest_bytes>large.guest_bytes)return false;
+        for(UINT mip=0;mip<common_levels;++mip){
+            const auto& x=small.mips[mip];const auto& y=large.mips[mip];
+            if(x.pitch!=y.pitch||x.height!=y.height||x.offset!=y.offset||x.slice_bytes!=y.slice_bytes||
+               x.macro!=y.macro||x.thickness!=y.thickness)return false;
+        }
+        return true;
+    };
     struct SamplerPending {UINT reg;D3D12_SAMPLER_DESC desc;};std::vector<SamplerPending> samplers;
     auto temporary_lease=std::make_shared<TemporaryMemory>(rasterizer);
     auto& temporary=*temporary_lease;
@@ -261,7 +283,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             for(const auto& previous:images)if(sharp&&!previous.null_resource&&previous.desc.address<desc.address+layout.guest_bytes&&desc.address<previous.desc.address+previous.layout.guest_bytes){
                 const bool converted_views=(!previous.desc.writable||!desc.writable)&&
                     desc.data_format==9&&CompatibleGuestPackedStorage(previous.desc,desc);
-                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views)
+                const bool block_views=block_parent&&previous.desc.writable&&
+                    textures->FindWritableBlockParent(previous.desc,previous.layout)==block_parent&&
+                    compatible_block_prefixes(previous.desc,previous.layout,desc,layout);
+                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views)
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
                 if(previous.desc.writable!=desc.writable){
                     const auto previous_end=previous.desc.writable?previous.mip+previous.count:previous.desc.levels;
@@ -307,14 +332,21 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         requests.push_back(input);
     }
     const auto validate_writable_block_alias=[&](const ImagePending& image,const GuestTextureCache::Entry& parent){
-        // A selected UINT writer modifies one BC parent through a private
-        // transient image. Mixed resource domains need a separate contract.
-        if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||images.size()!=1||
-           stages.front().info->images.size()!=1||image.count!=1||image.mip!=image.desc.first_mip||image.sample_storage)
-            throw std::runtime_error("Writable BC block view requires one compute image without DMA or mixed views");
+        // All writable views of this parent must bind one shared transient
+        // resource. Readonly BC/mixed-domain feedback still needs a separate
+        // contract, even when it appears in a reflected-dead original slot.
+        if(!pipeline.IsCompute()||stages.size()!=1||uses_dma||
+           image.count!=1||image.mip!=image.desc.first_mip||image.sample_storage)
+            throw std::runtime_error("Writable BC block views require selected compute mips without DMA");
         const auto overlaps=[](VAddr a,u64 as,VAddr b,u64 bs){return as&&bs&&(a<=b?b-a<as:a-b<bs);};
         for(const auto& request:requests)if(overlaps(request.address,request.size,parent.desc.address,parent.layout.guest_bytes))
             throw std::runtime_error("Writable BC block view cannot overlap any buffer request across its full parent storage");
+        for(const auto& other:images)if(!other.null_resource&&
+            overlaps(other.desc.address,other.layout.guest_bytes,parent.desc.address,parent.layout.guest_bytes))
+            if(!other.desc.writable||other.count!=1||other.mip!=other.desc.first_mip||other.sample_storage||
+               textures->FindWritableBlockParent(other.desc,other.layout)!=&parent||
+               !compatible_block_prefixes(image.desc,image.layout,other.desc,other.layout))
+                throw std::runtime_error("Writable BC block views cannot mix parent storage with other image domains");
     };
     // Pin the authoritative full BC image before buffer preparation or logical
     // invalidation can retire an unrelated overlap or reserve cache storage.
@@ -699,7 +731,35 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // them first so the final authoritative cache backing is the resource
         // used by all compatible writable views during the guest operation.
         std::stable_partition(images.begin(),images.end(),[](const auto& image){return !image.desc.writable;});
-        for(const auto& image:images) {
+        struct WritableBlockGroup {
+            GuestTextureCache::Entry* parent;uint64_t parent_uid;size_t storage;
+            std::optional<size_t> alias;
+        };
+        std::vector<WritableBlockGroup> block_groups;
+        std::vector<std::optional<size_t>> image_block_group(images.size());
+        // Plan every group and pin every parent before any Upload can reserve
+        // memory. Descriptor order must not choose a smaller allocation or
+        // create separate copies whose commits overwrite one another.
+        for(size_t index=0;index<images.size();++index){const auto& image=images[index];
+            if(image.null_resource||!image.desc.writable)continue;
+            if(auto* parent=textures->FindWritableBlockParent(image.desc,image.layout)){
+                validate_writable_block_alias(image,*parent);
+                const auto group=std::ranges::find_if(block_groups,[parent](const auto& item){return item.parent==parent;});
+                if(group==block_groups.end()){
+                    image_block_group[index]=block_groups.size();
+                    block_groups.push_back({parent,parent->image_uid,index,{}});
+                    writable_block_parent_pins.push_back(textures->PinBinding(*parent));
+                }else{
+                    image_block_group[index]=size_t(group-block_groups.begin());
+                    if(!compatible_block_prefixes(images[group->storage].desc,images[group->storage].layout,
+                        image.desc,image.layout))
+                        throw std::runtime_error("Writable BC group has incompatible physical mip prefixes");
+                    if(image.desc.levels>images[group->storage].desc.levels)group->storage=index;
+                }
+            }
+        }
+        for(size_t image_index=0;image_index<images.size();++image_index) {
+            const auto& image=images[image_index];
             // Native null views match the guest null T# without reading address
             // zero or allocating/uploading fake guest backing. Reads return 0;
             // writes are discarded by D3D12 (also used by Mesa/TranslationLayer).
@@ -707,22 +767,26 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             null_entry.desc=image.desc;null_entry.layout=image.layout;
             GuestTextureCache::Entry* entry=image.null_resource?&null_entry:nullptr;
             bool writable_block_alias=false;
-            // Recheck after buffer/cache preparation: another source may have
-            // become authoritative since the early parent query above.
-            if(!entry&&image.desc.writable)
-                if(auto* parent=textures->FindWritableBlockParent(image.desc,image.layout)){
-                    validate_writable_block_alias(image,*parent);
-                    auto parent_pin=textures->PinBinding(*parent);
+            if(image_block_group[image_index]){
+                auto& group=block_groups[*image_block_group[image_index]];
+                if(textures->FindWritableBlockParent(image.desc,image.layout)!=group.parent||
+                   group.parent->image_uid!=group.parent_uid)
+                    throw std::runtime_error("Writable BC parent changed after group planning");
+                if(!group.alias){
                     rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
-                    auto alias=textures->BeginWritableBlockAlias(image.desc,rasterizer.RecordingList(),rasterizer.CompletedFence());
-                    if(!alias||!alias->image||alias->parent!=parent||alias->parent_uid!=parent->image_uid)
+                    auto alias=textures->BeginWritableBlockAlias(images[group.storage].desc,
+                        rasterizer.RecordingList(),rasterizer.CompletedFence());
+                    if(!alias||!alias->image||alias->parent!=group.parent||alias->parent_uid!=group.parent_uid)
                         throw std::runtime_error("Writable BC block parent changed before transient image binding");
-                    entry=alias->image;writable_block_alias=true;
-                    if(entry->gpu_owned||entry->buffer_alias_version||!entry->logical_dirty)
-                        throw std::runtime_error("Writable BC block transient acquired independent authority before dispatch");
-                    bindings.RetainAllocation(alias->image_pin);uploaded.push_back(entry);
+                    group.alias=alias_writers.size();
+                    bindings.RetainAllocation(alias->image_pin);uploaded.push_back(alias->image);
                     alias_writers.push_back(std::move(*alias));
                 }
+                entry=alias_writers[*group.alias].image;writable_block_alias=true;
+                if(entry->gpu_owned||entry->buffer_alias_version||!entry->logical_dirty)
+                    throw std::runtime_error("Writable BC block transient acquired independent authority before dispatch");
+            }else if(!entry&&image.desc.writable&&textures->FindWritableBlockParent(image.desc,image.layout))
+                throw std::runtime_error("Writable BC parent appeared after group planning");
             bool separate_input=image.buffer_writer_alias;
             for(const auto& candidate:images)if(candidate.buffer_writer_alias&&
                 CompatibleGuestShaderStorage(candidate.desc,image.desc))separate_input=true;
@@ -761,14 +825,16 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto last_mip=image.desc.writable?image.mip+image.count:image.desc.levels;
                 for(UINT layer=image.desc.first_layer;layer<image.desc.first_layer+image.desc.view_layers;++layer)
                     for(UINT mip=image.mip;mip<last_mip;++mip)
-                        entry->texture.Transition(rasterizer.RecordingList(),state,mip+layer*image.desc.levels);
+                        entry->texture.Transition(rasterizer.RecordingList(),state,mip+layer*entry->desc.levels);
                 }
             }
             for(UINT i=0;i<image.count;++i)for(const auto& b:pipeline.Layout().Bindings()) {
                 const auto reg=image.reg+i;if(b.space!=0||reg<b.reg||reg-b.reg>=b.count)continue;
                 if(image.desc.writable&&b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV) {
                     const auto mip=image.sample_storage?0:image.mip+i;
-                    auto view=entry->Uav(image.desc,mip);
+                    auto writable_view=image.desc;
+                    if(writable_block_alias)writable_view.levels=entry->desc.levels;
+                    auto view=entry->Uav(writable_view,mip);
                     if(image.array&&image.desc.layers==1){
                         if(image.desc.one_dimensional){view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={mip,0,1};}
                         else{view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={mip,0,1,0};}

@@ -6,6 +6,7 @@
 #include "gcn_bc_block_expansion_fixture.h"
 #include "gcn_bc_mip_expansion_fixture.h"
 #include "gcn_bc_partial_expansion_fixture.h"
+#include "gcn_bc_writable_alias_fixture.h"
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include <algorithm>
@@ -546,5 +547,6 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     RunBcBlockExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunBcMipExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunBcPartialExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
+    RunBcWritableAliasGcnFixture(rasterizer, gpu, profile, memory, backing, base);
 }
 } // namespace NativeDX12

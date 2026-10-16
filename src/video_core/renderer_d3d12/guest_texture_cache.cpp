@@ -1407,9 +1407,13 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
 }
 GuestTextureCache::Entry* GuestTextureCache::FindWritableBlockParent(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
-    if(!desc.writable||desc.first_layer||desc.view_layers!=desc.layers||
-       !CanRetainBufferAlias(desc,layout))return nullptr;
-    auto view=desc;view.writable=false;
+    if(!desc.writable||desc.first_layer>=desc.layers||!desc.view_layers||
+       desc.view_layers>desc.layers-desc.first_layer)return nullptr;
+    // A layer subset is a view of full-layer transient storage, not another
+    // owner of a shortened guest range. Retain and transfer all original layers.
+    auto storage=desc;storage.first_layer=0;storage.view_layers=storage.layers;
+    if(!CanRetainBufferAlias(storage,layout))return nullptr;
+    auto view=storage;view.writable=false;
     Entry* parent{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto it=first;it!=last;++it){auto* candidate=it->second;
         if(!candidate->gpu_owned||!candidate->buffer_alias_version||candidate->logical_dirty||
@@ -1439,7 +1443,8 @@ std::optional<GuestTextureCache::WritableBlockAlias> GuestTextureCache::BeginWri
     WritableBlockAlias alias;alias.parent=parent;alias.parent_uid=parent->image_uid;
     alias.parent_pin=PinBinding(*parent);
     auto snapshot=read_independent_(*parent,desc.address,layout.guest_bytes);
-    auto& child=Upload(desc,{},list,completed,{},true,&snapshot,true);
+    auto storage=desc;storage.first_layer=0;storage.view_layers=storage.layers;
+    auto& child=Upload(storage,{},list,completed,{},true,&snapshot,true);
     // Snapshot Upload cannot reuse an owned or binding-pinned image. Do not
     // convert any preexisting ownership state into a detached child by clearing it.
     if(child.gpu_owned||child.buffer_alias_version||child.cpu_watched)

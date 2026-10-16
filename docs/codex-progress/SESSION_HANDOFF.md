@@ -1,34 +1,42 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
-## Active writable BC selected-mip continuation — 2026-10-16
+## Active grouped writable BC views - 2026-10-16
 
-This section supersedes earlier current/next instructions. Goal remains active; all129
-registry groups remain partial/open. Source only: no build, compiler, tests, GPU, game,
-XInput or desktop execution. Preview24 is unchanged; no new runtime or FPS evidence.
+This section supersedes earlier current/next instructions. Full-port goal remains active;
+all129 registry groups remain partial/open. Source only: no configure, build, compiler,
+tests, GPU, game, XInput or desktop execution. Preview24 remains unchanged; no new FPS.
 
-The current production block adds a bounded writable UINT view over a native BC parent.
-GuestCompute pins the parent before host-memory invalidation, admits one compute image,
-one selected mip and full layers, and rejects DMA, mixed images and any overlapping
-buffer. GuestTextureCache initializes a private dirty/nonowner child from current parent I;
-after dispatch it retile-merges the prefix into a full parent-I seed, acquires replacement
-ownership before retiring the old parent, and publishes transfer leases at submission.
-Untouched mips/padding retain the parent seed. This is a source-reviewed WIP, not full
-writable alias parity. Multiple children, mixed views, subsets and runtime failure paths
-remain open. Independent review found no defect within the bounded path; it is uncompiled.
+Base4deb8f6 implemented the parent-dependent writable UINT selected-mip transaction.
+The current production continuation groups all eligible writable views of each BC parent
+into ONE transient UINT texture, chooses the largest proved physical mip prefix before
+any Upload, retains all parent pins, and commits each parent once after dispatch. Original
+selected mips and layer ranges remain in each UAV. Array state indices use the allocation's
+actual mip count, preventing shorter-view stride errors. Layer-subset views now initialize
+and retain a full-layer child; untouched layers/mips/padding keep the parent-I seed.
 
-Evidence: F:/PS4Dev/handoff/bc-writable-view-20261016/{REFERENCE_CONTRACT.md,
-IMPLEMENTATION_REVIEW.md,compute/SOURCE_RATIONALE.md,checkpoint/}. The checkpoint directory
-preserves exact source snapshots and the original22 staged deletions. Prior scheduler
-commits6f55ea1/0162b5c retain submission leases and drain ready callbacks despite exceptions;
-their authored queue fixture is unrun. The earlier repaired-index incident remains recorded
-in scheduler-batch-20261016/index-incident/RECOVERY.json; do not repeat recovery blindly.
+Only one compute stage, selected one-mip UINT views and compatible physical prefixes are
+admitted. Unrelated disjoint images and multiple disjoint parent groups may coexist.
+Overlapping buffers, DMA and mixed readonly/image domains over a parent remain rejected.
+This is source-reviewed WIP, not complete alias parity. Native descriptors, PageWatch,
+shader cross-UAV memory ordering, failures and game/performance behavior remain unverified.
 
-Next source task: author the focused BC-parent -> writable selected UINT mip -> next BC
-and UINT readers control in the existing ordered GCN fixture. Verify encoded block words,
-decoded texels, untouched mips and whole physical padding against an independent oracle;
-include rejection controls for mixed views/overlapping buffers. Do not execute it under the
-current gate. Then continue grouped multi-view ownership/coherence; do not simply widen
-the current admission guard. Preserve broad inherited residual edits and staged deletions.
+Five GCN scenarios are authored in gcn_bc_writable_alias_fixture.h and wired into the
+existing ordered formatted mode: BC1/BC3 single nonzero mip, both different-prefix slot
+orders (one with separate array-layer subsets), and duplicate same-mip storeA/loadB/storeB.
+Known compressed words, decoded samples, full physical padding, independent I/B/P witnesses
+and64KiB dirty-union oracles are prepared. None is compiled or run. Negative rejection
+controls are not authored. Production and fixture review/evidence are saved under
+F:/PS4Dev/handoff/bc-writable-groups-20261016/{REVIEW.md,fixtures/,checkpoint/}.
+The old scheduler lease/drain commits6f55ea1/0162b5c and their unrun fixture remain intact.
+
+Next source task: adapt mixed readonly UINT views of the SAME parent when selected mip/
+layer ranges are disjoint from every writable view. Reuse MatchesReadonlyBlockMipPrefix's
+private nonowner source and the grouped writer; prove parent retention during readonly
+Upload, early validation and original view bounds before relaxing admission. Overlapping
+SRV/UAV feedback requires shader access unification; never admit it by merely removing
+checks. Keep BC-format feedback separate. Do not rerun prior audits or any execution under
+the current gate. Preserve broad inherited residual edits and22 staged deletions; recovery
+archives are for a separate checkout of their manifest.head, never overlay this tree.
 
 ## Current independent BC block expansion - 2026-10-16
 

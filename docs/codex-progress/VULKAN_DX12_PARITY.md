@@ -1,13 +1,15 @@
 # Vulkan / native D3D12 parity audit
 
-## Active writable BC selected-mip delta — 2026-10-16
+## Active grouped writable BC view delta - 2026-10-16
 
-Source-reviewed production WIP: one writable UINT compute view of one native BC parent,
-selected mip/full layers. Parent-I initialization and parent-I-seeded merge preserve
-untouched storage; child stays nonowner; replacement acquires before parent retirement.
-Mixed images, overlapping buffers, DMA, multiple children and partial layers are rejected.
-No build/runtime validation; no complete group or FPS claim. All129 groups remain partial.
-Exact continuation and evidence are in the active SESSION_HANDOFF.md section.
+Production WIP now groups selected writable UINT mips per native BC parent into one
+maximum-prefix/full-layer child and one parent replacement. UAVs retain their selected mip
+and layer subsets; array transitions use the child's actual mip count. This extends
+single-view handling to multiple/duplicate writable slots and layer subsets. Multiple
+disjoint parents/unrelated images are allowed; mixed overlapping readonly domains, buffers,
+DMA and broader feedback remain open. Five meaningful GCN cases are authored/unrun.
+Source review only: no build, runtime validation, complete group or new FPS evidence.
+All129 groups remain partial/open. Exact continuation: active SESSION_HANDOFF.md section.
 
 ## Current BC block expansion coverage - 2026-10-16
 
