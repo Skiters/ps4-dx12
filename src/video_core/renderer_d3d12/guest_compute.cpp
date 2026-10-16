@@ -979,10 +979,20 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Image/attachment uploads below may Finish and reset the constant arena.
     // Allocate only once their ownership resolution has ended, immediately
     // before the command binds its descriptors and executes on the GPU.
+    std::function<void()> dma_refresh;
+    if(dma){
+        const auto read_requests=std::span(requests).subspan(ordinary_count,dma_count);
+        const auto read_views=std::span(views).subspan(ordinary_count,dma_count);
+        dma_refresh=[&rasterizer,
+            ranges=std::vector<Rasterizer::ShaderBufferRequest>(read_requests.begin(),read_requests.end()),
+            selected=std::vector<Rasterizer::ShaderBufferView>(read_views.begin(),read_views.end())]{
+            rasterizer.SynchronizePreparedDmaBuffers(ranges,selected);
+        };
+    }
     bindings.BeforeBind([&rasterizer,push,buffer_limits,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
         buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end()),
-        buffer_views=views,dma](ResourceBindings& table){
-        if(dma)rasterizer.SynchronizePreparedDmaBuffers(buffer_requests,buffer_views);
+        dma_refresh=std::move(dma_refresh)](ResourceBindings& table){
+        if(dma_refresh)dma_refresh();
         // Attachment uploads may Finish after buffer preparation. Mark actual
         // shader writes at bind time so such retirement cannot clear this draw.
         rasterizer.MarkShaderBufferWrites(buffer_requests);
