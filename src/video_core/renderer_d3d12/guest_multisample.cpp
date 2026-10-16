@@ -248,14 +248,22 @@ void GuestMultisample::Lease::Record(ID3D12GraphicsCommandList* list,Resource& s
     if(upload){
         if(buffer.state!=D3D12_RESOURCE_STATE_GENERIC_READ)buffer.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         source_texture.Transition(list,depth?D3D12_RESOURCE_STATE_DEPTH_WRITE:D3D12_RESOURCE_STATE_RENDER_TARGET);
-        // This host transfer replaces every sample of the selected color
-        // slice. Placed RTs require initialization before a shader draw;
-        // discard only that fully replaced subresource, never another layer
-        // or a depth/stencil plane and never guest fast-clear metadata.
+        // Placed attachments require initialization before a shader draw.
+        // This transfer replaces every sample of one plane in one slice.
+        // Initialize only that fully replaced plane; a partial upload must
+        // preserve the already initialized pixels outside its viewport.
         const auto desc=source_texture.handle->GetDesc();
-        if(!depth&&desc.Width==constants[0]&&desc.Height==constants[1]){
-            D3D12_DISCARD_REGION region{0,nullptr,layer*UINT(desc.MipLevels),1};
-            DX12_API_CALL(list->DiscardResource(source_texture.handle.Get(),&region));
+        if(desc.Width==constants[0]&&desc.Height==constants[1]){
+            if(depth&&desc.MipLevels==1){
+                // The DSV covers only this layer. Clearing one flag preserves
+                // the other plane, including depth when stencil uploads next.
+                // This is host initialization, not guest fast-clear metadata.
+                const auto flags=stencil?D3D12_CLEAR_FLAG_STENCIL:D3D12_CLEAR_FLAG_DEPTH;
+                DX12_API_CALL(list->ClearDepthStencilView(attachment->Cpu(0),flags,1.0f,0,0,nullptr));
+            }else if(!depth){
+                D3D12_DISCARD_REGION region{0,nullptr,layer*UINT(desc.MipLevels),1};
+                DX12_API_CALL(list->DiscardResource(source_texture.handle.Get(),&region));
+            }
         }
         DX12_API_CALL(list->SetDescriptorHeaps(1,heaps));
         DX12_API_CALL(list->SetGraphicsRootSignature(program->root.Get()));
