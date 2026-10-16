@@ -111,6 +111,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     struct Pending {
         UINT reg;bool uav;u32 push_index,byte_adjust;bool formatted_read{};u64 original_bytes{};
         bool guest_read{};std::optional<size_t> stream_view;
+        u32 access_alignment{1};
     };
     std::vector<Pending> pending;
     struct DmaPending {UINT reg;bool fault;};std::vector<DmaPending> dma_pending;
@@ -244,10 +245,13 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             covered.emplace(reg,0);continue;
         default:throw std::runtime_error("Native guest direct-memory-addressing buffer is not connected");
         }
+        const u32 access_alignment=True(source.used_types&(Shader::IR::Type::U64|Shader::IR::Type::F64))?8:
+            True(source.used_types&(Shader::IR::Type::U32|Shader::IR::Type::F32))?4:
+            True(source.used_types&Shader::IR::Type::U16)?2:1;
         requests.push_back({address,size,source.is_written,uav,false,u8(adjust),original_bytes});
         pending.push_back({reg,uav,start.buffer+u32(index),adjust,
             source.buffer_type==Shader::BufferType::Guest&&source.is_formatted&&!source.is_written,original_bytes,
-            source.buffer_type==Shader::BufferType::Guest&&!source.is_written,{}});covered.emplace(reg,0);
+            source.buffer_type==Shader::BufferType::Guest&&!source.is_written,{},access_alignment});covered.emplace(reg,0);
     }
     u64 image_reg=u64(start.unified)+info.buffers.size();
     for(const auto& source:info.images) {
@@ -495,7 +499,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     if(!buffer.unordered_access||!original.size)return false;
                     if(!buffer.written)return buffer.address==desc.address&&
                         original.address==buffer.address&&original.size==buffer.size;
-                    if((original.address!=buffer.address||original.size!=buffer.size)&&!exact_shader_bounds)return false;
+                    if(original.address!=buffer.address||original.size!=buffer.size){
+                        const auto index=size_t(&buffer-requests.data());
+                        // The pinned emitter independently floors base/address
+                        // for each scalar width. Do not admit a new unaligned
+                        // wider alias whose stores precede its logical dirty range.
+                        if(!exact_shader_bounds||index>=pending.size()||
+                           (original.address&(pending[index].access_alignment-1)))return false;
+                    }
                     if(buffer.address==desc.address&&original.address==buffer.address)return true;
                     // The DWORD envelope shares B; native shader bounds retain
                     // the exact byte/halfword sharp, and narrow-store lowering
