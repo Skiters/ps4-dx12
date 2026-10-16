@@ -5,9 +5,15 @@
 namespace NativeDX12 {
 namespace {
 constexpr u64 HeapAlignment=64ull*1024;
+constexpr u64 MsaaHeapAlignment=4ull*1024*1024;
 u64 AlignHeap(u64 value){
     if(value>UINT64_MAX-(HeapAlignment-1))throw std::overflow_error("D3D12 heap size overflow");
     return (value+HeapAlignment-1)&~(HeapAlignment-1);
+}
+u64 AlignTexture(u64 value,u64 alignment){
+    if(!alignment||(alignment&(alignment-1)))throw std::invalid_argument("invalid D3D12 texture alignment");
+    if(value>UINT64_MAX-(alignment-1))throw std::overflow_error("D3D12 texture allocation size overflow");
+    return (value+alignment-1)&~(alignment-1);
 }
 }
 
@@ -106,19 +112,25 @@ PlacedTextureAllocator::PlacedTextureAllocator(ID3D12Device* device,u64 page_siz
 }
 void PlacedTextureAllocator::SetBudget(u64 bytes){
     std::lock_guard lock(mutex_);
-    budget_=std::max(AlignHeap(bytes),page_size_);
+    // Existing leases may exceed a reduced limit; future pages must honor it.
+    budget_=AlignHeap(bytes);
 }
 std::shared_ptr<PlacedTextureAllocator::Page> PlacedTextureAllocator::CreatePage(
     u64 minimum,u64 alignment,D3D12_HEAP_FLAGS flags){
-    const auto bytes=std::max(page_size_,(minimum+alignment-1)&~(alignment-1));
+    if(alignment!=HeapAlignment&&alignment!=MsaaHeapAlignment)
+        throw std::invalid_argument("invalid D3D12 texture heap alignment");
+    const auto minimum_bytes=AlignTexture(minimum,alignment);
     for(auto it=pages_.begin();it!=pages_.end();){
         if(it->use_count()==1){committed_-=(*it)->size;it=pages_.erase(it);}
         else ++it;
     }
-    if(bytes>budget_||committed_>budget_-bytes)throw std::runtime_error("D3D12 texture arena residency budget exhausted");
+    const auto available=committed_<budget_?budget_-committed_:0;
+    const auto normal_bytes=std::min(page_size_,available)&~(alignment-1);
+    const auto bytes=std::max(normal_bytes,minimum_bytes);
+    if(bytes>available)throw TextureBudgetExhausted();
     D3D12_HEAP_DESC description{};description.SizeInBytes=bytes;description.Alignment=alignment;
     description.Properties.Type=D3D12_HEAP_TYPE_DEFAULT;description.Flags=flags;
-    auto page=std::make_shared<Page>();page->size=bytes;page->flags=flags;page->free_ranges.emplace(0,bytes);
+    auto page=std::make_shared<Page>();page->size=bytes;page->heap_alignment=alignment;page->flags=flags;page->free_ranges.emplace(0,bytes);
     Check(DX12_API_CALL(device_->CreateHeap(&description,IID_PPV_ARGS(&page->heap))));
     committed_+=bytes;pages_.push_back(page);return page;
 }
@@ -127,16 +139,20 @@ Resource PlacedTextureAllocator::Allocate(const D3D12_RESOURCE_DESC& description
     if(description.Dimension==D3D12_RESOURCE_DIMENSION_BUFFER||!description.Width)
         throw std::invalid_argument("invalid placed texture description");
     const auto info=DX12_API_CALL(device_->GetResourceAllocationInfo(0,1,&description));
-    if(info.SizeInBytes==UINT64_MAX||!info.Alignment)throw std::runtime_error("invalid D3D12 texture allocation info");
-    const auto alignment=info.Alignment,bytes=(info.SizeInBytes+alignment-1)&~(alignment-1);
+    if(!info.SizeInBytes||info.SizeInBytes==UINT64_MAX)throw std::runtime_error("invalid D3D12 texture allocation info");
+    const auto alignment=info.Alignment,bytes=AlignTexture(info.SizeInBytes,alignment);
+    // Even a small MSAA resource with 64-KiB placement needs a 4-MiB heap.
+    const auto heap_alignment=description.SampleDesc.Count>1?MsaaHeapAlignment:HeapAlignment;
     const auto flags=(description.Flags&(D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET|D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))?
         D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES:D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES;
     std::lock_guard allocator_lock(mutex_);std::shared_ptr<Page> selected;u64 selected_offset{};
-    for(auto& page:pages_)if(page->flags==flags){std::lock_guard page_lock(page->mutex);
-        for(const auto& [offset,available]:page->free_ranges){const auto aligned=(offset+alignment-1)&~(alignment-1);
+    for(auto& page:pages_)if(page->flags==flags&&page->heap_alignment>=heap_alignment){std::lock_guard page_lock(page->mutex);
+        for(const auto& [offset,available]:page->free_ranges){
+            if(offset>UINT64_MAX-(alignment-1))continue;
+            const auto aligned=AlignTexture(offset,alignment);
             if(aligned>=offset&&aligned-offset<=available&&bytes<=available-(aligned-offset)){selected=page;selected_offset=aligned;break;}}
         if(selected)break;}
-    if(!selected)selected=CreatePage(bytes,alignment,flags);
+    if(!selected)selected=CreatePage(bytes,heap_alignment,flags);
     {std::lock_guard page_lock(selected->mutex);auto containing=selected->free_ranges.upper_bound(selected_offset);
         if(containing==selected->free_ranges.begin())throw std::logic_error("texture arena range missing");--containing;
         const auto begin=containing->first,available=containing->second,end=begin+available;selected->free_ranges.erase(containing);

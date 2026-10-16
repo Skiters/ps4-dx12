@@ -176,12 +176,12 @@ void GuestTextureCache::ClearRawStorageImage(Entry& entry,const float (&color)[4
     // This internal native clear target supports 1D/3D RTVs without changing
     // the guest cache's ordinary attachment geometry restrictions.
     temporary.desc.render_target=srgb;
-    temporary.texture=texture_allocator_.Allocate(source,D3D12_RESOURCE_STATE_COMMON);
+    temporary.texture=AllocateTexture(&entry,source,D3D12_RESOURCE_STATE_COMMON);
     std::shared_ptr<GuestStorageImageClearLease> lease;
     std::shared_ptr<GuestImageClearLease> render_lease;
     if(srgb)render_lease=std::make_shared<GuestImageClearLease>(device_.Get(),temporary);
     else lease=std::make_shared<GuestStorageImageClearLease>(device_.Get(),temporary);
-    auto output=broadcast?texture_allocator_.Allocate(destination,D3D12_RESOURCE_STATE_COMMON):entry.texture;
+    auto output=broadcast?AllocateTexture(&entry,destination,D3D12_RESOURCE_STATE_COMMON):entry.texture;
     auto transfer=std::make_shared<GuestPackedTransfer>(device_.Get(),temporary.texture,output,
         desc,layout,destination_desc,destination_layout,*tiler_,*multisample_,Resource{},Resource{});
     if(broadcast){
@@ -275,13 +275,13 @@ bool GuestTextureCache::ConvertPackedBacking(Entry& entry,const GuestTextureDesc
        resident>resident_budget_-target_bytes-scratch_bytes-readback_reserve)return false;
     if(!tiler_)tiler_=std::make_shared<GuestTiler>(device_.Get());
     if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
-    auto destination=texture_allocator_.Allocate(target,D3D12_RESOURCE_STATE_COMMON);
+    auto destination=AllocateTexture(&entry,target,D3D12_RESOURCE_STATE_COMMON);
     auto transfer=std::make_shared<GuestPackedTransfer>(device_.Get(),entry.texture,std::move(destination),
         entry.desc,entry.layout,desc,layout,*tiler_,*multisample_,
         inherited?entry.expanded_guest_backing:Resource{},inherited?entry.expanded_written_mask:Resource{});
     std::vector<Resource> storage;Resource storage_linear;
     if(desc.writable&&desc.samples>1){storage.reserve(desc.samples);
-        for(UINT sample=0;sample<desc.samples;++sample)storage.push_back(texture_allocator_.Allocate(storage_desc,D3D12_RESOURCE_STATE_COMMON));
+        for(UINT sample=0;sample<desc.samples;++sample)storage.push_back(AllocateTexture(&entry,storage_desc,D3D12_RESOURCE_STATE_COMMON));
         storage_linear=GuestTiler::Scratch(device_.Get(),storage_linear_bytes);
     }
     uint64_t retired_pool_bytes{};

@@ -941,7 +941,7 @@ void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12Graphi
            entry.allocation_bytes>UINT64_MAX-allocation.SizeInBytes)
             throw std::runtime_error("Invalid native sample backing allocation size");
         ReserveMemory(allocation.SizeInBytes,collected_fence_,&entry);
-        destination=texture_allocator_.Allocate(description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats);
+        destination=AllocateTexture(&entry,description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats);
         entry.allocation_bytes+=allocation.SizeInBytes;
     }
     if(copy){
@@ -993,7 +993,7 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry){
     // existing StorageLease read pass initializes every sample before use.
     std::vector<Resource> samples;samples.reserve(entry.desc.samples);
     for(UINT sample=0;sample<entry.desc.samples;++sample)
-        samples.push_back(texture_allocator_.Allocate(description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats));
+        samples.push_back(AllocateTexture(&entry,description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats));
     auto linear=GuestTiler::Scratch(device_.Get(),linear_bytes);
     entry.storage_samples=std::move(samples);entry.storage_linear=std::move(linear);
     entry.allocation_bytes+=bytes;entry.storage_retired=false;
@@ -1117,55 +1117,109 @@ uint64_t GuestTextureCache::ResidentBytes()const{
     }
     return total;
 }
+std::shared_ptr<void> GuestTextureCache::PinPressureEntry(Entry* entry){
+    if(!entry)return {};
+    const auto owner=image_uids_.find(entry->image_uid);
+    // A new entry can already own local resources before it is indexed. It is
+    // not an eviction candidate; registered callers need a transitive pin.
+    if(owner==image_uids_.end())return {};
+    if(owner->second!=entry)throw std::logic_error("Pressure preserve identity mismatch");
+    return PinBinding(*entry);
+}
+uint64_t GuestTextureCache::ReleaseRetiredStorage(Entry& entry,uint64_t completed){
+    if(entry.BindingPinned()||entry.pending||entry.fence>completed||!entry.tiler_leases.empty()||!entry.multisample_leases.empty()||
+       (entry.readback_pool&&entry.readback_pool.use_count()!=1))return 0;
+    const auto before=entry.ResidentBytes();
+    entry.upload_pool.clear();entry.tiler_input_pool.clear();entry.tiler_output_pool.clear();entry.readback_pool.reset();
+    for(auto it=entry.sample_backings.begin();it!=entry.sample_backings.end();){
+        const auto& backing=it->second;
+        if(backing.handle&&backing.allocation&&backing.allocation.use_count()==1){
+            const auto description=backing.handle->GetDesc();
+            const auto allocation=texture_allocator_.AllocationInfo(description,ResourceCasts(backing)).SizeInBytes;
+            if(allocation&&allocation<=entry.allocation_bytes){entry.allocation_bytes-=allocation;it=entry.sample_backings.erase(it);continue;}
+        }
+        ++it;
+    }
+    RetireMultisampleStorage(entry,completed);
+    return before-entry.ResidentBytes();
+}
+bool GuestTextureCache::EvictPressureVictim(uint64_t completed,Entry* preserve){
+    auto victim=entries_.end();
+    for(auto it=entries_.begin();it!=entries_.end();++it)
+        if(it->get()!=preserve&&!(*it)->BindingPinned()&&!(*it)->pending&&(*it)->fence<=completed&&
+           // Original GC skips a clean GPU-modified tiled image: its
+           // unsupported download cannot replace the physical buffer domain.
+           // A dirty independent version is also not a valid retirement source.
+           !((*it)->gpu_owned&&(*it)->buffer_alias_version&&
+             ((*it)->logical_dirty||(*it)->desc.tile_mode!=uint32_t(AmdGpu::TileMode::DisplayLinearAligned)||(*it)->desc.samples!=1))&&
+           (!(*it)->readback_pool||(*it)->readback_pool.use_count()==1)&&
+           (victim==entries_.end()||(*it)->last_use<(*victim)->last_use))victim=it;
+    if(victim==entries_.end())return false;
+    auto* chosen=victim->get();const auto uid=chosen->image_uid;
+    auto victim_pin=PinBinding(*chosen);
+    if(chosen->gpu_owned){
+        const auto& retire=retire_pressure_?retire_pressure_:resolve_owned_;
+        if(!retire)throw std::runtime_error("GPU-owned image has no retirement resolver");retire(*chosen);
+    }
+    if(chosen->cpu_watched&&release_immutable_)release_immutable_(*chosen);
+    // A resolver can restore another sample backing, allocate recursively and
+    // erase other victims. Cache objects stay pinned; vector iterators do not.
+    const auto owner=image_uids_.find(uid);
+    if(owner==image_uids_.end()||owner->second!=chosen)
+        throw std::logic_error("Pressure victim identity changed during retirement");
+    victim=std::find_if(entries_.begin(),entries_.end(),[chosen](const auto& image){return image.get()==chosen;});
+    if(victim==entries_.end())throw std::logic_error("Pressure victim disappeared during retirement");
+    victim_pin.reset();
+    if(chosen->BindingPinned())throw std::runtime_error("Pressure victim acquired another binding during retirement");
+    entries_.erase(victim);RebuildIndex();return true;
+}
+Resource GuestTextureCache::AllocateTexture(Entry* preserve,const D3D12_RESOURCE_DESC& description,
+    D3D12_RESOURCE_STATES initial,const D3D12_CLEAR_VALUE* clear,std::span<const DXGI_FORMAT> formats){
+    auto preserve_pin=PinPressureEntry(preserve);
+    for(;;){
+        try{return texture_allocator_.Allocate(description,initial,clear,formats);}
+        catch(const TextureBudgetExhausted&){
+            // Resource-byte admission alone cannot predict placed-heap class,
+            // alignment or fragmentation. Retry actual heap admission only after
+            // one real eviction or completed in-flight source reclamation.
+            const auto preceding_budget=resident_budget_;
+            RefreshMemoryBudget();
+            if(resident_budget_>preceding_budget)continue;
+            bool released=false;
+            for(auto& image:entries_)if(image.get()!=preserve)
+                released|=ReleaseRetiredStorage(*image,collected_fence_)!=0;
+            if(released)continue;
+            if(EvictPressureVictim(collected_fence_,preserve))continue;
+            const auto retired=PressureRetirementBytes();
+            if(retired&&wait_pressure_){
+                const auto completed=wait_pressure_();Collect(completed);
+                if(PressureRetirementBytes()<retired)continue;
+            }
+            throw;
+        }
+    }
+}
 void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* preserve){
+    auto preserve_pin=PinPressureEntry(preserve);
     RefreshMemoryBudget();
     const auto resident=[&]{const auto total=ResidentBytes();
         if(total>UINT64_MAX-bytes)throw std::overflow_error("Texture reservation total overflow");return total+bytes;
     };
     uint64_t total=resident();
     if(total>resident_budget_)for(auto& e:entries_){
-        if(e.get()==preserve||e->BindingPinned()||e->pending||e->fence>completed||!e->tiler_leases.empty()||!e->multisample_leases.empty()||
-           (e->readback_pool&&e->readback_pool.use_count()!=1))continue;
-        const auto before=e->ResidentBytes();
-        e->upload_pool.clear();e->tiler_input_pool.clear();e->tiler_output_pool.clear();e->readback_pool.reset();
-        for(auto it=e->sample_backings.begin();it!=e->sample_backings.end();){
-            const auto& backing=it->second;
-            if(backing.handle&&backing.allocation&&backing.allocation.use_count()==1){
-                const auto description=backing.handle->GetDesc();
-                const auto allocation=texture_allocator_.AllocationInfo(description,ResourceCasts(backing)).SizeInBytes;
-                if(allocation&&allocation<=e->allocation_bytes){e->allocation_bytes-=allocation;it=e->sample_backings.erase(it);continue;}
-            }
-            ++it;
-        }
-        RetireMultisampleStorage(*e,completed);
-        total-=before-e->ResidentBytes();
+        if(e.get()==preserve)continue;
+        total-=ReleaseRetiredStorage(*e,completed);
         if(total<=resident_budget_)break;
     }
     while(total>resident_budget_){
-        auto victim=entries_.end();
-        for(auto it=entries_.begin();it!=entries_.end();++it)
-            if(it->get()!=preserve&&!(*it)->BindingPinned()&&!(*it)->pending&&(*it)->fence<=completed&&
-               // Original GC skips a clean GPU-modified tiled image: its
-               // unsupported download cannot replace the physical buffer domain.
-               !((*it)->gpu_owned&&(*it)->buffer_alias_version&&
-                 ((*it)->desc.tile_mode!=uint32_t(AmdGpu::TileMode::DisplayLinearAligned)||(*it)->desc.samples!=1))&&
-               (!(*it)->readback_pool||(*it)->readback_pool.use_count()==1)&&
-               (victim==entries_.end()||(*it)->last_use<(*victim)->last_use))victim=it;
-        if(victim==entries_.end()){
-            const auto retired=PressureRetirementBytes();
-            if(retired&&wait_pressure_){
-                completed=std::max(completed,wait_pressure_());Collect(completed);total=resident();
-                if(total<=resident_budget_)break;
-                if(PressureRetirementBytes()<retired)continue;
-            }
-            throw std::runtime_error("Native texture batch exceeds adapter-derived cache budget including transfer pools and in-flight sources");
+        if(EvictPressureVictim(completed,preserve)){total=resident();continue;}
+        const auto retired=PressureRetirementBytes();
+        if(retired&&wait_pressure_){
+            completed=std::max(completed,wait_pressure_());Collect(completed);total=resident();
+            if(total<=resident_budget_)break;
+            if(PressureRetirementBytes()<retired)continue;
         }
-        if((*victim)->gpu_owned){
-            const auto& retire=retire_pressure_?retire_pressure_:resolve_owned_;
-            if(!retire)throw std::runtime_error("GPU-owned image has no retirement resolver");retire(**victim);
-        }
-        if((*victim)->cpu_watched&&release_immutable_)release_immutable_(**victim);
-        entries_.erase(victim);RebuildIndex();total=resident();
+        throw std::runtime_error("Native texture batch exceeds adapter-derived cache budget including transfer pools and in-flight sources");
     }
 }
 bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const GuestTextureLayout& layout,bool writable_snapshot){
@@ -1571,12 +1625,12 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         // Copy queues require COMMON on entry and decay back to COMMON at
         // submission completion. Depth/stencil cannot use implicit promotion,
         // so keep its upload and explicit barriers on the direct list.
-        new_entry->texture=texture_allocator_.Allocate(r,submit_copy_&&!d.depth_target&&!gpu_detile?
+        new_entry->texture=AllocateTexture(new_entry.get(),r,submit_copy_&&!d.depth_target&&!gpu_detile?
             D3D12_RESOURCE_STATE_COMMON:D3D12_RESOURCE_STATE_COPY_DEST,nullptr,cast_formats);
         if(storage_linear_bytes){
             new_entry->storage_samples.reserve(d.samples);
             for(UINT sample=0;sample<d.samples;++sample)
-                new_entry->storage_samples.push_back(texture_allocator_.Allocate(storage_description,D3D12_RESOURCE_STATE_COMMON,nullptr,cast_formats));
+                new_entry->storage_samples.push_back(AllocateTexture(new_entry.get(),storage_description,D3D12_RESOURCE_STATE_COMMON,nullptr,cast_formats));
             new_entry->storage_linear=GuestTiler::Scratch(device_.Get(),storage_linear_bytes);
         }
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}

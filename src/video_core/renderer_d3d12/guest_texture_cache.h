@@ -206,6 +206,11 @@ private:
     std::unique_ptr<GuestBcDecoder> bc_decoder_;
     void RefreshMemoryBudget();
     void ReserveMemory(uint64_t bytes,uint64_t completed,Entry* preserve=nullptr);
+    std::shared_ptr<void> PinPressureEntry(Entry*);
+    uint64_t ReleaseRetiredStorage(Entry&,uint64_t completed);
+    bool EvictPressureVictim(uint64_t completed,Entry* preserve);
+    Resource AllocateTexture(Entry* preserve,const D3D12_RESOURCE_DESC&,D3D12_RESOURCE_STATES,
+        const D3D12_CLEAR_VALUE* clear=nullptr,std::span<const DXGI_FORMAT> formats={});
     bool ConvertPackedBacking(Entry&,const GuestTextureDesc&,const GuestTextureLayout&,
         ID3D12GraphicsCommandList*);
     void Index(Entry& entry){guest_overlap_ranges_dirty_=guest_owned_overlap_ranges_dirty_=true;address_index_.emplace(entry.desc.address,&entry);image_uids_.emplace(entry.image_uid,&entry);}
