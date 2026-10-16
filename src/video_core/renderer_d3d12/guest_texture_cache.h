@@ -133,6 +133,12 @@ public:
         std::vector<Resource> buffer_sync_resources;
         uint64_t buffer_sync_allocation_bytes{};
         bool gpu_owned=false;
+        // Original GpuModified survives invalidation and readonly refresh.
+        // Logical validity does not imply current physical/page ownership.
+        bool logical_gpu_modified=false,logical_dirty=true;
+        void NoteLogicalImageWrite(){logical_gpu_modified=true;logical_dirty=false;}
+        void MarkLogicalDirty(){logical_dirty=true;}
+        bool HasValidLogicalImage()const{return logical_gpu_modified&&!logical_dirty;}
         // Separate shader buffer/image writers retain the original cache
         // domains. Their image version does not replace physical buffer bytes.
         bool buffer_alias_version=false,buffer_alias_watch=false;
@@ -236,10 +242,15 @@ public:
     void EnsureMultisampleStorage(Entry&);
     bool RetireMultisampleStorage(Entry&,uint64_t completed_fence);
     std::shared_ptr<GuestMultisample::StorageLease> PrepareMultisampleStorage(Entry&);
+    // current_buffer_snapshot is restricted to a proven current-B capture after
+    // logical invalidation. Private feedback snapshots cannot validate history.
     Entry& Upload(const GuestTextureDesc&,std::span<const std::byte> guest_bytes,
                   ID3D12GraphicsCommandList*,uint64_t completed_fence,
                   std::span<const std::byte> stencil_bytes={},bool guest_snapshot=false,
-                  const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false);
+                  const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false,
+                  bool current_buffer_snapshot=false);
+    // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
+    Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
@@ -273,9 +284,13 @@ public:
         return retain_independent_image_&&retain_independent_image_(desc,layout);
     }
     bool Own(Entry& entry){
+        entry.NoteLogicalImageWrite();
         if(entry.gpu_owned){if(notify_write_)notify_write_(entry);return true;}
         if(!acquire_owned_||!acquire_owned_(entry))return false;
         entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);return true;}
+    bool RevalidateReadonly(Entry& entry){
+        return entry.HasValidLogicalImage()&&acquire_independent_&&acquire_independent_(entry);
+    }
     bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
         const auto [first,last]=address_index_.equal_range(desc.address);
         for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&

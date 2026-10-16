@@ -1174,11 +1174,82 @@ bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const Gue
         layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
-GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot){
+namespace {
+bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLayout& target){
+    if(source.guest_bytes!=target.guest_bytes||source.bytes_per_pixel!=target.bytes_per_pixel||
+       source.block_extent!=target.block_extent||source.logical_bytes!=target.logical_bytes||
+       source.mips.size()!=target.mips.size())return false;
+    for(size_t mip=0;mip<target.mips.size();++mip){const auto& a=source.mips[mip];const auto& b=target.mips[mip];
+        if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
+           a.macro!=b.macro||a.thickness!=b.thickness)return false;
+    }
+    return true;
+}
+bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout){
+    return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
+        CompatibleGuestWritableStorage(entry.desc,desc)||
+        (entry.desc.writable&&CompatibleGuestShaderStorage(entry.desc,desc))||
+        (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc)))&&
+        MatchesGuestMipLayout(entry.layout,layout);
+}
+}
+GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout)const{
+    Entry* result{};bool ambiguous=false;auto [first,last]=address_index_.equal_range(desc.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
+        if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
+           !MatchesGuestUploadStorage(*entry,desc,layout))continue;
+        if(result){
+            const bool exact=entry->desc==desc,previous_exact=result->desc==desc;
+            if(previous_exact&&!exact)continue;
+            if(exact==previous_exact){
+                if(entry->texture.handle.Get()!=result->texture.handle.Get()||
+                   entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
+                   entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get())
+                    ambiguous=true;
+                continue; // Keep stable order; a later exact match can resolve ambiguity.
+            }
+        }
+        result=entry;ambiguous=false;
+    }
+    if(ambiguous)throw std::runtime_error("Ambiguous clean independent image binding");
+    return result;
+}
+GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
     auto layout=LayoutGuestTexture(d);
+    if(current_buffer_snapshot&&!guest_snapshot)
+        throw std::invalid_argument("Current buffer image source must be an explicit snapshot");
+    const bool refresh_current=!guest_snapshot||current_buffer_snapshot;
+    bool inherited_modified=false;
+    std::vector<std::shared_ptr<void>> history_pins;
+    if(refresh_current){
+        auto [first,last]=address_index_.equal_range(d.address);
+        for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
+            if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
+               !MatchesGuestMipLayout(previous.layout,layout))continue;
+            if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
+               !CompatibleGuestPackedStorage(previous.desc,d)&&
+               !CompatibleGuestAttachmentStorage(previous.desc,d)&&
+               !CompatibleGuestSampledStorage(previous.desc,d))continue;
+            // ReserveMemory may evict cache entries. Keep the logical identity
+            // witness alive until the replacement's refresh is published.
+            history_pins.push_back(PinBinding(previous));inherited_modified=true;
+        }
+    }
+    const auto finish_refresh=[&](Entry& entry)->Entry&{
+        if(refresh_current&&(!current_buffer_snapshot||inherited_modified)){
+            entry.logical_gpu_modified|=inherited_modified;entry.logical_dirty=false;
+        }else{
+            // A private prewrite/feedback version is not proof that this
+            // logical image has refreshed from its current buffer domain.
+            entry.MarkLogicalDirty();
+        }
+        return entry;
+    };
     const bool preserve_expanded=d.samples>1&&(d.data_format==9||d.data_format==19)&&
         !d.writable&&!d.render_target&&!d.depth_target&&!d.stencil_address&&
         HasExactPackedExpansion(d,layout);
@@ -1212,6 +1283,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         if(stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
+    auto* independent_reuse=guest_snapshot?nullptr:FindValidIndependentImage(d,layout);
+    Entry* reuse=independent_reuse;
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;
       if(guest_snapshot&&existing->cpu_watched){
         if(release_immutable_)release_immutable_(*existing);existing->cpu_watched=false;
@@ -1220,30 +1293,31 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
         !memcmp(existing->sampled_snapshot.data(),bytes.data(),size_t(layout.guest_bytes))&&
         (!d.stencil_address||(existing->stencil_snapshot.size()==stencil_layout.guest_bytes&&
          !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes))));
-      if((pending_coherent||(!guest_snapshot&&(existing->gpu_owned||existing->cpu_watched)))&&
-        (existing->desc==d||CompatibleGuestAttachmentStorage(existing->desc,d)||CompatibleGuestWritableStorage(existing->desc,d)||
-         (existing->desc.writable&&CompatibleGuestShaderStorage(existing->desc,d))||
-         (!d.writable&&!d.render_target&&!d.depth_target&&CompatibleGuestSampledStorage(existing->desc,d)))&&
-        existing->layout.guest_bytes==layout.guest_bytes){
-        bool same_layout=existing->layout.mips.size()==layout.mips.size();
-        for(size_t i=0;same_layout&&i<layout.mips.size();++i){const auto& a=existing->layout.mips[i];const auto& b=layout.mips[i];
-            same_layout=a.pitch==b.pitch&&a.height==b.height&&a.offset==b.offset&&a.slice_bytes==b.slice_bytes&&a.macro==b.macro&&a.thickness==b.thickness;}
-        if(!same_layout)continue;
+      if((pending_coherent||(!guest_snapshot&&!existing->logical_dirty&&(existing->gpu_owned||existing->cpu_watched)))&&
+        MatchesGuestUploadStorage(*existing,d,layout)){
+        if(!independent_reuse&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
+      }
+    }
+    if(reuse){
         // Page watchers prove that no CPU access can have changed these bytes.
         // Keep the original native image through subsequent draws/sampling.
-        existing->last_use=++use_sequence_;existing->pending=true;
-        if(existing->texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)existing->texture.UavBarrier(list);
-        existing->texture.Transition(list,d.writable&&d.samples==1?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+        reuse->last_use=++use_sequence_;reuse->pending=true;
+        if(reuse->texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)reuse->texture.UavBarrier(list);
+        reuse->texture.Transition(list,d.writable&&d.samples==1?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        return *existing;
-    }}
+        return finish_refresh(*reuse);
+    }
     // A different view (in particular a compute UAV) may overlap an owned
     // render target without qualifying for direct GPU reuse. Resolve ALL
     // overlapping backing on the caller before any comparison or parallel
     // detile can fault on a worker waiting for the caller's execution mutex.
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto& existing=*indexed->second;
-        if(!guest_snapshot&&existing.gpu_owned&&CompatibleGuestPackedStorage(existing.desc,d)&&
-           ConvertPackedBacking(existing,d,layout,list))return existing;
+        if(!guest_snapshot&&existing.gpu_owned&&!existing.logical_dirty&&CompatibleGuestPackedStorage(existing.desc,d)){
+            existing.MarkLogicalDirty();
+            if(ConvertPackedBacking(existing,d,layout,list))return finish_refresh(existing);
+            // A rejected conversion has not mutated its original resource.
+            existing.logical_dirty=false;
+        }
     }
     const auto overlaps=[](uint64_t a,uint64_t as,uint64_t b,uint64_t bs){
         return as&&bs&&(a<=b?b-a<as:a-b<bs);
@@ -1275,7 +1349,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
                 throw std::runtime_error("Converted independent image could not retain ownership");
             retire_independent_(*source);
             Diagnostics::Count("image-version.gpu-reinterpret");
-            return converted;
+            return finish_refresh(converted);
         }
         if(!resolve_owned_)throw std::runtime_error("GPU-owned upload backing has no resolver");
         resolve_owned_(*existing);
@@ -1321,7 +1395,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             }
             existing->last_use=++use_sequence_;existing->pending=true;
             existing->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            return *existing;
+            return finish_refresh(*existing);
         }
     }
     Entry* entry=nullptr;{auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
@@ -1337,7 +1411,7 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
            std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin())))){
         entry->last_use=++use_sequence_;entry->pending=true;
         entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        return *entry;
+        return finish_refresh(*entry);
     }
     if(entry&&(entry->pending||entry->fence>completed)) {
         // Changed CPU data must not overwrite staging used by queued copies.
@@ -1458,6 +1532,8 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
             new_entry->storage_linear=GuestTiler::Scratch(device_.Get(),storage_linear_bytes);
         }
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}
+    // No failure after backing mutation may leave an old valid-I witness.
+    entry->MarkLogicalDirty();
     SetBackingSamples(*entry,d.samples,list,false);
     if(preserve_expanded){
         // An immutable GPU snapshot owns exact packed bits independently of the
@@ -1610,12 +1686,13 @@ GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,st
     diagnostic.Stage("cpu-coherence-snapshot");
     if(immutable_view&&!gpu_snapshot)entry->RememberSnapshot(bytes,stencil_bytes);
     if(immutable_view&&!guest_snapshot&&!d.render_target&&!d.depth_target&&!d.stencil_address&&watch_immutable_)watch_immutable_(*entry);
-    entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return *entry;
+    entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
 }
 void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_argument("zero texture fence");for(auto& e:entries_)if(e->pending){e->pending=false;e->fence=fence;}}
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}
 Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
+    if(image.logical_dirty)throw std::runtime_error("Independent image transfer requires a valid logical version");
     const auto ownership=DescribeGuestImageOwnership(image);
     if(!list||!image.gpu_owned||!image.buffer_alias_version||!ownership||
        !CanRetainIndependentImage(ownership->desc,ownership->layout)||

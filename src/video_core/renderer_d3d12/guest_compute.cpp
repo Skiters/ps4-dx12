@@ -119,7 +119,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::vector<Rasterizer::ShaderBufferRequest> requests;
     struct ImagePending {GuestTextureDesc desc;GuestTextureLayout layout;UINT reg,count,mip;bool array;bool null_resource;bool sample_storage;
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
-        std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false;};
+        std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;};
     std::vector<ImagePending> images;
     struct SamplerPending {UINT reg;D3D12_SAMPLER_DESC desc;};std::vector<SamplerPending> samplers;
     auto temporary_lease=std::make_shared<TemporaryMemory>(rasterizer);
@@ -379,6 +379,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 throw std::runtime_error("Formatted buffer has ambiguous independent image versions");
             if(!version||pending[i].byte_adjust)
                 throw std::runtime_error("Independent formatted image/buffer partial or simultaneous-write ordering is not adapted");
+            if(version->logical_dirty)
+                throw std::runtime_error("Formatted buffer cannot read an invalidated independent image version");
             const auto first_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                 return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
                     version->desc.address<buffer.address+buffer.size;});
@@ -546,9 +548,22 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::map<std::pair<VAddr,u64>,std::shared_ptr<const std::vector<std::byte>>> image_snapshots;
     std::map<std::pair<VAddr,u64>,std::shared_ptr<Resource>> gpu_image_snapshots;
     u64 gpu_snapshot_bytes{};
+    std::vector<std::shared_ptr<void>> preserved_image_pins;
     for(auto& image:images)if(!image.null_resource&&(!image.desc.writable||image.buffer_writer_alias)&&
         std::ranges::any_of(requests,[&](const auto& buffer){return buffer.written&&
             buffer.address<image.desc.address+image.layout.guest_bytes&&image.desc.address<buffer.address+buffer.size;})){
+        // An interior buffer writer does not invalidate the pinned same-base
+        // independent image. Keep I here instead of capturing unrelated B0.
+        // Capturing another image can reserve memory, so pin this witness until
+        // Upload has selected and retained its descriptor resource.
+        if(!image.desc.writable)if(auto* retained=textures->FindValidIndependentImage(image.desc,image.layout)){
+            preserved_image_pins.push_back(textures->PinBinding(*retained));continue;
+        }
+        image.current_buffer_snapshot=!image.desc.writable&&std::ranges::any_of(
+            std::span(requests).first(ordinary_count),[&](const auto& buffer){
+                const auto write=buffer.WriteRange();
+                return buffer.written&&write.address==image.desc.address&&write.size;
+            });
         const auto key=std::pair{image.desc.address,image.layout.guest_bytes};
         if(GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout,image.buffer_writer_alias)&&
            rasterizer.IsGpuBufferModified(key.first,key.second)){
@@ -647,7 +662,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 b.space==30?push_buffer.offset:runtime_buffer.offset,
                 b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
     });
-    std::vector<GuestTextureCache::Entry*> uploaded;
+    std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers;
     std::vector<std::pair<GuestTextureDesc,GuestTextureCache::Entry*>> uploaded_views;
     // Keep all recorded resources alive on exceptions as well as normal GPU
     // completion. Cache entries own texture uploads; readbacks own their buffers.
@@ -683,12 +698,15 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 entry=&textures->Upload(storage,image.gpu_snapshot?std::span<const std::byte>{}:guest,
                     rasterizer.RecordingList(),rasterizer.CompletedFence(),{},
                     bool(image.guest_snapshot)||bool(image.gpu_snapshot),image.gpu_snapshot.get(),
-                    separate_input&&(bool(image.guest_snapshot)||bool(image.gpu_snapshot)));
+                    separate_input&&(bool(image.guest_snapshot)||bool(image.gpu_snapshot)),
+                    image.current_buffer_snapshot);
                 if(std::ranges::find(uploaded,entry)==uploaded.end()){
                     bindings.RetainAllocation(textures->PinBinding(*entry));uploaded.push_back(entry);
                 }
                 uploaded_views.emplace_back(storage,entry);
             }
+            if(!image.null_resource&&image.desc.writable&&
+               std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
             if(!image.null_resource&&separate_input)entry->buffer_alias_version=true;
             if(!image.null_resource){
                 textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
@@ -743,7 +761,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(!rasterizer.BuffersMayDefer(requests))
                 throw std::runtime_error("Independent image version lost its writable buffer ownership before execution");
         }
-        for(auto* entry:uploaded)if(entry->desc.writable)owned_images|=textures->Own(*entry);
+        // A reused allocation can still have a writable cache description even
+        // when all original slots here are readonly. Revalidation is not a new
+        // guest image write and must not enqueue a linear-image download.
+        for(auto* entry:uploaded)if(std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())
+            textures->RevalidateReadonly(*entry);
+        for(auto* entry:uploaded_writers)owned_images|=textures->Own(*entry);
         for(auto* entry:uploaded)if(entry->buffer_alias_version&&!entry->gpu_owned)
             throw std::runtime_error("Independent buffer/image cache ownership was not acquired");
         submit(bindings);
@@ -753,7 +776,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         diagnostic.Stage("image-readback-recording");
         // The graphics callback can upload color/depth attachments even when
         // the shader has no sampled images. Retire those uploads as well.
-        for(auto* entry:uploaded)if(entry->desc.writable&&!entry->gpu_owned)
+        for(auto* entry:uploaded_writers)if(!entry->gpu_owned)
             readbacks.push_back(std::make_unique<GuestImageReadback>(device,*entry,rasterizer.RecordingList()));
         static const bool async_enabled=[] {
             const auto* value=std::getenv("SHADPS4_DX12_ASYNC");
@@ -788,7 +811,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         bindings.RecycleRetiredHeaps();
         diagnostic.Stage("image-cpu-coherence");
         if(!readbacks.empty()) {
-            size_t index=0;for(auto* entry:uploaded)if(entry->desc.writable&&!entry->gpu_owned) {
+            size_t index=0;for(auto* entry:uploaded_writers)if(!entry->gpu_owned) {
                 rasterizer.ValidateHostMemory(entry->desc.address,entry->layout.guest_bytes,true);
                 readbacks[index++]->Resolve(rasterizer.CompletedFence(),
                     std::span(reinterpret_cast<std::byte*>(entry->desc.address),size_t(entry->layout.guest_bytes)));

@@ -203,6 +203,7 @@ bool GuestRasterizer::OwnImageClear(GuestTextureCache::Entry& image){
     // Pinned HLE clears happen before ordinary buffer binding and alone do not
     // enqueue the legacy FindTexture/FindRenderTarget download.
     if(!OwnIndependentImage(image))return false;
+    image.NoteLogicalImageWrite();
     Diagnostics::Count("image-clear.independent-ownership");return true;
 }
 void GuestRasterizer::QueueLinearImageDownload(GuestTextureCache::Entry& image){
@@ -310,8 +311,14 @@ void GuestRasterizer::ResolveMemory(VAddr address,u64 size){
 }
 void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu_write){
     std::lock_guard lock(execution_mutex_);std::vector<GuestTextureCache::Entry*> versions;
-    for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version&&ImageOverlap(address,size,*image)&&
-        (!gpu_write||image->desc.address==address))versions.push_back(image.get());
+    for(auto& image:textures_.Entries())if(ImageOverlap(address,size,*image)&&
+        (!gpu_write||image->desc.address==address)){
+        // Pinned CPU/GPU dirty invalidation retains GpuModified even after the
+        // old version has lost ownership. A later readonly refresh can validate
+        // that same logical image again; pressure retirement alone cannot.
+        image->MarkLogicalDirty();
+        if(image->gpu_owned&&image->buffer_alias_version)versions.push_back(image.get());
+    }
     if(versions.empty())return;
     // CPU writes retire the old image's uses before invalidating it. A GPU
     // buffer write instead preserves the preceding descriptors/allocations
@@ -344,7 +351,10 @@ void GuestRasterizer::ReleaseBufferPageWatch(VAddr address,u64 size){
 void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
     const bool separate=std::ranges::any_of(textures_.Entries(),[address](const auto& image){
         return image->gpu_owned&&image->buffer_alias_version&&ImageOverlap(address,1,*image);});
-    if(!separate){GuestBufferAccess::ResolveCpuFault(address,writing);return;}
+    if(!separate){
+        if(writing)DiscardBufferImageVersions(address,1,false);
+        GuestBufferAccess::ResolveCpuFault(address,writing);return;
+    }
     ResolveGpuBuffers(address,1);
     if(writing){DiscardBufferImageVersions(address,1,false);InvalidateCpuBufferPages(address,1);ReleaseImageWatches(address,1);}
     ResolveMemory(address,1);if(!writing)WatchBufferImageVersions(address,1);
