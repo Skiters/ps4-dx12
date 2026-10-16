@@ -214,6 +214,7 @@ public:
     Resource CaptureShaderBuffer(VAddr address,u64 bytes);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
+    void TransitionPreparedShaderBuffer(VAddr address,u64 bytes,D3D12_RESOURCE_STATES);
     void CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state);
     void FillPreparedShaderBuffer(VAddr address,u64 bytes,u32 value,D3D12_RESOURCE_STATES final_state);
     void CommitImageBacking(VAddr,std::span<const std::byte>,

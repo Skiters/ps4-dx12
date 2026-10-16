@@ -57,6 +57,7 @@ add_library(shadps4_dx12_guest_shader OBJECT
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_shader_cache.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_pipeline_cache.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_rasterizer.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_backend.cpp"
     "${PORT_ROOT}/src/video_core/guest_shader_runtime.cpp")
@@ -323,14 +324,16 @@ add_custom_command(OUTPUT "${_alias_fixture}"
     COMMAND "${_compute_glslang}" -V -S comp "${CMAKE_CURRENT_SOURCE_DIR}/buffer_alias_fixture.comp" -o "${_alias_fixture}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/buffer_alias_fixture.comp" VERBATIM)
 add_executable(native-buffer-alias-test "${CMAKE_CURRENT_SOURCE_DIR}/buffer_alias_test.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_alias_fixture}")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_alias_fixture}")
 target_include_directories(native-buffer-alias-test PRIVATE $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(native-buffer-alias-test PRIVATE cxx_std_23)
 target_link_libraries(native-buffer-alias-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures shadps4_dxil_compiler)
 add_test(NAME native_guest_unified_buffer_aliases COMMAND native-buffer-alias-test "${_alias_fixture}" "${MESA_LINKED_CONVERTER}" "${DXC_DLL}")
 add_executable(dx12-guest-metadata-dispatch-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_metadata_dispatch_test.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_compute_fixture}")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_compute_fixture}")
 target_include_directories(dx12-guest-metadata-dispatch-test PRIVATE
     $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(dx12-guest-metadata-dispatch-test PRIVATE cxx_std_23)
@@ -348,7 +351,8 @@ add_custom_command(OUTPUT "${_guest_image_fixture}"
     DEPENDS "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_image_compute_fixture.comp" VERBATIM)
 add_executable(dx12-guest-image-compute-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_image_compute_test.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_guest_image_fixture}")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_guest_image_fixture}")
 target_include_directories(dx12-guest-image-compute-test PRIVATE
     $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(dx12-guest-image-compute-test PRIVATE cxx_std_23)
@@ -364,7 +368,8 @@ add_custom_command(OUTPUT "${_buffer_reader_image_fixture}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/buffer_reader_image_writer.comp" VERBATIM)
 add_executable(dx12-buffer-reader-image-writer-test
     "${CMAKE_CURRENT_SOURCE_DIR}/buffer_reader_image_writer_test.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_buffer_reader_image_fixture}")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_buffer_reader_image_fixture}")
 target_include_directories(dx12-buffer-reader-image-writer-test PRIVATE
     $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(dx12-buffer-reader-image-writer-test PRIVATE cxx_std_23)
@@ -382,7 +387,8 @@ add_executable(native-writable-image-alias-test writable_image_alias_test.cpp
     "${PORT_ROOT}/src/shader_recompiler/ir/basic_block.cpp"
     "${PORT_ROOT}/src/shader_recompiler/ir/patch.cpp"
     "${PORT_ROOT}/src/shader_recompiler/backend/spirv/emit_spirv_image.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_writable_alias_fixture}"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_writable_alias_fixture}"
     "${PORT_ROOT}/src/video_core/amdgpu/pixel_format.cpp"
     "${PORT_ROOT}/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp"
     "${PORT_ROOT}/src/shader_recompiler/backend/dxil/tests/ir_test_diagnostics.cpp"
@@ -395,6 +401,8 @@ target_include_directories(native-writable-image-alias-test PRIVATE
     "${PORT_ROOT}"
     $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(native-writable-image-alias-test PRIVATE cxx_std_23)
+add_test(NAME native_ordered_stage_image_buffer_bindings COMMAND native-writable-image-alias-test
+    "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-stages)
 target_sources(native-writable-image-alias-test PRIVATE packed_image_test.cpp packed10_image_test.cpp)
 target_compile_definitions(native-writable-image-alias-test PRIVATE FMT_HEADER_ONLY NDEBUG)
 target_link_libraries(native-writable-image-alias-test PRIVATE shadps4_native_guest_textures shadps4_dxil_compiler sirit)
@@ -453,7 +461,8 @@ add_custom_command(OUTPUT "${_owned_image_fixture}"
     COMMAND "${_compute_glslang}" -V -S comp "${CMAKE_CURRENT_SOURCE_DIR}/owned_image.comp" -o "${_owned_image_fixture}"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/owned_image.comp" VERBATIM)
 add_executable(native-owned-image-dispatch-test owned_image_dispatch_test.cpp
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp" "${_owned_image_fixture}")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp" "${_owned_image_fixture}")
 target_include_directories(native-owned-image-dispatch-test PRIVATE $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(native-owned-image-dispatch-test PRIVATE cxx_std_23)
 target_link_libraries(native-owned-image-dispatch-test PRIVATE shadps4_native_guest_textures shadps4_dxil_compiler)
@@ -484,7 +493,8 @@ add_test(NAME native_enhanced_placed_buffer_alias_barriers COMMAND native-alias-
 set_tests_properties(native_enhanced_placed_buffer_alias_barriers PROPERTIES SKIP_RETURN_CODE 77)
 add_executable(dx12-guest-graphics-resources-test
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_graphics_resources_test.cpp"
-    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp")
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp")
 target_include_directories(dx12-guest-graphics-resources-test PRIVATE
     $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_compile_features(dx12-guest-graphics-resources-test PRIVATE cxx_std_23)
@@ -537,6 +547,7 @@ target_link_libraries(dx12-shader-pipeline-test PRIVATE shadps4_native_d3d12 sha
 add_test(NAME native_sampled_graphics_pipeline COMMAND dx12-shader-pipeline-test "${DXC_DLL}")
 add_executable(native-dma-shader-test dma_shader_test.cpp
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp"
     "${PORT_ROOT}/src/video_core/amdgpu/pixel_format.cpp"
     "${PORT_ROOT}/src/shader_recompiler/backend/spirv/spirv_emit_context.cpp"
     "${PORT_ROOT}/src/shader_recompiler/backend/dxil/tests/ir_test_diagnostics.cpp"

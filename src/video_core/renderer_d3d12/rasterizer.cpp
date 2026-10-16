@@ -991,6 +991,16 @@ Resource Rasterizer::CapturePreparedShaderBuffer(VAddr address,u64 bytes){
     snapshot.Transition(RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     return snapshot;
 }
+void Rasterizer::TransitionPreparedShaderBuffer(VAddr address,u64 bytes,D3D12_RESOURCE_STATES state){
+    std::lock_guard lock(execution_mutex_);
+    if(!bytes||address>UINT64_MAX-bytes)throw std::invalid_argument("Invalid prepared buffer transition range");
+    auto found=mappings_.upper_bound(address);
+    if(found==mappings_.begin())throw std::logic_error("Transitioning an unprepared guest buffer");--found;
+    auto& mapping=found->second;
+    if(address-mapping.base>mapping.size||bytes>mapping.size-(address-mapping.base))
+        throw std::logic_error("Prepared buffer transition lost its envelope");
+    mapping.gpu.Transition(RecordingList(),state);
+}
 void Rasterizer::CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state){
     std::lock_guard lock(execution_mutex_);
     if(!bytes||address%4||bytes%4||!source.handle||

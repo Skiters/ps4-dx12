@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/guest_compute.h"
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
+#include "ordered_stage_bindings_fixture.h"
 #include "shader_recompiler/backend/dxil/spirv_converter.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
@@ -341,6 +342,7 @@ int wmain(int argc,wchar_t** argv){try {
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware device");
+    if(argc==5&&std::wstring_view(argv[4])==L"ordered-stages")return RunOrderedStageBindingsFixture(device.Get());
     struct Allocation{void* p;~Allocation(){if(p)VirtualFree(p,0,MEM_RELEASE);}} owner{
         VirtualAlloc(reinterpret_cast<void*>(0x1200000000ULL),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)};
     if(!owner.p)throw std::runtime_error("Cannot allocate guest texture");
