@@ -269,6 +269,8 @@ add_executable(native-independent-version-transfer-test independent_version_tran
 target_compile_features(native-independent-version-transfer-test PRIVATE cxx_std_23)
 target_link_libraries(native-independent-version-transfer-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures)
 add_test(NAME native_independent_image_version_transfer COMMAND native-independent-version-transfer-test)
+add_test(NAME native_msaa_depth_initialization COMMAND native-independent-version-transfer-test --msaa-depth-init)
+set_tests_properties(native_msaa_depth_initialization PROPERTIES TIMEOUT 120)
 add_test(NAME native_independent_msaa_image_version_transfer COMMAND native-independent-version-transfer-test --msaa)
 set_tests_properties(native_independent_msaa_image_version_transfer PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_storage_pressure COMMAND native-independent-version-transfer-test --msaa-pressure)
