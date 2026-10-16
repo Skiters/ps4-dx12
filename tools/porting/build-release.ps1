@@ -72,9 +72,14 @@ if (Git-Value $SourceRoot @('status','--porcelain','--untracked-files=no')) {
 $files = @($compiler, $linker) + @(Get-ChildItem -Recurse -File $BuildDir |
     Where-Object { $_.Name -eq 'shadPS4-DX12-Core.exe' -or $_.Name -eq 'shadPS4-DX12-Core.pdb' -or
         $_.DirectoryName -eq (Join-Path $BuildDir 'native-compiler') } | Select-Object -ExpandProperty FullName)
+function File-Sha256([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
 $identity = [ordered]@{ commit=$commit; source=$SourceRoot; build=$BuildDir;
     utc=[DateTime]::UtcNow.ToString('o'); configuration='Release'; runtime_verification='not_run';
     configure=$configure; build_command=$build; dependencies=$lock;
-    files=@($files | ForEach-Object { $h=Get-FileHash -LiteralPath $_ -Algorithm SHA256;
-        @{ path=$h.Path; sha256=$h.Hash.ToLowerInvariant() } }) }
+    files=@($files | ForEach-Object { @{ path=$_; sha256=(File-Sha256 $_) } }) }
 $identity | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 (Join-Path $BuildDir 'release-identity.json')
