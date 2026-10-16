@@ -1505,7 +1505,12 @@ bool GuestTextureCache::IsLiveWritableBlockAlias(const WritableBlockAlias& alias
 }
 std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
     const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
-    const bool native_bc=IsNativeReadonlyGuestBlockStorage(desc,layout);
+    // A standalone small/odd BC view may need an expanded host allocation,
+    // while the existing parent's selected native BC mip needs no allocation.
+    // Classify the guest block role here; validate the native typed layout only
+    // after proving the original physical addresses and rebasing the descriptor.
+    const bool native_bc=!desc.writable&&desc.data_format>=35&&desc.data_format<=41&&
+        layout.block_extent==4&&(layout.bytes_per_pixel==8||layout.bytes_per_pixel==16);
     // Pinned ImageInfo::MipOf/SliceOf recognizes a one-level image starting
     // at a physical mip/slice boundary. Rebase it before grouping, so an alias
     // and an ordinary selected-mip view share one child and one parent commit.
@@ -1513,11 +1518,12 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
        !desc.view_layers||desc.view_layers>desc.layers-desc.first_layer||
        desc.render_target||desc.depth_target||desc.stencil_address||desc.one_dimensional||
        desc.volume_depth||desc.samples!=1||desc.pow2_padding||desc.storage_height||
-       desc.storage_slice_bytes||layout.expanded_bytes_per_pixel||layout.mips.size()!=1||
-       (!native_bc&&(layout.block_extent!=1||desc.number_format!=4||
+       desc.storage_slice_bytes||layout.mips.size()!=1||desc.address%4||
+       !layout.guest_bytes||layout.guest_bytes%4||layout.guest_bytes>64*1024*1024||
+       (!native_bc&&(layout.expanded_bytes_per_pixel||layout.block_extent!=1||desc.number_format!=4||
        !((desc.data_format==11&&layout.bytes_per_pixel==8)||
-         (desc.data_format==14&&layout.bytes_per_pixel==16))))||
-       !CanUploadGpuSnapshot(desc,layout,true))return std::nullopt;
+         (desc.data_format==14&&layout.bytes_per_pixel==16))||
+       !CanUploadGpuSnapshot(desc,layout,true))))return std::nullopt;
     // An existing independent version is a separate authority. Never silently
     // replace it with another overlapping image's contents.
     if(FindValidIndependentImage(desc,layout))return std::nullopt;
@@ -1528,8 +1534,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
         if(!parent.gpu_owned||!parent.buffer_alias_version||!parent.buffer_alias_watch||
            parent.logical_dirty||desc.address<=parent.desc.address||
            !IsNativeReadonlyGuestBlockStorage(parent.desc,parent.layout)||
-           (native_bc&&(desc.data_format!=parent.desc.data_format||desc.number_format!=parent.desc.number_format||
-                        layout.format!=parent.layout.format))||
+           (native_bc&&(desc.data_format!=parent.desc.data_format||desc.number_format!=parent.desc.number_format))||
            (!array&&parent.desc.layers!=1)||parent.desc.width%4||
            parent.desc.height%4||parent.desc.pitch%4)continue;
         const auto delta=desc.address-parent.desc.address;

@@ -1,5 +1,36 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
+## Active odd local BC subresource checkpoint - 2026-10-16
+
+This section supersedes earlier current/next instructions. Full-port goal remains active;
+all129 groups partial/open. Source-only gate remains: no configure/build/compiler,
+helper/fixture/tests/GPU/game/XInput/UI. No new runtime result or FPS; preview24 unchanged.
+
+RebaseBlockSubresource now classifies readonly BC guest storage before host-expanded
+RGBA fallback can reject an existing native parent mip. Original physical block/slice
+proof, exact local authority, GPU parent/watch, codec/number, normalized native typed
+format, retention and ambiguity gates remain. Generic odd BC allocation/upload/decoder
+rules are unchanged. Original shader resource type/dimension/mip constants remain.
+
+The existing partial-expansion GCN scenario now authors shifted standalone6x6 BC1
+mip4/layers0,1 reads of every2x2 block in both GPU-B/physical-P seed branches, preserving
+I and complement observations and existing physical/output oracles. This is UNRUN;
+no below4-pixel/BC3/numeric/graphics/macro-thick runtime coverage is claimed. Prior27
+writable-alias GCN cases and9positive/18negative address controls remain UNRUN.
+
+Evidence/recovery: F:/PS4Dev/handoff/bc-odd-subresource-20261016/{SOURCE_CONTRACT.md,
+checkpoint/COMMIT.json,CHECKPOINT_FINAL.json,final-residual}. Broad inherited integration
+and exact22 staged deletions remain separate. Restore only in a separate checkout at
+manifest.head; then staged.patch --index, unstaged.patch, source-files.zip. Clean commits
+alone do not reproduce current integration. Previous evidence/results remain unchanged.
+
+Next source block: shifted standalone nonarray BC views of array parents. Preserve
+RebaseBlockSubresource's !array && parent.layers!=1 guard until native_slice_view and
+DXIL resource dimension/slice behavior are proven (guest_compute.cpp, specialization.h).
+Reuse existing view/address/owner findings; no general audit or execution. Pinned SliceOf
+multi-local-layer/base_array discrepancy remains open; do not claim full Vulkan parity.
+
+
 ## Active one-level BC / word views checkpoint - 2026-10-16
 
 This section supersedes earlier current/next instructions. Full-port goal remains active;

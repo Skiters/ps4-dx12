@@ -22,7 +22,7 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
     constexpr u32 Endpoints=0x07e0f800,Green=0x55555555,BufferValue=0x13579bdf,Poison=0xaaaaaaaa;
     struct alignas(256) Code {std::array<u32,128> words{};};
     std::array<Code,Subresources> seed{},before{},covered{},after{};
-    std::array<Code,Layers> complement{};
+    std::array<Code,Layers> complement{},shifted_tail{};
     Code output_init{},warm{},writer{},gap_writer{},raw{},formatted{};
     GuestShaderFrontend frontend(profile);
     struct Drain {GuestRasterizer& r;bool armed=true;~Drain(){if(armed)try{r.Finish();}catch(...){}}} drain{rasterizer};
@@ -171,6 +171,39 @@ inline void RunBcPartialExpansionGcnFixture(GuestRasterizer& rasterizer,AmdGpu::
             std::memcpy(p.user_data.data(),&bc,sizeof(bc));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
             verify(frontend.BuildCompute(gpu),{{output,true,false}},&bc,false,mip);rasterizer.DispatchDirect();}};
         sample_covered(covered,512,7);
+        // The actual BC parent now exists. A standalone 6x6 BC1 T# would
+        // choose expanded RGBA storage, but these reads must bind its native
+        // mip4 directly and preserve the independent I / complement B/P bytes.
+        for(u32 layer=0;layer<Layers;++layer){
+            auto local=bc;const auto& physical=target_layout.mips.at(4);
+            const u64 address=base+ImageOffset+physical.offset+layer*physical.slice_bytes;
+            local.base_address=address>>8;local.width=local.height=5;local.pitch=31;
+            local.base_level=local.last_level=0;local.depth=local.base_array=local.last_array=0;
+            const auto local_desc=DescribeGuestTexture(local);const auto local_layout=LayoutGuestTexture(local_desc);
+            if(address%256||local_desc.address!=address||local_desc.width!=6||local_desc.height!=6||local_desc.pitch!=32||
+               local_desc.levels!=1||local_desc.first_mip||local_desc.min_lod||local_desc.layers!=1||local_desc.first_layer||
+               local_desc.view_layers!=1||local.GetType()!=AmdGpu::ImageType::Color2DArray||local_desc.writable||
+               local_desc.data_format!=target_desc.data_format||local_desc.number_format!=target_desc.number_format||
+               local_layout.block_extent!=4||local_layout.bytes_per_pixel!=8||local_layout.expanded_bytes_per_pixel!=4||
+               local_layout.format!=DXGI_FORMAT_R8G8B8A8_UNORM||local_layout.guest_bytes!=physical.slice_bytes||
+               local_layout.mips.size()!=1||local_layout.mips[0].offset||local_layout.mips[0].pitch!=physical.pitch||
+               local_layout.mips[0].height!=physical.height||local_layout.mips[0].slice_bytes!=physical.slice_bytes||
+               IsNativeReadonlyGuestBlockStorage(local_desc,local_layout))
+                throw std::runtime_error("Shifted 6x6 BC tail must require standalone expansion and match actual parent slice");
+            std::vector<u32> words;
+            for(u32 index=0;index<4;++index){const u32 x=index&1,y=index>>1;
+                if(local_desc.address+GuestPixelOffset(local_desc,local_layout,0,0,x,y)!=
+                   target_desc.address+GuestPixelOffset(target_desc,target_layout,4,layer,x,y))
+                    throw std::runtime_error("Shifted 6x6 BC tail physical block address changed");
+                coords(words,0,x*4,y*4,0,0);words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});
+                const bool green=index==0||(layer==1&&index==1);
+                for(u32 component=0;component<4;++component){const u32 offset=768+(layer*4+index)*16+component*4;
+                    words.insert(words.end(),{0xe0700000u+offset,0x80020000u|((4+component)<<8)});
+                    const bool one=component==3||(green?component==1:component==0);
+                    expect(OutputOffset+offset,std::bit_cast<u32>(one?1.f:0.f));}}
+            words.push_back(0xbf810000);initialize(shifted_tail[layer],words,hash(12,layer));auto& p=bind(shifted_tail[layer],12);
+            std::memcpy(p.user_data.data(),&local,sizeof(local));std::memcpy(p.user_data.data()+8,&output,sizeof(output));
+            verify(frontend.BuildCompute(gpu),{{output,true,false}},&local,false,0);rasterizer.DispatchDirect();}
         for(u32 layer=0;layer<Layers;++layer){std::vector<u32> words;for(u32 index=0;index<3;++index){
             const u32 x=index==1?0:1,y=index==0?0:1;coords(words,0,x*4,y*4,layer,4);
             words.insert(words.end(),{0xf0044f00,0x00000400,0xbf8c0000});const bool green=layer==1&&index==0;
