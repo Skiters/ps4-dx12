@@ -3132,25 +3132,39 @@
         "ordering": "Growth zero-initializes a new metadata buffer, copies the existing live prefix on the real DIRECT queue and retains old/initialization buffers through actual fence retirement. The ordinary persistent patch map then updates changed entries and the real capacity header. Existing fault feedback and compaction retain their own submitted/completed ordering.",
         "errors": "Address, raw descriptor extent, live descriptor-bank and secondary-slot bounds are checked. The pinned Sirit does not expose OpArrayLength; the actual buffer extent is supplied in native metadata without altering immutable upstream dependencies.",
         "historical_review_notes": "The extended production DMA fixture compiles only; it creates more than 32 partial pages through actual host decommit/recommit and checks accessible tails and recovery. Final shader conversion, nonuniform access, growth contents, in-flight lifetime, faults and alias ordering have not executed.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "Late DMA resident pages observed after AppendRequests must be safely materialized and published before final descriptors without replacing already selected B views. Behavior acceptance remains separate."
       },
       "final_verification": {
         "state": "not_run",
         "reason": "Full implementation boundary is still open."
       },
       "legacy_implementation_status": "integrated_review_pending",
-      "implementation_status": "connected",
+      "implementation_status": "connected_with_known_gaps",
       "implementation": {
-        "state": "connected",
+        "state": "connected_with_known_gaps",
         "source_package": "committed",
-        "remaining_production_changes": [],
-        "core_release_build_commit": "72569a531e1c262fc828e80d56400f7f1507d75a"
+        "remaining_production_changes": [
+          "formatted-alias-ordering"
+        ],
+        "core_release_build_commit": "34232f80bbbeaf46ded52e4ae853ccf310c32dfd"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Full implementation boundary is still open."
       },
-      "prepared_checks": []
+      "prepared_checks": [
+        {
+          "kind": "verification_prepared",
+          "description": "Resident page visible on first DMA command; unchanged CPU snapshot preserves GPU-only B; dirty CPU tail updates B without destroying a separate GPU page. Existing cold/warm fault, partial-page, scatter, growth and fence-feedback controls retained. C++ /Zs only, no execution."
+        },
+        {
+          "kind": "source_paths",
+          "paths": [
+            "native-port/dma_shader_test.cpp",
+            "native-port/guest_buffer_access_test.cpp"
+          ]
+        }
+      ]
     },
     {
       "id": "native-depth-stencil-shader-plane-access",
@@ -8157,11 +8171,12 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::SynchronizeMemoryFromImage / Rasterizer::BindResources",
       "native_symbol": "NativeDX12::ExecuteGuestResources",
-      "missing_semantics": "Ordered DMA stage binding/post-stage buffer synchronization, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations now replay per-stage BindBuffers then BindTextures, including intermediate I refreshes, original-prefix early retile and persistent exact-base invalidation. Partial-page protection and same-base compatible mip-prefix views remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred.",
-      "evidence": "src/video_core/renderer_d3d12/guest_compute.cpp: Independent formatted image/buffer partial or simultaneous-write ordering is not adapted",
+      "missing_semantics": "Late DMA resident-page/table publication after image/attachment materialization, ordered opaque depth/stencil I/B transfers, tiled independent-image retirement under pressure, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations replay per-stage BindBuffers then BindTextures; already planned resident DMA B ranges refresh CPU dirtiness after image binding without formatted I retile or future guest-write declarations. Partial-page protection, same-base compatible mip-prefix views, exact-base invalidation and private CPU streams remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred.",
+      "evidence": "src/video_core/renderer_d3d12/guest_dma.cpp: AppendRequests/ObserveResidentSharps/Bind late residency; guest_compute.cpp: opaque_dma and image-domain guards; guest_rasterizer.cpp: ResolveImage/RetireImageForPressure independent-image guards",
       "groups": [
         4,
         6,
+        48,
         51,
         52,
         54,
@@ -8188,14 +8203,15 @@
         "Single-stage mixed buffer/image commands retain a valid I for interior buffer writers. Images invalidated by a later exact-base writer refresh from the immutable B1 result of an earlier formatted retile, after its final COPY_SOURCE to shader-read transition. Matching guest mip layout and shader storage gate admission; incompatible layouts, multiple stages and overlapping image SRV/UAV subresources remain explicit guards. Primary and clean Release compiled/linked atc238eef;32 new real-GCN controls are C++ typechecked only.",
         "NativeImageStorageAliases now compares physical storage fields rather than the entire T# object, matching pinned ImageInfo(sharp, desc) allocation inputs. Non-storage control/counter/reserved differences no longer leave compatible reads as SRVs beside a UAV. Existing coherent UAV read/manual sampling/LOD/swizzle/format paths are reused, not reimplemented. Stored stage metadata version26 invalidates older unpromoted artifacts. Production Release and clean committed Release built atb85f076; authored controls are C++ typechecked only. Distinct geometry/layout and multi-stage domains remain explicit gaps.",
         "e780a6a connects uncompressed single-sample mip-prefix alias promotion and native storage groups, including maximum cached GPU-owned physical geometry, pins, per-original SRV/UAV ranges, pre-view independent I growth/reinterpretation, inherited logical GPU-modified history, and B1-prefix+B0-tail snapshots after exact-base invalidation. Native storage compatibility is distinct from physical transfer geometry. MSAA last_level remains sample count. Stage metadata27; core Release reproduced, prepared controls C++ typechecked only. Existing independent range-retention limits and multi-stage/shifted geometry guards remain.",
-      "7420e32 connects partial-page independent image protection to original logical bytes: full-page protection envelopes, at-most-two full physical-B boundary snapshots, rearm-before-compare lazy validation, CPU-winner buffer proof invalidation, sibling/stronger-B guard preservation and nested pre-store validation deferral. Exact-base GPU invalidation and original I/B domains remain unchanged. Ordinary exclusive image ownership still requires complete pages. Primary and separate clean committed Release linked; PageWatch/alias/GCN controls C++ typechecked only, no runtime tests or acceptance.",
-      "1678638 adds PrepareOrderedGuestStages to ExecuteGuestResources for multiple graphics stages with compatible native physical I/B domains. It reserves one stable B batch without marking future writes early, keeps original clean CPU streams/private DWORD envelopes, applies buffer invalidation and image refresh in original stage order, refreshes one bound native I allocation so earlier views observe later updates, and retains final dirty I rather than reviving/downloading it. Frozen initial retile preserves the original cache prefix/interpretation until the first image bind despite host preallocation. Metadata synthesis, narrow sharp bounds, original SRV/UAV ranges, fences and pins are retained. Root and nine standalone fixture source lists include the module.48 source-authored transfer/cache controls are C++ typechecked only; separate clean Release linked, no test execution or graphics acceptance."
+        "7420e32 connects partial-page independent image protection to original logical bytes: full-page protection envelopes, at-most-two full physical-B boundary snapshots, rearm-before-compare lazy validation, CPU-winner buffer proof invalidation, sibling/stronger-B guard preservation and nested pre-store validation deferral. Exact-base GPU invalidation and original I/B domains remain unchanged. Ordinary exclusive image ownership still requires complete pages. Primary and separate clean committed Release linked; PageWatch/alias/GCN controls C++ typechecked only, no runtime tests or acceptance.",
+        "1678638 adds PrepareOrderedGuestStages to ExecuteGuestResources for multiple graphics stages with compatible native physical I/B domains. It reserves one stable B batch without marking future writes early, keeps original clean CPU streams/private DWORD envelopes, applies buffer invalidation and image refresh in original stage order, refreshes one bound native I allocation so earlier views observe later updates, and retains final dirty I rather than reviving/downloading it. Frozen initial retile preserves the original cache prefix/interpretation until the first image bind despite host preallocation. Metadata synthesis, narrow sharp bounds, original SRV/UAV ranges, fences and pins are retained. Root and nine standalone fixture source lists include the module.48 source-authored transfer/cache controls are C++ typechecked only; separate clean Release linked, no test execution or graphics acceptance.",
+        "50bdc81/a564b6c/34232f8 connect planned resident DMA B synchronization after per-stage image binding, including single-stage DMA, direct native sharp residency observation, physical guest backing admission, borrowed read-only PageWatch witnesses, safe image/buffer watch release, and protected opaque physical backing snapshots preserving unchanged GPU B. The original buffer content loop is extracted unchanged; no DMA guest stores or eager formatted retile were added. DMA refresh captures only its actual resident views. Initial opaque rejection in50 was corrected bya564. Core Release reproduced from clean34232f8; alias/GCN/DMA/buffer-access fixture TUs C++ typechecked only, all runtime acceptance not_run. Late page publication and unsupported independent transfer domains remain listed gaps."
       ]
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw",
-      "missing_semantics": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+      "missing_semantics": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Opaque depth/stencil raw-DMA overlap retains the legacy physical-backing/exclusive-image path; ordered independent I/B transfer for this domain is unfinished. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: depth/color alias and simultaneous buffer/HTILE guards",
       "groups": [
         2,

@@ -1,5 +1,12 @@
 # Implementation and verification registry — 2026-10-17
 
+## Current planned resident DMA checkpoint - 2026-10-17
+
+Production50bdc81/a564b6c/34232f8 connect synchronization of already planned resident DMA B after image binding, preserve CPU streams and physical guest backing, and safely borrow/release PageWatch image/buffer witnesses. Opaque depth/stencil retains the legacy exclusive-image/physical-backing path; it is not completed independent transfer. Primary and separate clean committed Release linked at34232f8. For these changes runtime/GPU/game/XInput/UI tests are not_run; fixture TUs passed C++ /Zs only. Earlier behavior evidence is retained. Latest full external runtime: F:/PS4Dev/handoff/ordered-dma-sync-20261017/artifacts-34232f8. Never auto-install/select cores. Next: stable late DMA residency/table publication before final native descriptors; then remaining opaque/tiled-pressure/converted/shifted transfer guards. Registry:129 groups,59 connected_with_known_gaps,70 with no separately established change, nine broader gap IDs. The DMA group now explicitly records the proven late-page implementation gap; unrun behavior is separate. Full port remains unfinished.
+
+This section supersedes older current/next entries; full evidence and exact continuation: SESSION_HANDOFF.md.
+
+
 Pinned reference: `e0a466753a1aacbc8db8253be685bf7ab4d9daae`. All 129 groups have committed implementation/integration sources.
 Release core built from clean commit `72569a531e1c262fc828e80d56400f7f1507d75a`. Desktop C# and prepared fixtures were retained, not executed by this core build.
 
@@ -12,8 +19,8 @@ The known backlog below retains real native guards; this registry does not certi
 | ID | Upstream symbol → native symbol | Missing semantics |
 |---|---|---|
 | color-attachment-feedback | Vulkan::Rasterizer::BindResources / BeginRendering → NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources | Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback. |
-| formatted-alias-ordering | Vulkan::BufferCache::SynchronizeMemoryFromImage / TextureCache::ResolveOverlap / ExpandImage → NativeDX12::ExecuteGuestResources / CompatibleGuestImageMipGeometry | Ordered DMA stage binding/post-stage buffer synchronization, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations now replay per-stage BindBuffers then BindTextures, including intermediate I refreshes, original-prefix early retile and persistent exact-base invalidation. Partial-page protection and same-base compatible mip-prefix views remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred. |
-| depth-color-shared-storage | Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth → NativeDX12::GuestRasterizer::Draw | Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback. |
+| formatted-alias-ordering | Vulkan::BufferCache::SynchronizeMemoryFromImage / TextureCache::ResolveOverlap / ExpandImage → NativeDX12::ExecuteGuestResources / CompatibleGuestImageMipGeometry | Late DMA resident-page/table publication after image/attachment materialization, ordered opaque depth/stencil I/B transfers, tiled independent-image retirement under pressure, cross-stage converted or BC word-view domains without a common native image allocation, shifted base addresses, different physical image geometries and clipped transfers outside the connected reader-arena proof still need adaptation. Common native image allocations replay per-stage BindBuffers then BindTextures; already planned resident DMA B ranges refresh CPU dirtiness after image binding without formatted I retile or future guest-write declarations. Partial-page protection, same-base compatible mip-prefix views, exact-base invalidation and private CPU streams remain connected. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred. |
+| depth-color-shared-storage | Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth → NativeDX12::GuestRasterizer::Draw | Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Opaque depth/stencil raw-DMA overlap retains the legacy physical-backing/exclusive-image path; ordered independent I/B transfer for this domain is unfinished. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback. |
 | signed-packed10-attachment | Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState → NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState | R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected. |
 | packed19-msaa-attachment | Vulkan::SurfaceFormat / GraphicsPipeline → NativeDX12::LayoutGuestTexture / GuestTextureCache::UploadVersion | Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented. |
 | polygon-point-fill | Vulkan::Rasterizer::UpdateDynamicState → NativeDX12::BuildGuestGraphicsState | Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture. |
@@ -75,7 +82,7 @@ Only concrete change IDs from the table above are listed. `—` means none estab
 | 46 | native-packed16-images | connected_with_known_gaps | color-attachment-feedback, packed19-msaa-attachment | not_run |
 | 47 | native-shader-debug-and-reload | connected | — | not_run |
 | 48 | native-buffer-extents-and-index-bounds | connected | — | not_run |
-| 49 | native-dma-page-table-growth | connected | — | not_run |
+| 49 | native-dma-page-table-growth | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 50 | native-depth-stencil-shader-plane-access | connected_with_known_gaps | depth-color-shared-storage | not_run |
 | 51 | native-depth-shader-subresource-access | connected_with_known_gaps | color-attachment-feedback, depth-color-shared-storage | partial_gpu_verified |
 | 52 | native-independent-buffer-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
@@ -382,7 +389,7 @@ No separate prepared check recorded in this group; final acceptance not run.
 
 ### 49. native-dma-page-table-growth
 
-No separate prepared check recorded in this group; final acceptance not run.
+Resident-first-command, GPU-only B preservation and dirty CPU tail controls are authored in native-port/dma_shader_test.cpp; protected physical-backing and DMA host-temporary rejection controls in native-port/guest_buffer_access_test.cpp. All C++ typechecked only. Late page/table publication after image preparation remains a production gap; shader conversion and GPU behavior not run.
 
 ### 50. native-depth-stencil-shader-plane-access
 
