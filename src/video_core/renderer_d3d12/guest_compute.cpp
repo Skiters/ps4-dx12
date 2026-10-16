@@ -472,7 +472,21 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             std::ranges::any_of(std::span(requests).first(ordinary_count),[&](const auto& buffer){
                 const auto index=size_t(&buffer-requests.data());return pending[index].formatted_read&&!streams_before_binding(index)&&
                     buffer.address<image->desc.address+image->layout.guest_bytes&&image->desc.address<buffer.address+buffer.size;});}));
-    ordered_stages|=uses_dma&&textures;
+    bool opaque_dma=false;
+    if(dma&&textures)for(const auto& image:textures->Entries())if(image->gpu_owned&&
+        std::ranges::any_of(std::span(requests).subspan(ordinary_count,dma_count),[&](const auto& range){
+            return image->desc.address<range.address+range.size&&range.address<image->desc.address+image->layout.guest_bytes;})){
+        const auto owner=DescribeGuestImageOwnership(*image);
+        if(!image->HasValidLogicalImage()||!owner||!textures->CanRetainIndependentImage(owner->desc,owner->layout))
+            opaque_dma=true;
+    }
+    if(opaque_dma){
+        if(ordered_stages)throw std::runtime_error("Ordered opaque DMA image domains still require independent transfer adaptation");
+        // Preserve the pre-existing resolution behavior for domains whose
+        // independent depth/stencil/format transfer is not connected yet.
+        for(const auto& range:std::span(requests).subspan(ordinary_count,dma_count))
+            rasterizer.ReadMemory(range.address,range.size);
+    }else ordered_stages|=uses_dma&&textures;
     // The original binds buffers and refreshes sampled images before execution.
     // Two writers likewise keep separate cache domains, when the backend can
     // retain both versions without selecting an arbitrary physical winner.

@@ -7,10 +7,18 @@ using namespace NativeDX12;
 static void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 class Fixture final : public GuestBufferAccess {
     std::function<void()> before_read_;
+    bool opaque_{};
+    std::function<bool(VAddr,std::span<std::byte>)> physical_;
+    bool HasGpuImageOverlap(VAddr,u64)const override{return opaque_;}
+    bool ReadDmaBacking(VAddr address,std::span<std::byte> bytes)override{return physical_&&physical_(address,bytes);}
 public:
     using GuestBufferAccess::GuestBufferAccess;
     using GuestBufferAccess::SetBufferBackingAccess;
     bool TrackReadOnly(VAddr address,u64 bytes){return page_watch_->TrackReadOnly(address,bytes);}
+    bool TrackOpaque(VAddr address,u64 bytes){return page_watch_->Track(address,bytes);}
+    void Opaque(bool value,std::function<bool(VAddr,std::span<std::byte>)> physical={}){
+        opaque_=value;physical_=std::move(physical);
+    }
     void Untrack(VAddr address,u64 bytes){page_watch_->Untrack(address,bytes);}
     void BeforeRead(std::function<void()> callback){before_read_=std::move(callback);}
     bool ReadMemory(VAddr a,u64 s,bool assume=false) override {
@@ -20,6 +28,37 @@ public:
 };
 static u64 Counter(const char* name){auto& hub=Diagnostics::Hub::Get();std::lock_guard lock(hub.mutex);
     for(const auto& c:hub.counters)if(c.name&&std::string_view(c.name)==name)return c.value;return 0;}
+static void ProtectedDmaBacking(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
+    constexpr u64 bytes=4096;std::vector<std::byte> original(physical,physical+bytes);
+    Fixture renderer(device);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);
+    renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=bytes&&n<=bytes-(a-base);},
+        [&](VAddr a,std::span<const std::byte> data){memcpy(physical+a-base,data.data(),data.size());return true;});
+    SCOPE_EXIT {renderer.Finish();renderer.Opaque(false);renderer.Untrack(base,bytes);memcpy(physical,original.data(),bytes);};
+    const Rasterizer::ShaderBufferRequest ranges[]{{base,bytes,false,true,true}};
+    const auto views=renderer.PrepareShaderBuffers(ranges);
+    renderer.FillPreparedShaderBuffer(base,bytes,0x6b6b6b6b,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.ReleaseCpuBufferWatches(base,bytes);
+    renderer.Opaque(true,[&](VAddr a,std::span<std::byte> out){
+        if(a<base||a-base>bytes||out.size()>bytes-(a-base))return false;
+        memcpy(out.data(),physical+a-base,out.size());return true;});
+    Require(renderer.TrackOpaque(base,bytes),"opaque image guard setup");
+    const auto probe=[&](bool cpu_store){
+        renderer.SynchronizePreparedDmaBuffers(ranges,views);
+        MEMORY_BASIC_INFORMATION state{};VirtualQuery(guest,&state,sizeof(state));
+        Require(state.Protect==PAGE_NOACCESS,"DMA CPU synchronization resolved an opaque I guard");
+        auto snapshot=renderer.CapturePreparedShaderBuffer(base,bytes);
+        auto readback=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        snapshot.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,bytes);
+        renderer.Finish();void* data{};D3D12_RANGE all{0,size_t(bytes)};Check(readback.handle->Map(0,&all,&data));
+        SCOPE_EXIT {D3D12_RANGE none{};readback.handle->Unmap(0,&none);};
+        if(cpu_store)Require(!memcmp(data,physical,bytes),"DMA did not upload the actual CPU winner through physical backing");
+        else for(u64 i=0;i<bytes;++i)Require(static_cast<std::byte*>(data)[i]==std::byte{0x6b},
+            "DMA replaced GPU-only B with an unchanged physical CPU snapshot");
+    };
+    probe(false);physical[17]=std::byte{0x88};renderer.NotifyCpuWrite(base+17,1);probe(true);
+    renderer.ValidateDebugMessages();
+}
 void Run(ID3D12Device* device,bool f2){
     constexpr u64 bytes=65536;
     HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,bytes,nullptr);
@@ -28,6 +67,7 @@ void Run(ID3D12Device* device,bool f2){
     auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));
     Require(guest&&physical,"aliases");const auto base=reinterpret_cast<VAddr>(guest);
     for(u64 i=0;i<bytes;++i)physical[i]=std::byte(i*19+7);
+    ProtectedDmaBacking(device,guest,physical,base);
     {
         u64 commits{},committed{};bool fail{};
         Fixture renderer(device);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);

@@ -989,8 +989,35 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
     // Pinned SynchronizeDmaBuffers runs after BindTextures and only uploads
     // CPU-dirty B. It does not format-sync I, declare writes or recreate arenas.
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"post-stage-dma-content");
-    for(const auto& [base,uav]:active)
-        PrepareBufferContents(mappings_.at(base),false,uav,false,{},std::span<const BufferWrite>{},diagnostic);
+    for(const auto& [base,uav]:active){
+        auto& mapping=mappings_.at(base);
+        if(!mapping.gpu_owned&&!mapping.cpu_watched&&HasGpuImageOverlap(base,mapping.size)){
+            // Legacy opaque images can still own NOACCESS guest pages. Read
+            // physical B without resolving/downloading that I through a CPU
+            // fault. Stream comparisons in bounded chunks, retaining B1 when
+            // physical CPU bytes match the original B0 snapshot.
+            const bool unknown=mapping.cpu_snapshot.size()!=mapping.size;
+            if(unknown)ResizeSnapshot(mapping);
+            for(;;){
+                const auto generation=mapping.cpu_upload_generation;
+                const auto stores=mapping.cpu_upload_ranges;
+                std::array<std::byte,4096> physical;
+                for(u64 offset=0;offset<mapping.size;offset+=physical.size()){
+                    const auto bytes=std::min<u64>(physical.size(),mapping.size-offset);
+                    if(!ReadDmaBacking(base+offset,std::span(physical).first(size_t(bytes))))
+                        throw std::runtime_error("DMA synchronization lost protected physical guest backing");
+                    Diagnostics::Count("buffer-snapshot.bytes",bytes);
+                    const bool stored=std::ranges::any_of(stores,[&](const auto& range){
+                        return range.first<offset+bytes&&offset<range.second;});
+                    if(unknown||stored||memcmp(mapping.cpu_snapshot.data()+offset,physical.data(),size_t(bytes)))
+                        Upload(mapping,offset,bytes,physical.data());
+                }
+                if(generation==mapping.cpu_upload_generation){mapping.cpu_upload_ranges.clear();break;}
+            }
+            mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }else PrepareBufferContents(mapping,false,uav,false,{},std::span<const BufferWrite>{},diagnostic);
+    }
 }
 Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes){
     std::lock_guard lock(execution_mutex_);

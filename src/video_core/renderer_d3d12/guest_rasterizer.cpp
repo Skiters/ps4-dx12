@@ -195,9 +195,9 @@ bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
     if(HasDmaReadOverlap(image.desc.address,image.layout.guest_bytes)){
         // A bound ReadConst bank continues to read B while this attachment
         // writes I. Do not replace B's authority with exclusive image pages.
-        if(!OwnIndependentImage(image))
-            throw std::runtime_error("DMA-visible attachment has no independent image ownership transfer");
-        return true;
+        if(OwnIndependentImage(image))return true;
+        // Opaque depth/stencil and other unadapted transfer domains retain
+        // their existing ownership path until that port is connected.
     }
     if(image.buffer_alias_version){
         if(!textures_.CanRetainBufferAlias(image.desc,image.layout))return false;

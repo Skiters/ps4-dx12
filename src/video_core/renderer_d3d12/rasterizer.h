@@ -170,6 +170,7 @@ protected:
     virtual void CheckGpuBacking(VAddr address,u64 size,bool writing){Rasterizer::CheckBacking(address,size,writing);}
     virtual void PrepareGpuBacking(VAddr,u64,bool) {}
     virtual bool HasGpuImageOverlap(VAddr,u64)const {return false;}
+    virtual bool ReadDmaBacking(VAddr,std::span<std::byte>){return false;}
 public:
     void SetBufferOwnership(std::function<bool(VAddr,u64)> own,
         std::function<bool(VAddr,std::span<const std::byte>)> commit,std::function<void(VAddr,u64)> release){
