@@ -114,6 +114,8 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+6f55ea1 contains only reviewed isolated scheduler candidates; inherited scheduler patches remain dirty. Original22 staged deletions preserved. Evidence scheduler-batch-20261016; no build/test/game execution.
+
 Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
 into by-value Defer after GPU execution; deque allocation failure can destroy its last
 resource lease before fence completion. Source-proven failure path, not an observed crash.

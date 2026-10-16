@@ -151,6 +151,8 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Scheduler6f55ea1: pre-execution resource batches, no-allocation fence assignment, publication capture retention, terminal non-replay and best-effort drain implemented. Independent source review only; device/timeouts and runtime acceptance remain open.
+
 Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
 into by-value Defer after GPU execution; deque allocation failure can destroy its last
 resource lease before fence completion. Source-proven failure path, not an observed crash.

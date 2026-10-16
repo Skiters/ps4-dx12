@@ -3435,6 +3435,7 @@
     },
     {
       "id": "native-priority-retirement-drain",
+      "submission_lease_batch_20261016": "6f55ea1: scheduler owns copied retirement/publication resource captures before any queue execution, rolls back preparation before execution, assigns successful fence without allocation, fails closed without replay and best-effort drains via fresh signals. Exact isolated candidates independently reviewed; no build/runtime. Device/timeout teardown and fault injection remain open; all129 groups remain partial.",
       "upstream_paths": [
         "src/video_core/renderer_vulkan/vk_scheduler.cpp",
         "src/video_core/texture_cache/texture_cache.cpp"

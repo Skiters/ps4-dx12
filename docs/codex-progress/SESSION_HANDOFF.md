@@ -331,6 +331,29 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+## Scheduler submission lease block - 6f55ea1, 2026-10-16
+
+Retirement callbacks are now copied into scheduler-owned pending nodes BEFORE copy/direct
+queue execution. All node/vector allocations and rollback occur before submission. Nodes
+park at UINT64_MAX until a known direct fence is assigned under lock without allocation.
+An additional no-op node holds copies of every publication callback's captures until that
+fence, even if publication throws and caller unwinds. Any Submit exception latches terminal
+recording failure: Begin/SubmitCopy/Submit reject replay. Destructor best-effort drain uses
+fresh copy/direct signals and waits, never re-executes lists. Device removal/timeout teardown
+remains unverified. Conservative pre-execution allocation failure also terminates recording.
+
+Independent review covered live and exact isolated committed candidates. Existing inherited
+scheduler diagnostics/priority changes remain separate in the dirty workspace. Original22
+staged deletions were preserved byte-for-byte. Exact candidates/patches/review/commit identity:
+F:/PS4Dev/handoff/scheduler-batch-20261016. Uncompiled/unrun; no runtime PASS or FPS claim.
+Previous simple scheduler-retention experiment is superseded.
+
+Next: implement meaningful authored failure controls for prequeue allocation, Signal failure,
+throwing publication and non-replay/resource lifetime (execute only when authorized), then
+continue writable selected-mip authority and remaining renderer contracts. New partial BC
+fixture3488541 is authored/source-reviewed, not run; uncovered false-query B==P limitation
+remains. All129 groups remain partial/open. Preview24/core selection unchanged.
+
 Partial BC fixture is now authored and independently source-reviewed (2026-10-16).
 New gcn_bc_partial_expansion_fixture.h adds both real target GPU-page query branches for
 UINT24->BC96,5mips,2layers,36864bytes, three uncovered final-mip blocks perlayer, full

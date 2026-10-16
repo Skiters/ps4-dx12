@@ -118,6 +118,8 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Current source6f55ea1 owns callback/resource leases before queue execution and latches submit failures to prevent replay. Reviewed source only; no compilation/runtime. See SESSION_HANDOFF.md.
+
 Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
 into by-value Defer after GPU execution; deque allocation failure can destroy its last
 resource lease before fence completion. Source-proven failure path, not an observed crash.

@@ -96,6 +96,8 @@ No new performance result exists. Source admission is not a measured speedup. Hi
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Scheduler batch6f55ea1 has no new build/test/GPU/performance measurements. Source review cannot establish FPS or device-failure acceptance; historical baselines retain original identities.
+
 Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
 into by-value Defer after GPU execution; deque allocation failure can destroy its last
 resource lease before fence completion. Source-proven failure path, not an observed crash.
