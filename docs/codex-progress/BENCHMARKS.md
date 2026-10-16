@@ -1,5 +1,20 @@
 # Benchmarks
 
+## Current BC block source block - no new measurements, 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+No BC shader/GPU contents, debug-layer PASS, game launch, image acceptance, FPS/frame time,
+CPU/GPU wait or memory performance result was obtained. fdb1e27 source bridge and2 authored
+GCN cases are uncompiled/unrun. Earlier28 ordered cases and MSAA/heap modes remain separate
+unrun acceptance. Historical326/346(native211/229), three targeted passes and Vulkan/DX12
+measurements keep their original binary/scenario identities. Installed preview24 is unchanged.
+See SESSION_HANDOFF.md and bc-block-expansion-20261016 exact source/proof/recovery identities.
+
+
+
 ## Current depth/stencil block - no new measurement, 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.

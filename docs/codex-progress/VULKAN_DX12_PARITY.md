@@ -1,5 +1,25 @@
 # Vulkan / native D3D12 parity audit
 
+## Current BC block expansion coverage - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+| Contract | Production continuation | Acceptance |
+|---|---|---|
+| Pinned ExpandImage producer | Exact UINT64/128 I -> BC through private GPU snapshot | Source review only |
+| Reverse/numeric interpretation | UINT block views and samecodec BC variants preserve raw bytes | Authored/unrun |
+| Physical ownership | Canonical UINT geometry; actual BC remains readonly | Source review only |
+| Source/history/failure | Shared selection predicate, pins, successful ownership before retirement | Source review only |
+| Fallback isolation | Different codec keeps old I/new B; unsupported blocks fail explicitly | Corrected source finding |
+| Multi-mip/linear/expanded/odd | Single-mip tiled nonexpanded scope only | Remaining adaptation |
+
+Two additional real-GCN BC1/BC3 scenarios are authored only. No full BC/alias/cache equivalence
+or game/performance acceptance is claimed. See SESSION_HANDOFF.md and saved block proof.
+
+
+
 ## Current MSAA depth/stencil transfer coverage - 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.

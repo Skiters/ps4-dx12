@@ -1,5 +1,21 @@
 # Native DX12 state
 
+## Current BC block image bridge - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+fdb1e27 is pushed: retained UINT64/128 I -> BC, reverse UINT block views and samecodec
+numeric BC views via exact physical layout, canonical readonly BC ownership and block-aware
+retile. Independent review's generic fallback bypass was corrected before commit.
+Two real-GCN BC1/BC3 cases extend the older28 authored cases, all uncompiled/unrun. MSAA
+source fixes/focused mode remain as saved earlier. No new core was built/installed/selected.
+Next exact production task is per-mip BC block correspondence and ownership. Read
+SESSION_HANDOFF.md / NEXT_BC_MIP_CONTRACT.md; preserve scope, residual/index and execution gate.
+
+
+
 ## Current MSAA depth/stencil source corrections - 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.

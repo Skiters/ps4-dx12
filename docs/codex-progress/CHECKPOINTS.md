@@ -1,5 +1,20 @@
 # Checkpoints
 
+## Independent BC block source checkpoint - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+fdb1e27: exact independent UINT64/128<->BC and samecodec numeric bridge, canonical physical
+ownership, block-aware retile and corrected generic fallback isolation.25ba00c authors two
+real-GCN BC cases, uncompiled/unrun. Source reviews, exact hashes/patches/residual and actual final upstream
+SHA live in bc-block-expansion-20261016/CHECKPOINT_FINAL.json. Original22 staged deletions,
+inherited untracked attachment runner and broad dirty integration remain preserved.
+Previous MSAA/heap/readonly checkpoints and runtime results below stay historical.
+
+
+
 ## MSAA depth/stencil source checkpoint - 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.

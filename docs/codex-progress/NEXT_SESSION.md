@@ -1,5 +1,25 @@
 # Next session
 
+## Current BC mip continuation - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+Verify actual HEAD/upstream against bc-block-expansion-20261016/CHECKPOINT_FINAL.json.
+fdb1e27's single-mip BC bridge is implemented/pushed, with2 additional authored GCN cases.
+The older BC investigation omitted ResolveOverlap->ExpandImage; its proposed HLE producer
+prerequisite is superseded. Do not repeat it. Next source task: extend
+IsIndependentGuestBlockStorage/DescribeGuestImageOwnership and MatchesReferenceBlockImage
+to forward/same-codec multiple mips, requiring per-mip block-width/height correspondence
+and identical complete physical layout. Keep reverse uncompressed block-texel views at
+levelCount1 until their selected mip/view integration is proved. Base4x alone is wrong for24->96 at mip4. Read NEXT_BC_MIP_CONTRACT.md;
+keep codec/fallback/pin/history/retention guards and author appropriate unrun mip cases.
+No build/test/game execution or UI is authorized. Preserve broad inherited residual/index,
+push accurate WIP and continue existing source contracts without claiming full completion.
+
+
+
 ## Current bounded BC identity continuation - 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.

@@ -1,5 +1,109 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
+## Current independent BC block expansion - 2026-10-16
+
+Authoritative current section; all earlier current/next sections are historical.
+Source-only gate: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 groups remain partial/open. Source review is not runtime PASS, parity or FPS evidence.
+
+### Production changes
+
+Pushedfdb1e27 implements the confirmed pinned ResolveOverlap -> ExpandImage -> CopyImage
+producer through existing private GPU retile/snapshot/upload, retaining old GPU image I
+independently of physical/resident buffer B. This supersedes the previous BC investigation's
+omitted-producer prerequisite; no new HLE same-format copy producer is needed first.
+
+MatchesReferenceBlockImage supplies one exact predicate to early source selection and
+sticky modified-history inheritance. It admits UINT64/128 block words to matching BC bytes,
+reverse UINT block-texel access, and numeric variants of the same BC codec. It requires
+single-mip, single-sample ordinary2D/array storage, complete logical4x4 correspondence,
+identical physical mip bytes/offsets/tiling/layers and no expanded native decoding. It
+rejects linear8/31, odd/small/explicit padding-storage, volume/1D/attachment/depth/stencil
+shapes and incompatible codec identities. Equal-size different BC codecs never become
+compatible through this bridge.
+
+DescribeGuestImageOwnership validates readonly BC using a canonical writable UINT64/128
+physical geometry with width/height/pitch divided by4. Actual BC descriptor/resource stays
+readonly; BC UAV/RT admission and the rasterizer's retention whitelist are unchanged. All
+three ownership-retention callers already consume the canonical descriptor/layout. Existing
+page-alignment, complete-backing,64MiB, watches and fence requirements stay. RetileBufferVersion
+now validates row bytes in physical BC blocks, retaining the existing raw GuestTiler path.
+
+Independent review found that the generic Upload overlap fallback could bypass the new
+predicate and copy a different codec's I. It was corrected before commit: distinct BC codec
+keeps old I and refreshes its new view from B; other unsupported block-domain conversions
+fail explicitly. Existing non-BC fallback remains. Source pins survive private transfer and
+new ownership acquisition before old retirement. Only successful refresh publishes inherited
+logical modified/clean history; no physical B commit or fake shader image write is added.
+
+### Prepared verification and evidence
+
+Pushed25ba00c authors two additional real-GCN BC1/BC3 cases in gcn_bc_block_expansion_fixture.h,
+called from the existing tracked gcn_ordered_formatted_fixture.h. They extend the existing
+--ordered-formatted-owned mode; the older28 cases keep their expectations. Valid compressed
+red/green endpoint words start in a UINT image; actual image writes make I differ from B,
+then an interior raw buffer writer changes B without exact-base image invalidation. BC
+samples test decoded texels; reverse UINT/formatted reads test compressed DWORDs and full
+physical backing/padding. Authored controls are uncompiled/unrun; see fixture source proof
+and independent review for exact implemented cases and limitations. The historical attachment
+runner remains inherited/untracked integration, preserved in residual recovery.
+
+F:/PS4Dev/handoff/bc-block-expansion-20261016 holds source snapshots/own.patch,
+REFERENCE_EXPANSION_CONTRACT.md, INDEPENDENT_REVIEW.md, MEMORY_REVIEW.md and fixtures/.
+The initial fallback finding and its final resolved disposition remain explicit. The earlier
+writable mixed-domain concern was withdrawn after tracing the existing exact-base writer
+admission and invalidation; do not add the speculative extra restriction. CHECKPOINT_FINAL.json
+records actual final local/remote HEAD, owned hashes, original22 staged deletions and the
+exact final-residual archive. Restore only in a separate checkout of its manifest.head;
+never overlay the active dirty workspace. Older archives/checkpoints remain intact.
+
+Installed preview24 remains unchanged at C:/Users/skei/AppData/Local/PS4Desktop/cores/
+dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe, SHA256
+70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+Source provenance is still a3f1d5e plus archived integration; selected core was unchanged,
+last known preview23. No new core was built or installed. Original Vulkan, saves, settings,
+monitoring and the user/remote session were untouched. PDB/runtime paths remain in the
+preview24 installation manifest. The pushed source still requires broad inherited residual
+integration: clean checkout alone is not a reproducible full core. Historical326/346
+(native211/229), three targeted passes, Vulkan/DX12 captures/FPS are separate older evidence.
+Bloodborne world/image/controls/FPS acceptance and historical EOP attribution remain open.
+
+### Exact next source continuation
+
+Extend the BC block bridge beyond single-mip only after reading NEXT_BC_MIP_CONTRACT.md.
+Update IsIndependentGuestBlockStorage / canonical ownership and MatchesReferenceBlockImage
+with per-mip logical block correspondence and full physical mip identity. Extend forward
+and same-codec BC chains first; reverse uncompressed block-texel views retain levelCount1
+until selected single-mip view integration is proved (VUID07072). A global4x base
+relation is insufficient: source width24 versus BC96 has source width1 at mip4 while BC
+requires2 blocks. Preserve valid smaller mip blocks, source-domain choice, padding, codec
+isolation, failure atomicity and the existing block-aware retile path. Add meaningful
+unrun mip controls, without changing old fixture expectations. Broader linear/expanded/odd,
+BC shader-write/attachment and arbitrary overlap cases remain separate unimplemented or
+unverified contracts; do not silently widen them or mark this group complete.
+
+Reuse the previous MSAA depth-init/UINT-stencil fixes and authored focused mode from
+msaa-depth-init-20261016. Do not repeat BC producer/format, mapped-generation, geometry,
+heap-pressure, readonly-history, writable depth-feedback or blanket alias-barrier audits.
+No build/test/game/controller/desktop execution is authorized yet. Continue other existing
+production contracts when a runtime dependency blocks one item; keep the full-port goal active.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue Skiters/ps4-dx12 at F:/PS4Dev/work/shadps4-dx12-src, fix/mixed-cmask. Read this
+SESSION_HANDOFF current section, STATE/NEXT_SESSION and registry; compare actual HEAD/upstream
+with bc-block-expansion-20261016/CHECKPOINT_FINAL.json. Preserve all dirty integration/index
+and use the separate recovery archive only in another checkout. Tests/build/package/compiler,
+GPU/game/XInput/UI remain deferred. fdb1e27 BC block bridge and prior MSAA fixes are source
+changes with authored/unrun verification. Continue the precise BC multi-mip production task
+using NEXT_BC_MIP_CONTRACT.md; do not redo saved proofs or invent broad codec compatibility.
+Use saved Vulkan/DX12 baselines; only when execution is authorized build with pinned tooling,
+run affected components/regressions, minimal isolated virtual-XInput gameplay and real completed
+frames versus the saved baseline, preserving Vulkan and user saves/session. Commit/push
+coherent WIP and checkpoint exact continuation; full renderer parity remains incomplete.
+
+
+
 ## Current MSAA depth initialization and unsigned stencil extraction - 2026-10-16
 
 Authoritative current section; earlier current/next sections are historical.
