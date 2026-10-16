@@ -12,10 +12,10 @@ All129 groups remain partial/open. Production changes are source-reviewed only.
 | Direct readonly native BC SRVs | Actual full parent; disjoint UINT writes remain private | Authored/unrun |
 | Parent resource state | Restore SRV after retile preparation, before compute dispatch | Source review only |
 | Ownership/lifetime | Parent pins; child nonowner; replacement acquires before retirement | Source review only |
-| Unaligned private prefixes | Still coupled to independent ownership admission | Next source task |
+| Unaligned private prefixes | Private upload/retile requires live full-parent UID/pin/watch and exact physical prefix | Authored/unrun |
 | Overlapping feedback/DMA/buffers | Unsupported combinations still rejected | Remaining contracts |
 
-Eleven GCN cases are prepared; none was compiled or run. No new game/FPS evidence or
+Fifteen GCN cases are prepared, including four unaligned-prefix cases; none was compiled or run. No new game/FPS evidence or
 complete parity claim. Current continuation and exact evidence: SESSION_HANDOFF.md.
 
 ## Current BC block expansion coverage - 2026-10-16

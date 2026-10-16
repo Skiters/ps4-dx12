@@ -186,7 +186,11 @@ public:
         std::shared_ptr<void> parent_pin,image_pin;
     };
 private:
+    bool CanTransferDependentBlockView(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
+    bool IsLiveBlockParent(const WritableBlockAlias&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
+    Entry& UploadVersion(const GuestTextureDesc&,std::span<const std::byte>,ID3D12GraphicsCommandList*,
+        uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
         const WritableBlockAlias*);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;

@@ -2,12 +2,12 @@
 
 ## Current continuation pointer - 2026-10-16
 
-Read the active SESSION_HANDOFF.md section and bc-parent-readers-20261016/CHECKPOINT_FINAL.json;
-verify actual HEAD, preserve inherited dirty files and22 staged deletions. Next source:
-separate private dependent UINT upload/retile from independent page-aligned ownership
-(FindBlockViewParent, Upload writable_snapshot, RetileImageVersion). Keep full-parent
-PageWatch, bounds, budget, residency and fences. No compiler/build/tests/GPU/game/UI.
-Earlier next/current sections below are historical; do not restart their audits.
+Read SESSION_HANDOFF.md's active section and bc-dependent-transfer-20261016/CHECKPOINT_FINAL.json;
+verify HEAD and preserve inherited integration/22 staged deletions. Current dependent
+unaligned prefix source block is saved; do not redo it or prior audits. Next: exact shifted
+mip/slice physical aliases in guest_texture_cache.cpp, starting from the existing matcher
+and Begin/Commit transaction. Preserve full-parent watch, bounds, prefix/tail and lifetime.
+No compiler/build/tests/GPU/game/UI until execution is authorized. Earlier notes historical.
 
 ## Current BC mip continuation - 2026-10-16
 

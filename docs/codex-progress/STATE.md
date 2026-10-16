@@ -1,12 +1,12 @@
 # Native DX12 state
 
-## Current pointer - mixed BC / UINT views, 2026-10-16
+## Current pointer - dependent BC / UINT transfers, 2026-10-16
 
-The active state is the top section of SESSION_HANDOFF.md and the exact HEAD/residual
-record in F:/PS4Dev/handoff/bc-parent-readers-20261016/CHECKPOINT_FINAL.json.
-Shared word SRV/UAV views and direct BC parent reads are source WIP; all129 groups remain
-partial/open. No compilation/tests/game/UI; preview24 unchanged. Older sections below
-are historical snapshots, not instructions to restart the completed source work.
+SESSION_HANDOFF.md's top section is authoritative; exact HEAD/residual recovery is in
+F:/PS4Dev/handoff/bc-dependent-transfer-20261016/CHECKPOINT_FINAL.json.
+Private unaligned UINT prefixes use a live full BC owner lease; public ownership remains
+strict. Fifteen cases authored/unrun; all129 groups partial/open. No builds/tests/game/UI.
+Earlier sections are historical. Preview24 and user session remain unchanged.
 
 ## Current BC block image bridge - 2026-10-16
 
