@@ -1,12 +1,13 @@
 # Native DX12 state
 
-## Current pointer - dependent BC / UINT transfers, 2026-10-16
+## Current pointer - shifted BC word views, 2026-10-16
 
-SESSION_HANDOFF.md's top section is authoritative; exact HEAD/residual recovery is in
-F:/PS4Dev/handoff/bc-dependent-transfer-20261016/CHECKPOINT_FINAL.json.
-Private unaligned UINT prefixes use a live full BC owner lease; public ownership remains
-strict. Fifteen cases authored/unrun; all129 groups partial/open. No builds/tests/game/UI.
-Earlier sections are historical. Preview24 and user session remain unchanged.
+SESSION_HANDOFF.md's top section is authoritative; exact HEAD/residual recovery:
+F:/PS4Dev/handoff/bc-shifted-views-20261016/CHECKPOINT_FINAL.json.
+One-level thin microtiled UINT aliases rebase to shared parent-relative views. Full
+multi-layer/base_array Vulkan equivalence remains unproven; reference discrepancy saved.
+Twenty cases authored/unrun, all129 groups partial/open; no builds/tests/game/UI.
+Earlier notes historical. Preview24, original Vulkan and user session unchanged.
 
 ## Current BC block image bridge - 2026-10-16
 

@@ -23,7 +23,7 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     struct alignas(256) Code {std::array<u32,128> words{};};
     std::array<Code,MaxSubresources> seed{},source_probe{},parent_before{},parent_after{},parent_final{};
     std::array<Code,8> uint_probe{};
-    Code output_init{},warm{},marker{},raw{},writer{},formatted{},mixed_copy_probe{};
+    Code output_init{},warm{},marker{},raw{},writer{},formatted{},mixed_copy_probe{},shifted_probe{};
     GuestShaderFrontend frontend(profile);
     struct Drain {GuestRasterizer& r;bool armed=true;~Drain(){if(armed)try{r.Finish();}catch(...){}}} drain{rasterizer};
     const auto initialize=[](Code& code,const std::vector<u32>& words,u64 hash){
@@ -64,16 +64,18 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     };
     // Keep the first five cases; then mix selected readers and writers.
     // Variant7 controls conservative same-mip storage-read UAV promotion.
-    for(u32 variant=0;variant<15;++variant){const bool dependent=variant>=11,
-        bc3=variant==1||variant==4||variant==7||variant==8||variant==10||(dependent&&variant!=14),
-        group=variant==2||variant==3,duplicate=variant==4,mixed=(variant>=5&&variant<=10)||variant==12||variant==13,
+    for(u32 variant=0;variant<20;++variant){const bool dependent=variant>=11,shifted=variant>=15,
+        bc3=variant==1||variant==4||variant==7||variant==8||variant==10||(dependent&&variant!=14&&variant!=16),
+        group=variant==2||variant==3||variant==19,duplicate=variant==4,
+        mixed=(variant>=5&&variant<=10)||variant==12||variant==13||variant==17||variant==18,
         bc_reader=variant==9||variant==10,subset=variant==2||variant==7||variant==8||variant==10;
         const u32 Layers=dependent&&bc3?2:4,width=dependent?24:bc3?16:32,pitch=dependent?32:width,
             levels=dependent?4:bc3?5:6,components=bc3?4:2,block_bytes=components*4;
         const u64 image_bytes=dependent?36864:bc3?32768:49152;
-        const u32 first_mip=dependent?(variant==13?1:2):variant==3||variant==6?3:bc3?2:1,
-            second_mip=variant==13?2:duplicate||variant==7||variant==10?first_mip:variant==3||variant==6||variant==8?1:3;
-        const u32 first_layer=subset?1:0,second_layer=subset?2:1;
+        const u32 first_mip=dependent?(variant==13||variant==18?1:2):variant==3||variant==6?3:bc3?2:1,
+            second_mip=variant==13||variant==18?2:variant==19?1:duplicate||variant==7||variant==10?first_mip:variant==3||variant==6||variant==8?1:3;
+        const u32 first_layer=shifted?(variant==16?3:variant==18?0:1):subset?1:0,
+            second_layer=shifted?(variant==18?1:0):subset?2:1,shifted_slot=variant==18?1:0;
         const u32 slot_count=group||duplicate||mixed?2:1;
         const auto hash=[&](u32 phase,u32 index=0){return 0x574243414c000000ULL+u64(variant)*8192+u64(phase)*256+index;};
         rasterizer.ReadMemory(base,Bytes);rasterizer.InvalidateMemory(base,Bytes);std::memset(memory,0x81+int(variant)*13,Bytes);
@@ -102,10 +104,27 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         const auto word_selected=selected;
         if(bc_reader){selected[1]=bc;selected[1].base_level=second_mip;
             if(subset)selected[1].base_array=selected[1].last_array=second_layer;}
+        if(shifted){const u32 layer=shifted_slot?second_layer:first_layer;const auto& physical=layout.mips.at(2);
+            const u64 address=base+ImageOffset+physical.offset+layer*physical.slice_bytes;
+            auto& local=selected[shifted_slot];local.base_address=address>>8;local.width=local.height=5;local.pitch=7;
+            local.base_level=0;local.last_level=0;local.depth=0;local.base_array=0;local.last_array=0;
+            auto original=DescribeGuestTexture(local);original.writable=shifted_slot==0;const auto local_layout=LayoutGuestTexture(original);
+            if(address%256||original.address!=address||original.width!=6||original.height!=6||original.pitch!=8||
+               original.levels!=1||original.first_mip||original.min_lod||original.layers!=1||original.first_layer||original.view_layers!=1||
+               local.GetType()!=AmdGpu::ImageType::Color2DArray||local_layout.mips.size()!=1||
+               local_layout.guest_bytes!=(bc3?1024u:512u)||local_layout.guest_bytes!=physical.slice_bytes||
+               local_layout.mips[0].offset||local_layout.mips[0].pitch!=8||local_layout.mips[0].height!=8||
+               local_layout.mips[0].slice_bytes!=physical.slice_bytes||local_layout.mips[0].macro||local_layout.mips[0].thickness!=1||
+               layer>=Layers||address+local_layout.guest_bytes>base+ImageOffset+image_bytes)
+                throw std::runtime_error("Shifted BC original sharp lost exact standalone mip/slice geometry");}
         if(mixed&&first_mip==second_mip&&!(selected[0].last_array<selected[1].base_array||selected[1].last_array<selected[0].base_array))
             throw std::runtime_error("Mixed BC reader/writer selected subresources overlap");
         bool saw_unaligned_prefix=false;
-        for(u32 slot=0;slot<slot_count;++slot){auto view=DescribeGuestTexture(selected[slot]);view.writable=!mixed||slot==0||variant==7;const auto prefix=LayoutGuestTexture(view);
+        for(u32 slot=0;slot<slot_count;++slot){
+            // Standalone originals are checked above. Canonical word sharps
+            // independently describe their parent-prefix geometry here.
+            auto view=DescribeGuestTexture(shifted&&slot==shifted_slot?word_selected[slot]:selected[slot]);
+            view.writable=!mixed||slot==0||variant==7;const auto prefix=LayoutGuestTexture(view);
             if(bc_reader&&slot==1){auto storage=view;storage.first_mip=parent_desc.first_mip;
                 storage.first_layer=parent_desc.first_layer;storage.view_layers=parent_desc.view_layers;
                 if(storage!=parent_desc||prefix.guest_bytes!=parent_layout.guest_bytes||prefix.format!=parent_layout.format||
@@ -156,11 +175,14 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             auto& p=bind(seed[index],12);std::memcpy(p.user_data.data(),&target,sizeof(target));std::memcpy(p.user_data.data()+4,&image,sizeof(image));
             if(!index)verify(frontend.BuildCompute(gpu),{{target,true,false}},{{image,true,mip}});else verify(frontend.BuildCompute(gpu),{},{{image,true,mip}});
             rasterizer.DispatchDirect();}
-        const auto probe_uint=[&](Code& code,const AmdGpu::Image& sharp,u32 layer,u32 mip,u32 output_start,u64 identity){
+        const auto probe_uint=[&](Code& code,const AmdGpu::Image& sharp,u32 layer,u32 mip,u32 output_start,u64 identity,
+                                  u32 oracle_mip=~0u,u32 oracle_layer=~0u){
             std::vector<u32> words;for(u32 x=0;x<2;++x){coords(words,0,x,0,layer,mip);
                 words.insert(words.end(),{bc3?0xf0044f00u:0xf0044300u,0x00000400,0xbf8c0000});
                 for(u32 c=0;c<components;++c){words.insert(words.end(),{0xe0700000u+output_start+x*16+c*4,0x80020000u|((4+c)<<8)});
-                    u32 value{};const u32 absolute=u32(sharp.base_level)+mip;std::memcpy(&value,logical.data()+GuestPixelOffset(desc,layout,absolute,layer,x,0)+c*4,4);
+                    u32 value{};const u32 absolute=oracle_mip==~0u?u32(sharp.base_level)+mip:oracle_mip,
+                        physical_layer=oracle_layer==~0u?layer:oracle_layer;
+                    std::memcpy(&value,logical.data()+GuestPixelOffset(desc,layout,absolute,physical_layer,x,0)+c*4,4);
                     expect(OutputOffset+output_start+x*16+c*4,value);}}
             words.push_back(0xbf810000);initialize(code,words,identity);auto& p=bind(code,12);std::memcpy(p.user_data.data(),&sharp,sizeof(sharp));
             std::memcpy(p.user_data.data()+8,&output,sizeof(output));verify(frontend.BuildCompute(gpu),{{output,true,false}},{{sharp,false,mip}});rasterizer.DispatchDirect();};
@@ -209,7 +231,7 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             // Variants9/10 read the actual BC parent, not a UINT child.
             // Both mip values are view-relative zero. Subset array coordinate
             // zero maps to the original T# base_array, rather than layer zero.
-            coords(write_words,2,0,0,subset?0:second_layer,0);
+            coords(write_words,2,0,0,subset||(shifted&&shifted_slot==1)?0:second_layer,0);
             write_words.insert(write_words.end(),{bc3||bc_reader?0xf0044f00u:0xf0044300u,0x00020802,0xbf8c0000});
             coords(write_words,2,1,0,0,0);
             write_words.insert(write_words.end(),{bc3?0xf0244f00u:0xf0244300u,0x00000802,0xbf8c0000});
@@ -225,7 +247,7 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         write_words.insert(write_words.end(),{bc3?0xf0244f00u:0xf0244300u,0x00000802,0xbf8c0000});
         put(logical.data(),first_mip,first_layer,0,false,25);
         if(group){coords(write_words,2,0,0,variant==2?0:second_layer,0);const auto second_value=block(false,26);for(u32 c=0;c<components;++c)move(write_words,8+c,second_value[c]);
-            write_words.insert(write_words.end(),{0xf0244300,0x00020802,0xbf8c0000});put(logical.data(),second_mip,second_layer,0,false,26);}
+            write_words.insert(write_words.end(),{bc3?0xf0244f00u:0xf0244300u,0x00020802,0xbf8c0000});put(logical.data(),second_mip,second_layer,0,false,26);}
         if(duplicate){coords(write_words,2,0,0,0,0);write_words.insert(write_words.end(),{0xf0044f00,0x00020802,0xbf8c0000});
             coords(write_words,2,1,0,0,0);write_words.insert(write_words.end(),{0xf0244f00,0x00020802,0xbf8c0000});put(logical.data(),first_mip,0,1,false,25);}
         write_words.push_back(0xbf810000);initialize(writer,write_words,hash(8));auto& aw=bind(writer,slot_count*8);
@@ -248,6 +270,7 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         for(u32 slot=0;slot<slot_count;++slot){auto probe=word_selected[slot];probe.base_array=0;probe.last_array=Layers-1;
             for(u32 layer=0;layer<Layers;++layer)
                 probe_uint(uint_probe[slot*Layers+layer],probe,layer,0,1536+(slot*Layers+layer)*32,hash(10,slot*Layers+layer));}
+        if(shifted)probe_uint(shifted_probe,selected[shifted_slot],0,0,1840,hash(14),2,shifted_slot?second_layer:first_layer);
         read_gpu();sample_parent(parent_final,512,11,true);read_gpu();
         initialize(formatted,{0xe0002000,0x08000400,0xbf8c0000,0xe0702000,0x80010400,0xbf810000},hash(12));
         auto copied=target;copied.base_address=base+OutputOffset+CopyOffset;copied.num_records=Chunk/4;
@@ -259,6 +282,8 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         rasterizer.ReadMemory(base,Bytes);rasterizer.Finish();rasterizer.ValidateDebugMessages();
         if(std::memcmp(backing,expected.data(),Bytes))throw std::runtime_error("Writable BC encoded words, untouched mips/layers, physical padding or dirty-union mismatch");
         std::printf("PASS: real GCN writable %s %s; selected/grouped UAVs, exact parent blocks and64KiB physical oracle\n",bc3?"BC3":"BC1",
+            shifted?(variant==15?"shifted BC3 mip2/layer1 writer":variant==16?"shifted BC1 mip2/layer3 writer":
+                variant==17?"shifted writer/ordinary mip3 SRV":variant==18?"shifted mip2 SRV/ordinary mip1 writer":"shifted writer/ordinary second writer"):
             dependent?(variant==11?"unaligned mip2 single UINT128 writer":variant==12?"unaligned mip2 writer/aligned mip3 SRV":
                 variant==13?"aligned mip1 writer/unaligned mip2 SRV":"unaligned mip2 single UINT64 writer"):
             mixed?(variant==5?"writer mip1/reader mip3 SRV":variant==6?"reader mip1 SRV/writer mip3":

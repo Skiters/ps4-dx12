@@ -1469,6 +1469,62 @@ bool GuestTextureCache::IsLiveWritableBlockAlias(const WritableBlockAlias& alias
        !image.desc.writable||image.desc.first_layer||image.desc.view_layers!=image.desc.layers)return false;
     return true;
 }
+std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
+    const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
+    // Pinned ImageInfo::MipOf/SliceOf recognizes a one-level image starting
+    // at a physical mip/slice boundary. Rebase it before grouping, so an alias
+    // and an ordinary selected-mip view share one child and one parent commit.
+    if(desc.levels!=1||desc.first_mip||!desc.layers||desc.first_layer>=desc.layers||
+       !desc.view_layers||desc.view_layers>desc.layers-desc.first_layer||
+       desc.render_target||desc.depth_target||desc.stencil_address||desc.one_dimensional||
+       desc.volume_depth||desc.samples!=1||desc.pow2_padding||desc.storage_height||
+       desc.storage_slice_bytes||layout.block_extent!=1||layout.expanded_bytes_per_pixel||
+       layout.mips.size()!=1||desc.number_format!=4||
+       !((desc.data_format==11&&layout.bytes_per_pixel==8)||
+         (desc.data_format==14&&layout.bytes_per_pixel==16))||
+       !CanUploadGpuSnapshot(desc,layout,true))return std::nullopt;
+    // An existing independent version is a separate authority. Never silently
+    // replace it with another overlapping image's contents.
+    if(FindValidIndependentImage(desc,layout))return std::nullopt;
+    const auto& local=layout.mips[0];
+    if(local.offset||local.macro||local.thickness!=1||!local.slice_bytes||
+       local.slice_bytes>UINT64_MAX/desc.layers||
+       layout.guest_bytes!=local.slice_bytes*desc.layers)return std::nullopt;
+    Entry* owner{};std::optional<GuestTextureDesc> result;
+    for(const auto& candidate:entries_){const auto& parent=*candidate;
+        if(!parent.gpu_owned||!parent.buffer_alias_version||!parent.buffer_alias_watch||
+           parent.logical_dirty||desc.address<=parent.desc.address||
+           !IsNativeReadonlyGuestBlockStorage(parent.desc,parent.layout)||
+           (!array&&parent.desc.layers!=1)||parent.desc.width%4||
+           parent.desc.height%4||parent.desc.pitch%4)continue;
+        const auto delta=desc.address-parent.desc.address;
+        if(delta>=parent.layout.guest_bytes||layout.guest_bytes>parent.layout.guest_bytes-delta)continue;
+        for(uint32_t mip=0;mip<parent.desc.levels;++mip){const auto& physical=parent.layout.mips[mip];
+            if(physical.macro||physical.thickness!=1||!physical.slice_bytes||
+               physical.pitch!=local.pitch||physical.height!=local.height||
+               physical.slice_bytes!=local.slice_bytes||desc.pitch!=physical.pitch||
+               delta<physical.offset)continue;
+            const auto layer_bytes=delta-physical.offset;
+            if(layer_bytes%physical.slice_bytes)continue;
+            const auto layer=layer_bytes/physical.slice_bytes;
+            if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer)continue;
+            auto view=desc;view.address=parent.desc.address;
+            view.width=parent.desc.width/4;view.height=parent.desc.height/4;view.pitch=parent.desc.pitch/4;
+            if(mip>=std::bit_width(std::max(view.width,view.height))||
+               desc.width!=std::max(view.width>>mip,1u)||desc.height!=std::max(view.height>>mip,1u))continue;
+            view.levels=mip+1;view.first_mip=mip;view.layers=parent.desc.layers;
+            view.first_layer=uint32_t(layer)+desc.first_layer;
+            // A standalone one-level SRV clamps to its mip0. After rebasing,
+            // that is the parent's selected mip, not the parent's mip0.
+            view.min_lod=mip*256;
+            auto storage=view;storage.writable=true;storage.first_layer=0;storage.view_layers=storage.layers;
+            if(!CanTransferDependentBlockView(parent,storage,LayoutGuestTexture(storage)))continue;
+            if(owner&&owner!=&parent)throw std::runtime_error("Ambiguous shifted BC block-view parent");
+            owner=candidate.get();result=view;
+        }
+    }
+    return result;
+}
 std::optional<GuestTextureCache::WritableBlockAlias> GuestTextureCache::BeginWritableBlockAlias(
     const GuestTextureDesc& desc,ID3D12GraphicsCommandList* list,uint64_t completed){
     const auto layout=LayoutGuestTexture(desc);auto* parent=FindWritableBlockParent(desc,layout);

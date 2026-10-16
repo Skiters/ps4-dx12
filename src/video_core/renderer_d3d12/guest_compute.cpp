@@ -273,6 +273,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 desc.view_layers=1;
             }
             auto layout=LayoutGuestTexture(desc);
+            if(sharp&&count==1)if(auto view=textures->RebaseBlockSubresource(desc,layout,array)){
+                desc=*view;layout=LayoutGuestTexture(desc);
+            }
             if(desc.writable)textures->ValidateWritableFormat(layout.format);
             auto* block_parent=sharp?find_block_parent(desc,layout):nullptr;
             if(block_parent)writable_block_parent_pins.push_back(textures->PinBinding(*block_parent));

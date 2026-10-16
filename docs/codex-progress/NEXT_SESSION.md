@@ -2,12 +2,13 @@
 
 ## Current continuation pointer - 2026-10-16
 
-Read SESSION_HANDOFF.md's active section and bc-dependent-transfer-20261016/CHECKPOINT_FINAL.json;
-verify HEAD and preserve inherited integration/22 staged deletions. Current dependent
-unaligned prefix source block is saved; do not redo it or prior audits. Next: exact shifted
-mip/slice physical aliases in guest_texture_cache.cpp, starting from the existing matcher
-and Begin/Commit transaction. Preserve full-parent watch, bounds, prefix/tail and lifetime.
-No compiler/build/tests/GPU/game/UI until execution is authorized. Earlier notes historical.
+Read SESSION_HANDOFF.md and bc-shifted-views-20261016/CHECKPOINT_FINAL.json; verify HEAD
+and preserve inherited dirty integration/22 staged deletions. Shifted thin UINT mip/slice
+source rebase is saved; do not repeat it. Next: shifted native BC SRVs bound to the actual
+parent, exact original one-mip/layer range, state and disjoint-write checks. Start with
+RebaseBlockSubresource, FindReadonlyBlockParent and guest_compute readonly binding path.
+Reference multi-layer/base_array discrepancy and macro/thick/nonarray gaps remain open.
+No compiler/build/tests/GPU/game/UI. Earlier next-task sections are historical.
 
 ## Current BC mip continuation - 2026-10-16
 
