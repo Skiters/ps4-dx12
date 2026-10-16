@@ -1,5 +1,25 @@
 # Next session
 
+## Current bounded BC identity continuation - 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+Verify HEAD/upstream against msaa-depth-init-20261016/CHECKPOINT_FINAL.json and read the
+SESSION_HANDOFF current section.0682d65/9b5b356 depth-init/UINT-stencil fixes are already
+pushed; their focused fixture is authored only. Do not rerun source audits of these paths.
+NEXT_BC_IMAGE_IDENTITY_CONTRACT.md proves no current native modified independent BC producer;
+do not repeat it or widen identity alone. Next exact boundary: pinned IsComputeImageCopy /
+CopyColorAndDepth versus native ComputeImageOperation, GuestImageCopyCompatible and
+DescribeGuestImageOwnership. Read NEXT_SOURCE_TASK.md and adapt a valid compressed-copy
+producer/ownership/retention before BC family matching. Preserve source residency, physical
+padding, complete logical write and fence lifetime; do not legalize BC UAV writes or conflate
+equal-block-byte codecs. Source work only; preserve dirty integration/index
+and push accurate WIP. Full-port/runtime/reproducible publication remains incomplete.
+
+
+
 ## Current MSAA depth continuation - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

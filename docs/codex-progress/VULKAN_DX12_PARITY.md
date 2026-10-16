@@ -1,5 +1,25 @@
 # Vulkan / native D3D12 parity audit
 
+## Current MSAA depth/stencil transfer coverage - 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+| Contract | Production continuation | Acceptance |
+|---|---|---|
+| New placed MSAA depth | Full selected plane clear before upload shader draw | Source review only |
+| Plane/layer preservation | One-layer DSV, single clear flag; partial larger targets retained | Authored/unrun |
+| Stencil sample extraction | Unsigned SRV selects uint4 and retains G-to-X mapping | Authored/unrun |
+| First use and exact contents | Fresh D16/D32, DS order, independent sample oracle, padding | Uncompiled/unrun |
+| Generic partial fresh target | Initialization witness not implemented; current production initial upload is full | Open |
+
+No full depth/MSAA/feedback/physical-alias equivalence or performance result is claimed.
+See SESSION_HANDOFF.md, source proofs and msaa-depth-init-20261016 evidence; all earlier
+PASS results below remain historical. No core was built, installed or selected.
+
+
+
 ## Current heap-pressure coverage - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

@@ -1,5 +1,103 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-16
 
+## Current MSAA depth initialization and unsigned stencil extraction - 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+### Production changes
+
+Pushed0682d65 initializes the fully replaced MSAA depth/stencil plane before its upload
+shader draw. GuestMultisample::Lease::Record transitions to DEPTH_WRITE then uses its
+retained one-layer DSV with exactly DEPTH or STENCIL clear flag. Actual fullWidth/Height
+and MipLevels1 are required. Other planes/layers and pixels outside a partial viewport
+are preserved. Color discard behavior, cache identity, guest metadata, logical writes,
+physical backing, descriptors and transfer/fence lifetime remain unchanged.
+
+Pushed9b5b356 classifies X32_TYPELESS_G8X24_UINT as uint4 in ValueType. Previously actual
+production plane1 MSAA readback built TEXTURE_TYPE=float4 for this unsigned stencil SRV,
+then converted into an R8_UINT output. The existing G-to-X mapping stays; integer source
+and output now agree. GuestImageReadback::RecordTiled's plane1 path is the reachable user.
+Neither change establishes runtime correctness of depth/stencil or renderer parity.
+
+### Prepared acceptance, not executed
+
+Pushedf067efb registers native_msaa_depth_initialization with native-independent-version-transfer-test
+--msaa-depth-init. The authored focused mode uses fresh placed D16/D32 resources without
+fixture clear/discard/copy before production upload. A separate compute sample-load oracle
+checks complete per-layer/sample/pixel values and a canary tail; D32/stencil are exact,
+D16 tolerance1e-6 is below one normalized D16 step. Three-layer combined DS controls seed
+independent high-bit stencil0x80/0xa5/0xff values, check depth-only preservation, both upload
+orders where PSSpecifiedStencilRef is supported, and7x5 partial uploads into13x11 initialized
+resources. A separate production stencil extraction check includes every pitched padding
+byte and runs even when shader stencil export is unavailable. Required InfoQueue plus severe
+message checks retain the placed initialization acceptance oracle. All are uncompiled/unrun.
+
+### Evidence and preserved state
+
+F:/PS4Dev/handoff/msaa-depth-init-20261016 contains source/ and stencil-type/ snapshots,
+REFERENCE_CONTRACT.md, INDEPENDENT_REVIEW.md, REVIEW_STENCIL_TYPE.md and fixtures/ exact
+before/after/patch/proof plus fixtures/FIXTURE_REVIEW.md. CHECKPOINT_FINAL.json records actual final
+local/remote HEAD, source hashes, original22 staged deletion preservation and final-residual.
+Restore that archive only into a separate checkout of its recorded HEAD using its README;
+never overlay the active dirty tree. Older checkpoints and evidence remain immutable.
+
+The initial byte-index assertion accidentally compared a short-index Git patch with a
+full-index snapshot; canonical --binary --full-index comparison matches original exactly.
+No foreign index/source change was made. Existing large/casting/shared integration remains
+residual: a clean checkout of these commits alone is NOT a reproducible full core.
+
+Installed preview24 remains at C:/Users/skei/AppData/Local/PS4Desktop/cores/
+dx12-20261015-full-port-preview-70eeeff04e89/shadPS4-DX12-Core.exe, SHA256
+70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf.
+Source provenance remains a3f1d5e plus archived integration. No new core was built, installed
+or selected; selection last known preview23. PDB/runtime locations remain in
+F:/PS4Dev/handoff/eop-continuation-20261015/preview24-installed/INSTALLATION.json.
+Vulkan, original saves, settings, monitoring and remote/user session were untouched.
+Historical326/346(native211/229) and three targeted passes are separate older results;
+Bloodborne final-world correctness, controls/FPS and historical EOP cause stay unresolved.
+
+### Boundaries and exact continuation
+
+Generic partial upload into an already initialized larger depth target preserves outside
+pixels. Fresh partial-first-use lifecycle is not solved by this guarded clear; production
+initial depth Upload creates exact logical dimensions and reaches the full-plane path.
+NEXT_TRANSFER_GEOMETRY_CONTRACT.md found no confirmed production-reachable geometry or
+arithmetic mismatch; do not replace preservation with blanket clears or speculative guards.
+Pinned writable depth feedback must be resolved from NEXT_DEPTH_FEEDBACK_CONTRACT.md;
+absence of native simultaneous writable feedback alone is not a proved parity defect.
+
+NEXT_BC_IMAGE_IDENTITY_CONTRACT.md already proves no current native independently modified
+BC producer; exact format/number direct reuse exists, family numeric reinterpretation does
+not. Do not repeat that proof or widen identity alone. Next exact source boundary is pinned
+IsComputeImageCopy/CopyColorAndDepth versus native ComputeImageOperation,
+GuestImageCopyCompatible and DescribeGuestImageOwnership: establish/adapt a real exact
+compressed-copy producer, source residency and physical-padding/logical-write/fence contract
+before extending BC retention or matching. Read NEXT_SOURCE_TASK.md; never equate unrelated
+BC codecs merely by block bytes or legalize BC UAV writes. Then continue the existing registry.
+No broad audit, blanket alias barrier, unsupported MSAA pressure guard lift or repeated
+Vulkan/DX12/game experiment is justified. Existing heap-pressure, mapped-generation, readonly
+history and original-slot fixes are already saved and must not be redone without new evidence.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue Skiters/ps4-dx12 at F:/PS4Dev/work/shadps4-dx12-src on fix/mixed-cmask. Read this
+SESSION_HANDOFF current section, STATE/NEXT_SESSION and current registry; verify actual HEAD
+and upstream against msaa-depth-init-20261016/CHECKPOINT_FINAL.json. Preserve all dirty work
+and original index split. The execution gate remains active: no build/package/compiler,
+tests/game/GPU/XInput/UI until final authorization. Do not redo completed source proofs or
+attribute old326/346/FPS to current source. Depth initialization and UINT stencil extraction
+are source fixes with authored/unrun acceptance. Continue the precise compressed-copy
+producer/ownership boundary using NEXT_SOURCE_TASK.md and saved BC proof, then remaining
+applicable production contracts. Use existing
+Vulkan/DX12 evidence; when execution is finally authorized build with pinned tooling, run
+changed components/regressions, minimal isolated virtual-XInput gameplay and real completed
+frames against the saved baseline, preserving user saves/session/Vulkan. Keep the full-port
+goal active, commit/push coherent WIP, retain exact residual recovery and next task.
+
+
+
 ## Current texture heap pressure and idle reclamation - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

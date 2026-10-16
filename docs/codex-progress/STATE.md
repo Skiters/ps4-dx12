@@ -1,5 +1,23 @@
 # Native DX12 state
 
+## Current MSAA depth/stencil source corrections - 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+0682d65/9b5b356 are pushed: full selected-plane placed MSAA depth initialization before
+upload draw and unsigned shader type for actual stencil SRV extraction. Other planes/layers,
+partial preserved pixels, guest metadata/ownership and fence leases stay protected.
+One focused depth-init/stencil extraction mode is authored/unrun; older28 ordered cases and
+heap mode remain separate unrun coverage. No new core is built/installed/selected.
+See SESSION_HANDOFF.md and msaa-depth-init-20261016 exact proof/recovery. Partial fresh-resource
+lifecycle and broader depth/MSAA/alias/runtime acceptance remain open. Continue the bounded
+compressed-copy producer/ownership source contract; BC identity-alone expansion lacks a
+reachable producer. Do not redo saved BC/geometry/heap/readonly proofs.
+
+
+
 ## Current actual heap pressure - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

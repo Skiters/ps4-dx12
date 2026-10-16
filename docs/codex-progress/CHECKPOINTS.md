@@ -1,5 +1,21 @@
 # Checkpoints
 
+## MSAA depth/stencil source checkpoint - 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+0682d65: full replaced MSAA DS plane initialized through retained one-layer DSV before draw.
+9b5b356: stencil SRV X32_TYPELESS_G8X24_UINT uses uint4 in production sample extraction.
+f067efb: focused native_msaa_depth_initialization mode is authored/uncompiled/unrun. Source and
+fixture reviews, snapshots/hashes, exact residual archive and actual final upstream SHA are
+in F:/PS4Dev/handoff/msaa-depth-init-20261016/CHECKPOINT_FINAL.json. Original22 staged network
+deletions and inherited integration remain preserved. No rebuild/install/session operation.
+Historical source checkpoints and runtime evidence below remain historical and unchanged.
+
+
+
 ## Actual texture heap pressure checkpoint - 2026-10-16
 
 Authoritative current section; all earlier current/next sections are historical.

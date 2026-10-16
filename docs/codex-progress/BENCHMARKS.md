@@ -1,5 +1,20 @@
 # Benchmarks
 
+## Current depth/stencil block - no new measurement, 2026-10-16
+
+Authoritative current section; earlier current/next sections are historical.
+Source-only: no configure/build/package/compiler/test/GPU/game/XInput/UI execution.
+All129 contract groups remain partial/open; no runtime PASS, new FPS or game acceptance.
+
+0682d65/9b5b356 source fixes and authored depth-init/stencil controls have no execution result.
+No device-debug PASS, game launch, world acceptance, FPS/frame time, CPU/GPU wait or memory
+throughput measurement was obtained. Historical326/346(native211/229), three targeted passes
+and Vulkan/DX12 measurements remain tied to their original binaries/scenarios. Preview24
+SHA70eeeff04e89e604f7f5f6fa33115706bad76550dbbe54eb0cd86f1852c7e8bf stays unchanged.
+See SESSION_HANDOFF.md and msaa-depth-init-20261016 for exact source/proof/recovery identities.
+
+
+
 ## Texture heap pressure source continuation - 2026-10-16
 
 No configure/build/package/compiler/test/fixture/GPU/game/UI run or new measurement for
