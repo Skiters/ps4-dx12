@@ -1,5 +1,17 @@
 # PS4 Desktop
 
+
+## Folder core selection — 2026-10-17
+
+Open «Версии ядра» → «Выбрать папку с ядром…», choose the folder, inspect its details, then click «Выбрать ядро». The executable and DLLs stay in that folder; nothing is copied into the application catalogue. Selection persists across application restarts. Existing installed catalogue entries remain available.
+
+Supported folders contain either core-version.json (including Vulkan reference packages), or shadPS4-DX12-Core.exe plus the complete native-compiler/runtime DLLs from a native Release build. Plain builds are marked unverified in game and use an isolated profile. The chosen executable/runtime hashes are saved with the selection; missing, changed or added DLLs require selecting the folder again. Moving the folder also requires selecting its new location.
+
+This host's current core package is F:/PS4Dev/handoff/integrated-release-20261016/artifacts-6cbaef7. New builds are left in artifact folders for manual selection; they are not installed or selected automatically.
+
+`--external-core-folder-test` checks selection, persistence, hashes, missing/extra runtime, relocation, manifest backend and containment using only temporary files. It exits before WinForms initialization and does not launch a core, game or device probe. Historic notes below describe older launcher revisions.
+
+
 Separate Windows library/menu for the shadPS4 native DirectX 12 port. Installed at C:\Games\PS4-Desktop\PS4Desktop.exe and registered in Orbit as “PS4 — библиотека и установка PKG”.
 
 The library scans installed game folders/SFO metadata, caches cover thumbnails, imports folders, launches games and installs PKGs asynchronously with progress/cancellation and transactional extraction. Existing game directories are not replaced. Base games, update sidecars and DLC directories are supported.

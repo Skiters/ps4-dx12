@@ -8,6 +8,11 @@
 
 # Bloodborne emulation research
 
+- New core builds remain in separate artifact folders. Do not automatically
+  install them in the application catalogue or change the selected core. The
+  user requested manual folder selection on 2026-10-17; later explicit requests
+  may authorize a particular installation or selection.
+
 - For native DirectX renderer/core work, use
   `docs/codex-progress/vulkan-emulation-20261011/CORE_CONTRACT.md` as the saved
   model of guest execution, memory ownership, queues and resource reuse. Consult

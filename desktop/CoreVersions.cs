@@ -25,8 +25,9 @@ sealed class CoreVersion
     public CoreSourceIdentity? Source { get; set; }
     public CoreBuildIdentity? Build { get; set; }
     [System.Text.Json.Serialization.JsonIgnore] public string Directory { get; set; } = "";
+    [System.Text.Json.Serialization.JsonIgnore] public bool External { get; set; }
     [System.Text.Json.Serialization.JsonIgnore] public string? Error { get; set; }
-    public override string ToString() => $"{Name} · {Status}" + (Error is null ? "" : " · повреждено");
+    public override string ToString() => $"{Name} · {Status}" + (External ? " · из папки" : "") + (Error is null ? "" : " · повреждено");
 }
 
 sealed class CoreSourceIdentity
@@ -114,6 +115,54 @@ static class CoreVersions
         }
         return result;
     }
+    public static CoreVersion FromDirectory(string directory)
+    {
+        directory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        string manifest = Path.Combine(directory, "core-version.json");
+        CoreVersion version;
+        if (File.Exists(manifest))
+        {
+            version = JsonSerializer.Deserialize<CoreVersion>(File.ReadAllText(manifest),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new IOException("Пустой manifest ядра.");
+            if (string.IsNullOrWhiteSpace(version.Id) || version.Id is "." or ".." ||
+                version.Id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                throw new IOException("Некорректная идентичность версии ядра.");
+        }
+        else
+        {
+            const string executable = "shadPS4-DX12-Core.exe";
+            string path = Path.Combine(directory, executable);
+            if (!File.Exists(path))
+                throw new IOException("Выберите папку с core-version.json или с shadPS4-DX12-Core.exe и его DLL.");
+            path = System.IO.Directory.EnumerateFiles(directory).Single(file =>
+                Path.GetFileName(file).Equals(executable, StringComparison.OrdinalIgnoreCase));
+            foreach (string runtime in new[] { "spirv_to_dxil.dll", "dxcompiler.dll", "dxil.dll" })
+                if (!File.Exists(Path.Combine(directory, "native-compiler", runtime)))
+                    throw new IOException("В папке ядра отсутствует native-compiler/" + runtime + ". Нужен полный комплект сборки.");
+            string hash = Hash(path);
+            version = new() { Id = "external-" + hash[..24], Name = Path.GetFileName(directory), Backend = "dx12",
+                Executable = Path.GetFileName(path), Sha256 = hash, BuildDate = File.GetLastWriteTimeUtc(path), IsolatedProfile = true,
+                Status = "Внешняя сборка · игровая проверка не подтверждена",
+                Description = "Запуск из выбранной папки. Файлы ядра не копируются в приложение.",
+                Files = System.IO.Directory.EnumerateFiles(directory, "*", new EnumerationOptions {
+                    RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint })
+                    .Where(file => Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+                        Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(file => Path.GetRelativePath(directory, file), Hash) };
+        }
+        version.Directory = directory; version.External = true;
+        Validate(version);
+        return version;
+    }
+    public static void Select(Settings settings, CoreVersion version)
+    {
+        Validate(version);
+        settings.SelectedCoreId = version.External ? "" : version.Id;
+        settings.ExternalCoreDirectory = version.External ? version.Directory : "";
+        // Save a snapshot, not a reference to a mutable manifest in that folder.
+        settings.ExternalCore = version.External ? JsonSerializer.Deserialize<CoreVersion>(JsonSerializer.Serialize(version)) : null;
+        settings.Backend = version.Backend;
+    }
     public static string Validate(CoreVersion version)
     {
         if (version.Error is not null) throw new IOException(version.Error);
@@ -126,7 +175,7 @@ static class CoreVersions
         foreach (var file in version.Files)
             if (!Hex(file.Value, 64) || !string.Equals(Hash(Inside(version, file.Key)), file.Value, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Файл ядра повреждён: " + file.Key);
-        if (version.ManifestVersion == 2)
+        if (version.ManifestVersion == 2 || version.External)
             foreach (string runtime in System.IO.Directory.EnumerateFiles(version.Directory, "*", SearchOption.AllDirectories)
                 .Where(path => Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase)))
                 if (!version.Files.Keys.Any(path => Inside(version, path).Equals(runtime, StringComparison.OrdinalIgnoreCase)))
@@ -196,6 +245,12 @@ static class CoreVersions
     }
     public static CoreVersion? Selected(Settings settings)
     {
+        if (!string.IsNullOrEmpty(settings.ExternalCoreDirectory))
+        {
+            var external = settings.ExternalCore ?? throw new IOException("Выберите папку с ядром заново: отсутствует сохранённая идентичность файлов.");
+            external.Directory = Path.GetFullPath(settings.ExternalCoreDirectory); external.External = true;
+            return external;
+        }
         if (string.IsNullOrEmpty(settings.SelectedCoreId)) return null;
         return Discover().SingleOrDefault(v => v.Id == settings.SelectedCoreId)
             ?? throw new IOException("Выбранная версия ядра отсутствует. Откройте «Версии ядра» и выберите доступную версию.");
@@ -203,8 +258,8 @@ static class CoreVersions
     public static string Backend(Settings settings) => Selected(settings)?.Backend ?? "dx12";
     public static string Resolve(Settings settings)
     {
-        if (string.IsNullOrEmpty(settings.SelectedCoreId)) return settings.NativeCore;
-        var version = Selected(settings)!;
+        var version = Selected(settings);
+        if (version is null) return settings.NativeCore;
         try { return Validate(version); }
         catch (Exception ex) { throw new IOException("Выбранная версия ядра недоступна. Откройте «Версии ядра» и выберите доступную версию. " + ex.Message, ex); }
     }

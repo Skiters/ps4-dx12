@@ -12,6 +12,8 @@ sealed class Settings
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PS4Desktop"));
     public string Backend { get; set; } = "dx12";
     public string SelectedCoreId { get; set; } = "";
+    public string ExternalCoreDirectory { get; set; } = "";
+    public CoreVersion? ExternalCore { get; set; }
     public string NativeCore { get; set; } = Path.Combine(AppContext.BaseDirectory, "native", "shadPS4-DX12.exe");
     public string ProfileRoot { get; set; } = Path.Combine(AppContext.BaseDirectory, "profile-template");
     public string NativeProfileRoot { get; set; } = Path.Combine(DataRoot, "native-profile");
@@ -274,8 +276,7 @@ sealed class MainWindow : Form
         try
         {
             string selectedBackend = CoreVersions.Backend(settings);
-            string selected = string.IsNullOrEmpty(settings.SelectedCoreId) ? "Ранее настроенное ядро" :
-                CoreVersions.Discover().FirstOrDefault(v => v.Id == settings.SelectedCoreId)?.ToString() ?? "Выбранное ядро отсутствует";
+            string selected = CoreVersions.Selected(settings)?.ToString() ?? "Ранее настроенное ядро";
             backend.Text = "  " + selected + " · " + (nativeReady ? "Подключение проверено." : "Экспериментальный запуск.");
             playButton.Text = "▶ Запустить " + (selectedBackend == "dx12" ? "DX12" : "Vulkan") + " · A";
             playButton.Enabled = true;
@@ -361,30 +362,50 @@ sealed class MainWindow : Form
         var versions = new ListBox { Dock = DockStyle.Top, Height = 200, HorizontalScrollbar = true };
         var details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
         var select = new Button { Text = "Выбрать ядро", Dock = DockStyle.Bottom, Height = 45, Enabled = false };
+        var browse = new Button { Text = "Выбрать папку с ядром…", Dock = DockStyle.Bottom, Height = 45 };
         var legacy = new Button { Text = "Вернуться к ранее настроенному ядру", Dock = DockStyle.Bottom, Height = 45 };
         foreach (var version in CoreVersions.Discover()) versions.Items.Add(version);
+        if (!string.IsNullOrEmpty(settings.ExternalCoreDirectory))
+            try { versions.Items.Add(CoreVersions.Selected(settings)!); } catch (IOException) { }
+        browse.Click += (_, _) =>
+        {
+            using var folder = new FolderBrowserDialog { Description = "Папка с исполняемым файлом ядра и его DLL", ShowNewFolderButton = false,
+                SelectedPath = settings.ExternalCoreDirectory };
+            if (folder.ShowDialog(dialog) != DialogResult.OK) return;
+            try
+            {
+                var version = CoreVersions.FromDirectory(folder.SelectedPath);
+                for (int i = versions.Items.Count - 1; i >= 0; --i)
+                    if (versions.Items[i] is CoreVersion existing && existing.External &&
+                        existing.Directory.Equals(version.Directory, StringComparison.OrdinalIgnoreCase)) versions.Items.RemoveAt(i);
+                versions.Items.Add(version); versions.SelectedItem = version;
+            }
+            catch (Exception ex) { MessageBox.Show(dialog, ex.Message, "Не удалось выбрать ядро"); }
+        };
         versions.SelectedIndexChanged += (_, _) =>
         {
             if (versions.SelectedItem is not CoreVersion version) return;
             string validation;
             try { validation = CoreVersions.Validate(version); select.Enabled = true; }
             catch (Exception ex) { validation = ex.Message; select.Enabled = false; }
-            details.Text = $"{version.Name}\r\nСтатус: {version.Status}\r\nСохранения: {(version.IsolatedProfile ? "отдельная копия для этой версии" : "общий профиль выбранного backend")}\r\nДата сборки: {version.BuildDate:O}\r\nBackend: {version.Backend}\r\nВетка: {version.Branch}\r\nCommit: {version.Commit}\r\nИзменения поверх commit: {version.Dirty}\r\nSHA256: {version.Sha256}\r\nИсточник: {version.Source?.Repository}\r\nЭталон: {version.Source?.ReferenceRevision}\r\nКомпилятор: {version.Build?.Compiler} {version.Build?.CompilerVersion}\r\n{validation}\r\n\r\n{version.Description}\r\n\r\n{version.Results}";
+            details.Text = $"{version.Name}\r\nПапка: {version.Directory}\r\nСтатус: {version.Status}\r\nСохранения: {(version.IsolatedProfile ? "отдельная копия для этой версии" : "общий профиль выбранного backend")}\r\nДата сборки: {version.BuildDate:O}\r\nBackend: {version.Backend}\r\nВетка: {version.Branch}\r\nCommit: {version.Commit}\r\nИзменения поверх commit: {version.Dirty}\r\nSHA256: {version.Sha256}\r\nИсточник: {version.Source?.Repository}\r\nЭталон: {version.Source?.ReferenceRevision}\r\nКомпилятор: {version.Build?.Compiler} {version.Build?.CompilerVersion}\r\n{validation}\r\n\r\n{version.Description}\r\n\r\n{version.Results}";
         };
         select.Click += (_, _) =>
         {
             try
             {
                 var version = (CoreVersion)versions.SelectedItem!;
-                CoreVersions.Validate(version); settings.SelectedCoreId = version.Id; settings.Backend = version.Backend; nativeReady = false; settings.Save();
+                CoreVersions.Select(settings, version); nativeReady = false; settings.Save();
                 dialog.DialogResult = DialogResult.OK;
             }
             catch (Exception ex) { MessageBox.Show(dialog, ex.Message); }
         };
-        legacy.Click += (_, _) => { settings.SelectedCoreId = ""; settings.Backend = "dx12"; nativeReady = false; settings.Save(); dialog.DialogResult = DialogResult.OK; };
-        dialog.Controls.Add(details); dialog.Controls.Add(versions); dialog.Controls.Add(select); dialog.Controls.Add(legacy);
+        legacy.Click += (_, _) => { settings.SelectedCoreId = ""; settings.ExternalCoreDirectory = ""; settings.ExternalCore = null;
+            settings.Backend = "dx12"; nativeReady = false; settings.Save(); dialog.DialogResult = DialogResult.OK; };
+        dialog.Controls.Add(details); dialog.Controls.Add(versions); dialog.Controls.Add(select); dialog.Controls.Add(browse); dialog.Controls.Add(legacy);
         for (int i = 0; i < versions.Items.Count; ++i)
-            if (((CoreVersion)versions.Items[i]).Id == settings.SelectedCoreId) versions.SelectedIndex = i;
+            if (((CoreVersion)versions.Items[i]).External ? !string.IsNullOrEmpty(settings.ExternalCoreDirectory) :
+                string.IsNullOrEmpty(settings.ExternalCoreDirectory) && ((CoreVersion)versions.Items[i]).Id == settings.SelectedCoreId) versions.SelectedIndex = i;
         if (dialog.ShowDialog(this) == DialogResult.OK) { UpdateBackend(); _ = ProbeNative(); }
     }
 
@@ -554,6 +575,7 @@ static class Program
 {
     [STAThread] static int Main(string[] args)
     {
+        if (args.Contains("--external-core-folder-test")) return ExternalCoreTests.Run();
         ApplicationConfiguration.Initialize();
         try
         {
