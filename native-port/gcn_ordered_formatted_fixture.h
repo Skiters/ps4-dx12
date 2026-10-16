@@ -3,6 +3,7 @@
 
 #include "gcn_ordered_disjoint_fixture.h"
 #include "gcn_readonly_revalidation_fixture.h"
+#include "gcn_bc_block_expansion_fixture.h"
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include <algorithm>
@@ -540,5 +541,6 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     drain.armed = false;
     RunOrderedDisjointGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunReadonlyRevalidationGcnFixture(rasterizer, gpu, profile, memory, backing, base);
+    RunBcBlockExpansionGcnFixture(rasterizer, gpu, profile, memory, backing, base);
 }
 } // namespace NativeDX12
