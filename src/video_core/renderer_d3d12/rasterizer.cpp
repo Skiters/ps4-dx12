@@ -968,6 +968,16 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
     DmaMemory().ObserveResidentSharps(requests);
     return views;
 }
+std::optional<Rasterizer::ShaderBufferView> Rasterizer::PreparedDmaBuffer(VAddr address,u64 size)const{
+    std::lock_guard lock(execution_mutex_);
+    if(!size||address>UINT64_MAX-size)return {};
+    auto it=mappings_.upper_bound(address);
+    if(it==mappings_.begin())return {};--it;
+    const auto& mapping=it->second;
+    if(mapping.initial_upload_failed||!mapping.gpu.handle||address-mapping.base>mapping.size||
+       size>mapping.size-(address-mapping.base))return {};
+    return ShaderBufferView{mapping.gpu.handle,address-mapping.base,size,{},mapping.gpu.allocation};
+}
 void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest> requests,
     std::span<const ShaderBufferView> views){
     std::lock_guard lock(execution_mutex_);

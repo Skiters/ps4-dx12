@@ -209,6 +209,63 @@ int wmain(int argc,wchar_t** argv){try{
     AmdGpu::Buffer sharp{};sharp.base_address=output_base;sharp.num_records=1024;
     memcpy(metadata.flattened_ud_buf.data()+4,&sharp,sizeof(sharp));
     {
+        // Materialization after AppendRequests must reach the very first
+        // command, including a complete 4KiB tail inside a partial 64KiB page.
+        // A four-byte sharp must not expose the rest of its uninitialized page.
+        Rasterizer late(device.Get());late.MapMemory(guest_base,3*Dma::PageSize);
+        auto& dma=late.DmaMemory();std::vector<Rasterizer::ShaderBufferRequest> planned;
+        dma.AppendRequests(late,planned);
+        if(!planned.empty())throw std::logic_error("Fresh late-residency fixture unexpectedly has a DMA plan");
+        const Rasterizer::ShaderBufferRequest materialized[]{
+            {guest_base,Dma::PageSize,false,true,true},
+            {guest_base+2*Dma::PageSize-Dma::SubpageSize,Dma::SubpageSize,false,true,true},
+            {guest_base+3*Dma::PageSize-4,4,false,true,true}};
+        const auto selected=late.PrepareShaderBuffers(materialized);
+        if(!late.PreparedDmaBuffer(guest_base,Dma::PageSize)||
+           !late.PreparedDmaBuffer(materialized[1].address,Dma::SubpageSize)||
+           late.PreparedDmaBuffer(guest_base+3*Dma::PageSize-Dma::SubpageSize,Dma::SubpageSize))
+            throw std::runtime_error("Late DMA selection did not retain exact materialized coverage");
+        late.FillPreparedShaderBuffer(guest_base,Dma::PageSize,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        ResourceBindings late_bindings(device.Get(),pipeline.Layout());
+        const auto ordinary=[&](UINT reg,Resource& resource){
+            resource.Transition(late.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_TYPELESS;
+            view.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;view.Buffer.NumElements=UINT(resource.handle->GetDesc().Width/4);
+            view.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;late_bindings.Uav(reg,0,resource.handle.Get(),view);
+        };
+        ordinary(0,flat);ordinary(3,output);
+        auto mismatched=selected.front();++mismatched.offset;bool rejected=false;
+        try{dma.BindResident(late,late_bindings,std::span(materialized).first(1),std::span(&mismatched,1));}
+        catch(const std::logic_error&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Late DMA publication accepted a replaced selected buffer");
+        rejected=false;
+        try{dma.BindResident(late,late_bindings,planned,{},std::span(selected).subspan(1,1));}
+        catch(const std::runtime_error&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Late DMA publication allowed simultaneous SRV/UAV backing");
+        late_bindings.BeforeBind([&](ResourceBindings& table){
+            dma.BindResident(late,table,planned,{});
+            for(size_t i=0;i<std::size(materialized);++i){
+                const auto current=late.PreparedDmaBuffer(materialized[i].address,materialized[i].size);
+                if(!current||current->resource.Get()!=selected[i].resource.Get()||current->offset!=selected[i].offset)
+                    throw std::runtime_error("Late DMA publication recreated selected guest backing");
+            }
+            dma.BindMetadata(table,1,false);dma.BindMetadata(table,2,true);
+        });
+        late.ExecuteCompute(pipeline,late_bindings,1,1,1);
+        auto rb=Buffer(device.Get(),sizeof(values),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        output.Transition(late.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        late.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,output.handle.Get(),0,sizeof(values));late.Finish();
+        void* mapped{};D3D12_RANGE whole{0,sizeof(values)};Check(rb.handle->Map(0,&whole,&mapped));
+        memcpy(values.data(),mapped,sizeof(values));D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);
+        for(u32 lane=0;lane<64;++lane){
+            const auto expected=lane==0?0x51525354U:lane==1?0xface0001U:0U;
+            if(values[lane]!=expected||values[lane+64]!=(lane<2?expected:fallback)||
+               values[lane+128]!=0||values[lane+192]!=0x51525354U)
+                throw std::runtime_error("Late DMA full/partial-page publication or GPU-only B preservation mismatch");
+        }
+        late.ValidateDebugMessages();
+    }
+    {
         // EnsureResident must expose an ordinary cached page on the first DMA
         // command, without requiring a prior failed ReadConst on that page.
         Rasterizer resident(device.Get());resident.MapMemory(guest_base,guest_bytes);resident.MapMemory(output_base,1024);

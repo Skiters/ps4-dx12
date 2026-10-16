@@ -974,25 +974,27 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 bindings.Srv(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
         }
     }
-    if(dma){dma->Bind(rasterizer,bindings,std::span(views).subspan(ordinary_count,dma_count));
-        for(const auto& target:dma_pending)dma->BindMetadata(bindings,target.reg,target.fault);}
     // Image/attachment uploads below may Finish and reset the constant arena.
     // Allocate only once their ownership resolution has ended, immediately
     // before the command binds its descriptors and executes on the GPU.
-    std::function<void()> dma_refresh;
+    std::function<void(ResourceBindings&)> dma_refresh;
     if(dma){
         const auto read_requests=std::span(requests).subspan(ordinary_count,dma_count);
         const auto read_views=std::span(views).subspan(ordinary_count,dma_count);
-        dma_refresh=[&rasterizer,
+        std::vector<Rasterizer::ShaderBufferView> shader_srvs;
+        for(size_t i=0;i<requests.size();++i)if(!requests[i].unordered_access)
+            shader_srvs.push_back(views[i]);
+        dma_refresh=[&rasterizer,dma,dma_pending,shader_srvs=std::move(shader_srvs),
             ranges=std::vector<Rasterizer::ShaderBufferRequest>(read_requests.begin(),read_requests.end()),
-            selected=std::vector<Rasterizer::ShaderBufferView>(read_views.begin(),read_views.end())]{
-            rasterizer.SynchronizePreparedDmaBuffers(ranges,selected);
+            selected=std::vector<Rasterizer::ShaderBufferView>(read_views.begin(),read_views.end())](ResourceBindings& table){
+            dma->BindResident(rasterizer,table,ranges,selected,shader_srvs);
+            for(const auto& target:dma_pending)dma->BindMetadata(table,target.reg,target.fault);
         };
     }
     bindings.BeforeBind([&rasterizer,push,buffer_limits,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
         buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end()),
         dma_refresh=std::move(dma_refresh)](ResourceBindings& table){
-        if(dma_refresh)dma_refresh();
+        if(dma_refresh)dma_refresh(table);
         // Attachment uploads may Finish after buffer preparation. Mark actual
         // shader writes at bind time so such retirement cannot clear this draw.
         rasterizer.MarkShaderBufferWrites(buffer_requests);

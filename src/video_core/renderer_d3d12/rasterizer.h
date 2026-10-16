@@ -219,6 +219,8 @@ public:
     std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>,
         std::optional<std::span<const BufferWrite>> known_writes=std::nullopt);
     void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
+    // Select only fully materialized backing; never reserve, resize or upload.
+    std::optional<ShaderBufferView> PreparedDmaBuffer(VAddr,u64)const;
     Resource CaptureShaderBuffer(VAddr address,u64 bytes);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);

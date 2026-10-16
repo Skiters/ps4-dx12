@@ -71,24 +71,58 @@ void GuestDmaMemory::ObserveResidentSharps(std::span<const Rasterizer::ShaderBuf
 }
 void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterizer::ShaderBufferRequest>& requests,
     std::span<const Rasterizer::ShaderBufferRequest> resident_sharps){
-    ConsumeFaults(rasterizer);ranges_.clear();translations_.clear();indirect_entries_.clear();
+    ConsumeFaults(rasterizer);
     ObserveResidentSharps(resident_sharps);
-    const auto append=[&](u32 entry,VAddr address,u32 bytes){
-        if(ranges_.empty()||ranges_.back().address+ranges_.back().size!=address||ranges_.back().size>Dma::BankSize-bytes)
+    PlanRanges(rasterizer);
+    // This pass only plans residency. A raw DMA read must not download a
+    // distinct I into B before the ordered image-domain retention pass.
+    requests.insert(requests.end(),ranges_.begin(),ranges_.end());
+}
+void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,
+    std::vector<Rasterizer::ShaderBufferView>* resident_views){
+    ranges_.clear();translations_.clear();indirect_entries_.clear();
+    if(resident_views)resident_views->clear();
+    const auto append=[&](u32 entry,VAddr address,u32 bytes,const Rasterizer::ShaderBufferView* view){
+        const bool same_backing=!resident_views||(!resident_views->empty()&&
+            resident_views->back().resource.Get()==view->resource.Get()&&
+            resident_views->back().offset+resident_views->back().size==view->offset);
+        if(ranges_.empty()||ranges_.back().address+ranges_.back().size!=address||
+           ranges_.back().size>Dma::BankSize-bytes||!same_backing){
             ranges_.push_back({address,0,false,true});
+            if(resident_views){resident_views->push_back(*view);resident_views->back().size=0;}
+        }
         translations_.push_back({entry,bytes,ranges_.size()-1,ranges_.back().size});ranges_.back().size+=bytes;
+        if(resident_views)resident_views->back().size+=bytes;
     };
     u32 partial_count{};
     for(auto it=pages_.begin();it!=pages_.end();){
         const VAddr address=u64(*it)<<Dma::PageShift;
-        if(rasterizer.IsDmaReadable(address,Dma::PageSize))append(*it,address,Dma::PageSize);
+        const bool readable=rasterizer.IsDmaReadable(address,Dma::PageSize);
+        auto full=readable&&resident_views?rasterizer.PreparedDmaBuffer(address,Dma::PageSize):
+            std::optional<Rasterizer::ShaderBufferView>{};
+        if(readable&&(!resident_views||full))append(*it,address,Dma::PageSize,full?&*full:nullptr);
         else{
-            u32 valid{};for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub)
-                if(rasterizer.IsDmaReadable(address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize))valid|=1u<<sub;
-            if(!valid){it=pages_.erase(it);continue;}
+            u32 valid{},readable_subpages{};
+            std::array<std::optional<Rasterizer::ShaderBufferView>,Dma::SubpagesPerPage> subviews;
+            for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub){
+                const auto first=address+u64(sub)*Dma::SubpageSize;
+                if(!readable&&!rasterizer.IsDmaReadable(first,Dma::SubpageSize))continue;
+                readable_subpages|=1u<<sub;
+                if(resident_views){subviews[sub]=rasterizer.PreparedDmaBuffer(first,Dma::SubpageSize);
+                    if(!subviews[sub])continue;}
+                valid|=1u<<sub;
+            }
+            if(!valid){
+                // A readable candidate can have only a tiny resident sharp.
+                // Do not expose its uninitialized page tail or forget it: the
+                // ordinary fault/materialization pass can fill the page later.
+                if(!readable_subpages)it=pages_.erase(it);else ++it;
+                continue;
+            }
             indirect_entries_.emplace(*it,Dma::PartialFlag|u64(partial_count+1));
             for(u32 sub=0;sub<Dma::SubpagesPerPage;++sub)if(valid&(1u<<sub))
-                append(Dma::SecondaryBase+partial_count*Dma::SubpagesPerPage+sub,address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize);
+                append(Dma::SecondaryBase+partial_count*Dma::SubpagesPerPage+sub,
+                    address+u64(sub)*Dma::SubpageSize,Dma::SubpageSize,subviews[sub]?&*subviews[sub]:nullptr);
             ++partial_count;
         }
         ++it;
@@ -97,9 +131,31 @@ void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterize
     if(required>UINT32_MAX||required*sizeof(u64)>Dma::MaxRawViewBytes)
         throw std::out_of_range("Native DMA page-table descriptor extent overflow");
     required_entries_=UINT(std::max<u64>(Dma::TableEntries,required));
-    // This pass only plans residency. A raw DMA read must not download a
-    // distinct I into B before the ordered image-domain retention pass.
-    requests.insert(requests.end(),ranges_.begin(),ranges_.end());
+}
+void GuestDmaMemory::BindResident(Rasterizer& rasterizer,ResourceBindings& bindings,
+    std::span<const Rasterizer::ShaderBufferRequest> planned_requests,
+    std::span<const Rasterizer::ShaderBufferView> planned_views,
+    std::span<const Rasterizer::ShaderBufferView> shader_srvs){
+    // Image prewarm and attachment preparation can materialize B after the
+    // original request plan. Select current complete pages only. No Find,
+    // reservation or retile may replace resources already chosen for this draw.
+    if(planned_requests.size()!=planned_views.size())throw std::invalid_argument("Native DMA planned view count mismatch");
+    for(size_t i=0;i<planned_requests.size();++i){
+        const auto& request=planned_requests[i];const auto& selected=planned_views[i];
+        const auto current=rasterizer.PreparedDmaBuffer(request.address,request.size);
+        if(!current||current->resource.Get()!=selected.resource.Get()||
+           current->offset!=selected.offset||current->size!=selected.size)
+            throw std::logic_error("Late DMA publication cannot replace an already selected buffer");
+    }
+    std::vector<Rasterizer::ShaderBufferView> views;
+    PlanRanges(rasterizer,&views);
+    for(const auto& view:views){
+        if(std::ranges::any_of(shader_srvs,[&](const auto& srv){return srv.resource.Get()==view.resource.Get();}))
+            throw std::runtime_error("Late DMA residency needs unified UAV shader buffer access");
+        bindings.RetainAllocation(view.allocation);
+    }
+    rasterizer.SynchronizePreparedDmaBuffers(ranges_,views);
+    Bind(rasterizer,bindings,views);
 }
 void GuestDmaMemory::Bind(Rasterizer& rasterizer,ResourceBindings& bindings,
     std::span<const Rasterizer::ShaderBufferView> views){

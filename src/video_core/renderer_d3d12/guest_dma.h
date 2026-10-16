@@ -20,6 +20,8 @@ class GuestDmaMemory {
     std::map<u32,u64> indirect_entries_;
     u32 required_entries_=Shader::NativeDma::TableEntries;
     void Initialize(Rasterizer&);
+    void PlanRanges(Rasterizer&,std::vector<Rasterizer::ShaderBufferView>* resident_views=nullptr);
+    void Bind(Rasterizer&,ResourceBindings&,std::span<const Rasterizer::ShaderBufferView>);
 public:
     explicit GuestDmaMemory(ID3D12Device* device):device_(device){}
     u64 PageTableBytes()const{return table_.handle?table_.handle->GetDesc().Width:0;}
@@ -27,7 +29,10 @@ public:
     void AppendRequests(Rasterizer&,std::vector<Rasterizer::ShaderBufferRequest>&,
         std::span<const Rasterizer::ShaderBufferRequest> resident_sharps={});
     bool HasReadOverlap(VAddr,u64)const;
-    void Bind(Rasterizer&,ResourceBindings&,std::span<const Rasterizer::ShaderBufferView>);
+    // Publish late resident pages without recreating any selected guest buffer.
+    void BindResident(Rasterizer&,ResourceBindings&,
+        std::span<const Rasterizer::ShaderBufferRequest>,std::span<const Rasterizer::ShaderBufferView>,
+        std::span<const Rasterizer::ShaderBufferView> shader_srvs={});
     void BindMetadata(ResourceBindings&,UINT reg,bool fault);
     void RecordFaults(Rasterizer&);
     void ConsumeFaults(Rasterizer&);
