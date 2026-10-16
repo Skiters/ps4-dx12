@@ -151,6 +151,27 @@ Do not rerun completed format/cache audits. The user execution gate remains acti
 
 ## Current packed-float/RGB32 checkpoint - 2026-10-15
 
+Current partial BC expansion source WIP: 38b7c95 (2026-10-16), superseding prior next-step
+notes below. MatchesReferencePartialBlockExpansion now admits same-address UINT64/128
+source to native readonly BC target with matching base4x dimensions/pitch, equal array layers,
+source mip count <= target, exact common physical mip offsets/strides/tiling, and every
+source copy rectangle fitting its actual BC mip extent. Source bytes form a complete target
+prefix. Early source selection, sticky modified history and generic transfer share this
+admission. New callback captures one target R: synchronized B iff target pages are GPU
+modified, otherwise read_backing_ physical P staged privately. Retile overlays only source I
+words into the SAME seed prefix; prefix merges back without changing R-only blocks/tail.
+New actual BC ownership is acquired before retiring old I; pins/resources/fences stay.
+
+Independent source review: F:/PS4Dev/handoff/bc-partial-copy-20261016/REVIEW.md. No build,
+compiler, tests, game, GPU or UI execution. Failure-path device/submission lifetime and new
+GPU contents remain unverified. Old fixtures do not establish partial-copy coverage. Next:
+author meaningful unrun controls for UINT24->BC96 levels5 partial-block complement and
+UINT32->BC128 extra tail mips, with page-complete valid layer counts and BOTH target-page
+GPU-query branches using distinct I/B/P. Use independent GPU readback; do not reconcile guest
+source while observing. Check full target compressed bytes, padding, tail, source guards and
+parent retirement. Then continue writable selected-view authority and shifted physical aliases.
+All129 groups remain partial/open, and installed preview24 remains unchanged.
+
 Latest source WIP 3bfd8ef (2026-10-16), superseding older ownership limits below:
 actual native readonly BC storage now retains complete real mip layout even when it cannot
 be represented by a complete UINT64/128 chain. Canonical BC-to-UINT matching remains stricter;
