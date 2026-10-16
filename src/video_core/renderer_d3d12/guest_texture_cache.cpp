@@ -1407,18 +1407,27 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
 }
 GuestTextureCache::Entry* GuestTextureCache::FindWritableBlockParent(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
-    if(!desc.writable||desc.first_layer>=desc.layers||!desc.view_layers||
+    return desc.writable?FindBlockViewParent(desc,layout):nullptr;
+}
+GuestTextureCache::Entry* GuestTextureCache::FindBlockViewParent(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout)const{
+    // Querying a readonly image must not reinterpret BC/depth/expanded formats
+    // as writable just to test retention. Only raw UINT block-word views enter.
+    if(layout.block_extent!=1||layout.expanded_bytes_per_pixel||desc.number_format!=4||
+       !((desc.data_format==11&&layout.bytes_per_pixel==8)||(desc.data_format==14&&layout.bytes_per_pixel==16))||
+       desc.render_target||desc.depth_target||desc.stencil_address||
+       desc.first_layer>=desc.layers||!desc.view_layers||
        desc.view_layers>desc.layers-desc.first_layer)return nullptr;
     // A layer subset is a view of full-layer transient storage, not another
     // owner of a shortened guest range. Retain and transfer all original layers.
-    auto storage=desc;storage.first_layer=0;storage.view_layers=storage.layers;
+    auto storage=desc;storage.writable=true;storage.first_layer=0;storage.view_layers=storage.layers;
     if(!CanRetainBufferAlias(storage,layout))return nullptr;
     auto view=storage;view.writable=false;
     Entry* parent{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto it=first;it!=last;++it){auto* candidate=it->second;
         if(!candidate->gpu_owned||!candidate->buffer_alias_version||candidate->logical_dirty||
            !MatchesReadonlyBlockMipPrefix(candidate->desc,candidate->layout,view,layout))continue;
-        if(parent&&parent!=candidate)throw std::runtime_error("Ambiguous writable BC parent");
+        if(parent&&parent!=candidate)throw std::runtime_error("Ambiguous BC block-view parent");
         parent=candidate;
     }
     return parent;

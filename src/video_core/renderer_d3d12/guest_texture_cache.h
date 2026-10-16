@@ -272,8 +272,9 @@ public:
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
     static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);
-    // Transient writable views never own physical guest memory. The caller
-    // rejects overlapping buffers/mixed image views before recording dispatch.
+    // Transient UINT views never own physical guest memory. Before dispatch,
+    // the caller proves parent identity and disjoint SRV/UAV subresources.
+    Entry* FindBlockViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindWritableBlockParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     std::optional<WritableBlockAlias> BeginWritableBlockAlias(const GuestTextureDesc&,
         ID3D12GraphicsCommandList*,uint64_t completed);
