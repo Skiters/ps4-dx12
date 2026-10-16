@@ -331,6 +331,16 @@ fallback; a conversion-required resource is never bound as an incompatible direc
 Capture-skipping and replacement witnesses retain cache identities through preparation.
 No new format/sample/domain admission is implied by this selection correction.
 
+Partial BC fixture is now authored and independently source-reviewed (2026-10-16).
+New gcn_bc_partial_expansion_fixture.h adds both real target GPU-page query branches for
+UINT24->BC96,5mips,2layers,36864bytes, three uncovered final-mip blocks perlayer, full
+compressed/padding readback and physical64KiB oracle. Source proof/review/snapshots:
+F:/PS4Dev/handoff/bc-partial-copy-20261016/fixtures/. False-branch uncovered B==P remains
+a documented limit; special reflected operands are not asserted. Extra terminalmips and
+reverse selected views still lack fixture coverage. No build or test execution. Existing
+expectations retained. Next production work remains durable scheduler submission batches
+from scheduler-retention-20261016/DISPOSITION.md; no unsafe exploratory fix is live.
+
 Latest source finding (2026-10-16): CommandScheduler::Submit moves a retirement callback
 into by-value Defer after GPU execution; deque allocation failure can destroy its last
 resource lease before fence completion. Source-proven failure path, not an observed crash.
