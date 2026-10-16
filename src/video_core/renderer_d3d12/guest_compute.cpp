@@ -486,17 +486,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 // a later formatted read must not turn them into arena aliases.
                 const bool clean_small=streams_before_binding(i);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
+                const bool exact_shader_bounds=std::ranges::any_of(pipeline.Layout().Bindings(),[](const auto& binding){
+                    return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.space==Shader::NATIVE_BUFFER_BOUNDS_SET;
+                });
                 const bool compatible_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
                     if(buffer.address>=desc.address+layout.guest_bytes||desc.address>=buffer.address+buffer.size)return true;
                     const auto original=buffer.WriteRange();
-                    if(!buffer.unordered_access||!original.size||original.size!=buffer.size||
-                       original.address!=buffer.address)return false;
-                    if(buffer.address==desc.address)return true;
-                    // Keep one physical image domain and exact DWORD write
-                    // bounds. Offset formatted readers still require the pinned
-                    // base-address assertion; other layouts/stages stay guarded.
-                    return buffer.written&&buffer.address>desc.address&&
-                        !(buffer.address&3)&&!(buffer.size&3)&&
+                    if(!buffer.unordered_access||!original.size)return false;
+                    if(!buffer.written)return buffer.address==desc.address&&
+                        original.address==buffer.address&&original.size==buffer.size;
+                    if((original.address!=buffer.address||original.size!=buffer.size)&&!exact_shader_bounds)return false;
+                    if(buffer.address==desc.address&&original.address==buffer.address)return true;
+                    // The DWORD envelope shares B; native shader bounds retain
+                    // the exact byte/halfword sharp, and narrow-store lowering
+                    // preserves the other bytes. Invalidation uses the original
+                    // base, including a sub-DWORD base in the image's first word.
+                    // Offset readers still retain the pinned base assertion.
+                    return buffer.address>=desc.address&&original.address>desc.address&&
                         buffer.size<=desc.address+layout.guest_bytes-buffer.address;
                 });
                 // GetArena in the pinned backend guarantees whole 4-GiB VA
@@ -587,7 +593,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(dma&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&binding.space==Shader::NativeDma::DescriptorSet&&
            binding.reg==0&&binding.count==Shader::NativeDma::BankCount)continue;
         if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.count==1&&
-           (binding.space==30||binding.space==31))continue;
+            (binding.space==30||binding.space==31||binding.space==Shader::NATIVE_BUFFER_BOUNDS_SET))continue;
         if(binding.space!=0||(binding.type!=D3D12_DESCRIPTOR_RANGE_TYPE_SRV&&binding.type!=D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&binding.type!=D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER))
             throw std::runtime_error("Unexpected native guest compute descriptor class/space");
         for(UINT i=0;i<binding.count;++i)if(!covered.contains({binding.reg+i,binding.space}))
@@ -723,6 +729,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     auto bindings_lease=std::make_shared<ResourceBindings>(device,pipeline.Layout(),&rasterizer.BindingHeapPool());
     auto& bindings=*bindings_lease;
     diagnostic.Stage("buffer-descriptors-and-constants");
+    std::array<u64,Shader::NATIVE_BUFFER_BOUNDS_VECTORS*2> buffer_limits{};
     for(size_t i=0;i<ordinary_count;++i) {
         const auto& target=pending[i];const auto& view=views[target.stream_view.value_or(i)];
         // Raw SRV/UAV base is aligned to 16 bytes; PS4 sub-dword offsets go
@@ -731,6 +738,15 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(view.size>Shader::NativeDma::MaxRawViewBytes-delta)
             throw std::out_of_range("Native raw buffer descriptor element count overflow");
         push.buf_offsets[target.push_index]=u8(delta+target.byte_adjust);
+        // The raw view includes prefix/suffix alignment bytes. Its exact
+        // original sharp limit is independent of that physical envelope.
+        // Preserve the existing 16-byte temporary behavior for null sharps.
+        if(target.byte_adjust>view.size)
+            throw std::out_of_range("Native buffer prefix exceeds prepared view");
+        const u64 exact_bytes=target.original_bytes?target.original_bytes:view.size-target.byte_adjust;
+        if(!exact_bytes||exact_bytes>view.size-target.byte_adjust)
+            throw std::out_of_range("Native buffer original sharp exceeds prepared view");
+        buffer_limits.at(target.push_index)=delta+target.byte_adjust+exact_bytes-1;
         const auto elements=UINT((view.size+delta)/4);
         if(target.uav) {
             D3D12_UNORDERED_ACCESS_VIEW_DESC d{};d.Format=DXGI_FORMAT_R32_TYPELESS;
@@ -752,17 +768,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Image/attachment uploads below may Finish and reset the constant arena.
     // Allocate only once their ownership resolution has ended, immediately
     // before the command binds its descriptors and executes on the GPU.
-    bindings.BeforeBind([&rasterizer,push,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
+    bindings.BeforeBind([&rasterizer,push,buffer_limits,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
         buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end())](ResourceBindings& table){
         // Attachment uploads may Finish after buffer preparation. Mark actual
         // shader writes at bind time so such retirement cannot clear this draw.
         rasterizer.MarkShaderBufferWrites(buffer_requests);
         auto push_buffer=rasterizer.UploadConstants(std::as_bytes(std::span(&push,1)));
         auto runtime_buffer=rasterizer.UploadConstants(runtime);
-        for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV)
-            table.Cbv(0,b.space,b.space==30?push_buffer.resource:runtime_buffer.resource,
-                b.space==30?push_buffer.offset:runtime_buffer.offset,
-                b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
+        std::optional<UploadArena::Slice> limits_buffer;
+        for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV){
+            if(b.space==Shader::NATIVE_BUFFER_BOUNDS_SET){
+                if(!limits_buffer)limits_buffer=rasterizer.UploadConstants(std::as_bytes(std::span(buffer_limits)));
+                table.Cbv(0,b.space,limits_buffer->resource,limits_buffer->offset,
+                    UINT((sizeof(buffer_limits)+255)&~size_t(255)));
+            }else table.Cbv(0,b.space,b.space==30?push_buffer.resource:runtime_buffer.resource,
+                    b.space==30?push_buffer.offset:runtime_buffer.offset,
+                    b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
+        }
     });
     std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers;
     std::vector<GuestTextureCache::Entry*> bc_readers;

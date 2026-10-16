@@ -369,6 +369,52 @@ public:
         }
     };
 
+    // Raw D3D12 descriptors have DWORD granularity. Keep the original byte
+    // range independently so lowering byte/halfword stores cannot write padding.
+    template <typename Access>
+    Id BufferAccess(u32 handle, Id address, PointerSize size, Id result_type,
+                    Access&& access, u32 component = 0) {
+        const auto& buffer = buffers[handle];
+        Id adjusted = address;
+        if (const Id offset = buffer.Offset(size); Sirit::ValidId(offset)) {
+            adjusted = OpIAdd(U32[1], adjusted, offset);
+        }
+        const Id index = component ? OpIAdd(U32[1], adjusted, ConstU32(component)) : adjusted;
+        if (!profile.native_buffer_bounds || buffer.buffer_type != BufferType::Guest) {
+            return access(index);
+        }
+        const u32 shift = u32(size);
+        const Id limit_ptr = OpAccessChain(TypePointer(spv::StorageClass::Uniform, U32[4]),
+            native_buffer_limits, u32_zero_value, ConstU32(buffer.binding / 2));
+        const Id limits = OpLoad(U32[4], limit_ptr);
+        const Id limit_low = OpCompositeExtract(U32[1], limits, (buffer.binding % 2) * 2);
+        const Id limit_high = OpCompositeExtract(U32[1], limits, (buffer.binding % 2) * 2 + 1);
+        const Id last_low = shift ? OpBitwiseOr(U32[1],
+            OpShiftLeftLogical(U32[1], index, ConstU32(shift)), ConstU32((1U << shift) - 1)) : index;
+        const Id last_high = shift ? OpShiftRightLogical(U32[1], index, ConstU32(32 - shift))
+                                   : u32_zero_value;
+        const Id within_limit = OpLogicalOr(U1[1], OpULessThan(U1[1], last_high, limit_high),
+            OpLogicalAnd(U1[1], OpIEqual(U1[1], last_high, limit_high),
+                OpULessThanEqual(U1[1], last_low, limit_low)));
+        // Check both additions before a wrapped native prefix/component can
+        // turn an invalid guest address into a low in-range memory operation.
+        const Id valid = OpLogicalAnd(U1[1], within_limit,
+            OpLogicalAnd(U1[1], OpUGreaterThanEqual(U1[1], adjusted, address),
+                OpUGreaterThanEqual(U1[1], index, adjusted)));
+        const Id active = OpLabel(), inactive = OpLabel(), merge = OpLabel();
+        OpSelectionMerge(merge, spv::SelectionControlMask::MaskNone);
+        OpBranchConditional(valid, active, inactive);
+        AddLabel(active);
+        const Id result = access(index);
+        const Id active_end = last_label;
+        OpBranch(merge);
+        AddLabel(inactive);
+        OpBranch(merge);
+        AddLabel(merge);
+        return Sirit::ValidId(result_type)
+            ? OpPhi(result_type, result, active_end, ConstantNull(result_type), inactive) : Id{};
+    }
+
     Bindings& binding;
     boost::container::small_vector<Id, 16> buf_type_ids;
     boost::container::small_vector<BufferDefinition, 16> buffers;
@@ -380,6 +426,7 @@ public:
     size_t bda_pagetable_index{};
     size_t fault_buffer_index{};
     Id native_dma_banks{},native_dma_pointer{};
+    Id native_buffer_limits{};
     Id physical_pointer_type_u32;
 
     Id sampler_type{};

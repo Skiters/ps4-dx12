@@ -55,6 +55,7 @@ struct Profile {
     bool inline_fetch_shader{};
     // D3D12 DMA uses logical buffer descriptors and translated cache offsets.
     bool native_dma_buffers{};
+    bool native_buffer_bounds{};
     u32 native_shader_clock_backend{};
     u32 native_compute_wave_size{};
     // Native UAV descriptors can expose overlapping views of one texture.

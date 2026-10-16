@@ -41,6 +41,7 @@ std::unique_ptr<Backend> CreateGuestBackend(const BackendConfiguration& config,A
     profile.inline_fetch_shader=true;
     profile.native_dma_buffers=true;profile.sparse_page_shift=Shader::NativeDma::PageShift;
     profile.native_coherent_images=true;
+    profile.native_buffer_bounds=true;
     profile.native_viewport_clip_conversion=true;
     D3D12_COMMAND_QUEUE_DESC q{};q.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
     Check(DX12_API_CALL(result->device->CreateCommandQueue(&q,IID_PPV_ARGS(&result->presentation_queue))));

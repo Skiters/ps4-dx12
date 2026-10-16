@@ -963,6 +963,19 @@ EmitContext::BufferSpv EmitContext::DefineBuffer(bool is_written, bool is_cohere
 };
 
 void EmitContext::DefineBuffers() {
+    if (profile.native_buffer_bounds && std::ranges::any_of(info.buffers,
+            [](const auto& desc) { return desc.buffer_type == BufferType::Guest; })) {
+        const Id array = TypeArray(U32[4], ConstU32(NATIVE_BUFFER_BOUNDS_VECTORS));
+        const Id block = TypeStruct(array);
+        Decorate(array, spv::Decoration::ArrayStride, 16U);
+        Decorate(block, spv::Decoration::Block);
+        MemberDecorate(block, 0, spv::Decoration::Offset, 0U);
+        native_buffer_limits = DefineVar(block, spv::StorageClass::Uniform);
+        Decorate(native_buffer_limits, spv::Decoration::DescriptorSet, NATIVE_BUFFER_BOUNDS_SET);
+        Decorate(native_buffer_limits, spv::Decoration::Binding, 0U);
+        Name(native_buffer_limits, "native_buffer_limits");
+        interfaces.push_back(native_buffer_limits);
+    }
     if(info.uses_dma&&profile.native_dma_buffers){
         ASSERT(profile.sparse_page_shift==NativeDma::PageShift);
         AddCapability(spv::Capability::ShaderNonUniform);

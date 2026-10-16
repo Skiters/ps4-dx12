@@ -72,10 +72,19 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                                Sequence::LongWriter, Sequence::BindingOrderResident,
                                Sequence::OffsetWriterReadFirst, Sequence::OffsetWriterFirst})
     for (const bool small_image : {false, true})
-    for (const bool clean : {false, true}) {
+    for (const bool clean : {false, true})
+    for (const u32 write_bytes : {4U, 1U, 2U}) {
         const bool short_views = sequence >= Sequence::CleanShortDirtyTail && sequence <= Sequence::MixedShortLong;
         const bool writer_cases = sequence >= Sequence::ShortWriterFullRead;
         const bool offset_writer = sequence == Sequence::OffsetWriterReadFirst || sequence == Sequence::OffsetWriterFirst;
+        if (!offset_writer && write_bytes != 4) continue;
+        const bool narrow_writer = offset_writer && write_bytes < 4;
+        const u32 write_shift = narrow_writer ? write_bytes * 8 : 0;
+        const u32 write_mask = write_bytes == 1 ? 0xffU : write_bytes == 2 ? 0xffffU : 0xffffffffU;
+        const u32 physical_mask = write_mask << write_shift;
+        const u32 gpu_far_word = (ImageFar & ~physical_mask) | ((FinalValue & write_mask) << write_shift);
+        const u32 writer_load_opcode = write_bytes == 1 ? 0xe0200000 : write_bytes == 2 ? 0xe0280000 : 0xe0300000;
+        const u32 writer_store_opcode = write_bytes == 1 ? 0xe0600000 : write_bytes == 2 ? 0xe0680000 : 0xe0700000;
         const bool binding_order = sequence == Sequence::BindingOrderResident;
         const bool long_writer = sequence == Sequence::LongWriter;
         const bool short_writer = writer_cases && !long_writer;
@@ -153,7 +162,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         // Seed/probe commands always use a full protected page. The last case
         // gives the tested command a separate fresh, partial-page output below.
         observation.num_records = 4096 / 4;
-        const u64 identity = (u64(sequence) << 12) | (u64(small_image) << 8) | u64(clean);
+        const u64 identity = (u64(sequence) << 12) | (u64(small_image) << 8) | (u64(write_bytes) << 1) | u64(clean);
         std::vector<u32> seed_words{
             0x7e000280, 0x7e0202ff, BufferValue,
             0xe0700000, 0x80000100, // raw store v1, s[0:3]
@@ -330,7 +339,11 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             // A full formatted reader stays at image base. The DWORD writer
             // targets the separately seeded I texel at (0,8); both R/W and W/R
             // binding orders must tile I without invalidating its logical owner.
-            writer_sharp.base_address += far_offset;
+            writer_sharp.base_address += far_offset + (narrow_writer ? write_bytes : 0);
+            if (narrow_writer) {
+                writer_sharp.stride = 0;
+                writer_sharp.num_records = write_bytes;
+            }
             early_sharp.num_records = late_sharp.num_records = u32(layout.guest_bytes / 4);
             if (far_offset < 256 || far_offset % 4 || far_offset + 8 > layout.guest_bytes)
                 throw std::runtime_error("Offset writer lost its contained DWORD range and distinct image base");
@@ -362,7 +375,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         }
         const u64 command_output_offset = command_output.base_address - base;
         const std::array<u32, 2> early_load{early_opcode, 0x80000400 | (read_group << 16)};
-        const std::array<u32, 2> raw_load{0xe0300000, 0x80000500 | (write_group << 16)};
+        const std::array<u32, 2> raw_load{writer_load_opcode, 0x80000500 | (write_group << 16)};
         std::vector<u32> words;
         const auto append = [&](const auto& pair) { words.insert(words.end(), pair.begin(), pair.end()); };
         if (binding_order) words.insert(words.end(), {
@@ -375,12 +388,12 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         words.push_back(0xbf8c0000); // s_waitcnt before the actual store
         if (repeated) {
             words.insert(words.end(), {
-                0x7e1002ff, FinalValue, 0xe0700000, 0x80000800 | (write_group << 16)
+                0x7e1002ff, FinalValue, writer_store_opcode, 0x80000800 | (write_group << 16)
             });
             if (short_writer) words.insert(words.end(), {
-                // Declared W is exactly one DWORD. A store at byte4 must not
-                // mutate either the GPU image tail or its physical CPU bytes.
-                0xe0700004, 0x80000800 | (write_group << 16)
+                // Exact W is one scalar. The next same-width store is outside
+                // its sharp, including within a padded raw DWORD descriptor.
+                writer_store_opcode | write_bytes, 0x80000800 | (write_group << 16)
             });
             if (long_writer) words.insert(words.end(), {
                 // The original long W really owns this non-image DWORD. Keep
@@ -413,6 +426,14 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             }
             words.push_back(0xbf8c0000);
         }
+        if (narrow_writer) words.insert(words.end(), {
+            // Query the live full-buffer alias before any CPU readback: exact
+            // dirty masks alone could conceal an illegal GPU-only padding write.
+            0x7e0002ff, u32(far_offset), 0xe0301000, 0x80000d00 | (late_group << 16),
+            writer_load_opcode | write_bytes, 0x80000e00 | (write_group << 16),
+            0xbf8c0000, 0xe0700038, 0x80000d00 | (output_group << 16),
+            0xe070003c, 0x80000e00 | (output_group << 16)
+        });
         words.insert(words.end(), {
             0xe0700010, 0x80000400 | (output_group << 16),
             0xe0700014, 0x80000500 | (output_group << 16)
@@ -465,6 +486,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             if (sharp.base_address != address || sharp.GetSize() != bytes ||
                 buffer.is_written == reader || buffer.is_formatted != formatted)
                 throw std::runtime_error("Actual translated buffer collection does not have the requested R/W order");
+            if (narrow_writer && !reader && !output &&
+                buffer.used_types != (write_bytes == 1 ? Shader::IR::Type::U8 : Shader::IR::Type::U16))
+                throw std::runtime_error("Narrow writer unexpectedly acquired a wider native storage alias");
         }
         rasterizer.DispatchDirect();
         if (binding_order && (!rasterizer.IsGpuBufferModified(target.base_address, 4) ||
@@ -475,7 +499,11 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         const auto next = image_tiled ? ImageNext : initial(1, 0);
         if (binding_order) expect_word(command_output_offset, TailWrite);
         expect_word(command_output_offset + 16, early_loaded);
-        expect_word(command_output_offset + 20, offset_writer ? ImageFar : loaded);
+        expect_word(command_output_offset + 20, offset_writer ? (ImageFar >> write_shift) & write_mask : loaded);
+        if (narrow_writer) {
+            expect_word(command_output_offset + 56, gpu_far_word);
+            expect_word(command_output_offset + 60, 0);
+        }
         if (repeated) {
             expect_word(command_output_offset + 24, private_early ? BufferValue : offset_writer ? ImageValue : FinalValue);
             expect_word(command_output_offset + 28, offset_writer ? ImageValue : FinalValue);
@@ -528,7 +556,8 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 expect_word(ImageOffset + first, ImageValue);
                 expect_word(ImageOffset + second, ImageNext);
             }
-            expect_word(ImageOffset + far_offset, FinalValue);
+            const u32 cpu_far_word = (clean ? initial(0, 8) : ImageFar) & ~physical_mask;
+            expect_word(ImageOffset + far_offset, cpu_far_word | ((FinalValue & write_mask) << write_shift));
         } else expect_word(ImageOffset + first, FinalValue);
         // A readonly retile is not a CPU write. Only the original W extent
         // publishes I tail to physical memory; a four-byte W leaves that tail B.
@@ -559,9 +588,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             long_writer ? "clean20KiBR/20KiBW" :
             sequence == Sequence::OffsetWriterReadFirst ? "fullR/interior4-byteW/retainedI" :
             sequence == Sequence::OffsetWriterFirst ? "interior4-byteW/fullR/retainedI" : "same-page-disjointW/clean4100-byteR/4-byteW";
-        std::printf("PASS: ordered-formatted %s %s %s%s bytes=%llu; real GCN, full physical oracle\n",
+        std::printf("PASS: ordered-formatted %s %s %s%s writer-bytes=%u bytes=%llu; real GCN, full physical oracle\n",
             small_image ? "small" : "large", clean ? "CPU-clean" : "GPU-modified",
-            sequence_name, partial_output ? " partial-output sync fallback" : "",
+            sequence_name, partial_output ? " partial-output sync fallback" : "", write_bytes,
             static_cast<unsigned long long>(layout.guest_bytes));
     }
     rasterizer.Finish();

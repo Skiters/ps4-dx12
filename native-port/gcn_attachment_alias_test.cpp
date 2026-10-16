@@ -77,6 +77,8 @@ int main(int argc,char** argv){try{
     AmdGpu::Liverpool gpu;
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.needs_buffer_offsets=true;
     profile.native_coherent_images=true;profile.max_viewport_width=profile.max_viewport_height=16384;
+    profile.native_buffer_bounds=true;
+    profile.support_int8=profile.support_int16=true;
     GuestRasterizer rasterizer(device.Get(),gpu,profile,std::filesystem::path(argv[1]).wstring(),
         std::filesystem::path(argv[2]).wstring());
     rasterizer.SetBackingAccess([base,owned](VAddr address,u64 bytes){
