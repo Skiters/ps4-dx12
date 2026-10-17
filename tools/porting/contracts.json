@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -128,7 +128,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -198,7 +198,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -280,7 +280,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -385,7 +385,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -545,6 +545,13 @@
           "cb_layer_final_manifest": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\NATIVE_VERIFICATION_CB_LAYERS_FINAL.json",
           "original_cb_shape": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\UPSTREAM_CB_RESOURCE_SHAPE.json",
           "scope_correction": "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
+        },
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
         }
       },
       "prepared_checks": [
@@ -804,6 +811,23 @@
             "native_cached_depth_render_target"
           ],
           "description": "Actual bind of dirty initialized native D16/D32 to float16/32 RT; optional source S, GpuModified0/1, lexicographic resource growth, pre-draw native/post-copy source, clipped draw/API clear, typed/guest/B/padding/capacity and held-fence lifetime. Does NOT run GuestRasterizer CMASK planning/member metadata or ordered private-depth publication."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -842,7 +866,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -932,7 +956,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1092,6 +1116,13 @@
           "cb_layer_final_manifest": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\NATIVE_VERIFICATION_CB_LAYERS_FINAL.json",
           "original_cb_shape": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\UPSTREAM_CB_RESOURCE_SHAPE.json",
           "scope_correction": "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
+        },
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
         }
       },
       "prepared_checks": [
@@ -1353,6 +1384,23 @@
             "native_cached_depth_render_target"
           ],
           "description": "Actual bind of dirty initialized native D16/D32 to float16/32 RT; optional source S, GpuModified0/1, lexicographic resource growth, pre-draw native/post-copy source, clipped draw/API clear, typed/guest/B/padding/capacity and held-fence lifetime. Does NOT run GuestRasterizer CMASK planning/member metadata or ordered private-depth publication."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -1391,7 +1439,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1480,7 +1528,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1549,7 +1597,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1627,7 +1675,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1721,7 +1769,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1820,7 +1868,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1888,7 +1936,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1967,7 +2015,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2044,7 +2092,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2112,7 +2160,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2173,7 +2221,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2227,7 +2275,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2264,7 +2312,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2305,7 +2353,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2366,7 +2414,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2417,7 +2465,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2494,7 +2542,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2564,7 +2612,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2634,7 +2682,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2692,7 +2740,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2770,7 +2818,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2847,7 +2895,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2914,7 +2962,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2977,7 +3025,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3023,7 +3071,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3071,7 +3119,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3132,7 +3180,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3210,7 +3258,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3293,7 +3341,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3361,7 +3409,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3430,7 +3478,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3492,7 +3540,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3547,7 +3595,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3601,7 +3649,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3657,7 +3705,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3704,7 +3752,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3770,7 +3818,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3819,7 +3867,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3884,7 +3932,7 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3972,7 +4020,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4025,7 +4073,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4086,7 +4134,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4251,6 +4299,13 @@
           "cb_layer_final_manifest": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\NATIVE_VERIFICATION_CB_LAYERS_FINAL.json",
           "original_cb_shape": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\UPSTREAM_CB_RESOURCE_SHAPE.json",
           "scope_correction": "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
+        },
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
         }
       },
       "prepared_checks": [
@@ -4546,6 +4601,23 @@
             "native_cached_depth_render_target"
           ],
           "description": "Actual bind of dirty initialized native D16/D32 to float16/32 RT; optional source S, GpuModified0/1, lexicographic resource growth, pre-draw native/post-copy source, clipped draw/API clear, typed/guest/B/padding/capacity and held-fence lifetime. Does NOT run GuestRasterizer CMASK planning/member metadata or ordered private-depth publication."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -4609,7 +4681,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4955,7 +5027,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5355,7 +5427,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5531,6 +5603,13 @@
           "cb_layer_final_manifest": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\NATIVE_VERIFICATION_CB_LAYERS_FINAL.json",
           "original_cb_shape": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\UPSTREAM_CB_RESOURCE_SHAPE.json",
           "scope_correction": "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
+        },
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
         }
       },
       "prepared_checks": [
@@ -5830,6 +5909,23 @@
             "native_cached_depth_render_target"
           ],
           "description": "Actual bind of dirty initialized native D16/D32 to float16/32 RT; optional source S, GpuModified0/1, lexicographic resource growth, pre-draw native/post-copy source, clipped draw/API clear, typed/guest/B/padding/capacity and held-fence lifetime. Does NOT run GuestRasterizer CMASK planning/member metadata or ordered private-depth publication."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -5918,7 +6014,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6078,6 +6174,13 @@
           "cb_layer_final_manifest": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\NATIVE_VERIFICATION_CB_LAYERS_FINAL.json",
           "original_cb_shape": "F:\\PS4Dev\\handoff\\cached-depth-rt-20261017\\UPSTREAM_CB_RESOURCE_SHAPE.json",
           "scope_correction": "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
+        },
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
         }
       },
       "prepared_checks": [
@@ -6345,6 +6448,23 @@
             "native_cached_depth_render_target"
           ],
           "description": "Actual bind of dirty initialized native D16/D32 to float16/32 RT; optional source S, GpuModified0/1, lexicographic resource growth, pre-draw native/post-copy source, clipped draw/API clear, typed/guest/B/padding/capacity and held-fence lifetime. Does NOT run GuestRasterizer CMASK planning/member metadata or ordered private-depth publication."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6387,7 +6507,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6450,12 +6570,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6467,6 +6594,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6512,12 +6656,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6529,6 +6680,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6574,12 +6742,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6591,6 +6766,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6638,12 +6830,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6655,6 +6854,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6707,14 +6923,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015",
-        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements."
+        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6727,6 +6950,23 @@
             "native-port/gcn_attachment_alias_test.cpp",
             "native-port/independent_version_transfer_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6773,12 +7013,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6790,6 +7037,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6836,12 +7100,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6853,6 +7124,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6905,14 +7193,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md",
-        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes."
+        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6924,6 +7219,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -6978,14 +7290,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md",
-        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes."
+        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -6997,6 +7316,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7047,12 +7383,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7064,6 +7407,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7108,12 +7468,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7125,6 +7492,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7166,12 +7550,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7183,6 +7574,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7232,14 +7640,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
-        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7251,6 +7666,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7301,14 +7733,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled",
-        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged."
+        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7320,6 +7759,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7370,14 +7826,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015",
-        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements."
+        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7390,6 +7853,23 @@
             "native-port/gcn_attachment_alias_test.cpp",
             "native-port/independent_version_transfer_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7449,14 +7929,21 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016",
-        "historical_scope_reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately."
+        "historical_scope_reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -7468,6 +7955,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -7523,7 +8027,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8010,12 +8514,19 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
-        "historical_scope_reason": "Full implementation boundary remains open."
+        "historical_scope_reason": "Full implementation boundary remains open.",
+        "latest_native_word_guard_evidence": {
+          "source_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d",
+          "native_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\NATIVE_VERIFICATION_FINAL.json",
+          "gcn_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\GCN_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\depth-color-formats-20261018\\RELATED_VERIFICATION_FINAL.json",
+          "scope": "128 direct3/5/9/10 native cases;8 RGBA8 CMASK +8 single +8 ordered +4 prior caller;9 related ownership/B/DMA/lifetime checks. Narrow binaries only; whole-group/game remains separate."
+        }
       },
       "prepared_checks": [
         {
@@ -8027,6 +8538,23 @@
           "paths": [
             "native-port/gcn_attachment_alias_test.cpp"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/gcn_cached_depth_storage_fixture.h",
+            "native-port/page_watch_test.cpp"
+          ],
+          "tests": [
+            "native_cached_depth_color_3_0_rt",
+            "native_cached_depth_color_3_4_uav",
+            "native_cached_depth_color_5_0_rt",
+            "native_cached_depth_color_9_4_uav",
+            "native_cached_depth_color_10_0_rt",
+            "native_page_ownership_and_cache"
+          ],
+          "description": "16 registered direct-color modes now executed across128 GPU cases. Separate cached-depth-cmask-owned queued GCN8 and explicit old-exclusive-guard PageWatch negative cases executed; exact manifests in latest_native_word_guard_evidence. No whole-group closure."
         }
       ]
     },
@@ -8084,7 +8612,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8561,7 +9089,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8621,7 +9149,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8689,7 +9217,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8755,7 +9283,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8829,7 +9357,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8899,7 +9427,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8961,7 +9489,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9027,7 +9555,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9088,7 +9616,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9162,7 +9690,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9229,7 +9757,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9289,7 +9817,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9343,7 +9871,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9412,7 +9940,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9482,7 +10010,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9537,7 +10065,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9595,7 +10123,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9650,7 +10178,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9714,7 +10242,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9794,7 +10322,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9848,7 +10376,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9911,7 +10439,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9971,7 +10499,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10026,7 +10554,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10078,7 +10606,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10138,7 +10666,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10201,7 +10729,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10267,7 +10795,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10323,7 +10851,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10378,7 +10906,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10437,7 +10965,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10513,7 +11041,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10570,7 +11098,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10627,7 +11155,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10686,7 +11214,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10750,7 +11278,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10813,7 +11341,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10883,7 +11411,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10943,7 +11471,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11005,7 +11533,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11073,7 +11601,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11140,7 +11668,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11197,7 +11725,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11267,7 +11795,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11332,7 +11860,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11398,7 +11926,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11453,7 +11981,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11512,7 +12040,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11572,7 +12100,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11639,7 +12167,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11710,7 +12238,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11781,7 +12309,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11845,7 +12373,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11910,7 +12438,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11969,7 +12497,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12025,7 +12553,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "641f6b9c057d23c489f0bda2cc52d046d72fa3c9"
+        "core_release_build_commit": "e1eedf9b70cbd9eb1f3ee9e0c150f3eef58e7f6d"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12058,8 +12586,8 @@
     },
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
-      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness",
-      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and non-direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Other bit-compatible16/32 color data-format IDs remain gated in cached recreation/mapping/normalization; pending native-only CMASK component/decoder integration remains code work.",
+      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges",
+      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and non-direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Packed float6/permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
@@ -12124,7 +12652,8 @@
         "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
         "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open.",
         "d52ac76 capacity-only cached-depth plan / actual current I-B binding, source retirement dirty, preserved S/HTILE/GpuModified/history/residency/actual DSV. Six narrow native passes exact 5d121ea72296b6a73652f3a7f08aeefa8ea63de5576422cf38ec6bcb84e37dbf; four actual GCN shader/draw checks exact f9795ec2b10f1f09b7f9bcabaac63cf2dcd8fb34f740377d32d9b0fedeef6f40 plus intentionally early-bind negative control df vs40; seven B-envelope/DMA/lifetime/conversion checks. H=F:/PS4Dev/handoff/private-depth-binding-20261018. Clean committed Release35.804s; core/game runtime remains unrun. Full nine-gap closure NOT claimed.",
-        "641f6b9: direct2/4 cached native depth->writable snapshot/ownership/lexicographic storage and actual shader bind; current-owned-I retention versus stale cached provenance; original PS-before-VS buffer/image ordering with no future metadata publication. Native16 UAV+8 late-native+paired24 exactfca02f5df87b3f6b6d8eaafdd7da17c78c998c388b3aea8d8f628e1ebe537c97; GCN8 PM4+8 ordered+4 prior caller exactb3da2b74779e0bcab9bb91a6e5e701c1b1548d119b3ee92faabb401c906c0de7; intentionally early-bind negative control, strict scope corrections/dump retained. Clean Release25.788s,54 pins/2283 inputs/zero primary source paths. H=F:/PS4Dev/handoff/depth-writable-20261018; full core/game not accepted."
+        "641f6b9: direct2/4 cached native depth->writable snapshot/ownership/lexicographic storage and actual shader bind; current-owned-I retention versus stale cached provenance; original PS-before-VS buffer/image ordering with no future metadata publication. Native16 UAV+8 late-native+paired24 exactfca02f5df87b3f6b6d8eaafdd7da17c78c998c388b3aea8d8f628e1ebe537c97; GCN8 PM4+8 ordered+4 prior caller exactb3da2b74779e0bcab9bb91a6e5e701c1b1548d119b3ee92faabb401c906c0de7; intentionally early-bind negative control, strict scope corrections/dump retained. Clean Release25.788s,54 pins/2283 inputs/zero primary source paths. H=F:/PS4Dev/handoff/depth-writable-20261018; full core/game not accepted.",
+        "e1eedf9: direct3/5/9(UNORM/UINT)/10 old depth words to RT/UAV; explicit actual replaced-exclusive-I guard transfer with transactional cuts/strong-B preservation/missing-proof rejection.128 native cases16 tests641.63s exactbfcf069f; GCN8 CMASK +8 single +8 ordered +4 prior caller exact523e102e;9 related PageWatch/real GPU B/DMA/envelope/fence/lifetime checks. Clean committed Release22.9s/54 pins/2283 inputs/zero primary paths. H=F:/PS4Dev/handoff/depth-color-formats-20261018; fixture identities separate; full core/game not accepted."
       ]
     },
     "depth-color-shared-storage": {
