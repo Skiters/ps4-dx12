@@ -306,6 +306,7 @@ private:
     std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
     std::function<bool(Entry&)> acquire_independent_;
+    std::function<bool(Entry&,Entry&)> acquire_independent_replacement_;
     std::function<void(Entry&)> retire_independent_;
     std::function<void(Entry&)> retire_pressure_;
     std::function<uint64_t()> wait_pressure_;
@@ -406,6 +407,9 @@ public:
     }
     void SetIndependentImageTransfer(std::function<IndependentImageVersion(
         Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_independent_image_=std::move(read);}
+    void SetIndependentOwnershipTransfer(std::function<bool(Entry&,Entry&)> acquire){
+        acquire_independent_replacement_=std::move(acquire);
+    }
     void SetCachedDepthRecreationTransfer(std::function<IndependentImageVersion(
         Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_cached_depth_=std::move(read);}
     IndependentImageVersion CaptureCachedDepthRecreationVersion(Entry&,const GuestTextureDesc&,

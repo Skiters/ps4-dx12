@@ -150,13 +150,25 @@ inline std::vector<std::pair<uint64_t,uint64_t>> GuestImageProtectionRanges(
 // backing and native guards before publishing any new ownership flags.
 template <class HasBacking,class StrongBuffers>
 bool AcquireGuestImageOwnership(GuestTextureCache& cache,GuestTextureCache::Entry& image,
-    PageWatch& watch,HasBacking&& has_backing,StrongBuffers&& strong_buffers){
+    PageWatch& watch,HasBacking&& has_backing,StrongBuffers&& strong_buffers,
+    GuestTextureCache::Entry* replaced=nullptr){
     if(image.cache!=&cache)return false;
     const auto owner=DescribeGuestImageOwnership(image);
     if(!owner||!CanRetainGuestImageOwnership(cache,*owner))return false;
     if(image.HasUnprotectedCpuPages())
         throw std::runtime_error("Image ownership requires validated boundary witnesses");
-    std::vector<std::pair<uint64_t,uint64_t>> planes,strong;
+    std::vector<std::pair<uint64_t,uint64_t>> planes,strong,transferred;
+    if(replaced){
+        if(replaced==&image||replaced->cache!=&cache)return false;
+        if(replaced->gpu_owned&&!replaced->buffer_alias_version){
+            if(replaced->HasUnprotectedCpuPages())return false;
+            for(const auto& plane:replaced->ProtectionPlanes())if(plane.bytes){
+                const auto pages=GuestProtectionPages(plane.address,plane.bytes);
+                if(!pages||!has_backing(plane.address,plane.bytes))return false;
+                transferred.emplace_back(pages->address,pages->size);
+            }
+        }
+    }
     for(const auto& plane:image.ProtectionPlanes())if(plane.bytes){
         const auto pages=GuestProtectionPages(plane.address,plane.bytes);
         if(!pages||!has_backing(plane.address,plane.bytes))return false;
@@ -164,7 +176,7 @@ bool AcquireGuestImageOwnership(GuestTextureCache& cache,GuestTextureCache::Entr
         auto retained=strong_buffers(plane.address,plane.bytes);
         strong.insert(strong.end(),retained.begin(),retained.end());
     }
-    if(!watch.TrackImageReadOnly(planes,image.gpu_owned&&!image.buffer_alias_version,strong))return false;
+    if(!watch.TrackImageReadOnly(planes,image.gpu_owned&&!image.buffer_alias_version,strong,transferred))return false;
     image.cpu_watched=false;image.buffer_alias_version=true;image.SetGpuOwned(true);
     image.buffer_alias_watch=true;return true;
 }

@@ -258,6 +258,22 @@ int main(){try{
         const std::array invalid{std::pair{base,uint64_t{4096}},std::pair{base+8192,uint64_t{1}}};
         Require(!watch.TrackImageReadOnly(invalid)&&protection(base)==stable);
         watch.Untrack(base,16384);
+        // A NEW copied image can inherit only its explicit old image's strong
+        // guards. Strong B and an unrelated exclusive neighbour stay intact.
+        Require(watch.TrackOwned(base,16384));
+        const std::array replacement{std::pair{base,uint64_t{12288}}};
+        const std::array transferred{std::pair{base,uint64_t{8192}}};
+        Require(watch.TrackImageReadOnly(replacement,false,strong,transferred));
+        Require(protection(base)==PAGE_READONLY&&protection(base+4096)==PAGE_NOACCESS&&
+            protection(base+8192)==PAGE_NOACCESS&&protection(base+12288)==PAGE_NOACCESS);
+        watch.Untrack(base,16384);
+        Require(watch.Track(base,4096));
+        // A claimed old guard cannot be manufactured out of writable gaps;
+        // rejection must leave the first, valid old guard unchanged.
+        const std::array missing_source{std::pair{base,uint64_t{12288}}};
+        Require(!watch.TrackImageReadOnly(replacement,false,{},missing_source));
+        Require(protection(base)==PAGE_NOACCESS&&protection(base+8192)==PAGE_READWRITE);
+        watch.Untrack(base,16384);
         puts("PASS: transactional image-plane acquisition/demotion, second-plane rejection, shared union, stronger B and outside-owner preservation");
     }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);

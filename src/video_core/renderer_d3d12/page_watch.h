@@ -190,13 +190,15 @@ public:
     // All planning, allocation and OS validation precede protection changes.
     bool TrackImageReadOnly(std::span<const std::pair<uint64_t,uint64_t>> planes,
         bool demote_exclusive=false,
-        std::span<const std::pair<uint64_t,uint64_t>> preserve_strong={}){
+        std::span<const std::pair<uint64_t,uint64_t>> preserve_strong={},
+        std::span<const std::pair<uint64_t,uint64_t>> transfer_exclusive={}){
         if(planes.empty())return false;
         const auto valid=[](const auto& range){return range.first&&range.second&&
             range.first%4096==0&&range.second%4096==0&&range.first<=UINT64_MAX-range.second;};
         std::vector<std::pair<uint64_t,uint64_t>> requested(planes.begin(),planes.end());
         for(const auto& range:requested)if(!valid(range))return false;
         for(const auto& range:preserve_strong)if(!valid(range))return false;
+        for(const auto& range:transfer_exclusive)if(!valid(range))return false;
         std::sort(requested.begin(),requested.end());
         size_t count{};
         for(const auto& [begin,bytes]:requested){
@@ -225,13 +227,18 @@ public:
                 if(begin>key&&begin<original.end)cuts.push_back(begin);
                 if(begin+bytes>key&&begin+bytes<original.end)cuts.push_back(begin+bytes);
             }};
-            add_cuts(requested);add_cuts(preserve_strong);
+            add_cuts(requested);add_cuts(preserve_strong);add_cuts(transfer_exclusive);
             std::sort(cuts.begin(),cuts.end());cuts.erase(std::unique(cuts.begin(),cuts.end()),cuts.end());
             for(size_t i=1;i<cuts.size();++i){
                 const auto begin=cuts[i-1],end=cuts[i];
                 const bool selected=contains(requested,begin),strong=contains(preserve_strong,begin);
                 if(selected&&strong&&original.read_only)return false;
-                const bool read_only=original.read_only||(selected&&demote_exclusive&&!strong);
+                // A copied replacement can inherit an OLD exclusive image's
+                // guard even though the NEW Entry never owned that guard.
+                // Only explicitly transferred pages may be demoted; actual B
+                // owners retain NOACCESS, including shared page boundaries.
+                const bool read_only=original.read_only||(selected&&!strong&&
+                    (demote_exclusive||contains(transfer_exclusive,begin)));
                 Range part{end,{},read_only,selected?++generation:original.generation};
                 for(const auto& p:original.protection){
                     const auto a=std::max(begin,p.begin),b=std::min(end,p.begin+p.size);
@@ -244,7 +251,9 @@ public:
             }
         }
         const auto add_gap=[&](uint64_t begin,uint64_t end){
-            if(demote_exclusive||std::any_of(preserve_strong.begin(),preserve_strong.end(),
+            if(demote_exclusive||std::any_of(transfer_exclusive.begin(),transfer_exclusive.end(),
+                [begin,end](const auto& range){return begin<range.first+range.second&&range.first<end;})||
+               std::any_of(preserve_strong.begin(),preserve_strong.end(),
                 [begin,end](const auto& range){return begin<range.first+range.second&&range.first<end;}))return false;
             Range part{end,{},true,++generation};
             for(auto cursor=begin;cursor<end;){

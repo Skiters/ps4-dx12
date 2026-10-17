@@ -149,6 +149,9 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return version;
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
+    textures_.SetIndependentOwnershipTransfer([this](auto& image,auto& replaced){
+        return OwnIndependentImage(image,&replaced);
+    });
     const auto image_transfer=[this](auto& image,const auto& desc,const auto& layout,bool cached){
         const bool seed_resident=desc.samples==1&&(desc.levels>image.desc.levels||desc.layers>image.desc.layers)&&
             IsGpuBufferModified(desc.address,layout.guest_bytes);
@@ -273,7 +276,7 @@ bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
     }catch(...){page_watch_->Untrack(image.desc.address,image.layout.guest_bytes);throw;}
     image.SetGpuOwned(true);return true;
 }
-bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
+bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image,GuestTextureCache::Entry* replaced){
     // A cached image can keep a version distinct from its physical/resident
     // buffer, including a read-only descriptor or ordinary owned attachment.
     const auto owner=DescribeGuestImageOwnership(image);
@@ -283,7 +286,7 @@ bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     if(image.buffer_alias_version){image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;}
     if(!page_watch_)return false;
     if(!AcquireGuestImageOwnership(textures_,image,*page_watch_,has_backing_,
-        [this](u64 address,u64 bytes){return GpuOwnedBufferProtectionRanges(address,bytes);})){
+        [this](u64 address,u64 bytes){return GpuOwnedBufferProtectionRanges(address,bytes);},replaced)){
         if(image.gpu_owned)throw std::runtime_error("Cannot transfer independent image plane ownership to read-only protection");
         return false;
     }

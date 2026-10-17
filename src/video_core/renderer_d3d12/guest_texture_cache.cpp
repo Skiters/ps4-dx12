@@ -1361,6 +1361,18 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
     return true;
 }
 namespace {
+bool IsDirectDepthWordClass(const GuestTextureDesc& d,const GuestTextureLayout& l){
+    // CopyColorAndDepth preserves texel bits. These native color layouts have
+    // the same physical 16/32-bit words as guest storage, without expansion,
+    // packed-channel permutation or a numeric conversion through an SRV.
+    if(l.block_extent!=1||l.expanded_bytes_per_pixel||
+       (l.bytes_per_pixel!=2&&l.bytes_per_pixel!=4))return false;
+    switch(d.data_format){
+    case 2:case 3:case 4:case 5:case 10:return true;
+    case 9:return d.number_format==0||d.number_format==4;
+    default:return false;
+    }
+}
 bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
     GuestTextureDesc view,const GuestTextureLayout& view_layout){
     // Pinned texture_cache/host_compatibility.cpp groups ordinary uncompressed
@@ -1413,8 +1425,8 @@ bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextu
     // map source-native footprints to the target's own guest offsets/strides.
     if((!source.depth_target&&!target.depth_target)||source.samples!=target.samples||
        !source.levels||!source.layers||!target.levels||!target.layers||
-       (source.data_format!=2&&source.data_format!=4)||
-       (target.data_format!=2&&target.data_format!=4)||
+       !IsDirectDepthWordClass(source,source_layout)||
+       !IsDirectDepthWordClass(target,target_layout)||
        !MatchesGuestMipLayout(LayoutGuestTexture(target),target_layout))return false;
     auto prefix=target;prefix.levels=source.levels;prefix.layers=source.layers;
     prefix.first_mip=prefix.first_layer=prefix.min_lod=0;prefix.view_layers=source.layers;
@@ -1662,13 +1674,13 @@ bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const G
     const bool depth_target=IsGuestDepthPlaneStorage(target,layout);
     const bool color_target=(target.render_target||target.writable)&&!target.depth_target&&
         !target.stencil_address&&image.desc.depth_target&&
-        (target.data_format==2||target.data_format==4)&&layout.block_extent==1&&!layout.expanded_bytes_per_pixel;
+        IsDirectDepthWordClass(target,layout);
     if(image.cache!=this||found==image_uids_.end()||found->second!=&image||
        !image.cached_native_current||!image.texture.handle||
        image.desc.samples!=1||target.samples!=1||
        (!depth_target&&!color_target)||
-       (!image.desc.depth_target&&(image.desc.stencil_address||image.layout.block_extent!=1||
-        image.layout.expanded_bytes_per_pixel||(image.desc.data_format!=2&&image.desc.data_format!=4)))||
+       (!image.desc.depth_target&&(image.desc.stencil_address||
+        !IsDirectDepthWordClass(image.desc,image.layout)))||
        (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
        std::pair(target.levels,target.layers)<std::pair(image.desc.levels,image.desc.layers))return false;
     // ResolveDepthOverlap recreates on resource growth, color -> depth or changed S presence.
@@ -1803,7 +1815,8 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     // I or invent original GpuModified history for a CPU-initialized source.
     result.htile_initial_mask=0;
     result.pending_buffer_residency=std::move(residency);
-    if(!acquire_independent_(result))throw std::runtime_error("Recreated cached depth could not retain target ownership");
+    if(!(acquire_independent_replacement_?acquire_independent_replacement_(result,*source):acquire_independent_(result)))
+        throw std::runtime_error("Recreated cached depth could not retain target ownership");
     retire_independent_(*source);source->MarkLogicalDirty();
     ForgetRecreatedSourceMeta(*source);
     result.logical_gpu_modified=modified;result.logical_dirty=false;
@@ -1812,8 +1825,8 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     return result;
 }
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
-    if(requested.data_format!=2&&requested.data_format!=4)return requested;
     const auto layout=LayoutGuestTexture(requested);
+    if(!IsDirectDepthWordClass(requested,layout))return requested;
     auto* parent=FindDepthViewParent(requested,layout);
     if(parent){
         auto storage=parent->desc;
@@ -2333,7 +2346,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 Diagnostics::Count("image-version.private-block-mip-view");
                 return converted;
             }
-            if(!acquire_independent_(converted))
+            if(!(acquire_independent_replacement_?acquire_independent_replacement_(converted,*source):acquire_independent_(converted)))
                 throw std::runtime_error("Converted independent image could not retain ownership");
             if(d.depth_target)converted.htile_initial_mask=0;
             retire_independent_(*source);

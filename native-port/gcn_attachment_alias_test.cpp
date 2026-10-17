@@ -33,8 +33,9 @@ int main(int argc,char** argv){try{
     const bool linear_attachment=mode=="linear-attachment-owned";
     const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
     const bool formatted_cmask=mode=="formatted-cmask-owned";
+    const bool cached_depth_cmask=mode=="cached-depth-cmask-owned";
     const bool cached_depth_storage_ordered=mode=="cached-depth-storage-ordered-owned";
-    const bool cached_depth_storage=cached_depth_storage_ordered||mode=="cached-depth-storage-owned";
+    const bool cached_depth_storage=cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
@@ -100,7 +101,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(cached_depth_storage){
-        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize);
+        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask);
     }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
     }else if(formatted_cmask){
@@ -959,7 +960,8 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(cached_depth_storage?
+    puts(cached_depth_cmask?
+        "PASS: eight actual GCN native depth/RGBA8/CMASK clear/draw cases, independent UINT word image probes over every logical CMASK tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_storage?
         "PASS: eight actual GCN cached-depth storage transfers (clean/dirty, single/ordered stage mode), formatted-before-image and raw B versus native I probes, optional source S/HTILE and full physical padding":planned_depth?
         "PASS: four actual GCN late cached-depth recreations, PS current-B versus native D, interior VS writer, HTILE and full allocation/padding":ordered_formatted?
         "PASS: actual GCN descriptor-ordered formatted read/write, independent domains, image invalidation and physical padding":linear_attachment?

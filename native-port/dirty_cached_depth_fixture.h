@@ -6,10 +6,12 @@
 #include <bit>
 #include <cstring>
 namespace NativeDX12 {
-inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=false,bool color_target=false,int late_change=0,bool writable_target=false){
+inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=false,bool color_target=false,int late_change=0,bool writable_target=false,
+    UINT color_format=0,UINT color_number=0){
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(const bool modified:{false,true})for(const bool growth:{false,true}){
+        if(color_format&&format!=(color_format==3?2u:4u))continue;
         if(late_change&&(color_source||color_target||growth))continue;
         printf("CASE: dirty cached %s fmt=%u tile=%u GpuModified=%u growth=%u\n",color_source?"color-to-depth":"depth",format,tile,unsigned(modified),unsigned(growth));fflush(stdout);
         GuestTextureDesc source;source.address=0x40000;source.stencil_address=0x80000;source.width=13;source.height=11;source.pitch=16;
@@ -21,7 +23,20 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             // Original ColorBuffer requests one mip; RT expansion grows layers.
             source.layers=source.view_layers=growth?1:2;target.levels=1;target.layers=growth?3:2;
             target.depth_target=false;target.render_target=!writable_target;target.writable=writable_target;target.number_format=7;
+            if(color_format){target.data_format=color_format;target.number_format=color_number;}
         }
+        const bool uint_color=color_format&&color_number==4;
+        const auto written_color_word=[&](bool clear)->u32{
+            if(!color_format)return format==2?(clear?0x3400u:0x3800u):std::bit_cast<u32>(clear?0.25f:0.5f);
+            if(uint_color){const u32 r=clear?3:17,g=clear?5:31,b=clear?7:47,a=clear?2:1;
+                switch(color_format){case 3:return r|(g<<8);case 5:return r|(g<<16);
+                case 9:return r|(g<<10)|(b<<20)|(a<<30);case 10:return r|(g<<8)|(b<<16)|(a<<24);}}
+            // Exact UNORM endpoints avoid imposing a cross-vendor tie-rounding
+            // rule on newly authored draw commands; copied words stay arbitrary.
+            switch(color_format){case 3:return clear?0:255;case 5:return clear?0:65535;
+            case 9:return 0xc0000000u|(clear?0:1023);case 10:return 0xff000000u|(clear?0:255);}
+            throw std::runtime_error("Missing independent color write oracle");
+        };
         const auto old_layout=LayoutGuestTexture(source),layout=LayoutGuestTexture(target);
         auto stencil_shape=target;stencil_shape.depth_target=true;stencil_shape.render_target=false;
         const auto sl=LayoutGuestTexture(DescribeGuestStencil(stencil_shape));
@@ -165,7 +180,9 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             auto* list=renderer.RecordingList();
             if(!writable_target){
             auto vs=CompileMultisampleShader("float4 main(uint id:SV_VertexID):SV_Position { return float4(id==2?3:-1,id==1?3:-1,0,1); }","vs_5_1");
-            auto ps=CompileMultisampleShader("float4 main():SV_Target { return float4(0.5,0,0,1); }","ps_5_1");
+            auto ps=CompileMultisampleShader(uint_color?"uint4 main():SV_Target { return uint4(17,31,47,1); }":
+                color_format?"float4 main():SV_Target { return float4(1,0,0,1); }":
+                "float4 main():SV_Target { return float4(0.5,0,0,1); }","ps_5_1");
             D3D12_ROOT_SIGNATURE_DESC rs{};rs.Flags=D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
             ComPtr<ID3DBlob> signature,errors;ComPtr<ID3D12RootSignature> draw_root;
             Check(D3D12SerializeRootSignature(&rs,D3D_ROOT_SIGNATURE_VERSION_1,&signature,&errors));
@@ -190,13 +207,17 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             list->RSSetViewports(1,&viewport);list->RSSetScissorRects(1,&scissor);list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);list->DrawInstanced(3,1,0,0);
             converted.NoteLogicalImageWrite();require(converted.logical_gpu_modified&&cache.HasCurrentNativeContents(converted),"Actual RT draw did not update GpuModified0 history");
             // A clipped CMASK-sized tile clear must not refresh the rest from B.
-            const float clear[]{0.25f,0,0,1};const D3D12_RECT rectangle{8,0,LONG(target.width),8};
+            const float clear[]{uint_color?3.f:color_format?0.f:0.25f,uint_color?5.f:0.f,uint_color?7.f:0.f,uint_color?2.f:1.f};
+            const D3D12_RECT rectangle{8,0,LONG(target.width),8};
             list->ClearRenderTargetView(handle,clear,1,&rectangle);converted.NoteLogicalImageWrite();
             }else{
                 // A real clipped compute writer, not a clear or CPU substitute.
-                const auto shader=std::string("RWTexture2DArray<float4> output:register(u0);\n[numthreads(8,8,1)] void main(uint3 p:SV_DispatchThreadID){if(p.x<")+
+                const auto shader=std::string(uint_color?"RWTexture2DArray<uint4> output:register(u0);\n":"RWTexture2DArray<float4> output:register(u0);\n")+
+                    "[numthreads(8,8,1)] void main(uint3 p:SV_DispatchThreadID){if(p.x<"+
                     std::to_string(target.width)+"&&p.y<"+std::to_string(target.height)+
-                    "){if(p.x>=8&&p.y<8)output[p]=float4(0.25,0,0,1);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=float4(0.5,0,0,1);}}";
+                    (uint_color?"){if(p.x>=8&&p.y<8)output[p]=uint4(3,5,7,2);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=uint4(17,31,47,1);}}":
+                    color_format?"){if(p.x>=8&&p.y<8)output[p]=float4(0,0,0,1);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=float4(1,0,0,1);}}":
+                    "){if(p.x>=8&&p.y<8)output[p]=float4(0.25,0,0,1);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=float4(0.5,0,0,1);}}");
                 auto code=CompileMultisampleShader(shader.c_str(),"cs_5_1");
                 D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,0};
                 D3D12_ROOT_PARAMETER parameter{};parameter.ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -219,10 +240,10 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             }
             for(UINT y=0;y<target.height;++y)for(UINT x=0;x<target.width;++x){
                 const bool drawn=x>=1&&x<4&&y>=2&&y<5,cleared=x>=8&&y<8;
-                if(drawn||cleared){const u32 value=format==2?(cleared?0x3400u:0x3800u):std::bit_cast<u32>(cleared?0.25f:0.5f);
+                if(drawn||cleared){const u32 value=written_color_word(cleared);
                     memcpy(expected.data()+GuestPixelOffset(target,layout,0,0,x,y),&value,layout.bytes_per_pixel);}}
             auto after_native=std::make_shared<GuestImageReadback>(device,converted,list);renderer.RetainUntilFinish([after_native](u64){(void)after_native;});
-            const auto shader=std::string(format==2?"#define WORD16 1\n":"#define WORD16 0\n")+R"(
+            auto shader=std::string(format==2?"#define WORD16 1\n":"#define WORD16 0\n")+R"(
 Texture2DArray<float4> input:register(t0);RWByteAddressBuffer output:register(u0);
 cbuffer Shape:register(b0){uint width,height,layers,base;};
 [numthreads(8,8,1)]void main(uint3 p:SV_DispatchThreadID){if(p.x>=width||p.y>=height||p.z>=layers)return;
@@ -233,6 +254,19 @@ uint word=f32tof16(f);
 uint word=asuint(f);
 #endif
 output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
+            if(color_format){
+                // Independent typed-channel packing, separate from guest retile.
+                const auto convert=uint_color?"uint4 c=input.Load(int4(p,0));\n":
+                    color_format==5?"uint4 c=(uint4)round(input.Load(int4(p,0))*65535.0);\n":
+                    color_format==9?"uint4 c=(uint4)round(input.Load(int4(p,0))*float4(1023,1023,1023,3));\n":
+                    "uint4 c=(uint4)round(input.Load(int4(p,0))*255.0);\n";
+                const auto packed=color_format==3?"c.x|(c.y<<8)":color_format==5?"c.x|(c.y<<16)":
+                    color_format==9?"c.x|(c.y<<10)|(c.z<<20)|(c.w<<30)":"c.x|(c.y<<8)|(c.z<<16)|(c.w<<24)";
+                shader=std::string(uint_color?"Texture2DArray<uint4> input:register(t0);":"Texture2DArray<float4> input:register(t0);")+
+                    "RWByteAddressBuffer output:register(u0);cbuffer Shape:register(b0){uint width,height,layers,base;};"
+                    "[numthreads(8,8,1)]void main(uint3 p:SV_DispatchThreadID){if(p.x>=width||p.y>=height||p.z>=layers)return;"+
+                    convert+"output.Store(4*(base+(p.z*height+p.y)*width+p.x),"+packed+");}";
+            }
             auto cs=CompileMultisampleShader(shader.c_str(),"cs_5_1");
             D3D12_DESCRIPTOR_RANGE ranges[2]{{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,0},{D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,1}};
             D3D12_ROOT_PARAMETER parameters[2]{};parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;parameters[0].DescriptorTable={2,ranges};parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;parameters[1].Constants={0,0,4};
@@ -243,7 +277,7 @@ output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
             std::vector<u32> pixels;
             for(UINT m=0;m<target.levels;++m)for(UINT l=0;l<target.layers;++l)for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){
                 const bool drawn=!m&&!l&&x>=1&&x<4&&y>=2&&y<5,cleared=!m&&!l&&x>=8&&y<8;
-                pixels.push_back(drawn||cleared?(format==2?(cleared?0x3400u:0x3800u):std::bit_cast<u32>(cleared?0.25f:0.5f)):bits(m<source.levels&&l<source.layers?1:5,m,l,x,y));}
+                pixels.push_back(drawn||cleared?written_color_word(cleared):bits(m<source.levels&&l<source.layers?1:5,m,l,x,y));}
             const u64 bytes=pixels.size()*4;auto output=GuestTiler::Scratch(device,bytes),typed=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             renderer.RetainUntilFinish([output,typed,root,pipeline](u64){(void)output;(void)typed;(void)root;(void)pipeline;});
             converted.texture.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);u32 base_word{};
@@ -265,6 +299,12 @@ output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
             auto before_expected=current_d;
             for(UINT m=0;m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){const u32 value=bits(1,m,l,x,y);memcpy(before_expected.data()+GuestPixelOffset(target,layout,m,l,x,y),&value,layout.bytes_per_pixel);}
             auto actual=current_d;after_native->Resolve(renderer.CompletedFence(),actual);
+            const auto diagnose=[](const char* name,const auto& a,const auto& b){
+                for(size_t i=0;i<a.size();++i)if(a[i]!=b[i]){printf("MISMATCH %s byte=%zu actual=%02x expected=%02x\n",name,i,
+                    unsigned(a[i]),unsigned(b[i]));break;}
+            };
+            diagnose("source D",actual_source,old_d);diagnose("source S",actual_source_s,old_stencil);
+            diagnose("target before",actual_before,before_expected);diagnose("target after",actual,expected);
             require(actual_source==old_d&&actual_source_s==old_stencil&&actual_before==before_expected&&actual==expected,
                 "Native depth->RT copy/draw/clipped clear lost old words, target-only seed, source S or padding");
             void* mapped{};D3D12_RANGE range{0,SIZE_T(bytes)},empty{};Check(typed.handle->Map(0,&range,&mapped));const bool typed_ok=!memcmp(mapped,pixels.data(),size_t(bytes));typed.handle->Unmap(0,&empty);require(typed_ok,"Independent typed RT pixel oracle failed");
@@ -425,7 +465,7 @@ output.Store(at+4,s);})";
         cache.SetImageBufferSources({},{});cache.SetIndependentImageTransfer({});cache.SetCachedDepthRecreationTransfer({});cache.SetIndependentVersionTransfer({},{},{});cache.SetOwnershipAcquirer({});cache.SetOwnershipResolver({});cache.SetTransferSubmissionPublisher({});cache.SetBufferResidencyPublisher({});renderer.SetCpuPageRelease({});
         cache.Collect(renderer.CompletedFence());renderer.ValidateDebugMessages();++executed;
     }
-    require(executed==unsigned(late_change?8:16),"Dirty cached depth coverage missing");
+    require(executed==unsigned(late_change||color_format?8:16),"Dirty cached depth coverage missing");
     if(late_change){printf("PASS: %u private depth late source cases mode=%d; no early I/meta/ownership publication, current native/B selection, S/HTILE preservation, typed/native/guest/capacity/padding and held-fence leases\n",executed,late_change);return;}
     if(color_target||writable_target){printf(writable_target?"PASS: %u cached depth-to-UAV cases; actual clipped Dispatch, typed/native/guest/capacity/padding/source and held-fence leases\n":"PASS: %u cached depth-to-RT cases; original flags, actual CPU faults/bind, lexicographic extent, native typed words, real clipped RT draw/clear, source-after-copy/S, B/padding/capacity, metadata and held-fence leases\n",executed);return;}
     printf("PASS: %u dirty cached %s cases; original GpuModified0/1, real CPU faults, old native D versus current B/new S, growth/aspect extent, typed pixels, post-transfer source, private prewrite after later GPU B writes, stale-I negatives, HTILE, exact capacity/padding and held-fence leases\n",executed,color_source?"color-to-D16/D32":"D16/D32");

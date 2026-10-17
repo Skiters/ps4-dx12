@@ -24,7 +24,7 @@ class GuestRasterizer : public GuestBufferAccess {
     std::function<bool(VAddr,std::span<std::byte>)> read_backing_;
     std::function<bool(VAddr,std::span<const std::byte>)> write_backing_;
     bool OwnImage(GuestTextureCache::Entry&);
-    bool OwnIndependentImage(GuestTextureCache::Entry&);
+    bool OwnIndependentImage(GuestTextureCache::Entry&,GuestTextureCache::Entry* replaced=nullptr);
     bool OwnImageClear(GuestTextureCache::Entry&);
     void QueueLinearImageDownload(GuestTextureCache::Entry&);
     void DownloadIndependentImage(GuestTextureCache::Entry&);

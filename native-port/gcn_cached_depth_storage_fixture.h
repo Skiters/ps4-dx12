@@ -11,7 +11,7 @@ namespace NativeDX12 {
 template<class Initialize>
 void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& plain_vertex,const std::vector<u32>& vertex_words,bool ordered,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize){
+    const Initialize& initialize,bool cmask=false){
     alignas(256) std::array<u32,128> pixel{},writer{},probe{},ordered_vertex{},ordered_pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x43534453504c0001ULL);
@@ -92,6 +92,71 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
         const float buffer_depth=dirty?0.25f:0.875f;
         if(dirty){for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)memcpy(memory+8192+GuestPixelOffset(depth,layout,0,0,x,y),&buffer_depth,4);
             if(stencil)memset(memory+16384,53,1024);}
+        if(cmask){
+            // Rebind the original depth words as RGBA8; only one CMASK tile
+            // and a disjoint clipped guest draw may change those words.
+            regs.depth_control={};regs.depth_render_control={};
+            db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Invalid;
+            cb={};cb.base_address=u32((base+8192)>>8);cb.info.format=10;cb.info.number_type=0;
+            cb.attrib.tile_mode_index=AmdGpu::TileMode(5);cb.pitch.tile_max=3;cb.slice.tile_max=15;
+            cb.info.fast_clear=1;cb.cmask_base_address=u32((base+36864)>>8);cb.cmask_slice.tile_max=15;
+            cb.clear_word0=0xff00ff00;gpu.last_cb_extent[0]={32,32};
+            regs.screen_scissor.bottom_right_x=regs.window_scissor.bottom_right_x=32;
+            regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=32;
+            regs.generic_scissor.top_left_x=1;regs.generic_scissor.top_left_y=2;
+            regs.generic_scissor.bottom_right_x=4;regs.generic_scissor.bottom_right_y=5;
+            const auto color=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto cl=LayoutGuestTexture(color);
+            if(cl.guest_bytes!=4096||GuestCmaskBytes(cb)!=2048)
+                throw std::runtime_error("Native CMASK fixture extent changed");
+            memset(memory+36864,0xff,2048);
+            // Independent P8_32x32_16x16 address for tile(x=8,y=0):
+            // pipe1, element0 => byte256, low nibble. No planner oracle.
+            memory[36864+256]=std::byte{0xf0};
+            std::vector<std::byte> physical(backing,backing+65536);physical[36864+256]=std::byte{0xff};
+            rasterizer.Draw(false);rasterizer.Finish();
+            if(memcmp(backing,physical.data(),65536))
+                throw std::runtime_error("Native CMASK clear published copied I into physical B or changed metadata padding");
+            // ReadMemory(B) deliberately does not publish independent I. Use
+            // actual guest image_loads of a bit-compatible UINT word view.
+            std::vector<std::pair<u32,u32>> points{{0,0},{1,2},{3,4},{4,5},{31,31}};
+            for(u32 y=0;y<32;y+=8)for(u32 x=0;x<32;x+=8)points.emplace_back(x+4,y+4);
+            alignas(256) std::array<u32,1024> code{};std::vector<u32> words;
+            for(u32 i=0;i<points.size();++i){const auto [x,y]=points[i];
+                words.insert(words.end(),{0x7e0002ff,x,0x7e0202ff,y,0xf0000100,0x00000400,0xbf8c0000,
+                    0xe0700000u+i*4,0x80020400});}
+            words.push_back(0xbf810000);
+            if(words.size()>=512)throw std::runtime_error("CMASK probe overlaps shader metadata");
+            std::copy(words.begin(),words.end(),code.begin());AmdGpu::BinaryInfo binary{};
+            binary.signature=binary.signature_ref;binary.length=u32(words.size()*4);binary.shader_hash=0x434d41534b505201ULL;
+            memcpy(code.data()+512,&binary,sizeof(binary));
+            AmdGpu::Image image{};image.base_address=(base+8192)>>8;image.type=u64(AmdGpu::ImageType::Color2D);
+            image.width=image.height=image.pitch=31;image.data_format=4;image.num_format=4;image.tiling_index=5;
+            image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
+            AmdGpu::Buffer observation{};observation.base_address=base+57344;observation.stride=4;observation.num_records=1024;
+            observation.data_format=4;observation.num_format=4;observation.dst_sel_x=4;observation.dst_sel_y=5;
+            observation.dst_sel_z=6;observation.dst_sel_w=7;
+            compute={};compute.address=reinterpret_cast<u64>(code.data())>>8;
+            compute.num_thread_x.full=compute.num_thread_y.full=compute.num_thread_z.full=1;compute.dim_x=compute.dim_y=compute.dim_z=1;
+            compute.settings.num_user_regs=12;compute.settings.num_vgprs=3;compute.settings.num_sgprs=3;
+            memcpy(compute.user_data.data(),&image,sizeof(image));memcpy(compute.user_data.data()+8,&observation,sizeof(observation));
+            auto expected=physical;
+            for(u32 i=0;i<points.size();++i){const auto [x,y]=points[i];
+                const bool draw=x>=1&&x<4&&y>=2&&y<5,clear=x>=8&&x<16&&y<8;
+                const u32 word=draw?0xff0000ffu:clear?0xff00ff00u:std::bit_cast<u32>(0.875f);
+                memcpy(expected.data()+57344+i*4,&word,4);
+            }
+            dispatch();rasterizer.ReadMemory(observation.base_address,4096);rasterizer.Finish();
+            if(memcmp(backing,expected.data(),65536)){
+                for(u32 i=0;i<points.size();++i){u32 actual{},want{};memcpy(&actual,backing+57344+i*4,4);
+                    memcpy(&want,expected.data()+57344+i*4,4);if(actual!=want)fprintf(stderr,
+                    "CMASK probe(%u,%u) actual=%08x expected=%08x\n",points[i].first,points[i].second,actual,want);}
+                for(size_t i=0;i<expected.size();++i)if(backing[i]!=expected[i]){fprintf(stderr,
+                    "Native CMASK mismatch byte=%zu actual=%02x expected=%02x S=%u HTILE=%u Dirty=%u\n",i,
+                    unsigned(backing[i]),unsigned(expected[i]),unsigned(stencil),unsigned(htile),unsigned(dirty));break;}
+                throw std::runtime_error("Native depth/CMASK/draw lost independent I/B, source S or full physical padding");
+            }
+            ++cases;continue;
+        }
         AmdGpu::Image image{};image.base_address=(base+8192)>>8;image.type=u64(AmdGpu::ImageType::Color2D);
         image.width=image.height=image.pitch=31;image.data_format=4;image.num_format=7;image.tiling_index=5;
         image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
