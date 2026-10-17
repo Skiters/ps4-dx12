@@ -57,6 +57,34 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         require(rejected,"Immutable CPU stream was accepted for a guest write");
         renderer.ValidateDebugMessages();
     }
+    {
+        // Original GPU fill extends a preceding writable arena. Preserve its
+        // untouched formatted prefix, and publish only actual old/new writes.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        const VAddr old=base+4096;constexpr u64 old_size=8192,new_size=12288;
+        const Rasterizer::ShaderBufferRequest source{old,old_size,true,true,true};
+        const Rasterizer::BufferWrite actual{old,4};
+        auto selected=renderer.PrepareShaderBuffers(std::span(&source,1),std::span(&actual,1));
+        renderer.FillPreparedShaderBuffer(old,old_size,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.FillBuffer(old+2048,new_size-2048,0x51525354,false);
+        const auto final=renderer.RefreshPreparedShaderBuffers(std::span(&source,1),selected);
+        require(final.front().resource.Get()!=selected.front().resource.Get()&&
+            renderer.CachedBufferBytes()==new_size,"GPU fill did not preserve/grow its original arena");
+        const auto result=read(renderer,old,new_size);
+        for(size_t offset=0;offset<result.size();offset+=4){u32 word{};memcpy(&word,result.data()+offset,4);
+            require(word==(offset<2048?0x41424344U:0x51525354U),
+                "GPU fill lost the untouched formatted prefix or exact fill bytes");
+        }
+        require(renderer.ReadMemory(old,new_size),"GPU fill CPU visibility failed");
+        require(committed==4+new_size-2048,"GPU fill committed formatted padding or lost an actual write");
+        for(size_t offset=0;offset<bytes;offset+=4){u32 word{};memcpy(&word,physical+offset,4);
+            const auto expected=offset==4096?0x41424344U:
+                offset>=4096+2048&&offset<4096+new_size?0x51525354U:0x31313131U;
+            require(word==expected,"GPU fill changed physical B0 outside actual guest writes");
+        }
+        renderer.ValidateDebugMessages();
+    }
     // mode0: RO B1; mode1: one real GPU-written page and one formatted page;
     // mode2: owned reservation with no actual writes. Store0/1/2: no store,
     // actual same-value store before growth, or during the new guard callback.

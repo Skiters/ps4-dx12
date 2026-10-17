@@ -1607,6 +1607,14 @@ void Rasterizer::FillBuffer(VAddr a,u32 s,u32 value,bool gds){
             std::fill_n(reinterpret_cast<u32*>(a),s/4,value);return;
         }
     }
+    if(!gds){
+        // Original ObtainBuffer(...,true) prepares writable arena storage.
+        // Reuse the same preserving envelope/ownership path as shader writes;
+        // a direct Find would evict or reject preceding formatted GPU bytes.
+        const ShaderBufferRequest request{a,s,true,true,true};
+        const BufferWrite write{a,s};
+        PrepareShaderBuffers(std::span(&request,1),std::span(&write,1));
+    }
     auto& r=Find(a,s,gds);
     auto real=gds?a+reinterpret_cast<VAddr>(gds_.data()):a;
     std::vector<u32> words(s/4,value);Upload(r,real-r.base,s,words.data());MarkDirty(r,true,real-r.base,s);
