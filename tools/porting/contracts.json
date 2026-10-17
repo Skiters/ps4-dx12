@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -128,7 +128,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -189,7 +189,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -253,7 +253,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -314,7 +314,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -336,7 +337,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -475,6 +476,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -702,6 +710,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -740,7 +760,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -803,7 +823,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -826,7 +847,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -965,6 +986,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -1194,6 +1222,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -1232,7 +1272,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1321,7 +1361,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1390,7 +1430,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1468,7 +1508,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1562,7 +1602,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1661,7 +1701,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1729,7 +1769,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1808,7 +1848,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1885,7 +1925,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1953,7 +1993,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2014,7 +2054,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2068,7 +2108,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2105,7 +2145,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2146,7 +2186,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2207,7 +2247,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2258,7 +2298,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2335,7 +2375,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2405,7 +2445,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2475,7 +2515,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2533,7 +2573,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2611,7 +2651,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2688,7 +2728,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2755,7 +2795,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2818,7 +2858,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2864,7 +2904,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2912,7 +2952,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2973,7 +3013,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3051,7 +3091,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3134,7 +3174,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3202,7 +3242,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3271,7 +3311,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3333,7 +3373,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3388,7 +3428,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3442,7 +3482,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3498,7 +3538,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3545,7 +3585,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3611,7 +3651,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3660,7 +3700,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3725,7 +3765,7 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3813,7 +3853,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3866,7 +3906,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3908,7 +3948,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -3923,7 +3964,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4067,6 +4108,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -4330,6 +4378,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -4374,7 +4434,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -4389,7 +4450,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4478,6 +4539,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -4621,6 +4689,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -4660,7 +4740,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -4678,7 +4759,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4769,6 +4850,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -4924,6 +5012,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -4992,7 +5092,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -5021,7 +5122,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5176,6 +5277,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -5443,6 +5551,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -5498,7 +5618,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -5527,7 +5648,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5666,6 +5787,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -5901,6 +6029,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -5943,7 +6083,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6006,7 +6146,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6068,7 +6208,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6130,7 +6270,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6194,7 +6334,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6263,7 +6403,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6329,7 +6469,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6392,7 +6532,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6461,7 +6601,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6534,7 +6674,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6603,7 +6743,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6664,7 +6804,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6722,7 +6862,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6788,7 +6928,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6857,7 +6997,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6926,7 +7066,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7005,7 +7145,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7062,7 +7202,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -7075,7 +7216,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7227,6 +7368,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -7466,6 +7614,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -7509,7 +7669,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7566,7 +7726,8 @@
           "9fa2125: original ResolveOverlap BlockDim and num_bits*samples admission precedes depth/MS transfer. Incompatible same-base classes preserve preceding independent I and initialize fresh I from the supplied B source.32 scoped cases distinguish10 eligible cache copies from22 pool controls/explicit helper operations;92f085f corrects fixture mip applicability. No whole caller/core/game proof or subview implementation claim.",
           "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
           "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+          "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+          "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
         ]
       },
       "final_verification": {
@@ -7579,7 +7740,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7731,6 +7892,13 @@
           "initial_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION.json",
           "final_manifest": "F:\\PS4Dev\\handoff\\depth-crossed-resources-20261017\\NATIVE_VERIFICATION_FINAL.json",
           "scope": "16 new original same-aspect1x crossed cases; final source-native readback follows transfer. Initial4/final2 exact binaries separate. Prior equal-MS/multi-mip aspect native helper tests are not proof of implemented original overlap paths. Core compiler proof is separate from runtime/game."
+        },
+        "latest_dirty_cached_depth_evidence": {
+          "source_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe",
+          "final_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_FINAL.json",
+          "related_manifest": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\NATIVE_VERIFICATION_RELATED.json",
+          "scope_corrections": "F:\\PS4Dev\\handoff\\dirty-cached-depth-recreation-20261017\\SCOPE_CORRECTIONS.json",
+          "scope": "16 actual1x native cached recreation cases +24 paired GPU captures/conversions; full core/game and exception-unwind injection unrun."
         }
       },
       "prepared_checks": [
@@ -7959,6 +8127,18 @@
             "native_independent_depth_growth"
           ],
           "description": "Crossed mip/layer counts, reverse lexicographic parent reuse, source-native readback AFTER transfer, typed target values, target-only seed/S/padding, untouched raw GPU inputs, PageWatch and held-fence allocation/lease checks. Initial/final identities separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/dirty_cached_depth_fixture.h",
+            "native-port/paired_depth_snapshot_fixture.h"
+          ],
+          "tests": [
+            "native_dirty_cached_depth_recreation",
+            "native_paired_depth_gpu_snapshot"
+          ],
+          "description": "Old native I versus distinct current B after real CPU fault, true single-mip NoS->S and same-aspect resource growth, original GpuModified0/1, native typed pixels, post-transfer source values, later GPU B writes/prewrite snapshot isolation, metadata/negative inputs/capacity/padding/physical B and held-fence leases. Exact executed evidence separate."
         }
       ]
     },
@@ -8003,7 +8183,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8063,7 +8243,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8131,7 +8311,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8197,7 +8377,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8271,7 +8451,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8341,7 +8521,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8403,7 +8583,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8469,7 +8649,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8530,7 +8710,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8604,7 +8784,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8671,7 +8851,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8731,7 +8911,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8785,7 +8965,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8854,7 +9034,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8924,7 +9104,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8979,7 +9159,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9037,7 +9217,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9092,7 +9272,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9156,7 +9336,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9236,7 +9416,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9290,7 +9470,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9353,7 +9533,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9413,7 +9593,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9468,7 +9648,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9520,7 +9700,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9580,7 +9760,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9643,7 +9823,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9709,7 +9889,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9765,7 +9945,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9820,7 +10000,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9879,7 +10059,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9955,7 +10135,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10012,7 +10192,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10069,7 +10249,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10128,7 +10308,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10192,7 +10372,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10255,7 +10435,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10325,7 +10505,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10385,7 +10565,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10447,7 +10627,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10515,7 +10695,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10582,7 +10762,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10639,7 +10819,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10709,7 +10889,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10774,7 +10954,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10840,7 +11020,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10895,7 +11075,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10954,7 +11134,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11014,7 +11194,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11081,7 +11261,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11152,7 +11332,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11223,7 +11403,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11287,7 +11467,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11352,7 +11532,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11411,7 +11591,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11467,7 +11647,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a09007a030dab4220ff79c6ce5db0d5a27fcb003"
+        "core_release_build_commit": "1e2fae2cdf7bc5d2ea3b8c6d2c1bb325516a15fe"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11501,7 +11681,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent",
-      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached sources and shader-writable/render-target depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
+      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached sources outside connected fixed-base single-sample depth-to-depth mapping and shader-writable/render-target depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
@@ -11560,7 +11740,8 @@
         "a4a51e8 restores pinned depth-only CopyImage/CopyImageWithBuffer overlap aspects, separate from explicit CopyDepthStencil. a7e7ea5 connects fixed-base direct16/32-word depth mip/layer growth using source native footprints and target tiling offsets/array strides, preserving target-only B1/S/padding, real fences and deferred additional seed residency.9 exact scoped fixtures pass, including16 independent typed/byte-oracle growth cases and corrected paired controls. Smaller views/rebinding, other geometry/sample repacking/size guards and whole GuestRasterizer/priority/core/game acceptance remain open.",
         "21d1e93: fixed-base same-word D16/D32 smaller SRV/DSV parent reuse with full physical extent/requested selectors; dirty geometry distinct from I validity; single-sample paired ordered domains retain exact-base GPU invalidation; current-B D-only refresh preserves native S in-place or through fence-retained native-S clone.8 GPU cases plus four related fixtures have exact-binary proof; MS dirty/ordered and other recreation/geometry/source/size/core/game paths remain open.",
         "2ac536b: ResolveDepthViewStorage preserves original lexicographic max resources BEFORE caller source/prewrite capture for valid owned applicable depth/aspect/typed-color-MS recreation.8 aspect/subview and2 color-MS GPU cases retain full native source values, new S seed, untouched layers/padding, original source class and MS mip guards. Crossed extents/dirty-source/writable-RT depth-to-color and other guarded paths remain open; core compiler proof is separate from runtime/game acceptance.",
-        "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open."
+        "1a35c8b connects nonempty compatible depth mip/layer intersection, source-native stride and target guest offsets/seed/S/padding.16 new same-aspect single-sample GPU cases plus related checks. a09007a moves full source-native readback AFTER transfer with allocation pin; final2 exact runs separate from initial4 pre-source-readback runs. Original equal-MS overlap is unimplemented; multi-mip NoS->S buffer path asserts min-mips1: native helper content evidence is not original overlap parity. Dirty cached-native recreation and other guarded paths remain open.",
+        "1e2fae2 connects retained initialized cached native D16/D32 single-sample depth recreation after CPU dirtying with original GpuModified0/1, actual stencil-presence/min-mip or growth conditions, target B/S seed, prewrite integration, HTILE0/fresh identity/source metadata retirement and independent-source precedence.16 final GPU cases+24 paired related cases pass at exact native ddb05761. S-address-only earlier helper cases do not prove original recreation applicability; exception cleanup fault-injection/core/game acceptance remains unrun. Cached color/writable/RT/geometry/ordered/size domains remain explicit code gaps."
       ]
     },
     "depth-color-shared-storage": {
