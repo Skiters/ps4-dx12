@@ -218,6 +218,14 @@ int main(int argc,char**){try{
         for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
             memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),
                    data==10?static_cast<const void*>(&rgba):words.data(),data==14?16:4);
+        if(guest!=expected||image.texture.handle!=original||image.desc!=d){
+            const auto mismatch=std::mismatch(guest.begin(),guest.end(),expected.begin());
+            fprintf(stderr,"Typed clear mismatch: data=%u tile=%u swizzle=%u,%u,%u,%u offset=%zu actual=%u expected=%u resource_same=%u desc_same=%u\n",
+                data,tile,swizzle[0],swizzle[1],swizzle[2],swizzle[3],size_t(mismatch.first-guest.begin()),
+                mismatch.first==guest.end()?0:std::to_integer<unsigned>(*mismatch.first),
+                mismatch.second==expected.end()?0:std::to_integer<unsigned>(*mismatch.second),
+                unsigned(image.texture.handle==original),unsigned(image.desc==d));
+        }
         Require(guest==expected&&image.texture.handle==original&&image.desc==d);
         cache.Collect(renderer.CompletedFence());cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
     }

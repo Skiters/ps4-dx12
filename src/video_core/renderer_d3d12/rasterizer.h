@@ -204,11 +204,7 @@ public:
     };
     bool BuffersMayDefer(std::span<const ShaderBufferRequest>);
     virtual void NotifyGpuBufferWrite(VAddr,u64) {}
-    void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
-        std::lock_guard lock(execution_mutex_);for(const auto& request:requests)if(request.written){
-            auto& mapping=Find(request.address,request.size,false);
-            const auto write=request.WriteRange();
-            MarkDirty(mapping,true,write.address-mapping.base,write.size);}}
+    void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests);
     struct ShaderBufferView {
         ComPtr<ID3D12Resource> resource;u64 offset,size;
         std::shared_ptr<UploadArena> lease;

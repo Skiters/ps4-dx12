@@ -133,5 +133,36 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
             "A CPU store outside the old tiny sharp failed to restore its complete resident page");
         renderer.ValidateDebugMessages();
     }
+    {
+        // Image prewrite preparation may resolve a reserved, not-yet-written B
+        // and downgrade it to RO. Its later shader bind must reacquire the same
+        // allocation, preserving formatted GPU bytes and exact guest stores.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        Rasterizer::ShaderBufferRequest writer{base,8192,true,true,true};
+        writer.write_byte_adjust=4;writer.original_write_bytes=4;
+        const auto views=renderer.PrepareShaderBuffers(std::span(&writer,1),std::span<const Rasterizer::BufferWrite>{});
+        renderer.FillPreparedShaderBuffer(base+4096,4096,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        require(renderer.BuffersMayDefer(std::span(&writer,1)),"Prewrite B never acquired ownership");
+        require(renderer.ReadMemory(base,4),"Image prewrite CPU read failed");
+        require(!renderer.BuffersMayDefer(std::span(&writer,1)),"CPU resolution did not downgrade the reserved B");
+        renderer.MarkShaderBufferWrites(std::span(&writer,1));
+        const auto current=renderer.PreparedDmaBuffer(base,8192);
+        require(renderer.BuffersMayDefer(std::span(&writer,1))&&current&&
+            current->resource.Get()==views.front().resource.Get()&&current->offset==views.front().offset,
+            "Shader bind failed to restore ownership of its exact selected B");
+        renderer.FillPreparedShaderBuffer(base+4,4,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const auto result=read(renderer,base,8192);
+        for(size_t offset=0;offset<result.size();offset+=4){u32 word{};memcpy(&word,result.data()+offset,4);
+            require(word==(offset==4?0x41424344U:offset>=4096?0x51525354U:0x31313131U),
+                "Ownership restoration lost formatted B or changed its original shader write");
+        }
+        require(commits==0&&committed==0,"GPU-only verification prematurely committed owned B");
+        require(renderer.ReadMemory(base+4,4),"CPU visibility request failed after restored shader ownership");
+        require(commits==1&&committed==4,"Ownership restoration committed an envelope instead of the exact shader store");
+        for(size_t i=0;i<bytes;++i)require(physical[i]==(i>=4&&i<8?std::byte(0x44-(i-4)):std::byte{0x31}),
+            "Restoring B ownership committed private I/format bytes into physical guest memory");
+        renderer.ValidateDebugMessages();
+    }
 }
 }

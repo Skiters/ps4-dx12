@@ -60,11 +60,29 @@ static Level FromSpdlog(spdlog::level l) {
 void VLog(Class log_class, Level level, const char* file, int line, const char* func,
           fmt::string_view format, fmt::format_args args) {
     const auto& logger = ALL_LOGGERS[static_cast<size_t>(log_class)];
-    if (!logger) {
+    if (!logger && level != Level::Critical) {
         return;
     }
     fmt::memory_buffer msg;
     fmt::vformat_to(fmt::appender(msg), format, args);
+    if (level == Level::Critical) {
+        // The assertion trap can terminate the process before an asynchronous
+        // sink drains. Keep its original message independently of that queue.
+        std::fprintf(stderr, "[Fatal] %s:%d %s: ", file, line, func);
+        std::fwrite(msg.data(), 1, msg.size(), stderr);
+        std::fputc('\n', stderr);
+        std::fflush(stderr);
+        std::fflush(stdout);
+        if (g_shad_file_sink) {
+            const spdlog::details::log_msg fatal{spdlog::string_view_t{}, spdlog::level::critical,
+                                               {msg.data(), msg.size()}};
+            g_shad_file_sink->log(fatal);
+            g_shad_file_sink->flush();
+        }
+    }
+    if (!logger) {
+        return;
+    }
     if constexpr (PerformanceRecorder::Enabled) {
         if (level >= Level::Warning) {
             PerformanceRecorder::Get().Message(

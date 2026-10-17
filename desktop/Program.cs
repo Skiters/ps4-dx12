@@ -231,6 +231,7 @@ sealed class MainWindow : Form
     readonly Button playButton;
     List<Game> games = [];
     Process? worker, gameProcess;
+    Task? launchObservation;
     string? cancelPath;
     bool busy, scanning, launching;
     bool nativeProbing, nativeReady;
@@ -466,19 +467,37 @@ sealed class MainWindow : Form
             var game = (Game)library.SelectedItems[0].Tag!;
             status.Text = "Загрузка игры… Подготовка отдельного профиля " + CoreVersions.Backend(settings);
             var start = await Task.Run(() => NativeGameLaunch.Create(settings, game.Directory));
-            gameProcess?.Dispose(); gameProcess = new Process { StartInfo = start, EnableRaisingEvents = true };
+            if (launchObservation is not null) await launchObservation;
+            start.CreateNoWindow = true;
+            start.RedirectStandardOutput = start.RedirectStandardError = true;
+            gameProcess?.Dispose(); gameProcess = new Process { StartInfo = start };
             var launched = gameProcess;
-            gameProcess.Exited += (_, _) =>
-            {
-                int exitCode = launched.ExitCode;
-                if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { status.Text = exitCode == 0 ? "Игра завершена. Библиотека готова." : $"Ядро завершилось с ошибкой {exitCode}."; Activate(); });
-            };
-            if (!NativeGameLaunch.Start(gameProcess)) throw new IOException("Не удалось запустить ядро");
-            NativeGameLaunch.Record(settings, gameProcess, Settings.DataRoot);
+            if (!NativeGameLaunch.Start(launched)) throw new IOException("Не удалось запустить ядро");
+            var diagnostics = new LaunchDiagnostics(launched, Settings.DataRoot);
+            launchObservation = ObserveGameExit(launched, diagnostics);
+            NativeGameLaunch.Record(settings, launched, Settings.DataRoot);
+            diagnostics.PreserveManifest(Path.Combine(Settings.DataRoot, "launch-manifest.json"));
             status.Text = "Запущено: " + game.Title;
         }
         catch (Exception ex) { Error(ex); }
         finally { launching = false; }
+    }
+
+    async Task ObserveGameExit(Process launched, LaunchDiagnostics diagnostics)
+    {
+        try
+        {
+            int exitCode = await diagnostics.CompleteAsync();
+            if (IsDisposed || !IsHandleCreated || gameProcess != launched) return;
+            status.Text = exitCode == 0 ? "Игра завершена. Библиотека готова." :
+                $"Ядро завершилось с ошибкой 0x{unchecked((uint)exitCode):X8}. Отчёт: {diagnostics.ReportPath}";
+            if (exitCode != 0) MessageBox.Show(this, LaunchDiagnostics.FailureMessage(exitCode, diagnostics.ReportPath),
+                "Ошибка ядра", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch (Exception error)
+        {
+            if (!IsDisposed && IsHandleCreated) Error(new IOException("Не удалось сохранить диагностику запуска: " + diagnostics.DirectoryPath, error));
+        }
     }
 
     async Task<JsonElement> RunWorker(string mode, string package)
@@ -575,6 +594,12 @@ static class Program
 {
     [STAThread] static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--launch-diagnostics-child")
+        {
+            Console.Out.Write("stdout-without-newline"); Console.Error.Write("fatal-without-newline");
+            Console.Out.Flush(); Console.Error.Flush(); return int.Parse(args[1]);
+        }
+        if (args.Contains("--launch-diagnostics-test")) return LaunchDiagnosticsTests.Run();
         if (args.Contains("--external-core-folder-test")) return ExternalCoreTests.Run();
         ApplicationConfiguration.Initialize();
         try

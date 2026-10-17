@@ -541,12 +541,57 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
         mapping.gpu_owned=false;
     }
 }
+void Rasterizer::MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
+    std::lock_guard lock(execution_mutex_);
+    bool needs_restore=false;
+    // A prewrite image snapshot can Finish and downgrade reserved B to RO.
+    // Reacquire its existing mapping before declaring any new shader writes;
+    // no Find/reservation may replace resources already selected for this bind.
+    for(const auto& request:requests)if(request.written){
+        auto it=mappings_.upper_bound(request.address);
+        if(it==mappings_.begin())throw std::logic_error("Shader write lost its prepared native buffer");--it;
+        auto& mapping=it->second;
+        if(request.address-mapping.base>mapping.size||request.size>mapping.size-(request.address-mapping.base))
+            throw std::logic_error("Shader write lost its selected buffer envelope");
+        (void)request.WriteRange();
+        needs_restore|=!mapping.gpu_owned&&bool(own_buffer_)&&!IsGdsRange(mapping.base,mapping.size);
+    }
+    if(needs_restore){
+    std::set<VAddr> prepared;std::vector<Mapping*> mappings;
+    Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"restore-prepared-buffer-writes");
+    for(const auto& request:requests)if(request.written){
+        auto it=mappings_.upper_bound(request.address);--it;
+        if(prepared.insert(it->first).second)mappings.push_back(&it->second);
+    }
+    const auto previous_preparations=preparing_buffer_contents_.size();
+    SCOPE_EXIT {preparing_buffer_contents_.resize(previous_preparations);};
+    for(auto* mapping:mappings)preparing_buffer_contents_.push_back(mapping);
+    for(auto* entry:mappings){auto& mapping=*entry;
+        if(mapping.gpu_owned||!own_buffer_||IsGdsRange(mapping.base,mapping.size))continue;
+        const bool uav=std::ranges::any_of(requests,[&](const auto& r){return r.unordered_access&&
+            r.address>=mapping.base&&r.address-mapping.base<=mapping.size&&r.size<=mapping.size-(r.address-mapping.base);});
+        PrepareBufferContents(mapping,true,uav,false,requests,std::span<const BufferWrite>{},diagnostic);
+    }
+    }
+    for(const auto& request:requests)if(request.written){
+        auto it=mappings_.upper_bound(request.address);--it;
+        const auto write=request.WriteRange();
+        MarkDirty(it->second,true,write.address-it->first,write.size);
+    }
+}
 bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     std::lock_guard lock(execution_mutex_);
     for(const auto& request:requests)if(request.written){
         auto it=mappings_.upper_bound(request.address);
         if(it==mappings_.begin()){Diagnostics::Count("buffer-defer.no-mapping");return false;}--it;
-        if(!it->second.gpu_owned){Diagnostics::Count("buffer-defer.not-owned");return false;}
+        if(!it->second.gpu_owned){
+            Diagnostics::Count("buffer-defer.not-owned");
+            fprintf(stderr,"DX12 buffer ownership rejected: sharp=%llx+%llu mapping=%llx+%llu watched=%u dirty=%u\n",
+                (unsigned long long)request.address,(unsigned long long)request.size,
+                (unsigned long long)it->first,(unsigned long long)it->second.size,
+                unsigned(it->second.cpu_watched),unsigned(it->second.dirty));fflush(stderr);
+            return false;
+        }
         if(request.address-it->first>it->second.size||
            request.size>it->second.size-(request.address-it->first)){
             Diagnostics::Count("buffer-defer.not-covered");return false;
