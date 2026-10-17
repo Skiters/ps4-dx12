@@ -23,6 +23,7 @@ class GuestMultisample {
     using Key=std::tuple<DXGI_FORMAT,DXGI_FORMAT,UINT,bool,bool,bool>;
     std::map<Key,std::shared_ptr<Program>> programs_;
     std::map<std::tuple<DXGI_FORMAT,UINT,bool>,std::shared_ptr<Program>> copy_programs_;
+    std::map<std::tuple<DXGI_FORMAT,UINT,UINT>,std::shared_ptr<Program>> color_depth_programs_;
 public:
     struct Lease {
         Resource texture,linear;
@@ -38,6 +39,13 @@ public:
         std::shared_ptr<Descriptors> descriptors,attachment;
         std::shared_ptr<Program> program;
         UINT width,height,layer;
+        void Record(ID3D12GraphicsCommandList*,Resource& source,Resource& destination)const;
+    };
+    struct ColorDepthLease {
+        Resource source,destination;
+        std::shared_ptr<Descriptors> descriptors,attachment;
+        std::shared_ptr<Program> program;
+        UINT width,height;
         void Record(ID3D12GraphicsCommandList*,Resource& source,Resource& destination)const;
     };
     struct StorageLease {
@@ -56,6 +64,11 @@ public:
         const GuestTextureDesc&,const GuestTextureLayout&,UINT layer,UINT plane,bool upload);
     std::shared_ptr<CopyLease> PrepareCopy(Resource& source,Resource& destination,
         const GuestTextureDesc&,const GuestTextureLayout&,UINT layer);
+    static bool CanReinterpretColorAsMsDepth(const GuestTextureDesc&,const GuestTextureLayout&,
+        const GuestTextureDesc&,const GuestTextureLayout&);
+    std::shared_ptr<ColorDepthLease> PrepareColorAsMsDepth(Resource& source,Resource& destination,
+        const GuestTextureDesc& source_desc,const GuestTextureLayout& source_layout,
+        const GuestTextureDesc& target_desc,const GuestTextureLayout& target_layout);
     std::shared_ptr<StorageLease> PrepareStorage(Resource& texture,std::span<Resource> samples,
         Resource& linear,const GuestTextureDesc&,const GuestTextureLayout&);
 };

@@ -5,6 +5,7 @@
 #include <d3dcompiler.h>
 #include <string>
 #include <numeric>
+#include <bit>
 namespace NativeDX12 {
 namespace {
 ComPtr<ID3DBlob> Compile(std::string_view source,const char* target,const D3D_SHADER_MACRO* macros=nullptr){
@@ -438,6 +439,103 @@ void GuestMultisample::CopyLease::Record(ID3D12GraphicsCommandList* list,
     DX12_API_CALL(list->RSSetViewports(1,&viewport));DX12_API_CALL(list->RSSetScissorRects(1,&scissor));
     DX12_API_CALL(list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST));
     const auto target=attachment->Cpu(0);DX12_API_CALL(list->OMSetRenderTargets(1,&target,FALSE,nullptr));
+    DX12_API_CALL(list->DrawInstanced(3,1,0,0));
+}
+bool GuestMultisample::CanReinterpretColorAsMsDepth(const GuestTextureDesc& source,
+    const GuestTextureLayout& source_layout,const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
+    // The pinned helper accepts 2/4/8/16 samples. Its vec4 indices above three
+    // are undefined; the native shader writes zero for those samples while
+    // retaining the defined channel transfers, S and the full draw operation.
+    return !source.depth_target&&!source.stencil_address&&source.samples==1&&
+        !source.volume_depth&&!source.one_dimensional&&source.levels&&source.layers&&
+        !source.UsesRaw32()&&!source.UsesRawPacked10()&&source_layout.block_extent==1&&
+        !source_layout.expanded_bytes_per_pixel&&source_layout.format!=DXGI_FORMAT_UNKNOWN&&
+        std::string_view(ValueType(source_layout.format))=="float4"&&
+        target.depth_target&&!target.writable&&!target.render_target&&
+        !target.volume_depth&&!target.one_dimensional&&target.levels==1&&target.layers&&
+        target.samples>1&&target.samples<=16&&std::has_single_bit(target.samples)&&
+        ((target.data_format==2&&target.number_format==0&&target_layout.format==DXGI_FORMAT_R16_UNORM)||
+         (target.data_format==4&&target.number_format==7&&target_layout.format==DXGI_FORMAT_R32_FLOAT));
+}
+std::shared_ptr<GuestMultisample::ColorDepthLease> GuestMultisample::PrepareColorAsMsDepth(
+    Resource& source,Resource& destination,const GuestTextureDesc& source_desc,
+    const GuestTextureLayout& source_layout,const GuestTextureDesc& target_desc,const GuestTextureLayout& target_layout){
+    if(!source.handle||!destination.handle||!CanReinterpretColorAsMsDepth(source_desc,source_layout,target_desc,target_layout))
+        throw std::invalid_argument("Color-channel depth transfer has no typed source/sample contract");
+    const auto src=source.handle->GetDesc(),dst=destination.handle->GetDesc();
+    if(source.handle==destination.handle||src.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
+       dst.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||src.SampleDesc.Count!=1||
+       dst.SampleDesc.Count!=target_desc.samples||dst.MipLevels!=1||
+       src.Width<source_desc.width||src.Height<source_desc.height||src.MipLevels<source_desc.levels||
+       src.DepthOrArraySize<source_desc.layers||dst.DepthOrArraySize<target_desc.layers||
+       dst.Width<target_desc.width||dst.Height<target_desc.height||
+       (src.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE)||!(dst.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+        throw std::invalid_argument("Color-channel depth transfer resource geometry changed");
+    const auto depth_format=target_desc.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+        target_layout.bytes_per_pixel==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT;
+    // Writable sRGB I uses a linear UAV layout, but the pinned blit samples
+    // ImageInfo::pixel_format, not that storage view. Restore its typed SRV.
+    const auto color_format=source_desc.data_format==10&&source_desc.number_format==9?
+        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:source_layout.format;
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT support{color_format};
+    Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
+    if(!(support.Support1&D3D12_FORMAT_SUPPORT1_SHADER_LOAD))
+        throw std::runtime_error("Color-channel depth transfer source lacks typed sample loads");
+    auto& program=color_depth_programs_[{depth_format,target_desc.samples,dst.SampleDesc.Quality}];
+    if(!program){
+        auto compiled=std::make_shared<Program>();
+        D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,0};
+        D3D12_ROOT_PARAMETER parameter{};parameter.ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameter.DescriptorTable={1,&range};parameter.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+        D3D12_ROOT_SIGNATURE_DESC signature{1,&parameter,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+        ComPtr<ID3DBlob> blob,errors;
+        Check(DX12_API_CALL(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors)));
+        Check(DX12_API_CALL(device_->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&compiled->root))));
+        const auto vs=Compile("struct O{float4 p:SV_Position;float2 uv:TEXCOORD0;};"
+            "O main(uint id:SV_VertexID){O o;o.uv=float2(id==2?2:0,id==1?2:0);"
+            "o.p=float4(o.uv.x*2-1,1-o.uv.y*2,0,1);return o;}","vs_5_1");
+        const auto ps=Compile(GuestColorToMsDepthSource,"ps_5_1");
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};state.pRootSignature=compiled->root.Get();
+        state.VS={vs->GetBufferPointer(),vs->GetBufferSize()};state.PS={ps->GetBufferPointer(),ps->GetBufferSize()};
+        state.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;state.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;
+        state.RasterizerState.DepthClipEnable=TRUE;state.RasterizerState.MultisampleEnable=TRUE;
+        state.SampleMask=UINT_MAX;state.SampleDesc=dst.SampleDesc;state.DSVFormat=depth_format;
+        state.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        state.DepthStencilState.DepthEnable=TRUE;state.DepthStencilState.DepthWriteMask=D3D12_DEPTH_WRITE_MASK_ALL;
+        state.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_ALWAYS;
+        Check(DX12_API_CALL(device_->CreateGraphicsPipelineState(&state,IID_PPV_ARGS(&compiled->pipeline))));
+        program=std::move(compiled);
+    }
+    auto lease=std::make_shared<ColorDepthLease>();lease->source=source;lease->destination=destination;
+    lease->program=program;lease->width=target_desc.width;lease->height=target_desc.height;
+    lease->descriptors=std::make_shared<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,true);
+    lease->attachment=std::make_shared<Descriptors>(device_.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_DSV,1,false);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=color_format;
+    srv.Shader4ComponentMapping=source_desc.data_format==13?
+        D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(0,1,2,D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1):
+        D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    // Original views select mip/layer zero and do not inherit guest swizzles.
+    srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;srv.Texture2DArray.MipLevels=1;srv.Texture2DArray.ArraySize=1;
+    DX12_API_CALL(device_->CreateShaderResourceView(source.handle.Get(),&srv,lease->descriptors->Cpu(0)));
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsv{};dsv.Format=depth_format;
+    dsv.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;dsv.Texture2DMSArray.ArraySize=1;
+    DX12_API_CALL(device_->CreateDepthStencilView(destination.handle.Get(),&dsv,lease->attachment->Cpu(0)));
+    return lease;
+}
+void GuestMultisample::ColorDepthLease::Record(ID3D12GraphicsCommandList* list,Resource& src,Resource& dst)const{
+    if(!list||src.handle.Get()!=source.handle.Get()||dst.handle.Get()!=destination.handle.Get())
+        throw std::invalid_argument("Color-channel depth transfer resource changed");
+    // Destination was initialized by Upload. Preserve S and every other slice;
+    // do not discard the allocation or clear an unrelated plane.
+    if(src.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)src.UavBarrier(list);
+    src.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);dst.Transition(list,D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    ID3D12DescriptorHeap* heaps[]{descriptors->Heap()};DX12_API_CALL(list->SetDescriptorHeaps(1,heaps));
+    DX12_API_CALL(list->SetGraphicsRootSignature(program->root.Get()));DX12_API_CALL(list->SetPipelineState(program->pipeline.Get()));
+    DX12_API_CALL(list->SetGraphicsRootDescriptorTable(0,descriptors->Gpu(0)));
+    D3D12_VIEWPORT viewport{0,0,float(width),float(height),0,1};D3D12_RECT scissor{0,0,LONG(width),LONG(height)};
+    DX12_API_CALL(list->RSSetViewports(1,&viewport));DX12_API_CALL(list->RSSetScissorRects(1,&scissor));
+    DX12_API_CALL(list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST));
+    const auto target=attachment->Cpu(0);DX12_API_CALL(list->OMSetRenderTargets(0,nullptr,FALSE,&target));
     DX12_API_CALL(list->DrawInstanced(3,1,0,0));
 }
 } // namespace NativeDX12

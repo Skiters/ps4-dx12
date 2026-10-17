@@ -6,10 +6,12 @@ function(native_guest_tiling target)
     configure_file("${_tiling_root}/native-port/guest_tiling_shader.h.in"
         "${CMAKE_CURRENT_BINARY_DIR}/native-generated/guest_tiling_shader.h" @ONLY)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${_tiling_native}/guest_msaa_upload.hlsl" "${_tiling_native}/guest_msaa_readback.hlsl" "${_tiling_native}/guest_msaa_copy.hlsl")
+        "${_tiling_native}/guest_msaa_upload.hlsl" "${_tiling_native}/guest_msaa_readback.hlsl" "${_tiling_native}/guest_msaa_copy.hlsl"
+        "${_tiling_native}/guest_color_to_ms_depth.hlsl")
     file(READ "${_tiling_native}/guest_msaa_upload.hlsl" _guest_msaa_upload_source)
     file(READ "${_tiling_native}/guest_msaa_readback.hlsl" _guest_msaa_readback_source)
     file(READ "${_tiling_native}/guest_msaa_copy.hlsl" _guest_msaa_copy_source)
+    file(READ "${_tiling_native}/guest_color_to_ms_depth.hlsl" _guest_color_to_ms_depth_source)
     configure_file("${_tiling_root}/native-port/guest_msaa_shaders.h.in"
         "${CMAKE_CURRENT_BINARY_DIR}/native-generated/guest_msaa_shaders.h" @ONLY)
     target_sources(${target} PRIVATE "${_tiling_native}/guest_tiler.cpp" "${_tiling_native}/guest_multisample.cpp"

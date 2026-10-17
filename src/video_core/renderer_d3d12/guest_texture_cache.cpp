@@ -1371,6 +1371,7 @@ bool MatchesReferenceDepthImage(GuestTextureDesc source,const GuestTextureLayout
 }
 bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
+    if(source.address==target.address&&GuestMultisample::CanReinterpretColorAsMsDepth(source,source_layout,target,target_layout))return true;
     if(MatchesReferenceDepthImage(source,source_layout,target,target_layout))return true;
     // Original resource growth refreshes the target first, then copies the
     // source mip/layer domain. Byte prefixes are NOT physical mip prefixes
@@ -1984,6 +1985,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 throw std::runtime_error("Independent block image view has no proven word/layout transfer");
             }
             const bool depth_transfer=existing->desc.depth_target||d.depth_target;
+            const bool color_ms_depth=existing->desc.address==d.address&&
+                GuestMultisample::CanReinterpretColorAsMsDepth(existing->desc,existing->layout,d,layout);
             if((depth_transfer?!read_independent_image_:(partial_block?!expand_block_:!read_independent_))||
                !acquire_independent_||!retire_independent_||!CanUploadGpuSnapshot(d,layout,d.writable))
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
@@ -1991,7 +1994,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 throw std::runtime_error("Independent depth/color overlap needs an exact physical transfer plan");
             const auto samples_supported=[](const auto& desc,const auto& physical){
                 return IsGuestDepthPlaneStorage(desc,physical)||CanTransferIndependentMultisample(desc,physical);};
-            if((existing->desc.samples>1||d.samples>1)&&
+            if(!color_ms_depth&&(existing->desc.samples>1||d.samples>1)&&
                (existing->desc.samples!=d.samples||
                 !samples_supported(existing->desc,existing->layout)||!samples_supported(d,layout)))
                 throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
@@ -2017,6 +2020,19 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable,false,
                 UploadPurpose::Preparation,stencil_snapshot.handle?&stencil_snapshot:nullptr);
             converted.pending_buffer_residency=std::move(residency);
+            if(color_ms_depth){
+                // Pinned CopyColorAndDepth/ReinterpretColorAsMsDepth samples
+                // typed source channels into target layer zero. All other
+                // initialized layers/S stay intact. Register both participants
+                // before recording so internal submission retains allocations.
+                if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
+                auto lease=multisample_->PrepareColorAsMsDepth(source->texture,converted.texture,
+                    source->desc,source->layout,converted.desc,converted.layout);
+                converted.color_depth_leases.push_back(lease);
+                source->pending=converted.pending=true;
+                if(transfer_submission_)transfer_submission_();
+                lease->Record(list,source->texture,converted.texture);
+            }
             if(private_block_view){
                 // Do not publish a second mutable owner or retire the BC parent:
                 // the selected mip is only a binding snapshot of its private I.
@@ -2411,8 +2427,10 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     auto depth_seed=capture_buffer(target.address,physical.guest_bytes);
     auto stencil_seed=target.stencil_address?capture_buffer(target.stencil_address,stencil.guest_bytes):Resource{};
     IndependentImageVersion result;
+    const bool color_ms_depth=image.desc.address==target.address&&
+        GuestMultisample::CanReinterpretColorAsMsDepth(image.desc,image.layout,target,physical);
     const bool mapped=!MatchesGuestMipLayout(image.layout,physical);
-    result.depth=mapped?RetileImageVersion(image,depth_seed,list,completed,nullptr,0,
+    result.depth=color_ms_depth?std::move(depth_seed):mapped?RetileImageVersion(image,depth_seed,list,completed,nullptr,0,
         image.desc.depth_target,&target,&physical):RetileBufferVersion(image,depth_seed,list,completed);
     result.depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if(target.stencil_address){
@@ -2571,7 +2589,7 @@ void GuestTextureCache::Collect(uint64_t completed){
     // one PS4 packet. Do the O(cache entries) retirement scan once per advance.
     if(completed<=collected_fence_)return;collected_fence_=completed;
     for(auto& e:entries_)if(!e->pending&&e->fence<=completed){
-        e->uploads.clear();e->tiler_leases.clear();e->multisample_leases.clear();e->sample_copy_leases.clear();e->storage_leases.clear();
+        e->uploads.clear();e->tiler_leases.clear();e->multisample_leases.clear();e->color_depth_leases.clear();e->sample_copy_leases.clear();e->storage_leases.clear();
         e->storage_clear_leases.clear();
         e->buffer_sync_resources.clear();
         e->buffer_sync_allocation_bytes=0;

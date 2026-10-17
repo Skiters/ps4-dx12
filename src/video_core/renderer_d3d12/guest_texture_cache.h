@@ -189,6 +189,7 @@ public:
         std::shared_ptr<GuestTiler> tiler;
         std::shared_ptr<GuestMultisample> multisample;
         std::vector<std::shared_ptr<GuestMultisample::Lease>> multisample_leases;
+        std::vector<std::shared_ptr<GuestMultisample::ColorDepthLease>> color_depth_leases;
         std::vector<std::byte> sampled_snapshot;
         std::vector<std::byte> stencil_snapshot;
         GuestTextureLayout stencil_layout;
@@ -359,6 +360,8 @@ public:
         Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_independent_image_=std::move(read);}
     // Original overlap copies use private depth/color inputs. Both CopyImage
     // and CopyImageWithBuffer exclude S; explicit CopyDepthStencil is separate.
+    // Color->MS depth returns initialization seeds here; UploadVersion records
+    // the pinned channel-to-sample draw directly into the initialized target.
     IndependentImageVersion CaptureIndependentImageVersion(Entry&,const GuestTextureDesc&,
         const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t completed,
         const std::function<Resource(uint64_t,uint64_t)>& capture_buffer);
