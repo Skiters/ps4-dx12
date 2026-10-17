@@ -368,6 +368,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -441,6 +447,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -601,6 +617,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -676,6 +698,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -3407,6 +3439,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -3516,6 +3554,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -3793,6 +3841,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -3906,6 +3960,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -4027,6 +4091,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -4108,6 +4178,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -5315,6 +5395,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -5400,6 +5486,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -5562,6 +5658,12 @@
           "source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
           "scope": "16 exact scoped fixture passes plus exact-runtime alias/DMA; no whole-group/core/game acceptance."
+        },
+        "latest_readonly_dma_alias_evidence": {
+          "test_source_commit": "9fdd733acc7eda270c3f9b1234806d0df4774489",
+          "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
+          "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+          "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
         }
       },
       "prepared_checks": [
@@ -5636,6 +5738,16 @@
           "tests": [
             "native_memory_perf_preserved_versions",
             "native_memory_perf_pending_fence"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "Original NonWritable readonly sharp plus written SSBO and dynamic/immediate ReadConst see same-dispatch shared B in standalone/linked conversion; exact execution identities recorded separately.",
+          "paths": [
+            "native-port/dma_shader_test.cpp"
+          ],
+          "tests": [
+            "native_dma_shader_addressing"
           ]
         }
       ]
@@ -9128,8 +9240,8 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage",
-      "missing_semantics": "actual reflected shader SRV/DMA-UAV conflicts; ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
-      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json",
+      "missing_semantics": "ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
+      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
       "groups": [
         4,
         6,
@@ -9176,7 +9288,8 @@
         "7a59dd2 uses writable preserving preparation for GPU FillBuffer before exact upload/dirty marking. New envelope regression passes for prior formatted GPU prefix, expanded fill, exact actual CPU writes and full B0/padding. Independent native_copy_dirty_ranges large-DMA no-submit assertion fails and remains explicitly unaccepted; its cause is not yet localized.",
         "51ec097 preserves complete all-owned B growth on the pending GPU timeline, inheriting exact dirty spans/CPU baselines/generations and fence leases. Only new gaps acquire ownership; failure/exception rolls back gaps without releasing source guards, and actual CPU markers reject deferred publication. Original large DMA no-submit/data/neighbor/GDS regression now passes. Actual PageWatch success/rejection/throw-retry/provisional CPU-winner controls and ten related GPU fixture cases pass; NATIVE_VERIFICATION.json. CPU-visible/unprotected/marked sources retain necessary reconciliation. Mixed-class splits/pressure/other listed gaps remain.",
         "a39144a retains complete canonical B for disjoint native SRV/UAV ranges over preceding GPU-only/owned versions. Original writable/publication ranges and ownership remain canonical; private DEFAULT read copies refresh after late preparation with strict original-generation identity, exact bounds and fence leases. The bounded reusable placed-copy pool never reuses a live state. Actual production ExecuteGuestBufferCompute, late-growth HLSL dispatch, protected PageWatch/sync/readback/reuse and alias/generation negatives pass, alongside original standalone/linked compiler-unified true aliases. Source/compiler/runtime identities in disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json. True ununified overlapping native aliases remain guarded; no pressure/whole-group/game acceptance claim.",
-        "Pinned persistent resident B backing survives cache pressure: mandatory GPU-derived and selected generations are retained; only reconstructible inactive mappings are evicted with callback-safe rechecks. Soft cache target is separate from fresh actual-adapter/reserve native allocation admission. Remaining heap budget/current-page compaction, live zero-budget leases and exact guest visibility are preserved.16 scoped GPU/readback cases plus exact runtime alias/DMA pass at2e01aa6; whole-group/current-core/game acceptance remains open."
+        "Pinned persistent resident B backing survives cache pressure: mandatory GPU-derived and selected generations are retained; only reconstructible inactive mappings are evicted with callback-safe rechecks. Soft cache target is separate from fresh actual-adapter/reserve native allocation admission. Remaining heap budget/current-page compaction, live zero-budget leases and exact guest visibility are preserved.16 scoped GPU/readback cases plus exact runtime alias/DMA pass at2e01aa6; whole-group/current-core/game acceptance remains open.",
+        "Production native_storage_buffer_uavs unifies original readonly/writable SSBO and raw DMA bank access to live UAV B in standalone/linked conversion; cache keys preserve the policy. Extended actual DMA shader retains original NonWritable input, validates reflected live UAV and reads same-dispatch writes through readonly sharp and ReadConst over distinct prior B1. Scoped GPU fixture/exact-runtime converter pass at9fdd733. Custom incompatible SRV/DMA guard remains; no snapshot can substitute true same-command alias semantics."
       ]
     },
     "depth-color-shared-storage": {
