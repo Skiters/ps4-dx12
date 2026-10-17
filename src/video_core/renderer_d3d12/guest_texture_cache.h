@@ -327,8 +327,8 @@ public:
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindDepthViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
-    // Keep full parent storage for alias ranges/prewrite inputs; requested
-    // selectors stay on the binding view. Returns the request if no live parent.
+    // Resolve full parent/recreated depth storage BEFORE caller source/prewrite
+    // captures. Requested selectors stay on the binding view.
     GuestTextureDesc ResolveDepthViewStorage(const GuestTextureDesc&)const;
     // Also admits existing packed conversion and pinned-compatible uncompressed
     // color image interpretations. These are sources, never direct view reuse.

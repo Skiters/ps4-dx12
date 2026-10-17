@@ -24,7 +24,8 @@ inline void RunDepthSubviewFixture(ID3D12Device* device){
         const u64 dc=(layout.guest_bytes+65535)&~u64(65535),sc=paired?(sl.guest_bytes+65535)&~u64(65535):0;
         struct Backing {HANDLE section{};std::byte* guest{};std::byte* physical{};
             ~Backing(){if(physical)UnmapViewOfFile(physical);if(guest)UnmapViewOfFile(guest);if(section)CloseHandle(section);}} backing;
-        const u64 capacity=dc+sc;backing.section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,DWORD(capacity>>32),DWORD(capacity),nullptr);
+        const u64 new_sc=(sl.guest_bytes+65535)&~u64(65535);
+        const u64 capacity=dc+sc+new_sc;backing.section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,DWORD(capacity>>32),DWORD(capacity),nullptr);
         require(backing.section!=nullptr,"Subview backing section failed");
         backing.guest=static_cast<std::byte*>(MapViewOfFile(backing.section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(capacity)));
         backing.physical=static_cast<std::byte*>(MapViewOfFile(backing.section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(capacity)));
@@ -219,12 +220,60 @@ output.Store(at+4,s);})";
                     auto expected=initial;
                     for(UINT m=0;m<parent.levels;++m)for(UINT l=0;l<3;++l)for(UINT y=0;y<std::max(parent.height>>m,1u);++y)for(UINT x=0;x<std::max(parent.width>>m,1u);++x)
                         memcpy(expected.data()+GuestPixelOffset(parent,layout,m,l,x,y),&fill,layout.bytes_per_pixel);
-                    check_full(bound,expected);
+                    check_full(bound,expected);expected_d=expected;
                 }
             }
             renderer.written={};
 
         }
+        // Original ResolveDepthOverlap recreates a different depth aspect at
+        // max(requested,cached) resources. A one-mip/one-layer request must not
+        // capture a byte prefix of the three-layer/mip native source.
+        require(live&&live->gpu_owned,"Recreation lost preceding live owner");auto* preceding=live;
+        auto requested=parent;requested.stencil_address=parent.address+dc+sc;
+        requested.levels=requested.layers=requested.view_layers=1;
+        const auto recreated=cache.ResolveDepthViewStorage(requested);
+        require(recreated.levels==parent.levels&&recreated.layers==parent.layers&&recreated.view_layers==1&&
+            recreated.stencil_address==requested.stencil_address,"Depth recreation shrank original maximum resource extent");
+        require(cache.FindIndependentUploadSource(recreated,LayoutGuestTexture(recreated))==preceding,
+            "Depth recreation lost the full native I source");
+        auto bad=requested;bad.pitch+=16;
+        require(cache.ResolveDepthViewStorage(bad)==bad,"Depth recreation promoted incompatible block geometry");
+        std::vector<std::byte> seed_d(size_t(layout.guest_bytes),std::byte{0x83});
+        for(UINT m=0;m<parent.levels;++m)for(UINT l=0;l<parent.layers;++l)for(UINT sample=0;sample<samples;++sample)
+        for(UINT y=0;y<std::max(parent.height>>m,1u);++y)for(UINT x=0;x<std::max(parent.width>>m,1u);++x){
+            const u32 value=bits(7,m,l,sample,x,y);memcpy(seed_d.data()+GuestPixelOffset(parent,layout,m,l,x,y,sample),&value,layout.bytes_per_pixel);}
+        std::vector<std::byte> seed_s(size_t(sl.guest_bytes),std::byte{0x93});
+        auto new_d=gpu(seed_d),new_s=gpu(seed_s);unsigned captures{};
+        cache.SetIndependentImageTransfer([&](auto& old,const auto& target,const auto& target_layout){
+            require(&old==preceding&&target==recreated&&target_layout.guest_bytes==layout.guest_bytes,
+                "Recreation capture lost full parent target descriptor");
+            return cache.CaptureIndependentImageVersion(old,target,target_layout,renderer.RecordingList(),renderer.CompletedFence(),
+                [&](u64 address,u64 bytes){++captures;
+                    if(address==parent.address){require(bytes==layout.guest_bytes,"Recreation D seed was truncated");return new_d;}
+                    require(address==requested.stencil_address&&bytes==sl.guest_bytes,"Recreation S seed was truncated");return new_s;});});
+        puts("PHASE: aspect recreation keeps source resource extent");fflush(stdout);
+        auto& result=cache.Upload(recreated,std::span<const std::byte>(backing.physical,size_t(layout.guest_bytes)),
+            renderer.RecordingList(),renderer.CompletedFence(),std::span<const std::byte>(backing.physical+dc+sc,size_t(sl.guest_bytes)),
+            false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
+        require(&result!=preceding&&result.desc.levels==parent.levels&&result.desc.layers==parent.layers&&
+            result.texture.handle->GetDesc().MipLevels==parent.levels&&result.texture.handle->GetDesc().DepthOrArraySize==parent.layers&&
+            result.gpu_owned&&!preceding->gpu_owned&&captures==2&&result.pending_buffer_residency.empty(),
+            "Recreation lost full allocation/ownership or invented growth residency");
+        auto recreated_readback=std::make_shared<GuestImageReadback>(device,result,renderer.RecordingList());
+        renderer.RetainUntilFinish([recreated_readback](u64){(void)recreated_readback;});
+        const auto recreate_fence=renderer.Flush();cache.Submitted(recreate_fence);recreated_readback->Submitted(recreate_fence);renderer.Finish();
+        auto expected_recreated=seed_d;
+        for(UINT m=0;m<parent.levels;++m)for(UINT l=0;l<parent.layers;++l)for(UINT sample=0;sample<samples;++sample)
+        for(UINT y=0;y<std::max(parent.height>>m,1u);++y)for(UINT x=0;x<std::max(parent.width>>m,1u);++x){
+            const auto offset=GuestPixelOffset(parent,layout,m,l,x,y,sample);
+            memcpy(expected_recreated.data()+offset,expected_d.data()+offset,layout.bytes_per_pixel);}
+        auto actual_recreated=seed_d,actual_recreated_s=seed_s;
+        recreated_readback->Resolve(renderer.CompletedFence(),actual_recreated,actual_recreated_s);
+        require(actual_recreated==expected_recreated&&actual_recreated_s==seed_s,
+            "Recreated depth lost native parent mip/layer/sample values or copied old S instead of new seed");
+        cache.Collect(renderer.CompletedFence());renderer.ValidateDebugMessages();cache.SetIndependentImageTransfer({});
+
         // Source snapshots, including all capacity padding, must remain immutable.
         const auto check_input=[&](Resource& input,const auto& expected){const auto n=input.handle->GetDesc().Width;
             auto readback=Buffer(device,n,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);input.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -235,6 +284,6 @@ output.Store(at+4,s);})";
         if(live){retire(*live);live=nullptr;}cache.SetIndependentVersionTransfer({},{},{});cache.SetOwnershipAcquirer({});renderer.SetCpuPageRelease({});renderer.ValidateDebugMessages();++executed;
     }
     require(executed>=4,"Depth subview single-sample coverage missing");
-    printf("PASS: %u depth subview cases; typed scalar/array SRVs, selected DSV writes, full parent contents/S, deferred B receipts, real PageWatch, dirty extent, forced replacement/fence leases, immutable GPU inputs\n",executed);
+    printf("PASS: %u depth subview cases; typed scalar/array SRVs, selected DSV writes, full parent contents/S, deferred B receipts, real PageWatch, dirty extent, forced replacement/fence leases, immutable GPU inputs, full-resource aspect recreation\n",executed);
 }
 } // namespace NativeDX12

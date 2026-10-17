@@ -1651,11 +1651,36 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
        (requested.data_format!=2&&requested.data_format!=4))return requested;
     const auto layout=LayoutGuestTexture(requested);
     auto* parent=FindDepthViewParent(requested,layout);
-    if(!parent)return requested;
-    auto storage=parent->desc;
-    storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;
-    storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
-    return storage;
+    if(parent){
+        auto storage=parent->desc;
+        storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;
+        storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
+        return storage;
+    }
+    if(!requested.depth_target)return requested;
+    // ResolveDepthOverlap recreates the requested depth/aspect image with
+    // max(requested.resources, cached.resources). SubresourceExtent orders
+    // levels first, then layers; independently maximizing both is different.
+    // Resolve BEFORE caller source/prewrite captures, not inside Upload after
+    // it has already been given a smaller guest byte envelope.
+    Entry* preceding{};auto resolved=requested;
+    auto [first,last]=address_index_.equal_range(requested.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
+        if(!candidate->gpu_owned||!candidate->buffer_alias_version||!candidate->HasValidLogicalImage())continue;
+        auto storage=requested;
+        if(std::pair(candidate->desc.levels,candidate->desc.layers)>std::pair(storage.levels,storage.layers)){
+            storage.levels=candidate->desc.levels;storage.layers=candidate->desc.layers;
+        }
+        if(storage==requested||(storage.samples>1&&storage.levels!=1))continue;
+        const auto physical=LayoutGuestTexture(storage);
+        if(!CanMapIndependentDepthImage(candidate->desc,candidate->layout,storage,physical))continue;
+        if(candidate->HasUnprotectedCpuPages())
+            throw std::runtime_error("Depth recreation extent requires boundary validation");
+        if(preceding&&candidate->texture.handle.Get()!=preceding->texture.handle.Get())
+            throw std::runtime_error("Ambiguous depth recreation extent source");
+        preceding=candidate;resolved=storage;
+    }
+    return resolved;
 }
 GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{

@@ -8,13 +8,13 @@
 #include <cmath>
 
 namespace NativeDX12 {
-inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false,UINT pool_geometry=0){
+inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false,UINT pool_geometry=0,bool retain_extent=false){
     const auto require=[](bool ok,const char* message){if(!ok)throw std::runtime_error(message);};
     unsigned cases{};
     const auto counts=wide?std::array<UINT,2>{8,16}:std::array<UINT,2>{2,4};
     for(UINT color_kind=srgb?2:0;color_kind<(srgb?3u:wide?1u:2u);++color_kind)for(UINT format:{2u,4u})
     for(bool stencil:{false,true})for(UINT samples:counts){
-        if(pool_geometry&&(color_kind!=0||format!=4||samples!=4))continue;
+        if((pool_geometry||retain_extent)&&(color_kind!=0||format!=4||samples!=4))continue;
         if(wide){D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{stencil?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
                 format==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
             Check(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality)));
@@ -26,7 +26,7 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         // binding selectors/swizzles must not leak into this copy operation.
         source.first_mip=pool_geometry?1:0;source.first_layer=1;source.view_layers=1;source.swizzle={7,6,5,4};
         GuestTextureDesc target;target.width=7;target.height=pool_geometry==2?5:11;target.pitch=pool_geometry==1?8:16;
-        target.layers=target.view_layers=2;target.tile_mode=color_kind==1?0:8;
+        target.layers=2;target.view_layers=retain_extent?1:2;target.tile_mode=color_kind==1?0:8;
         target.samples=samples;target.depth_target=true;target.data_format=format;target.number_format=format==2?0:7;
         target.stencil_address=stencil?0x80000:0;
         const auto sl=LayoutGuestTexture(source),dl=LayoutGuestTexture(target);
@@ -95,6 +95,16 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         const auto acquire=[&](auto& e){return AcquireGuestImageOwnership(cache,e,watch,
             [&](u64 a,u64 n){return a>=base&&a-base<=total&&n<=total-(a-base);},[](u64,u64){return std::vector<std::pair<u64,u64>>{};});};
         require(acquire(image),"Channel transfer could not acquire source I");
+        if(retain_extent){
+            auto requested=target;requested.layers=1;
+            const auto storage=cache.ResolveDepthViewStorage(requested);
+            require(storage==target,"Color/MS depth recreation did not preserve cached maximum resources/selectors");
+            // All subsequent production captures, allocation, native draws and
+            // independent full-layer/sample/S/padding oracles use this storage.
+            target=storage;
+            auto bad=requested;bad.pitch+=16;
+            require(cache.ResolveDepthViewStorage(bad)==bad,"Color/MS extent promotion bypassed original block geometry");
+        }
         GuestTextureCache::BufferResidency receipt{{base,sl.guest_bytes}},published;unsigned publications{},captures{};
         image.pending_buffer_residency=receipt;cache.SetBufferResidencyPublisher([&](auto r){++publications;published.assign(r.begin(),r.end());});
         const auto capture=[&](u64 a,u64 n){++captures;Resource* input{};
@@ -297,7 +307,7 @@ O.Store(at+4,0);
         cache.Collect(renderer.CompletedFence());require(converted.color_depth_leases.empty(),"Completed color draw lease was not released");
         renderer.ValidateDebugMessages();++cases;
     }
-    require(pool_geometry?cases==2:wide?cases>0:cases==(srgb?8u:16u),"Color-channel cases missing");
+    require((pool_geometry||retain_extent)?cases==2:wide?cases>0:cases==(srgb?8u:16u),"Color-channel cases missing");
     printf("PASS: %u typed color-to-MS-depth cases; channels/defaults/sRGB, sample UVs, mip/layer-zero selection, unchanged S/B/padding, deferred receipts, CPU guards and real fence leases\n",cases);
 }
 } // namespace NativeDX12
