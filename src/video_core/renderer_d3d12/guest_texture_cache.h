@@ -128,7 +128,7 @@ public:
         Resource snapshot;
         BufferResidency residency;
     };
-    struct IndependentImageVersion {Resource depth,stencil;};
+    struct IndependentImageVersion {Resource depth,stencil;BufferResidency seed_residency;};
     struct Entry {
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
@@ -229,7 +229,8 @@ private:
         uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose,
         const Resource* stencil_gpu_snapshot=nullptr);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
-        const WritableBlockAlias*,UINT plane=0,bool private_depth_snapshot=false);
+        const WritableBlockAlias*,UINT plane=0,bool private_depth_snapshot=false,
+        const GuestTextureDesc* mapped_desc=nullptr,const GuestTextureLayout* mapped_layout=nullptr);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
     std::shared_ptr<GuestTiler> tiler_;
     std::shared_ptr<GuestMultisample> multisample_;

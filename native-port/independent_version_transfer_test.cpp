@@ -7,6 +7,7 @@
 #include "msaa_depth_initialization_fixture.h"
 #include "independent_depth_fixture.h"
 #include "paired_depth_snapshot_fixture.h"
+#include "independent_depth_growth_fixture.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
 #include <cstdio>
@@ -535,6 +536,7 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--msaa-depth-init")==0){RunMsaaDepthInitializationFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth")==0){RunIndependentDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--paired-depth")==0){RunPairedDepthSnapshotFixture(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--depth-growth")==0){RunIndependentDepthGrowthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--msaa")==0){
         for(const UINT samples:{2u,4u,8u})for(const UINT number_format:{4u,5u,7u})for(const bool writable:{false,true})
             RunMultisample(device.Get(),samples,number_format,writable);

@@ -150,12 +150,19 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
     textures_.SetIndependentImageTransfer([this](auto& image,const auto& desc,const auto& layout){
-        return textures_.CaptureIndependentImageVersion(image,desc,layout,RecordingList(),CompletedFence(),
+        const bool seed_resident=(desc.levels>image.desc.levels||desc.layers>image.desc.layers)&&
+            IsGpuBufferModified(desc.address,layout.guest_bytes);
+        auto captured=textures_.CaptureIndependentImageVersion(image,desc,layout,RecordingList(),CompletedFence(),
             [this](u64 address,u64 bytes){
                 ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
                 PreparePhysicalDmaBuffers(std::span(&request,1));
                 return CapturePreparedShaderBuffer(address,bytes);
             });
+        // Pinned growth RefreshImage obtains the target's B seed before I is
+        // copied. Preserve that additional EnsureResident effect until bind;
+        // private allocation/capture alone must not publish it early.
+        if(seed_resident)captured.seed_residency.emplace_back(desc.address,layout.guest_bytes);
+        return captured;
     });
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
         // Pinned ObtainBufferForImage chooses B only for GPU-modified target

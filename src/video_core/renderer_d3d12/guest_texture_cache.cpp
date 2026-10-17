@@ -1369,6 +1369,23 @@ bool MatchesReferenceDepthImage(GuestTextureDesc source,const GuestTextureLayout
     source.stencil_address=view.stencil_address=0;
     return MatchesReferenceColorImage(source,source_layout,view,view_layout);
 }
+bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
+    const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
+    if(MatchesReferenceDepthImage(source,source_layout,target,target_layout))return true;
+    // Original resource growth refreshes the target first, then copies the
+    // source mip/layer domain. Byte prefixes are NOT physical mip prefixes
+    // when the array layer count changes. The GPU retile below uses target
+    // offsets/strides with independent source-native footprints.
+    if((!source.depth_target&&!target.depth_target)||source.samples!=target.samples||
+       target.levels<source.levels||target.layers<source.layers||
+       (source.data_format!=2&&source.data_format!=4)||
+       (target.data_format!=2&&target.data_format!=4)||
+       !MatchesGuestMipLayout(LayoutGuestTexture(target),target_layout))return false;
+    auto prefix=target;prefix.levels=source.levels;prefix.layers=source.layers;
+    prefix.first_mip=prefix.first_layer=prefix.min_lod=0;prefix.view_layers=source.layers;
+    const auto prefix_layout=LayoutGuestTexture(prefix);
+    return MatchesReferenceDepthImage(source,source_layout,prefix,prefix_layout);
+}
 bool MatchesReferenceBlockStorage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
     GuestTextureDesc view,const GuestTextureLayout& view_layout){
     const bool source_block=IsIndependentGuestBlockStorage(source,source_layout);
@@ -1585,10 +1602,11 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
         // failed lookup here would instead seed BindTextures from unrelated B.
         const bool mip_growth=entry->desc.levels<desc.levels&&
             CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout);
-        if(!block&&!mip_growth&&(!MatchesGuestMipLayout(entry->layout,layout)||
+        const bool depth_transfer=CanMapIndependentDepthImage(entry->desc,entry->layout,desc,layout);
+        if(!block&&!mip_growth&&!depth_transfer&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
             !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout)&&
-            !MatchesReferenceDepthImage(entry->desc,entry->layout,desc,layout))))continue;
+            !CanMapIndependentDepthImage(entry->desc,entry->layout,desc,layout))))continue;
         if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||
             entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
             entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get()))
@@ -1827,13 +1845,14 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 MatchesExpandedReadonlyBc(previous.desc,previous.layout,d,layout);
             if(!previous.logical_gpu_modified||(current_buffer_snapshot&&!previous.logical_dirty)||
                 (!block&&!MatchesGuestMipLayout(previous.layout,layout)&&
-                 !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)))continue;
+                 !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)&&
+                 !CanMapIndependentDepthImage(previous.desc,previous.layout,d,layout)))continue;
             if(previous.desc!=d&&!CompatibleGuestShaderStorage(previous.desc,d)&&
                !CompatibleGuestPackedStorage(previous.desc,d)&&
                !CompatibleGuestAttachmentStorage(previous.desc,d)&&
                !CompatibleGuestSampledStorage(previous.desc,d)&&
                 !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout)&&
-                !MatchesReferenceDepthImage(previous.desc,previous.layout,d,layout)&&
+                !CanMapIndependentDepthImage(previous.desc,previous.layout,d,layout)&&
                 !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)&&!block)continue;
             // ReserveMemory may evict cache entries. Keep the logical identity
             // witness alive until the replacement's refresh is published.
@@ -1968,7 +1987,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             if((depth_transfer?!read_independent_image_:(partial_block?!expand_block_:!read_independent_))||
                !acquire_independent_||!retire_independent_||!CanUploadGpuSnapshot(d,layout,d.writable))
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
-            if(depth_transfer&&!MatchesReferenceDepthImage(existing->desc,existing->layout,d,layout))
+            if(depth_transfer&&!CanMapIndependentDepthImage(existing->desc,existing->layout,d,layout))
                 throw std::runtime_error("Independent depth/color overlap needs an exact physical transfer plan");
             const auto samples_supported=[](const auto& desc,const auto& physical){
                 return IsGuestDepthPlaneStorage(desc,physical)||CanTransferIndependentMultisample(desc,physical);};
@@ -1982,6 +2001,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             if(depth_transfer){
                 auto captured=read_independent_image_(*source,d,layout);
                 snapshot=std::move(captured.depth);stencil_snapshot=std::move(captured.stencil);
+                residency.insert(residency.end(),captured.seed_residency.begin(),captured.seed_residency.end());
                 if(bool(stencil_snapshot.handle)!=bool(d.stencil_address))
                     throw std::runtime_error("Independent depth conversion lost its stencil input");
             }else if(partial_block){
@@ -2381,8 +2401,8 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     if(image.cache!=this||!image.gpu_owned||!image.buffer_alias_version||!image.HasValidLogicalImage()||
        image.HasUnprotectedCpuPages()||!owner||!CanRetainGuestImageOwnership(*this,*owner)||
        !list||!capture_buffer||!CanUploadGpuSnapshot(target,physical,target.writable)||
-       !MatchesReferenceDepthImage(image.desc,image.layout,target,physical))
-        throw std::invalid_argument("Independent depth conversion has no exact live image source");
+       !CanMapIndependentDepthImage(image.desc,image.layout,target,physical))
+        throw std::invalid_argument("Independent depth conversion has no live physical image mapping");
     GuestTextureLayout stencil;
     if(target.stencil_address){
         stencil=LayoutGuestTexture(DescribeGuestStencil(target));
@@ -2391,7 +2411,9 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     auto depth_seed=capture_buffer(target.address,physical.guest_bytes);
     auto stencil_seed=target.stencil_address?capture_buffer(target.stencil_address,stencil.guest_bytes):Resource{};
     IndependentImageVersion result;
-    result.depth=RetileBufferVersion(image,depth_seed,list,completed);
+    const bool mapped=!MatchesGuestMipLayout(image.layout,physical);
+    result.depth=mapped?RetileImageVersion(image,depth_seed,list,completed,nullptr,0,
+        image.desc.depth_target,&target,&physical):RetileBufferVersion(image,depth_seed,list,completed);
     result.depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if(target.stencil_address){
         // BOTH pinned overlap paths, CopyImage and CopyImageWithBuffer, exclude
@@ -2412,7 +2434,7 @@ Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& 
 }
 Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias,
-    UINT plane,bool private_depth_snapshot){
+    UINT plane,bool private_depth_snapshot,const GuestTextureDesc* mapped_desc,const GuestTextureLayout* mapped_layout){
     if(image.HasUnprotectedCpuPages())
         throw std::runtime_error("Independent image transfer requires boundary validation");
     const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
@@ -2428,8 +2450,13 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
            !CanRetainGuestImageOwnership(*this,*ownership))
             throw std::invalid_argument("Unsupported independent image ownership for formatted transfer");
     }
-    const auto interpreted=plane?DescribeGuestStencil(image.desc):image.desc;
-    const auto& physical=plane?image.stencil_layout:image.layout;
+    if(bool(mapped_desc)!=bool(mapped_layout)||(mapped_desc&&(alias||plane||
+       !CanMapIndependentDepthImage(image.desc,image.layout,*mapped_desc,*mapped_layout))))
+        throw std::invalid_argument("Independent image transfer has no physical destination mapping");
+    const auto source_interpreted=plane?DescribeGuestStencil(image.desc):image.desc;
+    const auto& source_physical=plane?image.stencil_layout:image.layout;
+    auto interpreted=mapped_desc?*mapped_desc:source_interpreted;
+    const auto& physical=mapped_layout?*mapped_layout:source_physical;
     if(!list||!image.texture.handle||
        !initial.handle||initial.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
        initial.handle->GetDesc().Width<physical.guest_bytes)
@@ -2439,7 +2466,7 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     if(resource_desc.SampleDesc.Count!=image.desc.samples||
        (multisampled&&!private_depth_snapshot&&!CanTransferIndependentMultisample(image.desc,image.layout)))
         throw std::invalid_argument("Independent image sample backing has no exact transfer");
-    const auto linear_bytes=physical.HostBytesPerPixel();
+    const auto linear_bytes=source_physical.HostBytesPerPixel();
     const bool inherited=!plane&&image.layout.expanded_bytes_per_pixel!=0;
     if(inherited&&(!HasExactPackedExpansion(image.desc,image.layout)||
        !image.expanded_guest_backing.handle||!image.expanded_written_mask.handle||!image.expanded_backing_bytes))
@@ -2450,12 +2477,12 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     if(!inherited)for(UINT layer=0;layer<image.desc.layers;++layer)for(UINT mip=0;mip<image.desc.levels;++mip){
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};UINT64 bytes{},row_bytes{};
         if(multisampled){
-            footprint=GuestMultisample::Footprint(interpreted,physical);
+            footprint=GuestMultisample::Footprint(source_interpreted,source_physical);
             row_bytes=u64(image.desc.width)*linear_bytes;
-            bytes=GuestMultisample::LinearBytes(interpreted,footprint);
+            bytes=GuestMultisample::LinearBytes(source_interpreted,footprint);
         }else DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels+plane*image.desc.levels*image.desc.layers,
             1,0,&footprint,nullptr,&row_bytes,&bytes));
-        const auto blocks=(std::max(image.desc.width>>mip,1u)+physical.block_extent-1)/physical.block_extent;
+        const auto blocks=(std::max(image.desc.width>>mip,1u)+source_physical.block_extent-1)/source_physical.block_extent;
         if(!blocks||row_bytes%blocks||!bytes||bytes>UINT32_MAX||row_bytes/blocks>16)
             throw std::logic_error("Independent image transfer footprint changed");
         if(row_bytes/blocks!=linear_bytes&&!(private_depth_snapshot&&!plane&&
@@ -2494,7 +2521,10 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     for(auto& slice:linear){
         slice.buffer=multisampled?GuestTiler::Scratch(device_.Get(),slice.bytes):
             Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
-        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,interpreted,physical,
+        auto transfer_desc=interpreted;
+        if(mapped_desc&&image.desc.depth_target&&image.desc.data_format==2&&physical.bytes_per_pixel==2&&slice.native_bytes==4)
+            transfer_desc.depth_target=true; // Native D32/S8 -> original guest D16 words, even for a color view.
+        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,transfer_desc,physical,
             slice.mip,slice.layer,slice.footprint,slice.native_bytes,true);
         if(multisampled)slice.samples=image.multisample->Prepare(image.texture,slice.buffer,
             image.desc,image.layout,slice.layer,plane,false);
