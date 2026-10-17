@@ -288,6 +288,8 @@ add_test(NAME native_dirty_cached_depth_recreation COMMAND native-independent-ve
 set_tests_properties(native_dirty_cached_depth_recreation PROPERTIES TIMEOUT 180)
 add_test(NAME native_dirty_cached_color_depth COMMAND native-independent-version-transfer-test --dirty-cached-color-depth)
 set_tests_properties(native_dirty_cached_color_depth PROPERTIES TIMEOUT 180)
+add_test(NAME native_cached_depth_render_target COMMAND native-independent-version-transfer-test --cached-depth-rt)
+set_tests_properties(native_cached_depth_render_target PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_depth_subviews COMMAND native-independent-version-transfer-test --depth-subviews)
 set_tests_properties(native_independent_depth_subviews PROPERTIES TIMEOUT 180)
 add_test(NAME native_depth_crossed_resources COMMAND native-independent-version-transfer-test --depth-crossed-resources)

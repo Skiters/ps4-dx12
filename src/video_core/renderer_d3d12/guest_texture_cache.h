@@ -333,6 +333,7 @@ public:
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindDepthViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     // Native allocation contents and original GpuModified history are distinct.
+    bool HasCurrentNativeContents(const Entry&)const;
     bool HasCurrentDepthContents(const Entry&)const;
     // A cache recreation reads old initialized native I even after CPU dirtying.
     // This does NOT admit the old entry to ordinary independent/readonly reuse.

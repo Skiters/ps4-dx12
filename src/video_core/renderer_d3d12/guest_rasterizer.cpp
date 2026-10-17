@@ -656,8 +656,8 @@ void GuestRasterizer::CaptureDisplayCandidates(VAddr address,uint64_t id,Resourc
 bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     const GuestTextureDesc& d,const GuestTextureLayout& l,const GuestColorClearPlan& plan,
     std::span<std::byte> metadata) {
-    // This path updates an existing physical image owner, never an independent
-    // buffer/image version. Decode the original CB numeric type/component map
+    // Update an initialized native color owner, retaining a separate B version
+    // when this target came from native depth recreation. Decode the CB map
     // with the same codec as physical materialization, before changing planes.
     const auto clear=DecodeGuestColorClear(b);
     if(!page_watch_||!d.render_target||d.depth_target||d.stencil_address||d.writable||
@@ -676,7 +676,8 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     for(auto& entry:textures_.Entries())if(entry->gpu_owned&&ImageOverlap(d.address,l.guest_bytes,*entry)){
         // A competing alias is not evidence that this image is the last
         // writer. Let the existing reconciliation path determine ownership.
-        if(image||entry->buffer_alias_version||entry->layout.guest_bytes!=l.guest_bytes||
+        if(image||(entry->buffer_alias_version&&!textures_.HasCurrentNativeContents(*entry))||
+           entry->layout.guest_bytes!=l.guest_bytes||
            !CompatibleGuestAttachmentStorage(entry->desc,d))return false;
         image=entry.get();
     }
@@ -730,6 +731,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
         else DX12_API_CALL(list->ClearRenderTargetView(handle,clear->rtv.data(),UINT(rectangles.size()),rectangles.data()));
         handle.ptr+=step;
     }
+    image->NoteLogicalImageWrite(); // The actual clear is a GPU write, including a GpuModified0 copy.
     image->diagnostic_writer=image->diagnostic_vs=image->diagnostic_ps=0;
     // Color pages stay guarded and GPU-owned. ResolveImage later merges these
     // logical texels into existing backing, preserving padding/untouched layers.
@@ -741,7 +743,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     return true;
 }
 void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
-    const GuestTextureDesc& d,const GuestTextureLayout& l) {
+    const GuestTextureDesc& d,const GuestTextureLayout& l,bool native_only) {
     if(!b.info.fast_clear||!b.cmask_base_address)return;
     const auto meta_bytes=GuestCmaskBytes(b);
     // Fast-clear enable is persistent state, not evidence of a new clear.
@@ -777,6 +779,7 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     if(!plan.Pending())return;
     if(MaterializeOwnedColorClear(b,d,l,plan,
         {reinterpret_cast<std::byte*>(b.CmaskAddress()),size_t(meta_bytes)}))return;
+    if(native_only)throw std::runtime_error("Recreated native color target has no exact pending CMASK clear path");
     if(!ReadMemory(d.address,l.guest_bytes))
         throw std::runtime_error("Native color backing is not mapped");
     ValidateHostMemory(d.address,l.guest_bytes,true);
@@ -965,6 +968,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     std::array<GuestTextureDesc,9> descriptions{};
     std::array<GuestTextureLayout,9> layouts{};
+    std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
     for(UINT i=0;i<8;++i)if(r.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable&&
@@ -974,9 +978,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     MergeGuestColorAttachmentLayers(std::span(descriptions.data(),target_count));
     for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN){
+        descriptions[i]=textures_.ResolveDepthViewStorage(descriptions[i]);
         layouts[i]=LayoutGuestTexture(descriptions[i]);
         ValidateHostMemory(descriptions[i].address,layouts[i].guest_bytes,true);
-        MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
         for(UINT j=0;j<i;++j)if(formats[j]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(descriptions[i].address,layouts[i].guest_bytes,descriptions[j].address,layouts[j].guest_bytes)){
             const auto& a=descriptions[i];const auto& b=descriptions[j];
@@ -1073,6 +1077,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // Match FindImage -> ResolveDepthOverlap BEFORE shader buffer binding and
     // prewrite snapshots. A dirty cached native allocation is a recreation copy
     // source, never proof of current independent I/guest-memory ownership.
+    for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN){
+        // Shader buffer/image binds precede the original RT FindImage. Do not
+        // publish its future native class or metadata during physical prewarm.
+        auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
+        if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
+        deferred_color_clear[i]=source&&source->desc.depth_target;
+        if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
+    }
     auto* recreated_depth=has_depth?textures_.PrepareCachedDepthRecreation(descriptions[8],layouts[8],RecordingList(),CompletedFence()):nullptr;
     auto recreated_depth_pin=recreated_depth?textures_.PinBinding(*recreated_depth):std::shared_ptr<void>{};
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
@@ -1324,6 +1336,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 RecordingList(),CompletedFence());
             bindings.RetainAllocation(textures_.PinBinding(entry));bindings.RetainAllocation(entry.texture.allocation);
             const auto& buffer=r.color_buffers[i];
+            if(deferred_color_clear[i]){
+                if(!OwnIndependentImage(entry))throw std::runtime_error("Recreated color target cannot retain native clear ownership");
+                MaterializeColorClear(buffer,descriptions[i],layouts[i],true);
+            }
             // CMASK bytes are materialized before upload. Keep their owner in
             // the same image cache while preserving the physical clear path.
             textures_.RegisterMeta(entry,GuestTextureCache::MetaType::CMask,
@@ -1480,6 +1496,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         ExecuteGraphics(pipeline,bindings,state,std::span(attachments.data(),target_count),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
+        // A recorded attachment writer changes original GpuModified history,
+        // even when recreation copied a CPU-initialized (GpuModified0) source.
+        for(UINT i=0;i<target_count;++i)if(targets[i])targets[i]->NoteLogicalImageWrite();
+        if(targets[8]&&write_depth_stencil&&!depth_attachment_snapshot)targets[8]->NoteLogicalImageWrite();
         if(std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")){
             static u64 writer{};const auto serial=++writer;
             const auto* vs=guest.stages[u32(Shader::SwStage::Vertex)];

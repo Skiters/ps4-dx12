@@ -1647,19 +1647,26 @@ GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestText
     }
     return parent;
 }
-bool GuestTextureCache::HasCurrentDepthContents(const Entry& image)const{
+bool GuestTextureCache::HasCurrentNativeContents(const Entry& image)const{
     const auto found=image_uids_.find(image.image_uid);
     return image.cache==this&&found!=image_uids_.end()&&found->second==&image&&
         (image.HasValidLogicalImage()||image.cached_native_current)&&image.texture.handle&&image.gpu_owned&&!image.logical_dirty&&
-        !image.HasUnprotectedCpuPages()&&IsGuestDepthPlaneStorage(image.desc,image.layout);
+        !image.HasUnprotectedCpuPages();
+}
+bool GuestTextureCache::HasCurrentDepthContents(const Entry& image)const{
+    return HasCurrentNativeContents(image)&&IsGuestDepthPlaneStorage(image.desc,image.layout);
 }
 bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const GuestTextureDesc& target,
     const GuestTextureLayout& layout)const{
     const auto found=image_uids_.find(image.image_uid);
+    const bool depth_target=IsGuestDepthPlaneStorage(target,layout);
+    const bool color_target=target.render_target&&!target.depth_target&&!target.writable&&
+        !target.stencil_address&&image.desc.depth_target&&
+        (target.data_format==2||target.data_format==4)&&layout.block_extent==1&&!layout.expanded_bytes_per_pixel;
     if(image.cache!=this||found==image_uids_.end()||found->second!=&image||
        !image.cached_native_current||!image.texture.handle||
        image.desc.samples!=1||target.samples!=1||
-       !IsGuestDepthPlaneStorage(target,layout)||
+       (!depth_target&&!color_target)||
        (!image.desc.depth_target&&(image.desc.stencil_address||image.layout.block_extent!=1||
         image.layout.expanded_bytes_per_pixel||(image.desc.data_format!=2&&image.desc.data_format!=4)))||
        (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
@@ -1667,7 +1674,7 @@ bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const G
     // ResolveDepthOverlap recreates on resource growth, color -> depth or changed S presence.
     // Same-resource CPU/B dirtying must instead refresh D from current B.
     const bool recreate=std::pair(target.levels,target.layers)>std::pair(image.desc.levels,image.desc.layers)||
-        !image.desc.depth_target||bool(target.stencil_address)!=bool(image.desc.stencil_address);
+        !image.desc.depth_target||color_target||bool(target.stencil_address)!=bool(image.desc.stencil_address);
     // Differing-aspect CopyImageWithBuffer asserts a one-mip intersection.
     if((target.depth_target!=image.desc.depth_target||bool(target.stencil_address)!=bool(image.desc.stencil_address))&&
        std::min(target.levels,image.desc.levels)!=1)return false;
@@ -1723,7 +1730,7 @@ GuestTextureCache::Entry* GuestTextureCache::PrepareCachedDepthRecreation(const 
     return &result;
 }
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
-    if(requested.writable||requested.render_target||
+    if(requested.writable||
        (requested.data_format!=2&&requested.data_format!=4))return requested;
     const auto layout=LayoutGuestTexture(requested);
     auto* parent=FindDepthViewParent(requested,layout);
@@ -1733,7 +1740,7 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
         storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
         return storage;
     }
-    if(!requested.depth_target)return requested;
+    if(!requested.depth_target&&!requested.render_target)return requested;
     // ResolveDepthOverlap recreates the requested depth/aspect image with
     // max(requested.resources, cached.resources). SubresourceExtent orders
     // levels first, then layers; independently maximizing both is different.
