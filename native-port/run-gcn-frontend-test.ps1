@@ -33,7 +33,7 @@ try {
     if(!$objects.Contains('CMakeFiles/shadps4.dir/src/main.cpp.obj') -or !$libraries){throw 'Unexpected core link manifest'}
     $objects=$objects.Replace('CMakeFiles/shadps4.dir/src/main.cpp.obj',$output+'.obj')
     [IO.File]::WriteAllText((Join-Path $build ($output+'-link.rsp')),($objects+' '+$libraries).Replace('$:',':').Replace('$ ',' '))
-    & F:\Codex-Shared\devtools\bin\codex-dev.cmd run $linker ('@'+$output+'-link.rsp') ('/out:'+$output+'.exe') ('/map:'+$output+'.map') /subsystem:console /stack:0x200000,0x200000
+    & F:\Codex-Shared\devtools\bin\codex-dev.cmd run $linker ('@'+$output+'-link.rsp') ('/out:'+$output+'.exe') ('/map:'+$output+'.map') /debug ('/pdb:'+$output+'.pdb') /subsystem:console /stack:0x200000,0x200000
     if($LASTEXITCODE){throw 'GCN fixture link failed'}
     if($CompileOnly){return}
     $converter=(Resolve-Path -LiteralPath (Join-Path $build 'native-compiler/spirv_to_dxil.dll')).Path

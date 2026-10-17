@@ -1556,6 +1556,16 @@ bool Rasterizer::IsGpuBufferModified(VAddr address,u64 bytes)const{
     }
     return false;
 }
+void Rasterizer::ValidatePreparedShaderBufferRange(VAddr address,u64 bytes){
+    std::lock_guard lock(execution_mutex_);
+    if(!bytes||address%4||bytes%4||address>UINT64_MAX-bytes)
+        throw std::invalid_argument("Invalid prepared image source range");
+    auto found=mappings_.upper_bound(address);
+    if(found==mappings_.begin())throw std::logic_error("Planned image source was not prepared");--found;
+    const auto& source=found->second;
+    if(address-source.base>source.size||bytes>source.size-(address-source.base))
+        throw std::logic_error("Late image binding exceeds the prepared buffer envelope");
+}
 Resource Rasterizer::CapturePreparedShaderBuffer(VAddr address,u64 bytes){
     std::lock_guard lock(execution_mutex_);
     if(!bytes||address%4||bytes%4||bytes>UINT64_MAX-D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT+1)

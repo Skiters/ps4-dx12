@@ -133,6 +133,17 @@ public:
         BufferResidency residency;
     };
     struct IndependentImageVersion {Resource depth,stencil;BufferResidency seed_residency;};
+    struct BufferImageSource {Resource snapshot;bool resident{};};
+    class CachedDepthBindingPlan {
+        friend class GuestTextureCache;
+        const GuestTextureCache* cache_{};
+        GuestTextureDesc storage_;
+        std::shared_ptr<void> source_pin_;
+        CachedDepthBindingPlan()=default;
+    public:
+        const GuestTextureDesc& Storage()const{return storage_;}
+    };
+
     struct Entry {
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
@@ -234,6 +245,7 @@ public:
 private:
     void RememberNativeImageStorage(Entry&);
     void ForgetRecreatedSourceMeta(Entry&);
+    Entry& RecreateCachedDepthAtBind(Entry&,const GuestTextureDesc&,const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t);
     bool IsCachedDepthRecreationSource(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     enum class NativeReadPurpose { Independent, CachedDepthRecreation };
     bool CanTransferDependentBlockView(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
@@ -287,6 +299,9 @@ private:
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
     std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_independent_image_;
     std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_cached_depth_;
+    std::function<void(uint64_t,uint64_t)> prepare_image_buffer_;
+    std::function<BufferImageSource(uint64_t,uint64_t)> current_image_buffer_;
+    bool planned_depth_bind_{};
     std::function<void()> transfer_submission_;
     std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
@@ -333,13 +348,18 @@ public:
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindDepthViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
     // Native allocation contents and original GpuModified history are distinct.
+    void SetImageBufferSources(std::function<void(uint64_t,uint64_t)> prepare,
+        std::function<BufferImageSource(uint64_t,uint64_t)> current){
+        prepare_image_buffer_=std::move(prepare);current_image_buffer_=std::move(current);
+    }
+    bool IsPlannedDepthBind()const{return planned_depth_bind_;}
+    std::shared_ptr<const CachedDepthBindingPlan> PlanCachedDepthBinding(const GuestTextureDesc&,const GuestTextureLayout&);
+    Entry& BindPlannedDepth(const CachedDepthBindingPlan&,ID3D12GraphicsCommandList*,uint64_t);
     bool HasCurrentNativeContents(const Entry&)const;
     bool HasCurrentDepthContents(const Entry&)const;
     // A cache recreation reads old initialized native I even after CPU dirtying.
     // This does NOT admit the old entry to ordinary independent/readonly reuse.
     Entry* FindCachedDepthRecreationSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
-    Entry* PrepareCachedDepthRecreation(const GuestTextureDesc&,const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t,
-        UploadPurpose=UploadPurpose::Preparation);
     // Resolve full parent/recreated depth storage BEFORE caller source/prewrite
     // captures. Requested selectors stay on the binding view.
     GuestTextureDesc ResolveDepthViewStorage(const GuestTextureDesc&)const;

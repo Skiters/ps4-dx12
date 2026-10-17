@@ -3,6 +3,7 @@
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "core/emulator_settings.h"
+#include "common/elf_info.h"
 #include "gcn_ordered_formatted_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -36,8 +37,11 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool mixed_planes=mode=="mixed-depth-buffer"||mode=="mixed-depth-buffer-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
-    const bool readonly_depth=mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
+    const bool planned_depth=mode=="planned-depth-recreation-owned";
+    const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
     if(!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
+        Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     if(linear_download)EmulatorSettings.SetReadbackLinearImagesEnabled(false);
     if(linear_attachment)EmulatorSettings.SetReadbackLinearImagesEnabled(true);
@@ -654,6 +658,7 @@ int main(int argc,char** argv){try{
             0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4154544453425001ULL);
         for(bool z16:{false,true})for(uint32_t samples:{0u,2u})for(bool stencil:{false,true})
         for(bool stencil_writer:{false,true})for(bool full_buffer:{false,true})for(bool htile:{false,true}){
+            if(planned_depth&&(z16||samples||!stencil||stencil_writer))continue;
             if(stencil_writer&&!stencil)continue;
             if(mixed_planes&&!stencil)continue;
             if(image_writer&&(z16||samples||stencil_writer||full_buffer))continue;
@@ -683,6 +688,7 @@ int main(int argc,char** argv){try{
             db.z_info.format=z16?AmdGpu::DepthBuffer::ZFormat::Z16:AmdGpu::DepthBuffer::ZFormat::Z32Float;
             db.z_info.tile_mode_index=5;db.z_info.num_samples=samples;db.z_info.tile_surface_enable=htile;
             db.depth_size.pitch_tile_max=db.depth_size.height_tile_max=db.depth_slice.tile_max=1;
+            if(planned_depth)db.depth_size.height_tile_max=0; // 16 x 8 physical pixels in two tiles.
             if(image_writer){db.depth_size.pitch_tile_max=db.depth_size.height_tile_max=3;db.depth_slice.tile_max=15;}
             if(stencil){db.stencil_read_base=db.stencil_write_base=u32((base+16384)>>8);
                 db.stencil_info.format=AmdGpu::DepthBuffer::StencilFormat::Stencil8;}
@@ -719,7 +725,7 @@ int main(int argc,char** argv){try{
                 rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
                 regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;
             }
-            for(unsigned warm=0;warm<3;++warm){
+            for(unsigned warm=0;warm<(planned_depth?1u:3u);++warm){
                 rasterizer.ReadMemory(base,65536);rasterizer.InvalidateMemory(base,65536);memset(memory,0xee,65536);
                 regs.depth_view.z_read_only=regs.depth_view.stencil_read_only=warm!=1;
                 regs.depth_control.depth_write_enable=mixed_planes&&stencil_writer;
@@ -727,7 +733,26 @@ int main(int argc,char** argv){try{
                     mixed_planes&&!stencil_writer?AmdGpu::StencilFunc::AddClamp:AmdGpu::StencilFunc::Keep;
                 const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
                 for(unsigned i=0;i<3;++i){const float position[]{xy[i][0],xy[i][1],0.5f,1.f};memcpy(memory+i*32,position,sizeof(position));}
-                const float initial_depth=warm==1?0.25f:warm==2?0.875f:0.75f;
+                if(planned_depth){
+                    // An actual old native D image survives later CPU dirtiness.
+                    // Adding S must recreate it at DB binding, after PS buffers.
+                    const auto saved_vs=regs.vs_program;const auto saved_db=db;
+                    const auto saved_control=regs.depth_control;
+                    const auto saved_render=regs.depth_render_control;
+                    const auto saved_clear=regs.depth_clear;
+                    regs.vs_program.address=reinterpret_cast<u64>(plain_vertex.data())>>8;
+                    regs.vs_program.settings.num_user_regs=4;
+                    db.stencil_info.format=AmdGpu::DepthBuffer::StencilFormat::Invalid;
+                    regs.depth_control.stencil_enable=0;
+                    regs.depth_control.depth_func=AmdGpu::CompareFunc::Never;
+                    regs.depth_control.depth_write_enable=1;
+                    regs.depth_render_control.depth_clear_enable=1;regs.depth_clear=0.875f;
+                    rasterizer.Draw(false);rasterizer.Finish();
+                    regs.vs_program=saved_vs;db=saved_db;
+                    regs.depth_control=saved_control;regs.depth_render_control=saved_render;
+                    regs.depth_clear=saved_clear;
+                }
+                const float initial_depth=planned_depth?0.25f:warm==1?0.25f:warm==2?0.875f:0.75f;
                 const u16 packed_depth=u16(initial_depth*65535.f+0.5f);const u8 initial_stencil=u8(37+warm);
                 regs.stencil_ref_front.stencil_test_val=regs.stencil_ref_back.stencil_test_val=initial_stencil;
                 for(u32 sample=0;sample<depth.samples;++sample)for(u32 y=0;y<depth.height;++y)for(u32 x=0;x<depth.width;++x){
@@ -737,13 +762,25 @@ int main(int argc,char** argv){try{
                 }
                 const auto& written=stencil_writer?sd:depth;const auto& written_layout=stencil_writer?sl:dl;
                 const auto offset=full_buffer?0:GuestPixelOffset(written,written_layout,0,0,0,0,0);
-                target.base_address=written.address+offset;target.num_records=full_buffer?u32(written_layout.guest_bytes):4;
+                // Keep observed DWORD0 distinct from the VS writer. Exact-base
+                // GPU invalidation must not mask premature image publication.
+                target.base_address=written.address+(planned_depth?4:offset);
+                target.num_records=full_buffer?u32(written_layout.guest_bytes):4;
                 bind_writer();
+                if(planned_depth){
+                    regs.ps_program.address=reinterpret_cast<u64>(metadata_pixel.data())>>8;
+                    regs.ps_program.settings.num_user_regs=4;regs.ps_program.settings.num_vgprs=1;
+                    AmdGpu::Buffer formatted{};formatted.base_address=depth.address;
+                    formatted.stride=4;formatted.num_records=32768/4;
+                    formatted.data_format=4;formatted.num_format=7;
+                    formatted.dst_sel_x=4;formatted.dst_sel_y=5;formatted.dst_sel_z=6;formatted.dst_sel_w=7;
+                    memcpy(regs.ps_program.user_data.data(),&formatted,sizeof(formatted));
+                }
                 const auto image_desc=image_writer?DescribeGuestTexture(image_target):GuestTextureDesc{};
                 const auto image_layout=image_writer?LayoutGuestTexture(image_desc):GuestTextureLayout{};
                 const auto store_address=image_writer?image_desc.address+GuestPixelOffset(image_desc,image_layout,0,0,0,0):target.base_address;
                 std::vector<std::byte> expected(memory,memory+65536);memset(expected.data()+store_address-base,0,4);
-                if(initial_depth>0.5f){const u32 red=0xff0000ff;
+                if((planned_depth?0.875f:initial_depth)>0.5f){const u32 red=planned_depth?0xff000040:0xff0000ff;
                     for(u32 sample=0;sample<color.samples;++sample)for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
                         memcpy(expected.data()+4096+GuestPixelOffset(color,cl,0,0,x,y,sample),&red,4);
                         if(mixed_planes&&stencil_writer){const float z=0.5f;const u16 packed=32768;
@@ -755,8 +792,12 @@ int main(int argc,char** argv){try{
                     }
                 }
                 rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
-                if(memcmp(memory,expected.data(),65536))
+                if(memcmp(memory,expected.data(),65536)){
+                    for(size_t i=0;i<expected.size();++i)if(memory[i]!=expected[i]){
+                        fprintf(stderr,"First mismatch offset=%zu actual=%02x expected=%02x planned=%d full=%d htile=%d\n",
+                            i,std::to_integer<unsigned>(memory[i]),std::to_integer<unsigned>(expected[i]),planned_depth,full_buffer,htile);break;}
                     throw std::runtime_error("GCN buffer writer/read-only depth-stencil prewrite contents or padding mismatch");
+                }
                 if(mode=="readonly-depth-buffer-owned"&&htile&&!stencil&&!z16&&!samples&&!full_buffer){
                     const auto saved_vertex=regs.vs_program;const auto saved_pixel=regs.ps_program;
                     const auto saved_target=target;const auto saved_depth_func=regs.depth_control.depth_func;
@@ -796,6 +837,7 @@ int main(int argc,char** argv){try{
                     regs.vs_program=saved_vertex;regs.ps_program=saved_pixel;target=saved_target;
                     regs.depth_control.depth_func=saved_depth_func;
                 }
+                if(planned_depth)continue;
                 const auto reject=[&]{const std::vector<std::byte> before(memory,memory+65536);bool rejected=false;
                     try{rasterizer.Draw(false);}catch(const std::runtime_error&){rejected=true;}
                     rasterizer.Finish();rasterizer.ReadMemory(base,65536);
@@ -812,7 +854,7 @@ int main(int argc,char** argv){try{
                     reject();regs.depth_render_control.depth_clear_enable=0;regs.depth_control.depth_write_enable=0;
                 }
             }
-            if(htile&&!stencil_writer){
+            if(htile&&!stencil_writer&&!planned_depth){
                 // Rebinding a fresh metadata allocation installs the entry's
                 // initial clear mask. It must not escape the two-writer guard.
                 regs.depth_htile_data_base.address+=1;
@@ -912,7 +954,8 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(ordered_formatted?
+    puts(planned_depth?
+        "PASS: four actual GCN late cached-depth recreations, PS current-B versus native D, interior VS writer, HTILE and full allocation/padding":ordered_formatted?
         "PASS: actual GCN descriptor-ordered formatted read/write, independent domains, image invalidation and physical padding":linear_attachment?
         "PASS: actual GCN queued linear MRT, repeated owned bindings, independent raw arena, CPU store and full padding":formatted_cmask?
         "PASS: actual GCN CMASK metadata owners, 1/2/4/8 samples, large synthesized arena versus small physical CPU stream and complete padding":separate_versions?

@@ -543,6 +543,8 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--dirty-cached-depth")==0){RunDirtyCachedDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--dirty-cached-color-depth")==0){RunDirtyCachedDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--cached-depth-rt")==0){RunDirtyCachedDepthFixture(device.Get(),false,true);return 0;}
+    if(argc==2&&strcmp(argv[1],"--planned-depth-native-change")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,1);return 0;}
+    if(argc==2&&strcmp(argv[1],"--planned-depth-current-buffer")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,2);return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-subviews")==0){RunDepthSubviewFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-crossed-resources")==0){RunIndependentDepthGrowthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-growth")==0){RunIndependentDepthGrowthFixture(device.Get());return 0;}

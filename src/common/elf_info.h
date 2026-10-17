@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <map>
@@ -101,6 +102,20 @@ public:
 
     static ElfInfo& Instance() {
         return *Singleton<ElfInfo>::Instance();
+    }
+
+    // Establish process metadata before constructing memory or GPU services.
+    // Headless renderer fixtures use the same precondition as the emulator.
+    void InitializeApp(std::string serial, std::string app_title, std::string version,
+                       u32 firmware, u32 sdk, PSFAttributes attributes) {
+        game_serial = std::move(serial);
+        title = std::move(app_title);
+        app_ver = std::move(version);
+        firmware_ver = firmware & 0xFFF00000;
+        raw_firmware_ver = firmware;
+        sdk_ver = sdk;
+        psf_attributes = attributes;
+        initialized = true;
     }
 
     [[nodiscard]] std::string_view GameSerial() const {

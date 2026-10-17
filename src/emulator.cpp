@@ -467,14 +467,8 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     auto guest_eboot_path = "/app0/" + eboot_name.generic_string();
 
     auto& game_info = Common::ElfInfo::Instance();
-    game_info.initialized = true;
-    game_info.game_serial = id;
-    game_info.title = title;
-    game_info.app_ver = app_version;
-    game_info.firmware_ver = fw_version & 0xFFF00000;
-    game_info.raw_firmware_ver = fw_version;
-    game_info.sdk_ver = ReadCompiledSdkVersion(guest_eboot_path);
-    game_info.psf_attributes = psf_attributes;
+    game_info.InitializeApp(id, title, app_version, fw_version,
+                            ReadCompiledSdkVersion(guest_eboot_path), psf_attributes);
 
     if (auto splash = mnt->ReadFile("/app0/sce_sys/pic1.png")) {
         game_info.splash_data = std::move(*splash);

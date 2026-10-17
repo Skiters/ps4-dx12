@@ -1703,9 +1703,76 @@ void GuestTextureCache::ForgetRecreatedSourceMeta(Entry& source){
         address=0;
     }
 }
-GuestTextureCache::Entry* GuestTextureCache::PrepareCachedDepthRecreation(const GuestTextureDesc& target,
-    const GuestTextureLayout& layout,ID3D12GraphicsCommandList* list,uint64_t completed,UploadPurpose purpose){
-    auto* source=FindCachedDepthRecreationSource(target,layout);if(!source)return nullptr;
+std::shared_ptr<const GuestTextureCache::CachedDepthBindingPlan> GuestTextureCache::PlanCachedDepthBinding(
+    const GuestTextureDesc& target,const GuestTextureLayout& layout){
+    if(!target.depth_target)return {};
+    auto* source=FindCachedDepthRecreationSource(target,layout);if(!source)return {};
+    if(!prepare_image_buffer_||!current_image_buffer_||!CanUploadGpuSnapshot(target,layout))
+        throw std::runtime_error("Cached depth binding has no prepared current-B source");
+    auto plan=std::shared_ptr<CachedDepthBindingPlan>(new CachedDepthBindingPlan);
+    plan->cache_=this;plan->storage_=target;plan->source_pin_=PinBinding(*source);
+    // Capacity only. No new image, native copy, I validity, metadata, ownership
+    // or deferred semantic residency is published before shader bindings.
+    prepare_image_buffer_(target.address,layout.guest_bytes);
+    if(target.stencil_address)prepare_image_buffer_(target.stencil_address,
+        LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes);
+    return plan;
+}
+GuestTextureCache::Entry& GuestTextureCache::BindPlannedDepth(const CachedDepthBindingPlan& plan,
+    ID3D12GraphicsCommandList* list,uint64_t completed){
+    if(plan.cache_!=this||!list||!current_image_buffer_)
+        throw std::invalid_argument("Depth binding plan belongs to another cache or has no source");
+    struct Scope {bool& flag;bool old;~Scope(){flag=old;}} scope{planned_depth_bind_,planned_depth_bind_};
+    planned_depth_bind_=true;
+    // Earlier shader binds may refresh or replace the source class. Select
+    // CURRENT original I/B at the real bind, not a copied prewarm version.
+    const auto target=ResolveDepthViewStorage(plan.storage_);const auto layout=LayoutGuestTexture(target);
+    if(!CanUploadGpuSnapshot(target,layout))throw std::runtime_error("Planned depth binding lost its exact transfer domain");
+    auto* parent=FindDepthViewParent(target,layout);
+    if(FindIndependentUploadSource(target,layout)||FindCachedDepthRecreationSource(target,layout)||
+       (parent&&!parent->logical_dirty&&(parent->gpu_owned||parent->cpu_watched))){
+        const auto depth=std::span(reinterpret_cast<const std::byte*>(target.address),size_t(layout.guest_bytes));
+        const auto stencil=target.stencil_address?std::span(reinterpret_cast<const std::byte*>(target.stencil_address),
+            size_t(LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes)):std::span<const std::byte>{};
+        auto& result=Upload(target,depth,list,completed,stencil);
+        if(!result.gpu_owned&&(!acquire_independent_||!acquire_independent_(result)))
+            throw std::runtime_error("Actual planned depth binding cannot retain I ownership");
+        return result;
+    }
+    auto parent_pin=parent?PinBinding(*parent):std::shared_ptr<void>{};
+    const bool retain_s=parent&&target.stencil_address&&parent->texture.handle&&
+        CompatibleGuestDepthSubview(parent->desc,parent->layout,target,layout)&&
+        CompatibleGuestDepthSubview(target,layout,parent->desc,parent->layout);
+    auto depth=current_image_buffer_(target.address,layout.guest_bytes);
+    auto stencil=target.stencil_address&&!retain_s?current_image_buffer_(target.stencil_address,
+        LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes):BufferImageSource{};
+    auto& result=Upload(target,{},list,completed,{},true,&depth.snapshot,false,true,
+        UploadPurpose::Preparation,stencil.snapshot.handle?&stencil.snapshot:nullptr);
+    if(!acquire_independent_||!acquire_independent_(result))
+        throw std::runtime_error("Actual current-B depth binding cannot retain I ownership");
+    if(parent&&parent!=&result){
+        if(retire_independent_)retire_independent_(*parent);parent->MarkLogicalDirty();
+        result.htile_initial_mask=parent->htile_initial_mask;
+        for(size_t i=0;i<parent->metadata_addresses.size();++i){const auto address=parent->metadata_addresses[i];
+            const auto found=surface_metas_.find(address);
+            if(found!=surface_metas_.end()&&found->second.owner_uid==parent->image_uid){
+                found->second.owner_uid=result.image_uid;result.metadata_addresses[i]=address;
+                parent->metadata_addresses[i]=0;
+            }
+        }
+        result.pending_buffer_residency=std::move(parent->pending_buffer_residency);
+    }
+    // An actual current-B refresh initializes I even with original GpuModified0.
+    // Keep that history separate from validity/ownership and real later writes.
+    result.logical_dirty=false;RememberNativeImageStorage(result);
+    if(depth.resident)result.pending_buffer_residency.emplace_back(target.address,layout.guest_bytes);
+    if(stencil.resident)result.pending_buffer_residency.emplace_back(target.stencil_address,
+        LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes);
+    PublishBufferResidency(result);return result;
+}
+GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& image,const GuestTextureDesc& target,
+    const GuestTextureLayout& layout,ID3D12GraphicsCommandList* list,uint64_t completed){
+    auto* source=&image;
     if(!list||!read_cached_depth_||!acquire_independent_||!retire_independent_||
        !CanUploadGpuSnapshot(source->desc,source->layout)||!CanUploadGpuSnapshot(target,layout))
         throw std::runtime_error("Cached depth recreation has no exact native source/seed/ownership transfer");
@@ -1726,8 +1793,8 @@ GuestTextureCache::Entry* GuestTextureCache::PrepareCachedDepthRecreation(const 
     ForgetRecreatedSourceMeta(*source);
     result.logical_gpu_modified=modified;result.logical_dirty=false;
     RememberNativeImageStorage(result);
-    if(purpose==UploadPurpose::Binding)PublishBufferResidency(result);
-    return &result;
+    PublishBufferResidency(result);
+    return result;
 }
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
     if(requested.writable||
@@ -2107,7 +2174,11 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
        stencil_gpu_snapshot->handle->GetDesc().Width<stencil_layout.guest_bytes||
        stencil_gpu_snapshot->state!=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
         throw std::invalid_argument("Invalid GPU guest stencil snapshot");
-    if(!guest_snapshot)if(auto* recreated=PrepareCachedDepthRecreation(d,layout,list,completed,purpose))return *recreated;
+    if(!guest_snapshot)if(auto* source=FindCachedDepthRecreationSource(d,layout)){
+        if(purpose!=UploadPurpose::Binding)
+            throw std::logic_error("Cached native prewarm must use a private binding plan");
+        return RecreateCachedDepthAtBind(*source,d,layout,list,completed);
+    }
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
     auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
@@ -2252,6 +2323,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 throw std::runtime_error("Converted independent image could not retain ownership");
             if(d.depth_target)converted.htile_initial_mask=0;
             retire_independent_(*source);
+            // The retained object now serves queued descriptors/fences, not a
+            // live logical I version after the original image was replaced.
+            source->MarkLogicalDirty();
             if(depth_transfer&&(d.depth_target||d.writable||d.render_target||
                std::pair(d.levels,d.layers)>std::pair(source->desc.levels,source->desc.layers)))
                 ForgetRecreatedSourceMeta(*source);

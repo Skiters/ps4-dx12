@@ -154,6 +154,9 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
             IsGpuBufferModified(desc.address,layout.guest_bytes);
         const auto capture=[this](u64 address,u64 bytes){
                 ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+                if(textures_.IsPlannedDepthBind())ValidatePreparedShaderBufferRange(address,bytes);
+                // Refresh current CPU/store-marker contents within the already
+                // reserved envelope; a late snapshot must not reuse stale B.
                 PreparePhysicalDmaBuffers(std::span(&request,1));
                 return CapturePreparedShaderBuffer(address,bytes);
             };
@@ -169,6 +172,16 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return image_transfer(image,desc,layout,false);});
     textures_.SetCachedDepthRecreationTransfer([image_transfer](auto& image,const auto& desc,const auto& layout){
         return image_transfer(image,desc,layout,true);});
+    textures_.SetImageBufferSources([this](u64 address,u64 bytes){
+        ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+        PreparePhysicalDmaBuffers(std::span(&request,1));
+    },[this](u64 address,u64 bytes){
+        ValidatePreparedShaderBufferRange(address,bytes);
+        const bool resident=IsGpuBufferModified(address,bytes);
+        ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+        PreparePhysicalDmaBuffers(std::span(&request,1));
+        return GuestTextureCache::BufferImageSource{CapturePreparedShaderBuffer(address,bytes),resident};
+    });
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
         // Pinned ObtainBufferForImage chooses B only for GPU-modified target
         // pages. A resident arena alone is not proof that B is the refresh seed.
@@ -1085,13 +1098,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         deferred_color_clear[i]=source&&source->desc.depth_target;
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
-    auto* recreated_depth=has_depth?textures_.PrepareCachedDepthRecreation(descriptions[8],layouts[8],RecordingList(),CompletedFence()):nullptr;
-    auto recreated_depth_pin=recreated_depth?textures_.PinBinding(*recreated_depth):std::shared_ptr<void>{};
+    auto depth_binding_plan=has_depth?textures_.PlanCachedDepthBinding(descriptions[8],layouts[8]):nullptr;
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
     std::optional<u32> depth_meta_snapshot;
-    if(depth_attachment_snapshot){
+    if(depth_attachment_snapshot&&!depth_binding_plan){
         GuestTextureCache::Entry* depth_source{};
         if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]))
             for(const auto& candidate:textures_.Entries())if(textures_.HasCurrentDepthContents(*candidate)&&
@@ -1177,7 +1189,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     GuestTextureCache::Entry* feedback_depth{};
     std::shared_ptr<void> feedback_depth_pin;
-    if(depth_feedback&&!depth_attachment_snapshot){
+    if(depth_feedback&&!depth_attachment_snapshot&&!depth_binding_plan){
         feedback_depth=&textures_.Upload(descriptions[8],
             std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
             RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
@@ -1356,11 +1368,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes));
             const auto stencil_bytes=depth_attachment_snapshot?std::span<const std::byte>(stencil_guest_snapshot):
                 std::span<const std::byte>(stencil_memory);
-            auto& entry=feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
+            auto& entry=depth_binding_plan?textures_.BindPlannedDepth(*depth_binding_plan,RecordingList(),CompletedFence()):
+                feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
                 depth_bytes,RecordingList(),CompletedFence(),stencil_bytes,
                 depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr,
                 false,false,GuestTextureCache::UploadPurpose::Binding,
                 stencil_gpu_snapshot.handle?&stencil_gpu_snapshot:nullptr);
+            if(depth_binding_plan){
+                const auto requested=descriptions[8];descriptions[8]=entry.desc;
+                descriptions[8].first_mip=requested.first_mip;descriptions[8].first_layer=requested.first_layer;
+                descriptions[8].view_layers=requested.view_layers;descriptions[8].min_lod=requested.min_lod;descriptions[8].swizzle=requested.swizzle;
+                layouts[8]=entry.layout;
+                if(descriptions[8].stencil_address){stencil_desc=DescribeGuestStencil(descriptions[8]);stencil_layout=LayoutGuestTexture(stencil_desc);}
+            }
             if(depth_buffer_source){
                 const ShaderBufferRequest resident{descriptions[8].address,layouts[8].guest_bytes,false,true,true};
                 DmaMemory().ObserveResidentSharps(std::span(&resident,1));
@@ -1499,7 +1519,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // A recorded attachment writer changes original GpuModified history,
         // even when recreation copied a CPU-initialized (GpuModified0) source.
         for(UINT i=0;i<target_count;++i)if(targets[i])targets[i]->NoteLogicalImageWrite();
-        if(targets[8]&&write_depth_stencil&&!depth_attachment_snapshot)targets[8]->NoteLogicalImageWrite();
+        if(targets[8]&&write_depth_stencil&&(!depth_attachment_snapshot||depth_binding_plan))targets[8]->NoteLogicalImageWrite();
         if(std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")){
             static u64 writer{};const auto serial=++writer;
             const auto* vs=guest.stages[u32(Shader::SwStage::Vertex)];
