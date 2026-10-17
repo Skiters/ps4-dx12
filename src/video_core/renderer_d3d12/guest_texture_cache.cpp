@@ -1363,8 +1363,8 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
 namespace {
 bool IsDirectDepthWordClass(const GuestTextureDesc& d,const GuestTextureLayout& l){
     // CopyColorAndDepth preserves texel bits. These native color layouts have
-    // the same physical 16/32-bit words as guest storage, without expansion,
-    // packed-channel permutation or a numeric conversion through an SRV.
+    // guest 16/32-bit words after explicitly reversing any SOURCE native
+    // packed-channel order, without expansion or a numeric SRV conversion.
     if(l.block_extent!=1||l.expanded_bytes_per_pixel||
        (l.bytes_per_pixel!=2&&l.bytes_per_pixel!=4))return false;
     switch(d.data_format){

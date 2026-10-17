@@ -555,6 +555,9 @@ int main(int argc,char** argv){try{
         const UINT format=std::stoul(argv[2]);if(format<16||format>19)throw std::invalid_argument("Invalid packed depth source");
         RunDirtyCachedDepthFixture(device.Get(),true,false,0,false,format,0);return 0;
     }
+    if(argc==2&&strcmp(argv[1],"--cached-packed19-sampled-depth")==0){
+        RunDirtyCachedDepthFixture(device.Get(),true,false,0,false,19,0,true);return 0;
+    }
     if(argc==2&&strcmp(argv[1],"--planned-depth-native-change")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,1);return 0;}
     if(argc==2&&strcmp(argv[1],"--planned-depth-current-buffer")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,2);return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-subviews")==0){RunDepthSubviewFixture(device.Get());return 0;}

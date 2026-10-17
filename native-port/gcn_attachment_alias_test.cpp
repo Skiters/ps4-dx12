@@ -38,7 +38,9 @@ int main(int argc,char** argv){try{
         mode=="cached-depth-cmask18-owned"?18:mode=="cached-depth-cmask19-owned"?19:0;
     const bool cached_depth_cmask=cached_depth_cmask_packed||cached_depth_cmask6||mode=="cached-depth-cmask-owned";
     const bool cached_depth_storage_ordered=mode=="cached-depth-storage-ordered-owned";
-    const bool cached_depth_storage=cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
+    const u32 cached_depth_packed_storage=mode=="cached-depth-packed16-storage-owned"?16:mode=="cached-depth-packed17-storage-owned"?17:
+        mode=="cached-depth-packed18-storage-owned"?18:mode=="cached-depth-packed19-storage-owned"?19:0;
+    const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
@@ -104,7 +106,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(cached_depth_storage){
-        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10);
+        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
     }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
     }else if(formatted_cmask){
@@ -963,7 +965,8 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(cached_depth_cmask_packed?
+    puts(cached_depth_packed_storage?
+        "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
         "PASS: eight actual GCN native depth/RGBA8/CMASK clear/draw cases, independent UINT word image probes over every logical CMASK tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_storage?

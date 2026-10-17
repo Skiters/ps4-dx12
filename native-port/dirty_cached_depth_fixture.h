@@ -7,7 +7,7 @@
 #include <cstring>
 namespace NativeDX12 {
 inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=false,bool color_target=false,int late_change=0,bool writable_target=false,
-    UINT color_format=0,UINT color_number=0){
+    UINT color_format=0,UINT color_number=0,bool sampled_color_source=false){
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(const bool modified:{false,true})for(const bool growth:{false,true}){
@@ -18,7 +18,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         source.depth_target=true;source.data_format=format;source.number_format=format==2?0:7;source.tile_mode=tile;
         source.levels=1;source.layers=source.view_layers=growth?3:2;
         auto target=source;target.levels=growth?2:1;target.layers=growth?1:2;target.view_layers=1;
-        if(color_source){source.depth_target=false;source.render_target=true;source.number_format=4;}
+        if(color_source){source.depth_target=false;source.render_target=!sampled_color_source;source.number_format=4;}
         if(color_source&&color_format){source.data_format=color_format;source.number_format=color_number;}
         if(color_target||writable_target){
             // Original ColorBuffer requests one mip; RT expansion grows layers.
@@ -97,6 +97,8 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         auto& image=modified?cache.Upload(source,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,&old_gpu,false,false,
             GuestTextureCache::UploadPurpose::Preparation,source.stencil_address?&old_s_gpu:nullptr):
             cache.Upload(source,old_d,renderer.RecordingList(),renderer.CompletedFence(),old_stencil,false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
+        require(!sampled_color_source||!(image.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET),
+            "Sampled packed source unexpectedly requires native render-target support");
         GuestTextureCache::Entry* live{};unsigned faults{};std::function<void(GuestTextureCache::Entry&)> retire;
         PageWatch watch([&](u64,bool writing){require(writing&&live,"Unexpected dirty recreation CPU fault");++faults;
             auto* old=std::exchange(live,nullptr);old->MarkLogicalDirty();retire(*old);});

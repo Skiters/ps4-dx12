@@ -12,7 +12,7 @@ namespace NativeDX12 {
 template<class Initialize>
 void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& plain_vertex,const std::vector<u32>& vertex_words,bool ordered,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize,bool cmask=false,u32 cmask_format=10){
+    const Initialize& initialize,bool cmask=false,u32 cmask_format=10,u32 storage_packed=0){
     alignas(256) std::array<u32,128> pixel{},writer{},probe{},ordered_vertex{},ordered_pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x43534453504c0001ULL);
@@ -25,6 +25,9 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
         0xf0000100,0x00010500,0x7e000281,0xf0000100,0x00010600,0xbf8c0000,
         0xe0700000,0x80030400,0xe0700004,0x80030500,0xe0700008,0x80030600,
         0xbf810000},0x4353445350520001ULL);
+    if(storage_packed)initialize(writer,{0x7e000280,0x7e020280,0xe0000000,0x80000400,0xbf8c0000,
+        0x7e1002ff,0x3f800000,0x7e120280,0x7e140280,0x7e1602ff,0x3f800000,
+        0xf0200f00,0x00010800,0xe0700000,0x80030400,0xbf810000},0x4353445357520010ULL);
     // Pinned GetStages orders Fragment before Vertex, each buffers then images.
     // The early PS buffer must retain B while the later VS image becomes UAV.
     auto ordered_words=vertex_words;ordered_words.resize(ordered_words.size()-3);
@@ -50,7 +53,7 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
         gpu.SubmitGfx(packets,{});gpu.WaitGpuIdle();
     };
     unsigned cases{};
-    const bool packed16=cmask&&cmask_format>=16&&cmask_format<=19;
+    const bool packed16=storage_packed||(cmask&&cmask_format>=16&&cmask_format<=19);
     const u16 image_height=packed16?128:32;
     for(const bool stencil:{false,true})for(const bool htile:{false,true})for(const bool dirty:{false,true}){
         printf("CASE: actual GCN cached depth -> storage S=%u HTILE=%u Dirty=%u ordered=%u\n",unsigned(stencil),unsigned(htile),unsigned(dirty),unsigned(ordered));fflush(stdout);
@@ -189,11 +192,14 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             ++cases;continue;
         }
         AmdGpu::Image image{};image.base_address=(base+8192)>>8;image.type=u64(AmdGpu::ImageType::Color2D);
-        image.width=image.height=image.pitch=31;image.data_format=4;image.num_format=7;image.tiling_index=5;
+        image.width=image.pitch=31;image.height=image_height-1;
+        image.data_format=storage_packed?storage_packed:4;image.num_format=storage_packed?0:7;image.tiling_index=5;
         image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
-        AmdGpu::Buffer input{};input.base_address=base+8192;input.stride=4;input.num_records=32768/4;
-        input.data_format=4;input.num_format=7;input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
-        auto observation=input;observation.base_address=base+57344;observation.num_records=1024;observation.num_format=4;
+        AmdGpu::Buffer input{};input.base_address=base+8192;input.stride=storage_packed?2:4;input.num_records=32768/input.stride;
+        input.data_format=storage_packed?2:4;input.num_format=storage_packed?4:7;
+        input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
+        auto observation=input;observation.base_address=base+57344;observation.stride=4;observation.num_records=1024;
+        observation.data_format=4;observation.num_format=4;
         const auto bind=[&](const auto& code){auto& cs=compute;cs={};cs.address=reinterpret_cast<u64>(code.data())>>8;
             cs.num_thread_x.full=cs.num_thread_y.full=cs.num_thread_z.full=1;cs.dim_x=cs.dim_y=cs.dim_z=1;
             cs.settings.num_user_regs=16;cs.settings.num_vgprs=3;cs.settings.num_sgprs=3;
@@ -204,7 +210,8 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             if(memcmp(backing,expected.data(),65536)){
                 for(size_t i=0;i<expected.size();++i)if(backing[i]!=expected[i]){fprintf(stderr,"Cached storage %s first mismatch=%zu actual=%02x expected=%02x S=%u HTILE=%u\n",phase,i,std::to_integer<unsigned>(backing[i]),std::to_integer<unsigned>(expected[i]),unsigned(stencil),unsigned(htile));break;}
                 throw std::runtime_error("Actual GCN cached-depth storage lost I/B/source-S/physical padding contract");}};
-        const u32 initial=std::bit_cast<u32>(buffer_depth);memcpy(expected.data()+57344,&initial,4);
+        const u32 initial=storage_packed?(dirty?0x2222u:0xffffu):std::bit_cast<u32>(buffer_depth);
+        memcpy(expected.data()+57344,&initial,4);
         if(ordered){
             regs.depth_control={};db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Invalid;
             regs.depth_render_control={};
@@ -222,7 +229,14 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             rasterizer.Draw(false);rasterizer.ReadMemory(base+4096,4096);
         }else{bind(writer);dispatch();}
         check("formatted-before-image");
-        const u32 values[]{initial,std::bit_cast<u32>(0.5f),std::bit_cast<u32>(0.875f)};
+        // Original storage writes apply the inverse ORIGINAL T# swizzle.
+        // 16/17: BGR,18: identity with storage17,19: GBAR inverse -> ARGB.
+        // Thus this differs from both direct native writes and CB exports.
+        const u32 packed_written=storage_packed==16?0x1fu:storage_packed==17?0x801fu:
+            storage_packed==19?0xff0u:0xfc00u;
+        if(storage_packed){image.data_format=2;image.num_format=4;}
+        const u32 values[]{storage_packed?initial|(initial<<16):initial,
+            storage_packed?packed_written:std::bit_cast<u32>(0.5f),storage_packed?0xffffu:std::bit_cast<u32>(0.875f)};
         memcpy(expected.data()+57344,values,sizeof(values));bind(probe);dispatch();check("raw-B-and-native-I");++cases;
     }
     if(cases!=8)throw std::runtime_error("Cached depth storage GCN coverage missing");
