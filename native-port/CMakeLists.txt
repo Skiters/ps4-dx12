@@ -272,11 +272,18 @@ add_test(NAME native_rect_display COMMAND native-rect-display-test "${_compute_m
 add_executable(native-independent-version-transfer-test independent_version_transfer_test.cpp
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp")
 target_compile_features(native-independent-version-transfer-test PRIVATE cxx_std_23)
+if(MSVC)
+  # Keep optimized GPU regression failures symbolizable without a debug rebuild.
+  target_compile_options(native-independent-version-transfer-test PRIVATE /Z7)
+  target_link_options(native-independent-version-transfer-test PRIVATE /DEBUG)
+endif()
 target_link_libraries(native-independent-version-transfer-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures)
 add_test(NAME native_independent_image_version_transfer COMMAND native-independent-version-transfer-test)
 add_test(NAME native_independent_depth_version_transfer COMMAND native-independent-version-transfer-test --depth)
 add_test(NAME native_paired_depth_gpu_snapshot COMMAND native-independent-version-transfer-test --paired-depth)
 set_tests_properties(native_paired_depth_gpu_snapshot PROPERTIES TIMEOUT 180)
+add_test(NAME native_independent_depth_subviews COMMAND native-independent-version-transfer-test --depth-subviews)
+set_tests_properties(native_independent_depth_subviews PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_depth_growth COMMAND native-independent-version-transfer-test --depth-growth)
 set_tests_properties(native_independent_depth_growth PROPERTIES TIMEOUT 180)
 add_test(NAME native_color_to_ms_depth COMMAND native-independent-version-transfer-test --color-ms-depth)

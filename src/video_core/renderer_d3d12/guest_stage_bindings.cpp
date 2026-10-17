@@ -65,6 +65,15 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     }
     if(next_buffer!=buffers.size()||next_image!=images.size())
         throw std::invalid_argument("Ordered stages omit original resource slots");
+    std::vector<OrderedGuestImage> physical_images;
+    for(size_t i=0;i<images.size();++i)if(!images[i].null_resource&&!images[i].storage.writable){
+        const auto storage=textures.ResolveDepthViewStorage(images[i].storage);
+        if(storage!=images[i].storage){
+            if(physical_images.empty())physical_images.assign(images.begin(),images.end());
+            physical_images[i].storage=storage;physical_images[i].layout=LayoutGuestTexture(storage);
+        }
+    }
+    if(!physical_images.empty())images=std::span<const OrderedGuestImage>(physical_images);
     OrderedGuestBindings result;result.stream_views.resize(buffers.size());result.images.resize(images.size());
     result.pins=std::make_shared<std::vector<std::shared_ptr<void>>>();
     struct Domain {GuestTextureDesc desc;GuestTextureLayout layout;GuestTextureCache::Entry* bound{};
@@ -73,6 +82,10 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     const auto add_domain=[&](const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool cached=false){
         auto [it,inserted]=domains.try_emplace(desc.address,Domain{desc,layout});
         if(!inserted){auto& old=it->second;
+            if(old.desc.samples==1&&CompatibleGuestDepthSubview(old.desc,old.layout,desc,layout))return;
+            if(desc.samples==1&&CompatibleGuestDepthSubview(desc,layout,old.desc,old.layout)){
+                old.desc=desc;old.layout=layout;return;
+            }
             if(!CompatibleGuestImageMipGeometry(old.desc,old.layout,desc,layout))
                 throw std::runtime_error("Ordered stages have incompatible image physical geometry");
             const auto levels=std::max(old.desc.levels,desc.levels);const bool writable=old.desc.writable||desc.writable;
@@ -82,7 +95,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     };
     for(const auto& image:images)if(!image.null_resource&&
         (image.storage.writable||std::ranges::any_of(textures.Entries(),[&](const auto& cached){return cached->logical_gpu_modified&&
-            CompatibleGuestImageMipGeometry(image.storage,image.layout,cached->desc,cached->layout);}))&&
+            (CompatibleGuestImageMipGeometry(image.storage,image.layout,cached->desc,cached->layout)||
+             (image.storage.samples==1&&CompatibleGuestDepthSubview(cached->desc,cached->layout,image.storage,image.layout)));}))&&
         std::ranges::any_of(requests,[&](const auto& buffer){
         return Overlaps(image.storage.address,image.layout.guest_bytes,buffer.address,buffer.size);}))
         add_domain(image.storage,image.layout);
@@ -95,7 +109,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         if(auto found=domains.find(image.storage.address);found!=domains.end()){
             const auto& domain=found->second;
             if(!CompatibleGuestShaderStorage(domain.desc,image.storage)&&
-               !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout))
+               !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)&&
+               !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout)))
                 throw std::runtime_error("Ordered stage converted image views require their domain transfer plan");
         }
     }
@@ -104,6 +119,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(Overlaps(address,domain.layout.guest_bytes,other->first,other->second.layout.guest_bytes))
                 throw std::runtime_error("Ordered stages require shifted image-domain ownership adaptation");
         GuestTextureCache::Entry geometry;geometry.desc=domain.desc;geometry.layout=domain.layout;
+        if(domain.desc.stencil_address)geometry.stencil_layout=LayoutGuestTexture(DescribeGuestStencil(domain.desc));
         const auto owner=DescribeGuestImageOwnership(geometry);
         if(!owner||!CanRetainGuestImageOwnership(textures,*owner)||
            !GuestTextureCache::CanUploadGpuSnapshot(domain.desc,domain.layout,domain.desc.writable))
@@ -130,7 +146,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         // Protect I as a distinct version before preparing/owning overlapping B.
         for(const auto& [address,domain]:domains){
             for(const auto& entry:textures.Entries())if(entry->gpu_owned&&entry->HasValidLogicalImage()&&
-                CompatibleGuestImageMipGeometry(domain.desc,domain.layout,entry->desc,entry->layout)){
+                (CompatibleGuestImageMipGeometry(domain.desc,domain.layout,entry->desc,entry->layout)||
+                 (domain.desc.samples==1&&CompatibleGuestDepthSubview(entry->desc,entry->layout,domain.desc,domain.layout)))){
                 result.pins->push_back(textures.PinBinding(*entry));
                 if(!textures.RevalidateReadonly(*entry))throw std::runtime_error("Ordered stages cannot retain the preceding I");
             }
@@ -142,7 +159,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 // Preserve its old prefix/interpretation for earlier buffers;
                 // do not retile a future expanded tail into B prematurely.
                 if((!MatchesGuestMipLayout(previous->layout,domain.layout)||
-                    !CompatibleGuestShaderStorage(previous->desc,domain.desc))&&
+                    (!CompatibleGuestShaderStorage(previous->desc,domain.desc)&&
+                     !CompatibleGuestDepthSubview(previous->desc,previous->layout,domain.desc,domain.layout)))&&
                    std::ranges::any_of(buffers,[&](const auto& buffer){const auto index=size_t(&buffer-buffers.data());
                        return buffer.formatted&&!buffer.cpu_stream&&
                            Overlaps(address,domain.layout.guest_bytes,requests[index].address,requests[index].size);})){
@@ -230,6 +248,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 if(request.written){
                     rasterizer.MarkShaderBufferWrites(std::span(&request,1));
                     rasterizer.NotifyGpuBufferWrite(original.address,original.size);
+                    // Pinned InvalidateMemoryFromGPU deliberately considers
+                    // exact image bases only; CPU dirtying is range based.
                     if(auto domain=domains.find(original.address);domain!=domains.end())++domain->second.generation;
                 }
             }

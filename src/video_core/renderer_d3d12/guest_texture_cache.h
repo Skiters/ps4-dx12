@@ -109,6 +109,10 @@ bool CompatibleGuestImageMipGeometry(GuestTextureDesc,const GuestTextureLayout&,
     GuestTextureDesc,const GuestTextureLayout&);
 bool MatchesGuestMipLayout(const GuestTextureLayout&,const GuestTextureLayout&);
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view);
+// A smaller readonly/DSV binding can retain a grown native depth allocation.
+// Its logical mip/layer selectors do not redefine the owner's guest layout.
+bool CompatibleGuestDepthSubview(const GuestTextureDesc&,const GuestTextureLayout&,
+    const GuestTextureDesc&,const GuestTextureLayout&);
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc>);
 bool CompatibleGuestPackedStorage(GuestTextureDesc source,GuestTextureDesc view);
 // Reuses PS4 thin/display 8x8 microtile addressing from host_shaders/tiling.comp.
@@ -133,6 +137,9 @@ public:
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
         uint64_t image_uid{};
+        // Allocation identity survives CPU/B dirtying; it never proves current
+        // I contents or ownership. Private prewrite snapshots do not replace it.
+        bool depth_storage_current=false;
         // Physical prewarm can seed new I from B before its original image bind.
         // Retain the deferred EnsureResident effect with that exact I version.
         BufferResidency pending_buffer_residency;
@@ -190,6 +197,8 @@ public:
         std::shared_ptr<GuestMultisample> multisample;
         std::vector<std::shared_ptr<GuestMultisample::Lease>> multisample_leases;
         std::vector<std::shared_ptr<GuestMultisample::ColorDepthLease>> color_depth_leases;
+        struct NativePlaneSource {Resource resource;std::shared_ptr<void> binding_pin;};
+        std::vector<NativePlaneSource> native_plane_sources;
         std::vector<std::byte> sampled_snapshot;
         std::vector<std::byte> stencil_snapshot;
         GuestTextureLayout stencil_layout;
@@ -223,6 +232,7 @@ public:
         std::shared_ptr<void> parent_pin,image_pin;
     };
 private:
+    void RememberDepthViewStorage(Entry&,const GuestTextureDesc&);
     bool CanTransferDependentBlockView(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveBlockParent(const WritableBlockAlias&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
@@ -316,6 +326,10 @@ public:
     void PublishBufferResidency(Entry&);
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    Entry* FindDepthViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    // Keep full parent storage for alias ranges/prewrite inputs; requested
+    // selectors stay on the binding view. Returns the request if no live parent.
+    GuestTextureDesc ResolveDepthViewStorage(const GuestTextureDesc&)const;
     // Also admits existing packed conversion and pinned-compatible uncompressed
     // color image interpretations. These are sources, never direct view reuse.
     Entry* FindIndependentUploadSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
@@ -385,16 +399,19 @@ public:
     }
     bool Own(Entry& entry){
         entry.NoteLogicalImageWrite();
-        if(entry.gpu_owned){if(notify_write_)notify_write_(entry);return true;}
+        if(entry.gpu_owned){if(notify_write_)notify_write_(entry);RememberDepthViewStorage(entry,entry.desc);return true;}
         if(!acquire_owned_||!acquire_owned_(entry))return false;
-        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);return true;}
+        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberDepthViewStorage(entry,entry.desc);return true;}
     bool RevalidateReadonly(Entry& entry){
-        return entry.HasValidLogicalImage()&&acquire_independent_&&acquire_independent_(entry);
+        if(!entry.HasValidLogicalImage()||!acquire_independent_||!acquire_independent_(entry))return false;
+        RememberDepthViewStorage(entry,entry.desc);return true;
     }
     bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
         const auto [first,last]=address_index_.equal_range(desc.address);
         for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&
             (CompatibleGuestShaderStorage(it->second->desc,desc)||
+             (it->second->desc.depth_target&&CompatibleGuestDepthSubview(
+                 it->second->desc,it->second->layout,desc,LayoutGuestTexture(desc)))||
              CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
         return false;}
     void SetPendingRetirement(std::function<void()> retirement){retire_pending_=std::move(retirement);}

@@ -999,6 +999,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // stencil selects the combined view and Upload resolves the old depth
         // owner before initializing that view from coherent guest memory.
         if(!depth_tests.stencil)descriptions[8].stencil_address=0;
+        // Resolve the owning allocation before alias checks and prewrite
+        // snapshots. A smaller DSV does not shrink the cached physical image.
+        descriptions[8]=textures_.ResolveDepthViewStorage(descriptions[8]);
         layouts[8]=LayoutGuestTexture(descriptions[8]);
         ValidateHostMemory(descriptions[8].address,layouts[8].guest_bytes);
         if(descriptions[8].stencil_address){

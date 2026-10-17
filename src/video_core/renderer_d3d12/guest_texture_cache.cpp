@@ -359,6 +359,25 @@ bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc v
     source.view_layers=view.view_layers=1;
     return source==view;
 }
+bool CompatibleGuestDepthSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
+    const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
+    // ResolveDepthOverlap returns the existing image when a smaller binding
+    // needs no aspect/format recreation. Keep its full mip-major guest layout:
+    // fewer requested layers change guest mip offsets but NOT the cached I.
+    if(!IsGuestDepthPlaneStorage(source,physical)||view.writable||view.render_target||
+       view.volume_depth||view.one_dimensional||view.address!=source.address||
+       view.width!=source.width||view.height!=source.height||view.pitch!=source.pitch||
+       view.data_format!=source.data_format||view.number_format!=source.number_format||
+       view.samples!=source.samples||!view.levels||view.levels>source.levels||
+       !view.layers||view.layers>source.layers||view.first_mip>=view.levels||
+       view.first_layer>=view.layers||!view.view_layers||view.view_layers>view.layers-view.first_layer||
+       view_layout.block_extent!=1||view_layout.expanded_bytes_per_pixel||
+       view_layout.bytes_per_pixel!=physical.bytes_per_pixel||view_layout.mips.size()!=view.levels)
+        return false;
+    // An actual depth attachment must keep matching aspects. A sampled color
+    // view can omit S; its native SRV still uses the parent's depth plane format.
+    return view.depth_target?view.stencil_address==source.stencil_address:!view.stencil_address;
+}
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc> attachments){
     // CB slice_max bounds a view as well as the requested storage. The original
     // cache grows one compatible backing to the maximum requested layer count.
@@ -880,18 +899,20 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
 }
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTextureDesc& sampled_view)const{
     if(sampled_view==desc)return Srv();
+    const bool depth_alias=desc.depth_target&&
+        CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool shader_alias=!sampled_view.writable&&
         (CompatibleGuestShaderStorage(desc,sampled_view)||
          (desc.levels>=sampled_view.levels&&CompatibleGuestShaderMipPrefixes(desc,layout,
              sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
         CanBindReadonlyBcView(*this,sampled_view,LayoutGuestTexture(sampled_view));
-    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias)||sampled_view.first_mip>=sampled_view.levels||
+    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias&&!depth_alias)||sampled_view.first_mip>=sampled_view.levels||
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
     Entry view;view.desc=sampled_view;view.desc.stencil_address=desc.stencil_address;
-    view.layout=shader_alias||block_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
+    view.layout=shader_alias||block_alias||depth_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
 }
 void EncodeGuestSubresource(const GuestTextureDesc& d,const GuestTextureLayout& l,
     std::span<std::byte> guest,std::span<const std::byte> linear,uint32_t mip,uint32_t layer) {
@@ -970,7 +991,8 @@ D3D12_DEPTH_STENCIL_VIEW_DESC GuestTextureCache::Entry::Dsv(bool read_only_depth
     return view;
 }
 D3D12_DEPTH_STENCIL_VIEW_DESC GuestTextureCache::Entry::Dsv(const GuestTextureDesc& attachment,bool read_only_depth,bool read_only_stencil)const{
-    if(!CompatibleGuestAttachmentStorage(desc,attachment))
+    if(!CompatibleGuestAttachmentStorage(desc,attachment)&&
+        !CompatibleGuestDepthSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))
         throw std::invalid_argument("Incompatible native depth target view");
     Entry view;view.desc=attachment;view.layout=layout;
     return view.Dsv(read_only_depth,read_only_stencil);
@@ -1560,6 +1582,7 @@ bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTe
 }
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
+    if(CompatibleGuestDepthSubview(entry.desc,entry.layout,desc,layout))return true;
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
         (entry.desc.writable&&CompatibleGuestShaderStorage(entry.desc,desc))||
@@ -1597,6 +1620,43 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
     if(ambiguous)throw std::runtime_error("Ambiguous clean independent image binding");
     return result;
 }
+void GuestTextureCache::RememberDepthViewStorage(Entry& entry,const GuestTextureDesc& requested){
+    if(!entry.desc.depth_target&&!requested.writable&&!requested.render_target)return;
+    auto [first,last]=address_index_.equal_range(entry.desc.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
+        if(previous.depth_storage_current&&previous.desc.width==entry.desc.width&&
+           MatchesReferenceOverlapClass(previous.desc,previous.layout,entry.desc,entry.layout))
+            previous.depth_storage_current=false;
+    }
+    entry.depth_storage_current=entry.desc.depth_target;
+}
+GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestTextureDesc& requested,
+    const GuestTextureLayout& layout)const{
+    if(requested.writable||requested.render_target)return nullptr;
+    if(auto* live=FindValidIndependentImage(requested,layout);live&&
+       CompatibleGuestDepthSubview(live->desc,live->layout,requested,layout))return live;
+    // Dirtying invalidates contents, not the cached allocation's extent. Keep
+    // that extent for full-parent B refresh and existing descriptor lifetimes.
+    // A different current render/storage class clears this geometry identity.
+    Entry* parent{};auto [first,last]=address_index_.equal_range(requested.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
+        if(candidate->depth_storage_current&&CompatibleGuestDepthSubview(candidate->desc,candidate->layout,requested,layout)&&
+           (!parent||std::pair(candidate->desc.levels,candidate->desc.layers)>
+                     std::pair(parent->desc.levels,parent->desc.layers)))parent=candidate;
+    }
+    return parent;
+}
+GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
+    if(requested.writable||requested.render_target||
+       (requested.data_format!=2&&requested.data_format!=4))return requested;
+    const auto layout=LayoutGuestTexture(requested);
+    auto* parent=FindDepthViewParent(requested,layout);
+    if(!parent)return requested;
+    auto storage=parent->desc;
+    storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;
+    storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
+    return storage;
+}
 GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
     if(auto* direct=FindValidIndependentImage(desc,layout))return direct;
@@ -1616,7 +1676,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
         const bool mip_growth=entry->desc.levels<desc.levels&&
             CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout);
         const bool depth_transfer=CanMapIndependentDepthImage(entry->desc,entry->layout,desc,layout);
-        if(!block&&!mip_growth&&!depth_transfer&&(!MatchesGuestMipLayout(entry->layout,layout)||
+        const bool depth_view=CompatibleGuestDepthSubview(entry->desc,entry->layout,desc,layout);
+        if(!block&&!mip_growth&&!depth_transfer&&!depth_view&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
             !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout)&&
             !CanMapIndependentDepthImage(entry->desc,entry->layout,desc,layout))))continue;
@@ -1847,6 +1908,17 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(current_buffer_snapshot&&!guest_snapshot)
         throw std::invalid_argument("Current buffer image source must be an explicit snapshot");
     const bool refresh_current=!guest_snapshot||current_buffer_snapshot;
+    Resource retained_stencil;std::shared_ptr<void> retained_stencil_pin;Entry* stencil_parent{};
+    if(refresh_current&&d.depth_target&&d.stencil_address&&d.samples==1){
+        auto* parent=FindDepthViewParent(d,layout);
+        if(parent&&parent->texture.handle&&
+           CompatibleGuestDepthSubview(parent->desc,parent->layout,d,layout)&&
+           CompatibleGuestDepthSubview(d,layout,parent->desc,parent->layout)){
+            // Pinned RefreshImage uploads DEPTH ONLY into an existing image.
+            // Dirty CPU/B data does not replace its native stencil contents.
+            stencil_parent=parent;retained_stencil_pin=PinBinding(*parent);retained_stencil=parent->texture;
+        }
+    }
     bool inherited_modified=false;
     std::vector<std::shared_ptr<void>> history_pins;
     if(refresh_current){
@@ -1881,6 +1953,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             entry.MarkLogicalDirty();
         }
         if(purpose==UploadPurpose::Binding)PublishBufferResidency(entry);
+        if(refresh_current)RememberDepthViewStorage(entry,d);
         return entry;
     };
     const bool preserve_expanded=d.samples>1&&(d.data_format==9||d.data_format==19)&&
@@ -1913,7 +1986,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(d.writable)ValidateWritableFormat(layout.format);
     GuestTextureDesc stencil_desc;GuestTextureLayout stencil_layout;
     if(d.stencil_address){stencil_desc=DescribeGuestStencil(d);stencil_layout=LayoutGuestTexture(stencil_desc);
-        if(!stencil_gpu_snapshot&&stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
+        if(!retained_stencil.handle&&!stencil_gpu_snapshot&&stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
     if(stencil_gpu_snapshot&&(!guest_snapshot||!d.stencil_address||!d.depth_target||
        !CanUploadGpuSnapshot(d,layout,writable_snapshot)||!stencil_gpu_snapshot->handle||
        stencil_gpu_snapshot->handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
@@ -1934,8 +2007,10 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
       }
       const bool pending_coherent=!gpu_snapshot_any&&!existing->gpu_owned&&!existing->cpu_watched&&existing->pending&&existing->sampled_snapshot.size()==layout.guest_bytes&&
         !memcmp(existing->sampled_snapshot.data(),bytes.data(),size_t(layout.guest_bytes))&&
-        (!d.stencil_address||(existing->stencil_snapshot.size()==stencil_layout.guest_bytes&&
-         !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes))));
+         (!d.stencil_address||(retained_stencil.handle?
+          existing->texture.handle.Get()==retained_stencil.handle.Get():
+          (existing->stencil_snapshot.size()==stencil_layout.guest_bytes&&
+           !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes)))));
       if((pending_coherent||(!guest_snapshot&&!existing->logical_dirty&&(existing->gpu_owned||existing->cpu_watched)))&&
         MatchesGuestUploadStorage(*existing,d,layout)){
         if(!independent_source&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
@@ -2125,8 +2200,10 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
        ((!entry->pending&&entry->fence<=completed)||(!d.render_target&&!d.depth_target))&&
        entry->sampled_snapshot.size()==layout.guest_bytes&&
        std::equal(entry->sampled_snapshot.begin(),entry->sampled_snapshot.end(),bytes.begin())&&
-       (!d.stencil_address||(entry->stencil_snapshot.size()==stencil_layout.guest_bytes&&
-           std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin())))){
+        (!d.stencil_address||(retained_stencil.handle?
+            entry->texture.handle.Get()==retained_stencil.handle.Get():
+            (entry->stencil_snapshot.size()==stencil_layout.guest_bytes&&
+             std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin()))))){
         entry->last_use=++use_sequence_;entry->pending=true;
         entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         return finish_refresh(*entry);
@@ -2278,7 +2355,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         diagnostic.Stage("gpu-detile-upload");
         entry->tiler=tiler_;entry->tiler_leases.clear();
         entry->multisample=multisample_;entry->multisample_leases.clear();
-        const auto planes=d.stencil_address?2u:1u;
+        const auto planes=d.stencil_address&&!retained_stencil.handle?2u:1u;
         entry->tiler_leases.reserve(size_t(planes)*d.layers*d.levels*(preserve_expanded?3u:1u));
         entry->tiler_input_pool.reserve(planes);
         entry->tiler_output_pool.reserve(size_t(planes)*d.layers*d.levels);
@@ -2370,7 +2447,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         return bc_decoder_->Expand(d.data_format,d.number_format,
             std::max(d.width>>mip,1u),std::max(d.height>>mip,1u),linear);
     };
-    for(uint32_t plane=0;plane<(d.stencil_address?2u:1u);++plane)
+    for(uint32_t plane=0;plane<(d.stencil_address&&!retained_stencil.handle?2u:1u);++plane)
     for(uint32_t layer=0;layer<d.layers;++layer)for(uint32_t mip=0;mip<d.levels;++mip){
         diagnostic.Stage("cpu-detile");
         auto linear=plane?DecodeGuestSubresource(stencil_desc,entry->stencil_layout,stencil_bytes,mip,layer):DecodeGuestSubresource(d,entry->layout,bytes,mip,layer);
@@ -2404,8 +2481,33 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         for(const auto& copy:copies)DX12_API_CALL(copy_list->CopyTextureRegion(
             &copy.destination,0,0,0,&copy.source,nullptr));
     });
+    if(retained_stencil.handle&&retained_stencil.handle.Get()!=entry->texture.handle.Get()){
+        const auto from=retained_stencil.handle->GetDesc(),to=entry->texture.handle->GetDesc();
+        if(from.Dimension!=to.Dimension||from.Width!=to.Width||from.Height!=to.Height||
+           from.DepthOrArraySize!=to.DepthOrArraySize||from.MipLevels!=to.MipLevels||
+           from.Format!=to.Format||from.SampleDesc.Count!=1||to.SampleDesc.Count!=1)
+            throw std::logic_error("Depth refresh lost its native stencil allocation geometry");
+        // A bound old allocation can outlive the B refresh. Initialize the
+        // replacement S from that native I, not unrelated guest B stencil bytes.
+        entry->native_plane_sources.push_back({retained_stencil,retained_stencil_pin});
+        stencil_parent->pending=entry->pending=true;if(transfer_submission_)transfer_submission_();
+        const auto old_state=retained_stencil.state;
+        retained_stencil.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        const UINT plane_base=UINT(d.levels)*d.layers;
+        for(UINT sub=0;sub<plane_base;++sub){
+            D3D12_TEXTURE_COPY_LOCATION source{};source.pResource=retained_stencil.handle.Get();
+            source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=plane_base+sub;
+            D3D12_TEXTURE_COPY_LOCATION destination{};destination.pResource=entry->texture.handle.Get();
+            destination.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;destination.SubresourceIndex=plane_base+sub;
+            DX12_API_CALL(list->CopyTextureRegion(&destination,0,0,0,&source,nullptr));
+        }
+        // Resource is a retained value copy. Restore the old Entry's tracked
+        // state so later bound-view refreshes cannot emit a stale barrier.
+        retained_stencil.Transition(list,old_state);
+    }
     diagnostic.Stage("cpu-coherence-snapshot");
-    if(immutable_view&&!gpu_snapshot_any)entry->RememberSnapshot(bytes,stencil_bytes);
+    if(immutable_view&&!gpu_snapshot_any&&!retained_stencil.handle)entry->RememberSnapshot(bytes,stencil_bytes);
     if(immutable_view&&!guest_snapshot&&!d.render_target&&!d.depth_target&&!d.stencil_address&&watch_immutable_)watch_immutable_(*entry);
     entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
 }
@@ -2603,7 +2705,7 @@ void GuestTextureCache::Collect(uint64_t completed){
     // one PS4 packet. Do the O(cache entries) retirement scan once per advance.
     if(completed<=collected_fence_)return;collected_fence_=completed;
     for(auto& e:entries_)if(!e->pending&&e->fence<=completed){
-        e->uploads.clear();e->tiler_leases.clear();e->multisample_leases.clear();e->color_depth_leases.clear();e->sample_copy_leases.clear();e->storage_leases.clear();
+        e->uploads.clear();e->tiler_leases.clear();e->multisample_leases.clear();e->color_depth_leases.clear();e->native_plane_sources.clear();e->sample_copy_leases.clear();e->storage_leases.clear();
         e->storage_clear_leases.clear();
         e->buffer_sync_resources.clear();
         e->buffer_sync_allocation_bytes=0;

@@ -307,6 +307,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(mip>=desc.levels||(!source.native_msaa_storage&&count>desc.levels-mip)||
                (source.native_msaa_storage&&count!=desc.samples))throw std::out_of_range("Native image descriptor span");
             for(const auto& previous:images)if(sharp&&!previous.null_resource&&previous.desc.address<desc.address+layout.guest_bytes&&desc.address<previous.desc.address+previous.layout.guest_bytes){
+                auto* depth_parent=!desc.writable&&(desc.data_format==2||desc.data_format==4)?
+                    textures->FindDepthViewParent(desc,layout):nullptr;
+                const bool depth_views=!previous.desc.writable&&!desc.writable&&depth_parent&&depth_parent->desc.depth_target&&
+                    CompatibleGuestDepthSubview(depth_parent->desc,depth_parent->layout,previous.desc,previous.layout)&&
+                    CompatibleGuestDepthSubview(depth_parent->desc,depth_parent->layout,desc,layout);
                 const bool converted_views=(!previous.desc.writable||!desc.writable)&&
                     desc.data_format==9&&CompatibleGuestPackedStorage(previous.desc,desc);
                 const bool block_views=block_parent&&
@@ -315,7 +320,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                      ((layout.block_extent==4&&previous.layout.block_extent==4)||
                       (pipeline.IsCompute()&&stages.size()==1&&!uses_dma)):
                      compatible_block_prefixes(previous.desc,previous.layout,desc,layout));
-                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views&&
+                if(previous.desc!=desc&&!CompatibleGuestShaderStorage(previous.desc,desc)&&!converted_views&&!block_views&&!depth_views&&
                     !CompatibleGuestShaderMipPrefixes(previous.desc,previous.layout,desc,layout)&&
                     !CompatibleGuestBlockSampledViews(previous.desc,previous.layout,desc,layout))
                     throw std::runtime_error("Native image aliases with different storage layouts unsupported");
@@ -355,6 +360,16 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Include an already owned larger chain so a narrow writable bind does not
     // discard its untouched I tail or initialize it from unrelated B bytes.
     if(textures)for(auto& image:images){
+        if(!image.null_resource&&!image.desc.writable&&(image.desc.data_format==2||image.desc.data_format==4)){
+            auto* parent=textures->FindDepthViewParent(image.desc,image.layout);
+            if(parent&&CompatibleGuestDepthSubview(parent->desc,parent->layout,image.desc,image.layout)){
+                // Keep original image.desc for shader dimension/range/swizzle.
+                // Only the physical storage/envelope follows the grown parent.
+                image.storage_group=shader_image_storage.size();
+                shader_image_storage.push_back({parent->desc,parent->layout});
+                shader_storage_pins.push_back(textures->PinBinding(*parent));continue;
+            }
+        }
         if(image.null_resource||!CompatibleGuestShaderMipPrefixes(image.desc,image.layout,image.desc,image.layout))continue;
         auto found=std::ranges::find_if(shader_image_storage,[&](const auto& group){
             return CompatibleGuestShaderMipPrefixes(group.desc,group.layout,image.desc,image.layout);
