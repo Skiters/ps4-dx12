@@ -46,13 +46,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015",
+        "historical_scope_reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure."
       },
       "prepared_checks": [
         {
@@ -127,13 +128,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
       },
       "prepared_checks": [
         {
@@ -187,11 +189,12 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -250,11 +253,12 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -282,7 +286,9 @@
         "BindTextures",
         "ObtainBufferForImage",
         "RefreshImage",
-        "InvalidateMemoryFromGPU"
+        "InvalidateMemoryFromGPU",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/rasterizer.h",
@@ -290,7 +296,10 @@
         "src/video_core/renderer_d3d12/guest_compute.cpp",
         "src/video_core/renderer_d3d12/guest_texture_cache.h",
         "src/video_core/renderer_d3d12/guest_texture_cache.cpp",
-        "src/video_core/renderer_d3d12/guest_image_compute_test.cpp"
+        "src/video_core/renderer_d3d12/guest_image_compute_test.cpp",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "A writable shader buffer overlapping a sampled image, with complete dword-aligned guest backing and a GPU-detile-compatible format. This extends the preceding single-writer snapshot implementation toward the original resident-buffer-to-image refresh path.",
@@ -299,7 +308,10 @@
         "verification_prepared": "The two existing full/partial sampled-image/buffer-writer fixtures additionally require a default-heap GPU tiler input with no CPU image snapshot. Warm passes include a GPU-to-CPU upload transition sampled through a separate output buffer, exact full guest allocation/padding comparison, a CPU edit and restoration of the GPU snapshot path. The remaining opposite-writer and two-writer rejection cases are retained. Compiled only; no cases executed.",
         "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open.",
         "historical_review_notes": "Content/validation/lifetime and performance acceptance on the actual GPU remain open. Two writers, writable attachment collisions, guarded physical aliases and wider original resource reinterpretations remain open. This is a bounded native adaptation with explicit coherent CPU fallback; it does not establish complete buffer/image equivalence or a measured avoidance of readback for every ownership mode. Global peak memory across renderer caches and temporary captures still requires final acceptance.",
-        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -320,7 +332,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -426,6 +438,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -593,6 +612,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -631,11 +664,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -663,7 +697,9 @@
         "BindTextures",
         "ObtainBufferForImage",
         "RefreshImage",
-        "InvalidateMemoryFromGPU"
+        "InvalidateMemoryFromGPU",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/guest_compute.cpp",
@@ -673,7 +709,10 @@
         "src/video_core/renderer_d3d12/guest_image_compute_test.cpp",
         "native-port/buffer_reader_image_writer.comp",
         "native-port/buffer_reader_image_writer_test.cpp",
-        "native-port/CMakeLists.txt"
+        "native-port/CMakeLists.txt",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "One shader buffer/image writer overlapping a read-only view of the other class in the same draw/dispatch, including partial ranges and cross-stage descriptors. The original binds buffers and refreshes separate image allocations before execution.",
@@ -682,7 +721,10 @@
         "verification_prepared": "Five metadata-to-DXIL/GPU cases prepare both directions, full/partial tiled overlap, a preceding GPU buffer writer, three warm submissions, a CPU edit, exact full allocation/padding, retirement of a preexisting sampled-cache witness and rejection of two simultaneous writers before execution. Compilation only; no cases executed.",
         "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open.",
         "historical_review_notes": "Two simultaneous buffer/image writers and writable buffer overlap with bound color/depth/stencil attachments remain explicit failures; sampled snapshots must not conceal attachment ownership collisions. The later GPU snapshot adaptation is tracked by native-gpu-buffer-image-prewrite-snapshots; guarded physical aliases, broader GCN/graphics/depth/volume/MSAA differential acceptance and performance remain open. This group does not establish simultaneous writable image/buffer ownership or full memory equivalence.",
-        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback."
+        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -704,7 +746,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -810,6 +852,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -979,6 +1028,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -1017,11 +1080,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -1105,11 +1169,12 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -1173,11 +1238,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -1250,11 +1316,12 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -1343,11 +1410,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1441,11 +1509,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1508,13 +1577,14 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled",
+        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged."
       },
       "prepared_checks": [
         {
@@ -1586,11 +1656,12 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1662,11 +1733,12 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1729,11 +1801,12 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1789,11 +1862,12 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -1842,11 +1916,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -1878,11 +1953,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -1918,11 +1994,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -1978,11 +2055,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -2028,11 +2106,12 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2104,11 +2183,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2173,13 +2253,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015",
+        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements."
       },
       "prepared_checks": [
         {
@@ -2242,7 +2323,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2300,11 +2381,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2377,11 +2459,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2453,11 +2536,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2519,11 +2603,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2581,11 +2666,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2626,11 +2712,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -2673,11 +2760,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -2733,11 +2821,12 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -2810,19 +2899,20 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "previous_checkpoint_verification": {
           "state": "partial_gpu_verified",
           "date": "2026-10-14",
           "reason": "Partial position exports corrected in native Mesa. Production RectList old compiler FAIL/new64pixelsPASS in both viewport orientations; SRGB minmax/dual-face baseline failures remain. No whole-group closure.",
           "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/complete-port-20261015",
+        "historical_scope_reason": "Current post-preview24 source changes reviewed only; not compiled, installed or executed. Preview24 compile/link is historical and does not verify this delta. User execution gate remains; no whole-group closure."
       },
       "prepared_checks": [
         {
@@ -2892,11 +2982,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": [
         {
@@ -2959,11 +3050,12 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3027,17 +3119,18 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "CMASK exceptional-value continuation is source-reviewed only; no compilation, installation, tests, GPU/game execution or performance measurements. Historical evidence is unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "previous_checkpoint_verification": {
           "state": "not_run",
           "reason": "Full implementation boundary is still open."
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/cmask-exceptions-20261015/REFERENCE.md; F:/PS4Dev/handoff/cmask-exceptions-20261015/SOURCE_REVIEW.md"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/cmask-exceptions-20261015/REFERENCE.md; F:/PS4Dev/handoff/cmask-exceptions-20261015/SOURCE_REVIEW.md",
+        "historical_scope_reason": "CMASK exceptional-value continuation is source-reviewed only; no compilation, installation, tests, GPU/game execution or performance measurements. Historical evidence is unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -3088,11 +3181,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3142,11 +3236,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3195,11 +3290,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3250,11 +3346,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3296,11 +3393,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3361,11 +3459,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3409,11 +3508,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3473,13 +3573,14 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled",
+        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged."
       },
       "prepared_checks": []
     },
@@ -3560,13 +3661,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md",
+        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes."
       },
       "prepared_checks": []
     },
@@ -3612,11 +3714,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     },
@@ -3628,13 +3731,18 @@
       ],
       "upstream_symbols": [
         "DefineReadConst",
-        "EmitReadConst"
+        "EmitReadConst",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/shader_recompiler/native_dma.h",
         "src/shader_recompiler/backend/spirv/spirv_emit_context.cpp",
         "src/video_core/renderer_d3d12/guest_dma.cpp",
-        "src/video_core/renderer_d3d12/guest_dma.h"
+        "src/video_core/renderer_d3d12/guest_dma.h",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Original 40-bit guest pointers and ReadConst faults, actual committed 4-KiB subpages, resident cache resources and persistent page translations.",
@@ -3642,7 +3750,10 @@
         "ordering": "Growth zero-initializes a new metadata buffer, copies the existing live prefix on the real DIRECT queue and retains old/initialization buffers through actual fence retirement. The ordinary persistent patch map then updates changed entries and the real capacity header. Existing fault feedback and compaction retain their own submitted/completed ordering.",
         "errors": "Address, raw descriptor extent, live descriptor-bank and secondary-slot bounds are checked. The pinned Sirit does not expose OpArrayLength; the actual buffer extent is supplied in native metadata without altering immutable upstream dependencies.",
         "historical_review_notes": "The extended production DMA fixture compiles only; it creates more than 32 partial pages through actual host decommit/recommit and checks accessible tails and recovery. Final shader conversion, nonuniform access, growth contents, in-flight lifetime, faults and alias ordering have not executed.",
-        "open_contracts": "Tiny late subpage completion and preplanned stable image-source backing through pressure/reservation, direct/split/pressure B residency, private IA streams/auxiliary unification and unsupported transfer domains remain concrete production gaps. Shader-buffer bind-order publication/resident-only retile and version-specific image-source publication at real image use are connected atd01969e/2498c6f. Behavior acceptance is separate."
+        "open_contracts": "Tiny late subpage completion and preplanned stable image-source backing through pressure/reservation, direct/split/pressure B residency, private IA streams/auxiliary unification and unsupported transfer domains remain concrete production gaps. Shader-buffer bind-order publication/resident-only retile and version-specific image-source publication at real image use are connected atd01969e/2498c6f. Behavior acceptance is separate.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -3656,7 +3767,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3767,6 +3878,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -3970,6 +4088,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -3984,7 +4116,9 @@
         "BindResources",
         "BindTextures",
         "FindDepthTarget",
-        "FindTexture"
+        "FindTexture",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/resource_bindings.h",
@@ -3992,7 +4126,10 @@
         "src/video_core/renderer_d3d12/graphics_submission.cpp",
         "src/video_core/renderer_d3d12/guest_rasterizer.cpp",
         "src/video_core/renderer_d3d12/guest_graphics_resources_test.cpp",
-        "native-port/CMakeLists.txt"
+        "native-port/CMakeLists.txt",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Reflected shader SRVs on an attached combined depth/stencil resource, including depth SRV plus stencil writes and stencil SRV plus depth writes. Actual attachment operations and clears determine writable planes; dormant guest view hints do not introduce writes.",
@@ -4003,7 +4140,10 @@
           "https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12graphicscommandlist-cleardepthstencilview"
         ],
         "historical_review_notes": "Final GPU states, shader contents, guest descriptor equivalence, multisample/mip/layer feedback, pending HTILE integration and resource lifetime acceptance remain open. Same-plane simultaneous attachment/shader writers remain unsupported; no semantic closure is claimed.",
-        "open_contracts": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback."
+        "open_contracts": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -4017,7 +4157,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4073,6 +4213,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -4156,6 +4303,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -4170,21 +4331,29 @@
         "BindResources",
         "BindTextures",
         "FindDepthTarget",
-        "FindTexture"
+        "FindTexture",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/resource_bindings.h",
         "src/video_core/renderer_d3d12/resource_bindings.cpp",
         "src/video_core/renderer_d3d12/graphics_submission.cpp",
         "src/video_core/renderer_d3d12/guest_graphics_resources_test.cpp",
-        "native-port/CMakeLists.txt"
+        "native-port/CMakeLists.txt",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Native depth/stencil SRV mip/layer/plane ranges and DSV selected mip/layers, including disjoint writable attachment and sampled ranges of the same resource.",
         "outputs": "Known 2D, array, multisample and cube SRV ranges are retained independently of whole-resource lifetime references; unknown DS views/UAVs remain conservative. Bounds and unbounded remaining-mip extents are checked. Descriptor replacement removes the previous slot's range. Normalized DSVs carry actual read-only flags and validated view extents. Feedback guards check the attached range, and barriers transition attached and sampled subresources independently, leaving unrelated states intact. Whole uniform single-mip attachments retain the global transition fast path.",
         "verification_prepared": "Twelve depth-view-ranges cases prepare independent same-mip/different-layer and same-layer/different-mip shader loads versus attachment writes over three warm versions. The old descriptor is overwritten before draw. Exact complete guest contents/padding, sampled RGBA32F values and unrelated native states are checked; changing the DSV to the sampled subresource must reject before recording. Compile/link only, not executed.",
         "historical_review_notes": "Final GPU states/contents, actual guest descriptor integration, combined stencil/multisample/cube ranges and lifetime/performance acceptance remain open. Physical buffer/image and shader/attachment simultaneous writers still require separate ownership adaptation. No semantic closure.",
-        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback."
+        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "partial_gpu_verified",
@@ -4201,7 +4370,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4259,6 +4428,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -4354,6 +4530,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -4376,7 +4566,9 @@
         "InvalidateMemoryFromGPU",
         "InvalidateMemory",
         "DownloadImage",
-        "RunGarbageCollector"
+        "RunGarbageCollector",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/guest_compute.cpp",
@@ -4394,7 +4586,9 @@
         "src/video_core/renderer_d3d12/guest_multisample.cpp",
         "src/video_core/renderer_d3d12/guest_packed_transfer.cpp",
         "src/video_core/renderer_d3d12/guest_image_operations.h",
-        "src/video_core/renderer_d3d12/guest_image_ownership.h"
+        "src/video_core/renderer_d3d12/guest_image_ownership.h",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Simultaneous exact-base/full-range raw buffer and R32 float/uint/sint image writers, backed by complete protected 4-KiB pages. Full mip chain, one layer/sample, at most 64 MiB, with original linear-image readback policy disabled.",
@@ -4412,7 +4606,10 @@
         "bc_actual_owner_20261016": "3bfd8ef: actual native readonly BC ownership preserves BC-only terminal or partial mip blocks, validates regenerated real layout, and retains complete page/backing/budget/watch/fence guards. Canonical complete BC-UINT bridge stays stricter; selected private prefix also requires exact canonical correspondence. Authored controls adjusted for actual-owner versus canonical distinction; physical-corruption guards retained. Source review only, uncompiled/unrun. Shared-seed forward partial-copy producer, writable aliases and runtime acceptance remain open. Evidence F:/PS4Dev/handoff/bc-actual-owner-20261016/REVIEW.md.",
         "bc_partial_copy_20261016": "38b7c95: bounded forward partial BC expansion has strict common physical-prefix/copy-extent admission, integrated source/history/generic transfer. Separate callback chooses one full target seed Bsync iff target GPU-page modified else physical P, feeds SAME prefix to Retile and merges it back; target complement/tail remains R. New owner acquired before old retirement; source pins/fence resources retained. Source review only, uncompiled/unrun. Partial block/extra-tail fixtures with distinct I/B/P not yet authored. Writable selected aliases, shifted layouts, device/submission failure and runtime acceptance remain open. Evidence F:/PS4Dev/handoff/bc-partial-copy-20261016/REVIEW.md. Source inspection found common scheduler retirement lease loss on post-submit Defer allocation failure; safe scheduler-owned batching fix pending. Exploratory patch preserved outside production in scheduler-retention-20261016, no runtime failure claim.",
         "historical_review_notes": "Formatted readonly buffer synchronization, domain-preserving pressure eviction/incompatible views, original queued linear-image readbacks, other formats/layouts/mips/layers/samples, partial/sub-DWORD aliases and atomic writers remain open or explicitly rejected. GPU contents, real CPU fault behavior and lifetime acceptance are unverified. No semantic closure.",
-        "open_contracts": "Tiny late subpage completion and preplanned stable image-source backing through pressure/reservation, direct/split/pressure B residency, private IA streams/auxiliary unification and unsupported transfer domains remain concrete production gaps. Shader-buffer bind-order publication/resident-only retile and version-specific image-source publication at real image use are connected atd01969e/2498c6f. Behavior acceptance is separate."
+        "open_contracts": "Tiny late subpage completion and preplanned stable image-source backing through pressure/reservation, direct/split/pressure B residency, private IA streams/auxiliary unification and unsupported transfer domains remain concrete production gaps. Shader-buffer bind-order publication/resident-only retile and version-specific image-source publication at real image use are connected atd01969e/2498c6f. Behavior acceptance is separate.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -4440,7 +4637,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4562,6 +4759,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -4769,6 +4973,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -4785,7 +5003,9 @@
         "SynchronizeMemoryFromImage",
         "FindImageFromRange",
         "GarbageCollectImages",
-        "SafeToDownload"
+        "SafeToDownload",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/guest_compute.cpp",
@@ -4798,7 +5018,10 @@
         "src/shader_recompiler/backend/dxil/spirv_buffer_access.h",
         "src/video_core/renderer_d3d12/guest_shader_cache.cpp",
         "native-port/gcn_ordered_disjoint_fixture.h",
-        "native-port/gcn_mixed_formatted_fixture.h"
+        "native-port/gcn_mixed_formatted_fixture.h",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Readonly formatted buffers aliasing one retained R32 image version at its exact complete extent, including full mip chains. Original sharp base/byte size determine the 16-KiB streaming condition separately from native DWORD alignment.",
@@ -4813,7 +5036,10 @@
         "native_shader_alias_continuation_20261016": "f9ec214 extends4210e31: valid restrictive decoration groups split per SSBO variable/member target using deterministic sanitized clones, legal annotation/declaration order and checked freshIDs/bound. Other group payloads/targets and Aliased dedup persist; empty sanitized groups need noID. Shared SSBO/UBO structure annotations retain inherited type-ID scope, UniformBlock intrinsicallyreadonly. Old accepted valid inputs rewrite identically, so no global cache bump; newly accepted valid groups previouslyfailed before DXIL save. Validation/conversion/runtime remain unrun.",
         "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open.",
         "historical_review_notes": "Readonly independent-image revalidation after buffer invalidation loses sticky modified history (confirmed next task). Non-base/sub-DWORD simultaneous aliases, overlapping planned image geometries, image/metadata operands, cross-stage ordering and missing sparse-block history remain open. Compiler/GPU/reflection/bounds/PageWatch/fences/pressure/device-loss/performance acceptance deferred; no broad closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -4841,7 +5067,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4947,6 +5173,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -5122,6 +5355,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -5164,11 +5411,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5226,11 +5474,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5287,11 +5536,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5348,11 +5598,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5411,11 +5662,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5479,13 +5731,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015",
+        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements."
       },
       "prepared_checks": [
         {
@@ -5544,11 +5797,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5606,11 +5860,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5674,13 +5929,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md",
+        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes."
       },
       "prepared_checks": [
         {
@@ -5746,13 +6002,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/ordered-writers-20261015/EVIDENCE_INDEX.md",
+        "historical_scope_reason": "Current production deltas source-reviewed only.24 authored GCN scenarios plus grouped/replacement acceptance remain uncompiled/unrun; no build/GPU/game/UI. Earlier results remain historical and do not verify these changes."
       },
       "prepared_checks": [
         {
@@ -5814,11 +6071,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5874,11 +6132,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5931,11 +6190,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -5996,13 +6256,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -6064,13 +6325,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled",
+        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged."
       },
       "prepared_checks": [
         {
@@ -6132,13 +6394,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-float-msaa-20261015",
+        "historical_scope_reason": "Current packed-float/RGB32 continuation is source-reviewed only; no compilation, installation, GPU/test/game execution or measurements."
       },
       "prepared_checks": [
         {
@@ -6210,13 +6473,14 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016",
+        "historical_scope_reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately."
       },
       "prepared_checks": [
         {
@@ -6241,13 +6505,18 @@
         "ObtainBuffer",
         "SynchronizeMemory",
         "RefreshImage",
-        "InvalidateMemory"
+        "InvalidateMemory",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/page_watch.h",
         "src/video_core/renderer_d3d12/guest_buffer_access.h",
         "native-port/page_watch_test.cpp",
-        "native-port/gcn_attachment_alias_test.cpp"
+        "native-port/gcn_attachment_alias_test.cpp",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "An aligned writable native buffer page envelope with validated physical backing, possibly crossing independent image read-only witnesses, already protected pages and ordinary writable gaps.",
@@ -6255,7 +6524,10 @@
         "ordering": "Allocate replacement map nodes/vectors and validate every existing/gap interval before VirtualProtect. On transition failure restore all earlier segments to their preceding watched modes. Publish replacement nodes only after successful protection, retaining outside generation/protection and advancing new owner generations. Buffer ownership uses this API; existing CPU fault resolution, actual backing commit, untrack and image rearming remain authoritative.",
         "verification_prepared": "The page-watch fixture prepares interior ownership splitting, unchanged outside read-only modes, retained range lookup, conversion back to read-only, partial release creating a writable hole, complete mixed-gap reacquisition, full original permission restoration, rejection of an originally read-only untracked page and rejection after watched OS permissions change with no partial mutation. The 3981 basic/3378 divergent full-core GCN partial/shifted cases compile against the same production API. Compiled only; no execution.",
         "historical_review_notes": "Actual Windows protection/rollback/allocation failure, delayed/racing faults, cross-owner interval lifetimes/generations, GCN/GPU/CPU/fence and remap/protection notifications remain unverified. Broader ownership/DMA/pressure and full acceptance remain open. No semantic closure.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -6267,7 +6539,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6386,6 +6658,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -6565,6 +6844,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -6608,11 +6901,12 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -6638,14 +6932,19 @@
         "SynchronizeMemory",
         "SynchronizeMemoryFromImage",
         "MarkRegionAsCpuModified",
-        "ForEachUploadRange"
+        "ForEachUploadRange",
+        "Runtime::CopyColorAndDepth",
+        "BlitHelper::ReinterpretColorAsMsDepth"
       ],
       "native_paths": [
         "src/video_core/renderer_d3d12/rasterizer.h",
         "src/video_core/renderer_d3d12/rasterizer.cpp",
         "src/video_core/renderer_d3d12/guest_buffer_access.h",
         "native-port/guest_buffer_access_test.cpp",
-        "native-port/gcn_attachment_alias_test.cpp"
+        "native-port/gcn_attachment_alias_test.cpp",
+        "src/video_core/renderer_d3d12/guest_color_to_ms_depth.hlsl",
+        "src/video_core/renderer_d3d12/guest_multisample.cpp",
+        "native-port/color_to_ms_depth_fixture.h"
       ],
       "contract": {
         "inputs": "Real CPU stores into resident arenas whose readonly formatted image/metadata synthesis changed GPU contents without changing physical CPU bytes or their snapshot.",
@@ -6653,7 +6952,10 @@
         "ordering": "Record intersecting 4-KiB CPU pages before watch/proof early returns. Only actual write faults create those markers; generic CPU read faults reconcile exact GPU writes without declaring a CPU store. Image-watch retirement and ReleaseCpuBufferWatches do not discard actual-store markers. Preparation uploads them before snapshot equality shortcuts, repeats if an upload callback changes the marker generation, and clears markers only after all uploads succeed without new CPU notifications. Readonly copy/fill conservatively retains divergence for the mapping lifetime.",
         "verification_prepared": "Byte-component GCN image/buffer cases verify resident quarter through a large raw BUFFER_LOAD_DWORD plus byte mask/UINT conversion, perform a volatile same-zero CPU store and require raw zero before image refresh; raw reads cannot use small CPU streams or formatted synchronization. Subsequent refreshed image/formatted zero retains full physical oracles. Production GuestBufferAccess fixture fills a 16-KiB GPU-only arena, reconciles four declared GPU-written bytes on a real CPU read without a store marker, then stores an unchanged CPU byte in page two. Forced upload count is 4096 and full GPU readback retains three untouched GPU pages. A physical-alias callback additionally notifies page three during page-two upload; both CPU pages must reach this prepared view while first/last GPU pages persist. Current core/checks/all-ten full-core fixtures compile/link and static inventory/whitespace pass; no execution.",
         "historical_review_notes": "Actual same-value store faults, CPU page alignment/clamping, untouched GPU-only pages, reentrancy/races/exception recovery, metadata synthesis and wider remap/ownership/DMA/pressure need execution and review. Conservative divergence lifetime and original upload range equivalence remain partial. No semantic closure.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate.",
+        "implemented_subcontracts": [
+          "e94f886: native typed source channels to MS depth direct draw, source0 mip/layer/default components and sRGB, deferred source receipts, unchanged S/B and real fence leases. 2/4/8/16 connected; GPU 28 cases at2/4/8,16x hardware skipped. Additional growth B residency only samples1. Raw/expanded/BC-source and other mapping/order/size guards remain."
+        ]
       },
       "final_verification": {
         "state": "not_run",
@@ -6665,7 +6967,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6784,6 +7086,13 @@
           "manifest": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\NATIVE_VERIFICATION_a7e7ea5.json",
           "correction": "F:\\PS4Dev\\handoff\\depth-growth-aspect-contract-20261017\\UPSTREAM_ASPECT_CORRECTION.json",
           "scope": "9 scoped passes including16 typed/native growth cases and corrected paired oracle. Fixed-base direct16/32-word domain only; explicit S copy differs from overlap. No whole-renderer/priority/core/game acceptance."
+        },
+        "latest_color_ms_depth_evidence": {
+          "source_commit": "e94f886bad466a0d169f4626812c5c82e50af68d",
+          "manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_e94f886.json",
+          "corrected_growth_oracle_commit": "616fb45873af98a0eda0ea294f633473f866ce5f",
+          "corrected_growth_manifest": "F:\\PS4Dev\\handoff\\color-to-ms-depth-20261017\\NATIVE_VERIFICATION_616fb45.json",
+          "scope": "Six exact scoped passes plus one separate rebuilt16-case growth proof.28 new typed2/4/8 cases; four16x hardware skips. Spec-derived numeric intervals/default source view and explicit native interpolation choice; not whole renderer/core/game/priority/FPS acceptance."
         }
       },
       "prepared_checks": [
@@ -6952,6 +7261,20 @@
             "native_paired_depth_gpu_snapshot"
           ],
           "description": "16 mip/layer/native MSAA-layer growth controls, target-only B1/S/padding, source/seed immutability, deferred extra receipts, held-fence lifetimes and real CPU guards; corrected upstream depth-only overlap aspect oracle. Exact executed evidence separate."
+        },
+        {
+          "kind": "verification_prepared",
+          "paths": [
+            "native-port/color_to_ms_depth_fixture.h",
+            "native-port/independent_depth_growth_fixture.h"
+          ],
+          "tests": [
+            "native_color_to_ms_depth",
+            "native_color_to_ms_depth_srgb",
+            "native_color_to_ms_depth_wide",
+            "native_independent_depth_growth"
+          ],
+          "description": "Independent typed native and full guest pixel/padding checks; negative source/sample/rebase, actual CPU guards, GPU input/physical B immutability, deferred receipts and held-fence leases. Original MSAA does not add growth RefreshImage B effect. Executed identities separate."
         }
       ]
     },
@@ -6996,17 +7319,18 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-15",
-        "reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "previous_checkpoint_verification": {
           "state": "not_run",
           "reason": "Full implementation boundary remains open."
         },
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/eop-continuation-20261015",
+        "historical_scope_reason": "Preview24 production core compiled/linked on 2026-10-15; static packaging verified. Runtime tests and fixtures not run; user execution gate remains. No semantic closure."
       },
       "prepared_checks": [
         {
@@ -7055,7 +7379,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7123,7 +7447,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7189,7 +7513,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7263,13 +7587,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -7332,13 +7657,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015/packed16-sampled",
+        "historical_scope_reason": "Packed MSAA continuation is source-reviewed only, not compiled/installed/executed; earlier results unchanged."
       },
       "prepared_checks": [
         {
@@ -7393,13 +7719,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -7458,13 +7785,14 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -7518,7 +7846,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7592,11 +7920,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -7658,13 +7987,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
       },
       "prepared_checks": [
         {
@@ -7717,11 +8047,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -7770,11 +8101,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -7838,13 +8170,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
       },
       "prepared_checks": [
         {
@@ -7907,11 +8240,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -7961,11 +8295,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8018,11 +8353,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8072,11 +8408,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8135,7 +8472,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8215,11 +8552,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8268,11 +8606,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8330,13 +8669,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
       },
       "prepared_checks": [
         {
@@ -8389,11 +8729,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8443,11 +8784,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8494,11 +8836,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8553,13 +8896,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
       },
       "prepared_checks": [
         {
@@ -8615,13 +8959,14 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015",
+        "historical_scope_reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure."
       },
       "prepared_checks": [
         {
@@ -8680,11 +9025,12 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8735,11 +9081,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8789,11 +9136,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8847,11 +9195,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8922,11 +9271,12 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -8978,11 +9328,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9034,11 +9385,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9092,11 +9444,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9155,11 +9508,12 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9217,11 +9571,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9286,11 +9641,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9345,11 +9701,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9406,11 +9763,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9473,11 +9831,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9539,11 +9898,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9595,11 +9955,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9664,11 +10025,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9728,11 +10090,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9793,11 +10156,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9847,11 +10211,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9905,11 +10270,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -9964,11 +10330,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -10030,11 +10397,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -10100,11 +10468,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -10170,11 +10539,12 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary remains open."
       },
       "prepared_checks": [
         {
@@ -10233,12 +10603,13 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "evidence": "F:/PS4Dev/handoff/point-capture-20261013; source/core and fixture logs listed in SESSION_HANDOFF.md",
-        "limitations": "Bloodborne game-world acceptance failed/not established; complete native suite is not green."
+        "limitations": "Bloodborne game-world acceptance failed/not established; complete native suite is not green.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior."
       },
       "prepared_checks": [
         {
@@ -10297,12 +10668,13 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
         "evidence": "SESSION_HANDOFF.md; point-capture-20261013 provenance",
-        "limitations": "No complete Vulkan parity or current Bloodborne speedup claim."
+        "limitations": "No complete Vulkan parity or current Bloodborne speedup claim.",
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior."
       },
       "prepared_checks": [
         {
@@ -10355,11 +10727,12 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Partial GPU transfer invariants verified; full contract and game acceptance remain open. See SESSION_HANDOFF.md and msaa-initialization logs."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Partial GPU transfer invariants verified; full contract and game acceptance remain open. See SESSION_HANDOFF.md and msaa-initialization logs."
       },
       "prepared_checks": [
         {
@@ -10410,11 +10783,12 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "a7e7ea5482e2e39a0ced692dd3780704805604e2"
+        "core_release_build_commit": "616fb45873af98a0eda0ea294f633473f866ce5f"
       },
       "behavior_verification": {
         "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
+        "historical_scope_reason": "Full implementation boundary is still open."
       },
       "prepared_checks": []
     }
@@ -10443,7 +10817,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency",
-      "missing_semantics": "cached smaller-view reuse/rebinding over grown depth I; spatial/tile/rebased or clipped mappings and packed growth; pinned single-color channels to MSAA-depth sample repacking, ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
+      "missing_semantics": "cached smaller-view reuse/rebinding over grown depth I; spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
