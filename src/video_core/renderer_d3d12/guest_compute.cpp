@@ -911,7 +911,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto [copy,capacity]=temporary.Make(bytes,reinterpret_cast<const void*>(address));
                 if(capacity<bytes)throw std::logic_error("Ordered stage CPU stream is shorter than its original sharp");
                 return copy;
-            },dma?std::span(requests).subspan(ordinary_count,dma_count):std::span<const Rasterizer::ShaderBufferRequest>{});
+            },dma?std::span(requests).subspan(ordinary_count,dma_count):std::span<const Rasterizer::ShaderBufferRequest>{},bool(dma));
         for(size_t i=0;i<ordinary_count;++i)pending[i].stream_view=stage_bindings->stream_views[i];
         for(size_t i=0;i<images.size();++i)images[i].ordered_entry=stage_bindings->images[i];
     }

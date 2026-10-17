@@ -53,10 +53,10 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     std::vector<Rasterizer::ShaderBufferRequest>& requests,std::span<const OrderedGuestBuffer> buffers,
     std::span<const OrderedGuestImage> images,bool exact_buffer_bounds,
     const std::function<VAddr(VAddr,uint64_t)>& private_cpu_stream,
-    std::span<const Rasterizer::ShaderBufferRequest> dma_reads){
+    std::span<const Rasterizer::ShaderBufferRequest> dma_reads,bool dma_active){
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||buffers.size()>requests.size())throw std::invalid_argument("Invalid ordered guest stage set");
-    const std::vector<Rasterizer::ShaderBufferRequest> dma_ranges(dma_reads.begin(),dma_reads.end());
+    std::vector<Rasterizer::ShaderBufferRequest> dma_ranges(dma_reads.begin(),dma_reads.end());
     size_t next_buffer=0,next_image=0;
     for(const auto& stage:stages){
         if(stage.first_buffer!=next_buffer||stage.first_image!=next_image||
@@ -126,6 +126,27 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     };
     arm();
     try{
+        if(dma_active){
+            // A later BindTextures can publish a tiny image B source after
+            // the initial DMA plan. Reserve complete legal pages/subpages now,
+            // before selecting any native shader views. This is prediction,
+            // never an EnsureResident effect: only the original stage binding
+            // below publishes pages and determines formatted I->B masks.
+            auto predicted=requests;
+            for(const auto& [address,domain]:domains)
+                predicted.push_back({address,domain.layout.guest_bytes,false,true,true});
+            std::vector<Rasterizer::ShaderBufferRequest> backing;
+            rasterizer.DmaMemory().AppendRequests(rasterizer,backing,predicted);
+            for(const auto& range:backing){
+                dma_ranges.push_back(range);
+                // Existing complete UAV ranges need no duplicate allocation
+                // request. A narrow sharp alone never initializes its tail.
+                if(std::ranges::none_of(requests,[&](const auto& request){return request.resident&&
+                    request.unordered_access&&request.address<=range.address&&
+                    range.address-request.address<=request.size&&
+                    range.size<=request.size-(range.address-request.address);}))requests.push_back(range);
+            }
+        }
         // ReadConst consumes B, not a formatted I snapshot. Retain every
         // overlapping image before DMA residency can acquire the same pages,
         // even when that image is absent from this command's shader metadata.
