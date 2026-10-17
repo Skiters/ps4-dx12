@@ -20,11 +20,11 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
             Check(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality)));
             if(!quality.NumQualityLevels){printf("SKIP: hardware depth samples=%u fmt=%u S=%u unavailable\n",samples,format,stencil);continue;}}
         GuestTextureDesc source;source.width=13;source.height=11;source.pitch=16;
-        source.layers=source.view_layers=2;source.levels=2;source.tile_mode=8;source.writable=true;
+        source.layers=source.view_layers=2;source.levels=pool_geometry?2:1;source.tile_mode=8;source.writable=true;
         source.data_format=color_kind==0?14:color_kind==1?11:10;source.number_format=color_kind==2?9:7;
         // The upstream helper creates its own mip/layer-zero view. Guest
         // binding selectors/swizzles must not leak into this copy operation.
-        source.first_mip=1;source.first_layer=1;source.view_layers=1;source.swizzle={7,6,5,4};
+        source.first_mip=pool_geometry?1:0;source.first_layer=1;source.view_layers=1;source.swizzle={7,6,5,4};
         GuestTextureDesc target;target.width=7;target.height=pool_geometry==2?5:11;target.pitch=pool_geometry==1?8:16;
         target.layers=target.view_layers=2;target.tile_mode=color_kind==1?0:8;
         target.samples=samples;target.depth_target=true;target.data_format=format;target.number_format=format==2?0:7;
