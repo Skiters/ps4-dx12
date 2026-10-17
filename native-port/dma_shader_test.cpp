@@ -17,6 +17,8 @@
 #include <cstring>
 #include <future>
 #include <chrono>
+#include <unordered_map>
+#include <unordered_set>
 using namespace NativeDX12;
 namespace Dma=Shader::NativeDma;
 using Context=Shader::Backend::SPIRV::EmitContext;
@@ -27,7 +29,8 @@ namespace Shader::Gcn {
 bool ParseFetchShader(const Shader::Info&,FetchShaderData&){throw std::logic_error("Unexpected vertex fetch in DMA compute fixture");}
 }
 
-std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=16U,u32 read_word=Dma::PageSize/4-1){
+std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=16U,u32 read_word=Dma::PageSize/4-1,
+                          bool readonly_alias=false){
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.native_dma_buffers=true;
     profile.sparse_page_shift=Dma::PageShift;profile.support_int64=true;
     Shader::RuntimeInfo runtime{};runtime.sw_stage=Shader::SwStage::Compute;
@@ -38,6 +41,10 @@ std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=
     info.buffers.push_back({.used_types=Shader::IR::Type::U32,.buffer_type=Shader::BufferType::FaultBuffer,.is_written=true});
     info.buffers.push_back({.used_types=Shader::IR::Type::U32,.buffer_type=Shader::BufferType::SharedMemory,.is_written=true});
     if(alias)info.buffers.push_back({.used_types=Shader::IR::Type::U32,.buffer_type=Shader::BufferType::Guest,.is_written=true});
+    if(readonly_alias){
+        if(!alias)throw std::invalid_argument("Readonly DMA alias requires the actual shader writer");
+        info.buffers.push_back({.used_types=Shader::IR::Type::U32,.buffer_type=Shader::BufferType::Guest});
+    }
     Shader::Backend::Bindings binding{};Context c(profile,runtime,info,binding);c.AddCapability(spv::Capability::Int64);
     const auto invocation=c.DefineInput(c.U32[3],{},spv::BuiltIn::LocalInvocationId);
     const auto fn=c.OpFunction(c.void_id,spv::FunctionControlMask::MaskNone,c.TypeFunction(c.void_id));c.AddLabel();
@@ -46,7 +53,7 @@ std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=
         const auto [buffer,pointer]=c.buffers[4].Alias(Context::PointerType::U32);
         // The ordinary buffer starts four bytes before the first DMA page.
         const auto word=c.OpIMul(c.U32[1],c.OpIAdd(c.U32[1],lane,c.ConstU32(1U)),c.ConstU32(Dma::PageSize/4));
-        c.OpStore(c.OpAccessChain(pointer,buffer,c.u32_zero_value,word),c.OpIAdd(c.U32[1],lane,c.ConstU32(0xcafe0000U)));
+        c.OpStore(c.OpAccessChain(pointer,buffer,c.u32_zero_value,word),c.OpIAdd(c.U32[1],lane,c.ConstU32(readonly_alias?0xdbca0000U:0xcafe0000U)));
         c.OpControlBarrier(c.ConstU32(u32(spv::Scope::Workgroup)),c.ConstU32(u32(spv::Scope::Device)),
             c.ConstU32(u32(spv::MemorySemanticsMask::AcquireRelease|spv::MemorySemanticsMask::UniformMemory)));
     }
@@ -68,9 +75,37 @@ std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=
     c.OpStore(c.OpAccessChain(pointer,output,c.u32_zero_value,c.OpIAdd(c.U32[1],lane,c.ConstU32(128U))),wide_offset);
     const auto carry=c.OpFunctionCall(c.U32[1],c.read_const_dynamic,c.ConstU32(0xfffffffcU,15U),c.ConstU32(1U));
     c.OpStore(c.OpAccessChain(pointer,output,c.u32_zero_value,c.OpIAdd(c.U32[1],lane,c.ConstU32(192U))),carry);
+    if(readonly_alias){
+        const auto [source,read_pointer]=c.buffers[5].Alias(Context::PointerType::U32);
+        const auto word=c.OpIMul(c.U32[1],c.OpIAdd(c.U32[1],lane,c.ConstU32(1U)),c.ConstU32(Dma::PageSize/4));
+        const auto read=c.OpLoad(c.U32[1],c.OpAccessChain(read_pointer,source,c.u32_zero_value,word));
+        c.OpStore(c.OpAccessChain(pointer,output,c.u32_zero_value,c.OpIAdd(c.U32[1],lane,c.ConstU32(128U))),read);
+    }
     c.OpReturn();c.OpFunctionEnd();c.AddEntryPoint(spv::ExecutionModel::GLCompute,fn,"main",c.interfaces);
     c.AddExecutionMode(fn,spv::ExecutionMode::LocalSize,64U,1U,1U);
     return c.Assemble();
+}
+bool HasReadonlyStorageBinding(std::span<const u32> words,u32 reg){
+    std::unordered_map<u32,u32> bindings,sets,pointers,variables;
+    std::unordered_set<u32> readonly;
+    for(size_t i=5;i<words.size();){const auto count=words[i]>>16,op=words[i]&65535;
+        if(!count||count>words.size()-i)throw std::runtime_error("Malformed readonly DMA alias intermediate");
+        if(op==u32(spv::Op::OpDecorate)&&count==4){
+            if(words[i+2]==u32(spv::Decoration::Binding))bindings[words[i+1]]=words[i+3];
+            if(words[i+2]==u32(spv::Decoration::DescriptorSet))sets[words[i+1]]=words[i+3];
+        }
+        if((op==u32(spv::Op::OpDecorate)&&count==3&&words[i+2]==u32(spv::Decoration::NonWritable))||
+           (op==u32(spv::Op::OpMemberDecorate)&&count==4&&words[i+3]==u32(spv::Decoration::NonWritable)))readonly.insert(words[i+1]);
+        if(op==u32(spv::Op::OpTypePointer)&&count==4)pointers[words[i+1]]=words[i+3];
+        if(op==u32(spv::Op::OpVariable)&&count>=4)variables[words[i+2]]=words[i+1];
+        i+=count;
+    }
+    for(const auto& [variable,binding]:bindings)if(binding==reg&&sets.contains(variable)&&sets.at(variable)==0){
+        const auto type=variables.find(variable);
+        if(type!=variables.end()&&(readonly.contains(variable)||
+            (pointers.contains(type->second)&&readonly.contains(pointers.at(type->second)))))return true;
+    }
+    return false;
 }
 int wmain(int argc,wchar_t** argv){try{
     if(argc!=3)throw std::runtime_error("usage: dma-shader-test converter.dll dxcompiler.dll");
@@ -407,6 +442,43 @@ int wmain(int argc,wchar_t** argv){try{
     for(u32 i=0;i<62;++i)if(result[i]!=0xcafe0000+i)
         throw std::runtime_error("DMA feedback ring lost resident pages after wraparound");
     deferred.ValidateDebugMessages();
+    {
+        // The original reads one live B through readonly SSBO, writable SSBO
+        // and ReadConst. Production conversion must retain that same-dispatch
+        // alias contract instead of copying the readonly view before the write.
+        const auto code=MakeShader(true,false,16U,Dma::PageSize/4-1,true);
+        if(!HasReadonlyStorageBinding(code,5))throw std::runtime_error("Readonly DMA alias input lacks its original NonWritable binding");
+        auto unified=Shader::Backend::DX12::ConvertSpirv(argv[1],code,options);
+        if(!unified.success)throw std::runtime_error(unified.diagnostics);
+        Shader::Backend::DX12::LinkedSpirvStage stage{Shader::Backend::DX12::SpirvStage::Compute,code};
+        auto linked=Shader::Backend::DX12::ConvertLinkedStages(argv[1],std::span(&stage,1),options);
+        if(!linked.success)throw std::runtime_error(linked.diagnostics);
+        auto readonly_metadata=metadata;readonly_metadata.flattened_ud_buf.resize(16);
+        readonly_metadata.buffers.push_back(alias_metadata);
+        auto source=alias_metadata;source.is_written=false;source.sharp_fetch.offsets[0]=12;
+        readonly_metadata.buffers.push_back(source);
+        memcpy(readonly_metadata.flattened_ud_buf.data()+12,&sharp,sizeof(sharp));
+        for(const auto* bytecode:{&unified.bytecode,&linked.stages.at(0).bytecode}){
+            ShaderPipeline active(device.Get(),argv[2],*bytecode);bool found=false;
+            for(const auto& b:active.Layout().Bindings())if(b.space==0&&b.reg<=5&&b.reg+b.count>5){
+                if(b.type!=D3D12_DESCRIPTOR_RANGE_TYPE_UAV)throw std::runtime_error("Production readonly DMA alias retained SRV class");
+                found=true;
+            }
+            if(!found)throw std::runtime_error("Production readonly DMA alias was optimized away");
+            Rasterizer coherent(device.Get());coherent.MapMemory(guest_base-4,guest_bytes+4);coherent.MapMemory(output_base,1024);
+            const Rasterizer::ShaderBufferRequest backing{guest_base-4,guest_bytes+4,false,true,true};
+            coherent.PrepareShaderBuffers(std::span(&backing,1));
+            coherent.FillPreparedShaderBuffer(backing.address,backing.size,0x22334455,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            ExecuteGuestBufferCompute(device.Get(),coherent,active,readonly_metadata,{},{{1,1,1}});
+            for(u32 lane=0;lane<64;++lane){
+                const auto written=0xdbca0000U+lane;
+                const auto dma_value=lane<62?written:0U;
+                if(result[lane]!=dma_value||result[lane+64]!=(lane<62?written:fallback)||result[lane+128]!=written)
+                    throw std::runtime_error("Readonly sharp/DMA lost same-dispatch shared B at lane "+std::to_string(lane));
+            }
+            coherent.ValidateDebugMessages();
+        }
+    }
     if(GetModuleHandleW(L"vulkan-1.dll"))throw std::runtime_error("Vulkan runtime unexpectedly loaded");
-    puts("PASS: production ReadConst -> DXIL -> hardware; nonuniform banks, 64-bit addresses, atomic faults; runtime cold/warm pages, CPU refresh, unmap/remap, same-dispatch aliases, held-queue nonblocking feedback and ring wraparound");return 0;
+    puts("PASS: production ReadConst -> DXIL -> hardware; nonuniform banks, 64-bit addresses, atomic faults; runtime cold/warm pages, CPU refresh, unmap/remap, same-dispatch aliases including readonly sharps in standalone/linked DXIL, held-queue nonblocking feedback and ring wraparound");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
