@@ -298,6 +298,14 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     return source==view;
 }
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view) {
+    if(source.depth_target||view.depth_target){
+        // A sampled view can use the same exact single depth plane. This does
+        // not make the depth allocation UAV-capable or admit a color writer.
+        if(source.writable||view.writable||
+           (source.depth_target&&!IsIndependentGuestDepthStorage(source))||
+           (view.depth_target&&!IsIndependentGuestDepthStorage(view)))return false;
+        source.depth_target=view.depth_target=false;
+    }
     if(((source.data_format==9&&(source.number_format==1||source.number_format==5||
         view.number_format==1||view.number_format==5))||(source.data_format>=16&&source.data_format<=19))&&
        source.writable!=view.writable)
@@ -311,6 +319,12 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
 }
 bool CompatibleGuestImageMipGeometry(GuestTextureDesc a,const GuestTextureLayout& al,
     GuestTextureDesc b,const GuestTextureLayout& bl){
+    if(a.depth_target||b.depth_target){
+        if(a.writable||b.writable||
+           (a.depth_target&&!IsIndependentGuestDepthStorage(a,al))||
+           (b.depth_target&&!IsIndependentGuestDepthStorage(b,bl)))return false;
+        a.depth_target=b.depth_target=false;
+    }
     if(a.samples!=1||b.samples!=1||al.block_extent!=1||bl.block_extent!=1||
        a.render_target||b.render_target||a.depth_target||b.depth_target||a.stencil_address||b.stencil_address||
        (al.expanded_bytes_per_pixel&&!HasExactPackedExpansion(a,al))||
@@ -1550,7 +1564,12 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
             (entry->buffer_alias_watch&&CanRetainIndependentImage(entry->desc,entry->layout)&&
              CanBindReadonlyBcMipPrefix(*entry,desc,layout))||
             MatchesReferencePartialBlockExpansion(entry->desc,entry->layout,desc,layout);
-        if(!block&&(!MatchesGuestMipLayout(entry->layout,layout)||
+        // A valid smaller mip chain is still the preceding I source. The
+        // caller must expand it privately before final buffer selection; a
+        // failed lookup here would instead seed BindTextures from unrelated B.
+        const bool mip_growth=entry->desc.levels<desc.levels&&
+            CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout);
+        if(!block&&!mip_growth&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
             !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout))))continue;
         if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||

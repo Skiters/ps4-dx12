@@ -1,6 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_image_readback.h"
+#include "guest_image_ownership.h"
 #include <algorithm>
 #include <cstring>
 #include <bit>
@@ -62,7 +63,8 @@ GuestImageReadback::GuestImageReadback(ID3D12Device* device,GuestTextureCache::E
 }
 GuestLinearImageReadback::GuestLinearImageReadback(ID3D12Device* device,GuestTextureCache::Entry& image,
     ID3D12GraphicsCommandList* list):source_(image.texture),desc_(image.desc),layout_(image.layout){
-    if(!device||!list||desc_.depth_target||desc_.stencil_address||desc_.samples!=1||
+    if(!device||!list||(desc_.depth_target&&!IsIndependentGuestDepthStorage(desc_,layout_))||
+       desc_.stencil_address||desc_.samples!=1||
        layout_.block_extent!=1||!source_.handle)
         throw std::invalid_argument("Unsupported compact linear image readback");
     bytes_=uint64_t(desc_.pitch)*desc_.height*std::max(desc_.volume_depth,1u)*desc_.layers*layout_.bytes_per_pixel;

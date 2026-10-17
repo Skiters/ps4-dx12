@@ -3,9 +3,11 @@
 #include "video_core/renderer_d3d12/guest_stage_bindings.h"
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include <cstring>
+#include <source_location>
+#include <string>
 
 namespace NativeDX12 {
-// Authored, unrun GPU transfer/ordering controls. The cache notification adapter
+// GPU transfer/ordering controls. The cache notification adapter
 // supplies the original exact-base dirty event; this is not a PageWatch or
 // whole-graphics shader execution/acceptance test.
 inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
@@ -15,9 +17,13 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
     } memory,scratch;
     if(!memory.bytes||!scratch.bytes)throw std::runtime_error("Ordered stage fixture allocation failed");
     const auto base=reinterpret_cast<VAddr>(memory.bytes),private_base=reinterpret_cast<VAddr>(scratch.bytes);
-    const auto require=[](bool value){if(!value)throw std::runtime_error("Ordered stage cache/physical oracle mismatch");};
     for(const bool interior:{false,true})for(const bool refresh:{false,true})for(const bool early_retile:{false,true})
     for(const u8 read_adjust:{u8(0),u8(1),u8(2)})for(const bool prefix_seed:{false,true}){
+        const auto require=[&](bool value,const std::source_location where=std::source_location::current()){
+            if(!value)throw std::runtime_error("Ordered stage cache/physical oracle mismatch at line "+
+                std::to_string(where.line())+" interior="+std::to_string(interior)+" refresh="+std::to_string(refresh)+
+                " early="+std::to_string(early_retile)+" adjust="+std::to_string(read_adjust)+" prefix="+std::to_string(prefix_seed));
+        };
         struct FixtureRasterizer final:Rasterizer {
             GuestTextureCache* cache{};
             using Rasterizer::Rasterizer;
@@ -111,6 +117,11 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         std::vector<std::byte> observed_i(size_t(layout.guest_bytes),std::byte{0xb4});
         image_readback.Resolve(rasterizer.CompletedFence(),observed_i);
         const auto& expected_i=refresh&&!interior&&!early_retile?original:retiled;
+        if(memcmp(observed_i.data(),expected_i.data(),observed_i.size()))for(size_t at=0;at<observed_i.size();++at)
+            if(observed_i[at]!=expected_i[at]){u32 got{},expected{};const auto word=at&~size_t(3);
+                memcpy(&got,observed_i.data()+word,4);memcpy(&expected,expected_i.data()+word,4);
+                fprintf(stderr,"Ordered I mismatch byte=%zu got=%08x expected=%08x seed_bytes=%llu target_bytes=%llu\n",
+                    at,got,expected,(unsigned long long)seed_layout.guest_bytes,(unsigned long long)layout.guest_bytes);break;}
         require(!memcmp(observed_i.data(),expected_i.data(),observed_i.size()));
         require(!memcmp(scratch.bytes,original.data(),64));
         rasterizer.ValidateDebugMessages();

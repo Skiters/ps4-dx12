@@ -12,6 +12,22 @@ struct GuestImageOwnershipGeometry {
     GuestTextureLayout layout;
 };
 
+// D16/D32 depth storage has one exact physical plane. The native depth
+// attachment remains typed/readonly to shaders; only ownership uses a writable
+// color-shaped description of the same guest words. Split stencil and MSAA
+// need their own plane/sample transfer and must not enter this contract.
+inline bool IsIndependentGuestDepthStorage(const GuestTextureDesc& desc) {
+    return desc.depth_target&&!desc.render_target&&!desc.writable&&!desc.stencil_address&&
+        desc.samples==1&&!desc.volume_depth&&!desc.one_dimensional&&
+        ((desc.data_format==2&&desc.number_format==0)||(desc.data_format==4&&desc.number_format==7));
+}
+inline bool IsIndependentGuestDepthStorage(const GuestTextureDesc& desc,
+    const GuestTextureLayout& layout) {
+    return IsIndependentGuestDepthStorage(desc)&&layout.block_extent==1&&!layout.expanded_bytes_per_pixel&&
+        ((desc.data_format==2&&layout.bytes_per_pixel==2&&layout.format==DXGI_FORMAT_R16_UNORM)||
+         (desc.data_format==4&&layout.bytes_per_pixel==4&&layout.format==DXGI_FORMAT_R32_FLOAT));
+}
+
 // Validate actual readonly BC storage independently of whether its entire mip
 // chain can also be represented as a UINT64/128 image. No shader writes allowed.
 inline bool IsNativeReadonlyGuestBlockStorage(const GuestTextureDesc& desc,
@@ -49,6 +65,10 @@ inline bool IsIndependentGuestBlockStorage(const GuestTextureDesc& desc,
 inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     const GuestTextureCache::Entry& image) {
     auto owner=image.desc;owner.writable=true;owner.render_target=false;
+    if(image.desc.depth_target){
+        if(!IsIndependentGuestDepthStorage(image.desc,image.layout))return std::nullopt;
+        owner.depth_target=false;
+    }
     const bool block=image.layout.block_extent==4;
     const bool block_words=block&&IsIndependentGuestBlockStorage(image.desc,image.layout);
     if(block&&!IsNativeReadonlyGuestBlockStorage(image.desc,image.layout))return std::nullopt;

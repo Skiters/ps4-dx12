@@ -178,7 +178,8 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     });
     textures_.SetImageWriteNotifier([this](auto& image){QueueLinearImageDownload(image);});
     const auto retain_image=[this](const auto& desc,const auto& layout){
-        return page_watch_&&!desc.render_target&&!desc.depth_target&&!desc.stencil_address&&
+        const bool depth=IsIndependentGuestDepthStorage(desc,layout);
+        return page_watch_&&!desc.render_target&&(!desc.depth_target||depth)&&!desc.stencil_address&&
             !desc.one_dimensional&&(desc.samples==1||
                 GuestTextureCache::CanTransferIndependentMultisample(desc,layout))&&
             (IsNativeReadonlyGuestBlockStorage(desc,layout)||
@@ -199,22 +200,26 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return desc.writable&&retain_image(desc,layout);
     });
     textures_.SetIndependentImageRetention([retain_image](const auto& desc,const auto& layout){
-        return (desc.writable||desc.data_format==13||IsNativeReadonlyGuestBlockStorage(desc,layout))&&
+        return (desc.writable||desc.data_format==13||IsNativeReadonlyGuestBlockStorage(desc,layout)||
+            IsIndependentGuestDepthStorage(desc,layout))&&
             retain_image(desc,layout);
     });
 }
 bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
-    if(image.gpu_owned)return true;
+    if(image.gpu_owned&&image.buffer_alias_version)return true;
     if(HasDmaReadOverlap(image.desc.address,image.layout.guest_bytes)){
         // A bound ReadConst bank continues to read B while this attachment
         // writes I. Do not replace B's authority with exclusive image pages.
         if(OwnIndependentImage(image))return true;
-        // Opaque depth/stencil and other unadapted transfer domains retain
+        // Split stencil/MSAA depth and other unadapted transfer domains retain
         // their existing ownership path until that port is connected.
     }
+    // A newly published DMA B can overlap an attachment that was already
+    // exclusively owned. Reconsider that contract before the warm-owner fast
+    // path; otherwise its later resolution would publish I over the separate B.
+    if(image.gpu_owned)return true;
     if(image.buffer_alias_version){
-        if(!textures_.CanRetainBufferAlias(image.desc,image.layout))return false;
-        image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;
+        return OwnIndependentImage(image);
     }
     // Ownership is a coherence rule, not a size optimization. A 640x360
     // color target is below 1 MiB; eagerly downloading it after every draw
@@ -359,7 +364,7 @@ void GuestRasterizer::RetireImageForPressure(GuestTextureCache::Entry& image){
     if(!image.gpu_owned)return;
     if(!image.buffer_alias_version||image.desc.tile_mode!=8||image.desc.samples!=1||
        (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
-       image.desc.depth_target||image.desc.stencil_address){
+       (image.desc.depth_target&&!IsIndependentGuestDepthStorage(image.desc,image.layout))||image.desc.stencil_address){
         ResolveImage(image);return;
     }
     auto source=textures_.RetainPressureSource(image);
@@ -387,7 +392,7 @@ void GuestRasterizer::ResolveImage(GuestTextureCache::Entry& image){
     if(image.buffer_alias_version){
         if((image.desc.tile_mode!=8&&image.desc.width>8)||image.desc.samples!=1||
            (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
-           image.desc.depth_target||image.desc.stencil_address)
+           (image.desc.depth_target&&!IsIndependentGuestDepthStorage(image.desc,image.layout))||image.desc.stencil_address)
             throw std::runtime_error("Independent buffer/image version needs a domain-preserving format/pressure resolver");
         DownloadIndependentImage(image);
         ReleaseIndependentImageWatches(image);

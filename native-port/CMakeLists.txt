@@ -269,10 +269,12 @@ target_compile_features(native-rect-display-test PRIVATE cxx_std_23)
 target_include_directories(native-rect-display-test PRIVATE $<TARGET_PROPERTY:shadps4_dxil_ir_adapter,INCLUDE_DIRECTORIES>)
 target_link_libraries(native-rect-display-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures shadps4_dxil_compiler sirit)
 add_test(NAME native_rect_display COMMAND native-rect-display-test "${_compute_mesa}" "${DXC_DLL}")
-add_executable(native-independent-version-transfer-test independent_version_transfer_test.cpp)
+add_executable(native-independent-version-transfer-test independent_version_transfer_test.cpp
+    "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp")
 target_compile_features(native-independent-version-transfer-test PRIVATE cxx_std_23)
 target_link_libraries(native-independent-version-transfer-test PRIVATE shadps4_native_d3d12 shadps4_native_guest_textures)
 add_test(NAME native_independent_image_version_transfer COMMAND native-independent-version-transfer-test)
+add_test(NAME native_independent_depth_version_transfer COMMAND native-independent-version-transfer-test --depth)
 add_test(NAME native_msaa_depth_initialization COMMAND native-independent-version-transfer-test --msaa-depth-init)
 set_tests_properties(native_msaa_depth_initialization PROPERTIES TIMEOUT 120)
 add_test(NAME native_independent_msaa_image_version_transfer COMMAND native-independent-version-transfer-test --msaa)
@@ -406,6 +408,9 @@ target_include_directories(native-writable-image-alias-test PRIVATE
 target_compile_features(native-writable-image-alias-test PRIVATE cxx_std_23)
 add_test(NAME native_ordered_stage_image_buffer_bindings COMMAND native-writable-image-alias-test
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-stages)
+# Each of the 48 independent cache cases compiles its native tiler. Retain the
+# complete matrix; a short process timeout is not a functional result.
+set_tests_properties(native_ordered_stage_image_buffer_bindings PROPERTIES TIMEOUT 420)
 target_sources(native-writable-image-alias-test PRIVATE packed_image_test.cpp packed10_image_test.cpp)
 target_compile_definitions(native-writable-image-alias-test PRIVATE FMT_HEADER_ONLY NDEBUG)
 target_link_libraries(native-writable-image-alias-test PRIVATE shadps4_native_guest_textures shadps4_dxil_compiler sirit)
