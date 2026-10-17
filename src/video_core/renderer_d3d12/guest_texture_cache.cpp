@@ -2341,49 +2341,68 @@ Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
     return RetileImageVersion(image,initial,list,completed,nullptr);
 }
+Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& initial,
+    ID3D12GraphicsCommandList* list,uint64_t completed){
+    if(image.cache!=this)throw std::invalid_argument("Depth snapshot source belongs to another cache");
+    auto pin=PinBinding(image);
+    auto result=RetileImageVersion(image,initial,list,completed,nullptr,plane,true);
+    result.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return result;
+}
 Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
-    ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias){
+    ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias,
+    UINT plane,bool private_depth_snapshot){
     if(!image.unprotected_cpu_pages.empty())
         throw std::runtime_error("Independent image transfer requires boundary validation");
     const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
     if(image.logical_dirty&&!dependent)throw std::runtime_error("Independent image transfer requires a valid logical version");
-    if(!dependent){
+    if(private_depth_snapshot){
+        if(alias||!image.desc.depth_target||!image.gpu_owned||!image.HasValidLogicalImage()||
+           plane>1||(plane&&!image.desc.stencil_address)||!CanUploadGpuSnapshot(image.desc,image.layout))
+            throw std::invalid_argument("Unsupported native depth snapshot source/plane");
+    }else if(plane)throw std::invalid_argument("Formatted image transfer cannot publish a stencil plane");
+    else if(!dependent){
         const auto ownership=DescribeGuestImageOwnership(image);
         if(!image.gpu_owned||!image.buffer_alias_version||!ownership||
            !CanRetainIndependentImage(ownership->desc,ownership->layout))
             throw std::invalid_argument("Unsupported independent image ownership for formatted transfer");
     }
+    const auto interpreted=plane?DescribeGuestStencil(image.desc):image.desc;
+    const auto& physical=plane?image.stencil_layout:image.layout;
     if(!list||!image.texture.handle||
        !initial.handle||initial.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
-       initial.handle->GetDesc().Width<image.layout.guest_bytes)
+       initial.handle->GetDesc().Width<physical.guest_bytes)
         throw std::invalid_argument("Unsupported independent image formatted-buffer geometry");
     const auto resource_desc=image.texture.handle->GetDesc();
     const bool multisampled=image.desc.samples>1;
     if(resource_desc.SampleDesc.Count!=image.desc.samples||
-       (multisampled&&!CanTransferIndependentMultisample(image.desc,image.layout)))
+       (multisampled&&!private_depth_snapshot&&!CanTransferIndependentMultisample(image.desc,image.layout)))
         throw std::invalid_argument("Independent image sample backing has no exact transfer");
-    const auto linear_bytes=image.layout.HostBytesPerPixel();
-    const bool inherited=image.layout.expanded_bytes_per_pixel!=0;
+    const auto linear_bytes=physical.HostBytesPerPixel();
+    const bool inherited=!plane&&image.layout.expanded_bytes_per_pixel!=0;
     if(inherited&&(!HasExactPackedExpansion(image.desc,image.layout)||
        !image.expanded_guest_backing.handle||!image.expanded_written_mask.handle||!image.expanded_backing_bytes))
         throw std::invalid_argument("Independent expanded image lost its exact packed backing");
-    struct Linear {D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT64 bytes;UINT mip,layer;Resource buffer;
+    struct Linear {D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT64 bytes;UINT mip,layer,native_bytes;Resource buffer;
         std::shared_ptr<GuestTiler::Lease> dispatch;std::shared_ptr<GuestMultisample::Lease> samples;};
     std::vector<Linear> linear;linear.reserve(size_t(image.desc.levels)*image.desc.layers);
     if(!inherited)for(UINT layer=0;layer<image.desc.layers;++layer)for(UINT mip=0;mip<image.desc.levels;++mip){
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};UINT64 bytes{},row_bytes{};
         if(multisampled){
-            footprint=GuestMultisample::Footprint(image.desc,image.layout);
+            footprint=GuestMultisample::Footprint(interpreted,physical);
             row_bytes=u64(image.desc.width)*linear_bytes;
-            bytes=GuestMultisample::LinearBytes(image.desc,footprint);
-        }else DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels,
+            bytes=GuestMultisample::LinearBytes(interpreted,footprint);
+        }else DX12_API_CALL(device_->GetCopyableFootprints(&resource_desc,mip+layer*image.desc.levels+plane*image.desc.levels*image.desc.layers,
             1,0,&footprint,nullptr,&row_bytes,&bytes));
-        const auto blocks=(std::max(image.desc.width>>mip,1u)+image.layout.block_extent-1)/image.layout.block_extent;
-        if(row_bytes!=u64(blocks)*linear_bytes||!bytes||bytes>UINT32_MAX)
+        const auto blocks=(std::max(image.desc.width>>mip,1u)+physical.block_extent-1)/physical.block_extent;
+        if(!blocks||row_bytes%blocks||!bytes||bytes>UINT32_MAX||row_bytes/blocks>16)
             throw std::logic_error("Independent image transfer footprint changed");
-        linear.push_back({footprint,bytes,mip,layer,{},{},{}});
+        if(row_bytes/blocks!=linear_bytes&&!(private_depth_snapshot&&!plane&&
+           image.desc.data_format==2&&linear_bytes==2&&row_bytes/blocks==4))
+            throw std::logic_error("Independent image transfer needs an explicit plane conversion");
+        linear.push_back({footprint,bytes,mip,layer,UINT(row_bytes/blocks),{},{},{}});
     }
-    const auto mask_bytes=GuestTiler::WrittenBytes(image.layout.guest_bytes);
+    const auto mask_bytes=GuestTiler::WrittenBytes(physical.guest_bytes);
     const auto allocation_bytes=[&](uint64_t length,bool uav){
         D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
         desc.Width=length;desc.Height=desc.DepthOrArraySize=desc.MipLevels=1;
@@ -2394,23 +2413,23 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
             throw std::runtime_error("Invalid formatted image transfer allocation requirements");
         return allocation.SizeInBytes;
     };
-    auto reservation=allocation_bytes(image.layout.guest_bytes,true)+
+    auto reservation=allocation_bytes(physical.guest_bytes,true)+
         (inherited?0:allocation_bytes(mask_bytes,true))+allocation_bytes(initial.handle->GetDesc().Width,false);
     for(const auto& slice:linear)reservation+=allocation_bytes((slice.bytes+3)&~u64(3),multisampled);
     ReserveMemory(reservation,completed,&image);
     if(!image.tiler)image.tiler=std::make_shared<GuestTiler>(device_.Get());
     if(multisampled&&!image.multisample)image.multisample=std::make_shared<GuestMultisample>(device_.Get());
-    auto output=GuestTiler::Scratch(device_.Get(),image.layout.guest_bytes);
+    auto output=GuestTiler::Scratch(device_.Get(),physical.guest_bytes);
     auto mask=inherited?image.expanded_written_mask:GuestTiler::Scratch(device_.Get(),mask_bytes);
     auto merge=inherited?image.tiler->PrepareMaskedMerge(image.expanded_guest_backing,output,mask,image.layout.guest_bytes):
         std::shared_ptr<GuestTiler::Lease>{};
     for(auto& slice:linear){
         slice.buffer=multisampled?GuestTiler::Scratch(device_.Get(),slice.bytes):
             Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
-        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,image.desc,image.layout,
-            slice.mip,slice.layer,slice.footprint,linear_bytes,true);
+        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,interpreted,physical,
+            slice.mip,slice.layer,slice.footprint,slice.native_bytes,true);
         if(multisampled)slice.samples=image.multisample->Prepare(image.texture,slice.buffer,
-            image.desc,image.layout,slice.layer,0,false);
+            image.desc,image.layout,slice.layer,plane,false);
     }
     // Retain all resources/descriptors and account transient bytes before recording.
     image.buffer_sync_resources.reserve(image.buffer_sync_resources.size()+linear.size()+3+(inherited?1:0));
@@ -2429,7 +2448,7 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     if(image.texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)image.texture.UavBarrier(list);
     if(!multisampled)image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
     initial.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
-    DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,initial.handle.Get(),0,image.layout.guest_bytes));
+    DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,initial.handle.Get(),0,physical.guest_bytes));
     if(inherited)merge->Record(list,image.expanded_guest_backing,output,image.expanded_written_mask);
     for(auto& slice:linear){
         // MSAA textures cannot be copied into a placed buffer footprint. Load
@@ -2438,7 +2457,7 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
         if(slice.samples)slice.samples->Record(list,image.texture,slice.buffer);
         else{
             D3D12_TEXTURE_COPY_LOCATION source{};source.pResource=image.texture.handle.Get();
-            source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=slice.mip+slice.layer*image.desc.levels;
+            source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=slice.mip+slice.layer*image.desc.levels+plane*image.desc.levels*image.desc.layers;
             D3D12_TEXTURE_COPY_LOCATION destination{};destination.pResource=slice.buffer.handle.Get();
             destination.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;destination.PlacedFootprint=slice.footprint;
             DX12_API_CALL(list->CopyTextureRegion(&destination,0,0,0,&source,nullptr));

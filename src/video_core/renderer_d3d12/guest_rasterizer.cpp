@@ -1058,6 +1058,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
     std::optional<u32> depth_meta_snapshot;
     if(depth_attachment_snapshot){
+        GuestTextureCache::Entry* depth_source{};
+        if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]))
+            for(const auto& candidate:textures_.Entries())if(candidate->gpu_owned&&candidate->HasValidLogicalImage()&&
+                candidate->unprotected_cpu_pages.empty()&&
+                CompatibleGuestAttachmentStorage(candidate->desc,descriptions[8])&&
+                MatchesGuestMipLayout(candidate->layout,layouts[8])){
+                if(depth_source&&depth_source->texture.handle.Get()!=candidate->texture.handle.Get())
+                    throw std::runtime_error("Ambiguous valid depth/stencil snapshot source");
+                depth_source=candidate.get();
+            }
+        auto depth_source_pin=depth_source?textures_.PinBinding(*depth_source):std::shared_ptr<void>{};
         depth_buffer_source=IsGpuBufferModified(descriptions[8].address,layouts[8].guest_bytes);
         stencil_buffer_source=descriptions[8].stencil_address&&
             IsGpuBufferModified(stencil_desc.address,stencil_layout.guest_bytes);
@@ -1068,13 +1079,16 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const auto meta=r.depth_buffer.z_info.tile_surface_enable?
             r.depth_htile_data_base.GetAddress():0;
         if(meta){
-            if(!ReadMemory(descriptions[8].address,layouts[8].guest_bytes))
-                throw std::out_of_range("Native depth snapshot has no readable guest backing");
-            auto& entry=textures_.Upload(descriptions[8],
-                std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
-                RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
-                GuestTextureCache::UploadPurpose::Preparation);
-            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::HTile,meta,entry.htile_initial_mask);
+            auto* entry=depth_source;
+            if(!entry){
+                if(!ReadMemory(descriptions[8].address,layouts[8].guest_bytes))
+                    throw std::out_of_range("Native depth snapshot has no readable guest backing");
+                entry=&textures_.Upload(descriptions[8],
+                    std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
+                    RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
+                    GuestTextureCache::UploadPurpose::Preparation);
+            }
+            textures_.RegisterMeta(*entry,GuestTextureCache::MetaType::HTile,meta,entry->htile_initial_mask);
             const auto info=textures_.GetMetaInfo(meta);
             if(!info)throw std::logic_error("Native depth snapshot lost its HTILE owner");
             depth_meta_snapshot=info->clear_mask;
@@ -1095,9 +1109,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         };
         // Capture all GPU versions first. Each input has its own native
         // resource and stays immutable while current shader writes target B.
-        if(gpu_planes&&depth_buffer_source)
+        if(depth_source){
+            // Valid I wins over unrelated resident B. Seed only private
+            // padding from B; no capture publishes I pixels or guest writes.
+            auto initial=capture_gpu(descriptions[8].address,layouts[8].guest_bytes);
+            depth_gpu_snapshot=textures_.CaptureDepthPlane(*depth_source,0,initial,RecordingList(),CompletedFence());
+            if(descriptions[8].stencil_address){
+                auto stencil_initial=capture_gpu(stencil_desc.address,stencil_layout.guest_bytes);
+                stencil_gpu_snapshot=textures_.CaptureDepthPlane(*depth_source,1,stencil_initial,RecordingList(),CompletedFence());
+            }
+            depth_buffer_source=stencil_buffer_source=false;
+            Diagnostics::Count("shader-depth.native-image-snapshot");
+        }else if(gpu_planes&&depth_buffer_source)
             depth_gpu_snapshot=capture_gpu(descriptions[8].address,layouts[8].guest_bytes);
-        if(gpu_planes&&stencil_buffer_source)
+        if(!depth_source&&gpu_planes&&stencil_buffer_source)
             stencil_gpu_snapshot=capture_gpu(stencil_desc.address,stencil_layout.guest_bytes);
         const auto capture=[&](VAddr address,u64 bytes,std::vector<std::byte>& result){
             if(!ReadMemory(address,bytes))

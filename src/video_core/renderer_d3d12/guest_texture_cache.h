@@ -218,7 +218,7 @@ private:
         uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose,
         const Resource* stencil_gpu_snapshot=nullptr);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
-        const WritableBlockAlias*);
+        const WritableBlockAlias*,UINT plane=0,bool private_depth_snapshot=false);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
     std::shared_ptr<GuestTiler> tiler_;
     std::shared_ptr<GuestMultisample> multisample_;
@@ -279,6 +279,9 @@ public:
     void RegisterMeta(Entry&,MetaType,uint64_t address,uint32_t initial_mask=UINT32_MAX);
     std::optional<MetaDataInfo> GetMetaInfo(uint64_t address)const;
     Resource RetileBufferVersion(Entry&,Resource& initial,ID3D12GraphicsCommandList*,uint64_t completed);
+    // Immutable prewrite copy of an owned native I plane, without publishing
+    // pixels to guest B or granting independent multi-plane ownership.
+    Resource CaptureDepthPlane(Entry&,UINT plane,Resource& initial,ID3D12GraphicsCommandList*,uint64_t completed);
     void ClearRawStorageImage(Entry&,const float (&color)[4],ID3D12GraphicsCommandList*,uint64_t completed);
     bool ClearMeta(uint64_t address);
     bool ConsumeMeta(uint64_t address,uint32_t slice);

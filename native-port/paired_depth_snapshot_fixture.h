@@ -96,16 +96,41 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
                 gpu_depth?&depth_gpu:nullptr,false,false,GuestTextureCache::UploadPurpose::Binding,
                 gpu_stencil?&stencil_gpu:nullptr);
             require(image.sampled_snapshot.empty()&&image.stencil_snapshot.empty(),"GPU plane was cached as a CPU equality witness");
+            // Ordinary GPU-owned I is a legal private snapshot source. It
+            // must not need a CPU download or independent multi-plane flags.
+            image.NoteLogicalImageWrite();image.SetGpuOwned(true);
+            require(!image.buffer_alias_version,"Private capture silently acquired independent ownership");
+            struct Gate {ComPtr<ID3D12Fence> fence;~Gate(){if(fence)fence->Signal(1);}} gate;
+            Check(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate.fence)));
+            renderer.WaitExternalFence(gate.fence.Get(),1);
+            if(mode==0){
+                bool rejected=false;
+                try{cache.CaptureDepthPlane(image,2,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());}
+                catch(const std::invalid_argument&){rejected=true;}
+                require(rejected,"Depth capture accepted a nonexistent plane");
+                image.MarkLogicalDirty();rejected=false;
+                try{cache.CaptureDepthPlane(image,0,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());}
+                catch(const std::runtime_error&){rejected=true;}
+                require(rejected,"Depth capture resurrected an invalid I");image.logical_dirty=false;
+            }
+            auto captured_depth=cache.CaptureDepthPlane(image,0,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());
+            auto captured_stencil=cache.CaptureDepthPlane(image,1,stencil_gpu,renderer.RecordingList(),renderer.CompletedFence());
+            auto restored_desc=desc;restored_desc.address+=0x100000;restored_desc.stencil_address+=0x100000;
+            auto& restored=cache.Upload(restored_desc,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,
+                &captured_depth,false,false,GuestTextureCache::UploadPurpose::Binding,&captured_stencil);
+            require(image.gpu_owned&&!image.buffer_alias_version&&image.HasValidLogicalImage(),
+                "Private plane capture changed source I ownership or logical validity");
             struct Probe {Resource result,upload,readback,source_readback;std::shared_ptr<Descriptors> descriptors;
                 ComPtr<ID3D12RootSignature> root;ComPtr<ID3D12PipelineState> pipeline;};
             auto probe=std::make_shared<Probe>();
-            const auto words=u64(desc.width)*desc.height*desc.layers*samples*2;
+            const auto words=u64(desc.width)*desc.height*desc.layers*samples*4;
             const auto bytes=words*4+64;
             probe->result=GuestTiler::Scratch(device,bytes);
             probe->upload=Buffer(device,bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
             probe->readback=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             const auto depth_capacity=depth_gpu.handle->GetDesc().Width,stencil_capacity=stencil_gpu.handle->GetDesc().Width;
-            probe->source_readback=Buffer(device,depth_capacity+stencil_capacity,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            probe->source_readback=Buffer(device,depth_capacity+stencil_capacity+layout.guest_bytes+stencil_layout.guest_bytes,
+                D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             void* mapped{};D3D12_RANGE empty{};Check(probe->upload.handle->Map(0,&empty,&mapped));
             memset(mapped,0xa7,size_t(bytes));probe->upload.handle->Unmap(0,nullptr);
             std::string source=std::string(samples>1?"#define MSAA 1\n":"#define MSAA 0\n")+
@@ -113,9 +138,13 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
 #if MSAA
 Texture2DMSArray<float4> depth : register(t0);
 Texture2DMSArray<uint4> stencil : register(t1);
+Texture2DMSArray<float4> restored_depth : register(t2);
+Texture2DMSArray<uint4> restored_stencil : register(t3);
 #else
 Texture2DArray<float4> depth : register(t0);
 Texture2DArray<uint4> stencil : register(t1);
+Texture2DArray<float4> restored_depth : register(t2);
+Texture2DArray<uint4> restored_stencil : register(t3);
 #endif
 RWByteAddressBuffer output : register(u0);
 cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layers; };
@@ -125,21 +154,28 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
 #if MSAA
     float z=depth.Load(int3(p.xy,layer),sample).x;
     uint s=stencil.Load(int3(p.xy,layer),sample).x;
+    float rz=restored_depth.Load(int3(p.xy,layer),sample).x;
+    uint rs=restored_stencil.Load(int3(p.xy,layer),sample).x;
 #else
     float z=depth.Load(int4(p.xy,layer,0)).x;
     uint s=stencil.Load(int4(p.xy,layer,0)).x;
+    float rz=restored_depth.Load(int4(p.xy,layer,0)).x;
+    uint rs=restored_stencil.Load(int4(p.xy,layer,0)).x;
 #endif
-    uint at=8*((p.z*height+p.y)*width+p.x);
+    uint at=16*((p.z*height+p.y)*width+p.x);
 #if D16
     output.Store(at,uint(round(saturate(z)*65535.0)));
+    output.Store(at+8,uint(round(saturate(rz)*65535.0)));
 #else
     output.Store(at,asuint(z));
+    output.Store(at+8,asuint(rz));
 #endif
     output.Store(at+4,s);
+    output.Store(at+12,rs);
 })";
             auto code=CompileMultisampleShader(source.c_str(),"cs_5_1");
-            D3D12_DESCRIPTOR_RANGE ranges[2]{{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,2,0,0,0},
-                {D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,2}};
+            D3D12_DESCRIPTOR_RANGE ranges[2]{{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,4,0,0,0},
+                {D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,4}};
             D3D12_ROOT_PARAMETER parameters[2]{};parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             parameters[0].DescriptorTable={2,ranges};parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
             parameters[1].Constants={0,0,4};
@@ -148,21 +184,22 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             Check(device->CreateRootSignature(0,signature->GetBufferPointer(),signature->GetBufferSize(),IID_PPV_ARGS(&probe->root)));
             D3D12_COMPUTE_PIPELINE_STATE_DESC state{};state.pRootSignature=probe->root.Get();state.CS={code->GetBufferPointer(),code->GetBufferSize()};
             Check(device->CreateComputePipelineState(&state,IID_PPV_ARGS(&probe->pipeline)));
-            probe->descriptors=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,3,true);
-            for(UINT plane=0;plane<2;++plane){D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+            probe->descriptors=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,5,true);
+            for(UINT index=0;index<4;++index){const auto plane=index%2;D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
                 srv.Format=plane?DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
                 srv.Shader4ComponentMapping=plane?D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(1,1,1,1):D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                 if(samples>1){srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;srv.Texture2DMSArray={0,desc.layers};}
                 else{srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;srv.Texture2DArray={0,1,0,desc.layers,plane,0};}
-                device->CreateShaderResourceView(image.texture.handle.Get(),&srv,probe->descriptors->Cpu(plane));}
+                device->CreateShaderResourceView((index<2?image:restored).texture.handle.Get(),&srv,probe->descriptors->Cpu(index));}
             D3D12_UNORDERED_ACCESS_VIEW_DESC uav{};uav.Format=DXGI_FORMAT_R32_TYPELESS;uav.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;
             uav.Buffer.NumElements=UINT(bytes/4);uav.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
-            device->CreateUnorderedAccessView(probe->result.handle.Get(),nullptr,&uav,probe->descriptors->Cpu(2));
+            device->CreateUnorderedAccessView(probe->result.handle.Get(),nullptr,&uav,probe->descriptors->Cpu(4));
             renderer.RetainUntilFinish([probe](u64){(void)probe;});
             auto* list=renderer.RecordingList();probe->result.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
             list->CopyBufferRegion(probe->result.handle.Get(),0,probe->upload.handle.Get(),0,bytes);
             probe->result.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             image.texture.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            restored.texture.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             ID3D12DescriptorHeap* heaps[]{probe->descriptors->Heap()};list->SetDescriptorHeaps(1,heaps);
             list->SetComputeRootSignature(probe->root.Get());list->SetPipelineState(probe->pipeline.Get());
             list->SetComputeRootDescriptorTable(0,probe->descriptors->Gpu(0));
@@ -176,31 +213,59 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             list->CopyBufferRegion(probe->source_readback.handle.Get(),depth_capacity,stencil_gpu.handle.Get(),0,stencil_capacity);
             depth_gpu.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             stencil_gpu.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            const auto fence=renderer.Flush();cache.Submitted(fence);renderer.Finish();
+            captured_depth.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            captured_stencil.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            list->CopyBufferRegion(probe->source_readback.handle.Get(),depth_capacity+stencil_capacity,
+                captured_depth.handle.Get(),0,layout.guest_bytes);
+            list->CopyBufferRegion(probe->source_readback.handle.Get(),depth_capacity+stencil_capacity+layout.guest_bytes,
+                captured_stencil.handle.Get(),0,stencil_layout.guest_bytes);
+            captured_depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            captured_stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            const auto fence=renderer.Flush();cache.Submitted(fence);
+            cache.Collect(renderer.CompletedFence());
+            const bool held=renderer.CompletedFence()<fence&&!image.buffer_sync_resources.empty();
+            captured_depth={};captured_stencil={}; // Entry and queue leases must retain the copies.
+            Check(gate.fence->Signal(1));renderer.Finish();
+            require(held,"Depth plane source/copy leases retired before the held GPU fence");
             std::vector<u32> expected(size_t(bytes/4),0xa7a7a7a7);
             for(UINT layer=0;layer<desc.layers;++layer)for(UINT sample=0;sample<samples;++sample)
             for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x){
-                const auto at=2*((u64(layer)*samples+sample)*desc.height*desc.width+y*desc.width+x);
+                const auto at=4*((u64(layer)*samples+sample)*desc.height*desc.width+y*desc.width+x);
                 expected[at]=depth_bits(gpu_depth?gpu_phase:cpu_phase,layer,sample,x,y);
                 expected[at+1]=stencil_code(gpu_stencil?gpu_phase:cpu_phase,layer,sample,x,y);
+                expected[at+2]=expected[at];expected[at+3]=expected[at+1];
             }
             D3D12_RANGE range{0,SIZE_T(bytes)};Check(probe->readback.handle->Map(0,&range,&mapped));
             const bool valid=!memcmp(mapped,expected.data(),size_t(bytes));probe->readback.handle->Unmap(0,&empty);
             if(!valid)throw std::runtime_error("Paired depth GPU result mismatch: format="+std::to_string(data_format)+
                 " tile="+std::to_string(tile)+" samples="+std::to_string(samples)+" mode="+std::to_string(mode));
-            range={0,SIZE_T(depth_capacity+stencil_capacity)};Check(probe->source_readback.handle->Map(0,&range,&mapped));
+            auto expected_depth_capture=depth_gpu_bytes,expected_stencil_capture=stencil_gpu_bytes;
+            for(UINT layer=0;layer<desc.layers;++layer)for(UINT sample=0;sample<samples;++sample)
+            for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x){
+                const auto d_at=GuestPixelOffset(desc,layout,0,layer,x,y,sample);
+                const auto s_at=GuestPixelOffset(stencil_desc,stencil_layout,0,layer,x,y,sample);
+                const u32 d_value=depth_bits(gpu_depth?gpu_phase:cpu_phase,layer,sample,x,y);
+                const auto s_value=std::byte(stencil_code(gpu_stencil?gpu_phase:cpu_phase,layer,sample,x,y));
+                memcpy(expected_depth_capture.data()+d_at,&d_value,layout.bytes_per_pixel);
+                expected_stencil_capture[size_t(s_at)]=s_value;
+            }
+            range={0,SIZE_T(depth_capacity+stencil_capacity+layout.guest_bytes+stencil_layout.guest_bytes)};
+            Check(probe->source_readback.handle->Map(0,&range,&mapped));
             const auto* source_bytes=static_cast<const std::byte*>(mapped);bool sources_valid=true;
             for(u64 at=0;at<depth_capacity;++at)sources_valid&=source_bytes[at]==
                 (at<depth_gpu_bytes.size()?depth_gpu_bytes[size_t(at)]:std::byte{0x79});
             for(u64 at=0;at<stencil_capacity;++at)sources_valid&=source_bytes[depth_capacity+at]==
                 (at<stencil_gpu_bytes.size()?stencil_gpu_bytes[size_t(at)]:std::byte{0x79});
+            const bool copies_valid=!memcmp(source_bytes+depth_capacity+stencil_capacity,expected_depth_capture.data(),expected_depth_capture.size())&&
+                !memcmp(source_bytes+depth_capacity+stencil_capacity+layout.guest_bytes,expected_stencil_capture.data(),expected_stencil_capture.size());
             probe->source_readback.handle->Unmap(0,&empty);
             require(sources_valid&&depth_cpu==original_depth_cpu&&stencil_cpu==original_stencil_cpu,
                 "Paired upload changed CPU/GPU plane inputs or source padding");
+            require(copies_valid,"Private native I plane capture changed logical bits or its B1 padding");
             cache.Collect(renderer.CompletedFence());renderer.ValidateDebugMessages();++executed;
         }
     }
     require(executed>=12,"Paired single-sample depth controls did not execute");
-    printf("PASS: %u paired depth/stencil GPU uploads, D16/D32, samples/layers, mixed CPU/GPU inputs, reuse and validation negatives; PS stencil ref=%u\n",executed,options.PSSpecifiedStencilRefSupported);
+    printf("PASS: %u paired native I captures and GPU uploads, D16/D32, samples/layers, mixed CPU/GPU inputs, exact private padding and held-fence leases; PS stencil ref=%u\n",executed,options.PSSpecifiedStencilRefSupported);
 }
 } // namespace NativeDX12
