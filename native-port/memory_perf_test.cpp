@@ -8,6 +8,23 @@
 #include <atomic>
 using namespace NativeDX12;
 void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
+void VerifyPlacedBufferWords(ID3D12Device* device,std::span<Resource* const> resources,
+                            std::span<const u32> expected){
+    Require(resources.size()==expected.size()&&!resources.empty(),"placed buffer oracle size");
+    Rasterizer commands(device);const auto bytes=expected.size_bytes();
+    auto upload=Buffer(device,bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+    auto readback=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+    void* cpu{};D3D12_RANGE empty{0,0};Check(upload.handle->Map(0,&empty,&cpu));
+    memcpy(cpu,expected.data(),bytes);upload.handle->Unmap(0,nullptr);
+    for(size_t i=0;i<resources.size();++i){auto& resource=*resources[i];
+        resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+        commands.RecordingList()->CopyBufferRegion(resource.handle.Get(),0,upload.handle.Get(),i*4,4);
+        resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        commands.RecordingList()->CopyBufferRegion(readback.handle.Get(),i*4,resource.handle.Get(),0,4);}
+    commands.Finish();D3D12_RANGE all{0,bytes};Check(readback.handle->Map(0,&all,&cpu));
+    const bool valid=!memcmp(cpu,expected.data(),bytes);readback.handle->Unmap(0,&empty);
+    Require(valid,"placed-heap page corrupted live resource contents");commands.ValidateDebugMessages();
+}
 struct Guest {
     void* data;u64 size;
     explicit Guest(u64 bytes):data(VirtualAlloc(nullptr,bytes,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)),size(bytes){Require(data,"guest allocation");}
@@ -74,24 +91,31 @@ int main(int argc,char** argv){try{
         PlacedBufferAllocator arena(device.Get(),8*MemoryMiB,12*MemoryMiB);
         auto a=arena.Allocate(2*MemoryMiB),b=arena.Allocate(4*MemoryMiB),c=arena.Allocate(4*MemoryMiB);
         Require(arena.CommittedBytes()==12*MemoryMiB,"remaining placed-heap budget was not admitted");
-        Rasterizer commands(device.Get());
-        auto upload=Buffer(device.Get(),12,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
-        auto readback=Buffer(device.Get(),12,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
-        const u32 expected[]{0x11223344,0x51525354,0x61626364};void* cpu{};D3D12_RANGE empty{0,0};
-        Check(upload.handle->Map(0,&empty,&cpu));memcpy(cpu,expected,sizeof(expected));upload.handle->Unmap(0,nullptr);
+        const u32 expected[]{0x11223344,0x51525354,0x61626364};
         Resource* resources[]{&a,&b,&c};
-        for(unsigned i=0;i<3;++i){auto& resource=*resources[i];resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
-            commands.RecordingList()->CopyBufferRegion(resource.handle.Get(),0,upload.handle.Get(),i*4,4);
-            resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
-            commands.RecordingList()->CopyBufferRegion(readback.handle.Get(),i*4,resource.handle.Get(),0,4);}
-        commands.Finish();D3D12_RANGE all{0,12};Check(readback.handle->Map(0,&all,&cpu));
-        const bool valid=!memcmp(cpu,expected,sizeof(expected));readback.handle->Unmap(0,&empty);
-        Require(valid,"second placed-heap page corrupted live resource contents");
+        VerifyPlacedBufferWords(device.Get(),resources,expected);
         arena.SetBudget(0);arena.Trim();Require(arena.CommittedBytes()==12*MemoryMiB,"reduced budget destroyed live pages");
         bool rejected=false;try{arena.Allocate(16*MemoryMiB);}catch(const BufferBudgetExhausted&){rejected=true;}
         Require(rejected,"zero actual heap budget admitted another page");
         a={};b={};c={};arena.Trim();Require(arena.CommittedBytes()==0,"completed heap pages did not retire");
-        commands.ValidateDebugMessages();
+    }
+    {
+        // Compaction follows the current page target after a budget reduction,
+        // rather than reserving unused slack using the original 256-MiB target.
+        PlacedBufferAllocator arena(device.Get(),256*MemoryMiB,512*MemoryMiB);
+        arena.SetBudget(6*MemoryMiB);arena.SetCompactLargePages(true);
+        auto a=arena.Allocate(4*MemoryMiB);
+        // Admission may increase with required live guest backing. An earlier
+        // six-MiB heap leaves only two MiB free and blocks this four-MiB page,
+        // although the two live resources need exactly eight MiB in total.
+        arena.SetBudget(8*MemoryMiB);auto b=arena.Allocate(4*MemoryMiB);
+        Require(arena.CommittedBytes()==8*MemoryMiB,"compact heaps wasted the reduced actual budget");
+        Resource* resources[]{&a,&b};const u32 expected[]{0x71727374,0x81828384};
+        VerifyPlacedBufferWords(device.Get(),resources,expected);
+        arena.SetBudget(0);arena.Trim();Require(arena.CommittedBytes()==8*MemoryMiB,"pressure destroyed compact live pages");
+        bool rejected=false;try{arena.Allocate(65536);}catch(const BufferBudgetExhausted&){rejected=true;}
+        Require(rejected,"zero compact heap budget admitted a new page");
+        a={};b={};arena.Trim();Require(arena.CommittedBytes()==0,"compact live leases did not retire");
     }
     if(argc>1&&std::string_view(argv[1])=="fence"){
         Guest guest(65536);Rasterizer raster(device.Get());raster.MapMemory(guest.Base(),guest.size);

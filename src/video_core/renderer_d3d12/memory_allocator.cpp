@@ -64,8 +64,11 @@ std::shared_ptr<PlacedBufferAllocator::Page> PlacedBufferAllocator::CreatePage(u
     // Existing live pages already consume part of the budget. A second page
     // uses its remainder, rather than requesting the complete budget again.
     const auto available=budget_>committed_?budget_-committed_:0;
-    const auto bytes=compact_large_pages_&&minimum>=page_size_/2?AlignHeap(minimum):
-        std::max(std::min(page_size_,available),AlignHeap(minimum));
+    const auto page_target=std::min(page_size_,available);
+    // Compact relative to the current target: a reduced adapter budget may
+    // make a small backing large enough to strand most of the next admission.
+    const auto bytes=compact_large_pages_&&minimum>=page_target/2?AlignHeap(minimum):
+        std::max(page_target,AlignHeap(minimum));
     if(bytes>budget_||committed_>budget_-bytes)throw BufferBudgetExhausted();
     D3D12_HEAP_DESC description{};description.SizeInBytes=bytes;description.Alignment=HeapAlignment;
     description.Properties.Type=D3D12_HEAP_TYPE_DEFAULT;
