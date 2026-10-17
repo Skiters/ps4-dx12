@@ -125,6 +125,85 @@ int main(){try{
         Require(alias[600]==std::byte{0x83}&&alias[4700]==std::byte{0x94}&&logical_i.back()==std::byte{0xa5});
         watch.Untrack(base,8192);
     }
+    {
+        // Split D/S witnesses must remain distinct even on one host page.
+        // Use genuine write faults and the physical alias, not injected VEH
+        // exceptions or a second copy of the production comparison algorithm.
+        const auto base=reinterpret_cast<uint64_t>(guest);
+        for(const size_t stencil_offset:{size_t{1024},size_t{4608}}){
+            memset(alias,0x27,12288);
+            GuestImageBoundaryPages depth,stencil;
+            const std::array planes{
+                GuestImageBoundaryPlane{base+256,uint64_t{512},&depth},
+                GuestImageBoundaryPlane{base+stencil_offset,uint64_t{128},&stencil}};
+            const auto stencil_page=(base+stencil_offset)&~uint64_t(4095);
+            unsigned callbacks{};PageWatch* active{};
+            const auto read=[&](uint64_t address,std::span<std::byte> out){
+                if(address<base||address-base>bytes||out.size()>bytes-(address-base))return false;
+                memcpy(out.data(),alias+size_t(address-base),out.size());return true;
+            };
+            PageWatch watch([&](uint64_t address,bool writing){
+                Require(writing);++callbacks;
+                for(const auto& plane:planes)
+                    RememberGuestImageBoundary(*plane.saved,plane.address,plane.bytes,address,1,read);
+                Require(active->UntrackReadOnly(address&~uint64_t(4095),4096,true));
+            });active=&watch;
+            Require(watch.TrackReadOnly(base,8192));
+            Require(watch.TrackOwned(base+8192,4096));
+            const auto outside_stores=[&]{
+                *reinterpret_cast<volatile unsigned char*>(guest+10)=0x61;
+                if(stencil_page!=base)*reinterpret_cast<volatile unsigned char*>(guest+4106)=0x62;
+            };
+            outside_stores();
+            Require(depth.size()==1&&stencil.size()==1&&depth.begin()->second.size()==512&&
+                stencil.begin()->second.size()==128);
+            std::vector<std::pair<uint64_t,uint64_t>> protected_ranges;
+            for(const auto& plane:planes)VisitGuestImageProtectedRanges(plane,[&](uint64_t a,uint64_t n){
+                protected_ranges.emplace_back(a,n);});
+            Require(protected_ranges.empty()); // both released boundary pages are holes
+            // A same-value store must not fabricate a content change in I.
+            *reinterpret_cast<volatile unsigned char*>(guest+stencil_offset)=0x27;
+            const auto all_guards_before_read=[&](uint64_t a,std::span<std::byte> out){
+                MEMORY_BASIC_INFORMATION region{};
+                for(const auto page:{base,stencil_page})
+                    Require(VirtualQuery(reinterpret_cast<void*>(page),&region,sizeof(region))&&region.Protect==PAGE_READONLY);
+                return read(a,out);
+            };
+            const auto protect=[&](uint64_t a,uint64_t n){return watch.TrackReadOnly(a,n,true);};
+            Require(ValidateGuestImageBoundaries(planes,all_guards_before_read,protect).empty());
+            Require(depth.empty()&&stencil.empty());
+            outside_stores();
+            // Failed reprotection must compare nothing and retain BOTH proofs.
+            unsigned reads{};bool rejected=false;
+            try{ValidateGuestImageBoundaries(planes,[&](uint64_t,std::span<std::byte>){++reads;return true;},
+                [](uint64_t,uint64_t){return false;});}catch(const std::runtime_error&){rejected=true;}
+            Require(rejected&&!reads&&depth.size()==1&&stencil.size()==1);
+            // A late S read error must not clear the already compared D proof.
+            rejected=false;
+            try{ValidateGuestImageBoundaries(planes,[&](uint64_t a,std::span<std::byte> out){
+                return a==planes[1].address?false:read(a,out);},protect);
+            }catch(const std::runtime_error&){rejected=true;}
+            Require(rejected&&depth.size()==1&&stencil.size()==1);
+            // Those failed reads restored protection, so make a real outside
+            // fault before the unguarded inside-S write; retain earliest bytes.
+            outside_stores();
+            const auto count=callbacks;
+            *reinterpret_cast<volatile unsigned char*>(guest+stencil_offset+7)=0x93;
+            Require(callbacks==count);
+            const auto changed=ValidateGuestImageBoundaries(planes,all_guards_before_read,protect);
+            Require(changed==std::vector<uint64_t>{stencil_page}&&depth.empty()&&stencil.empty());
+            Require(alias[256]==std::byte{0x27}&&alias[stencil_offset+7]==std::byte{0x93});
+            for(const auto& plane:planes)VisitGuestImageProtectedRanges(plane,[&](uint64_t a,uint64_t n){
+                protected_ranges.emplace_back(a,n);});
+            Require(protected_ranges.size()==2&&protected_ranges[0]==std::pair<uint64_t,uint64_t>{base,4096}&&
+                protected_ranges[1]==std::pair<uint64_t,uint64_t>{stencil_page,4096});
+            Require(watch.UntrackReadOnly(base,12288,true));
+            MEMORY_BASIC_INFORMATION region{};
+            Require(VirtualQuery(guest+8192,&region,sizeof(region))&&region.Protect==PAGE_NOACCESS);
+            watch.Untrack(base+8192,4096);
+        }
+        puts("PASS: two-plane shared/separate-page boundary proofs, all guards before reads, same-value stores, read/protection failure retention and stronger B guard");
+    }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
     {
         auto* pages=static_cast<unsigned char*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));Require(pages);

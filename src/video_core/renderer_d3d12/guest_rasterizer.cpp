@@ -299,35 +299,29 @@ void GuestRasterizer::ProcessDownloadImages(){
 }
 void GuestRasterizer::ReleaseIndependentImageWatches(GuestTextureCache::Entry& image){
     image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);
-    image.unprotected_cpu_pages.clear();image.linear_download_pending=false;
+    image.unprotected_cpu_pages.clear();image.stencil_unprotected_cpu_pages.clear();image.linear_download_pending=false;
     image.sampled_snapshot.clear();image.stencil_snapshot.clear();
     ReleaseImageProtection(image);
 }
 void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
     const auto retained=ImageProtectionRanges(&image);
-    ReleaseUnusedReadOnlyWatches(image.desc.address,image.layout.guest_bytes,retained);
+    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes)
+        ReleaseUnusedReadOnlyWatches(plane.address,plane.bytes,retained);
 }
 std::vector<std::pair<VAddr,u64>> GuestRasterizer::ImageProtectionRanges(const GuestTextureCache::Entry* exclude)const{
     std::vector<std::pair<VAddr,u64>> retained;
     for(const auto& other:textures_.Entries())if(other.get()!=exclude&&(other->gpu_owned||other->cpu_watched)){
-        const auto pages=GuestProtectionPages(other->desc.address,other->layout.guest_bytes);
-        if(!pages)throw std::runtime_error("Invalid retained image protection envelope");
-        auto cursor=pages->address;
-        for(const auto& [page,bytes]:other->unprotected_cpu_pages){
-            if(cursor<page)retained.emplace_back(cursor,page-cursor);
-            cursor=page+4096;
-        }
-        if(cursor<pages->address+pages->size)retained.emplace_back(cursor,pages->address+pages->size-cursor);
-        if(other->desc.stencil_address)retained.emplace_back(other->desc.stencil_address,other->stencil_layout.guest_bytes);
+        for(const auto& plane:other->ProtectionPlanes())
+            VisitGuestImageProtectedRanges(plane,[&](u64 address,u64 bytes){retained.emplace_back(address,bytes);});
     }
     return retained;
 }
 void GuestRasterizer::RememberImageBoundary(GuestTextureCache::Entry& image,VAddr address,u64 size){
     if(!image.gpu_owned||!image.buffer_alias_version)return;
-    if(RememberGuestImageBoundary(image.unprotected_cpu_pages,image.desc.address,image.layout.guest_bytes,
-        address,size,read_backing_)){
-        image.buffer_alias_watch=false;image_watch_pending_=true;
-    }
+    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes&&
+        RememberGuestImageBoundary(*plane.saved,plane.address,plane.bytes,address,size,read_backing_)){
+            image.buffer_alias_watch=false;image_watch_pending_=true;
+        }
 }
 void GuestRasterizer::ValidateIndependentImageWatches(){
     std::lock_guard lock(execution_mutex_);
@@ -336,9 +330,10 @@ void GuestRasterizer::ValidateIndependentImageWatches(){
     SCOPE_EXIT {validating_image_watches_=false;};
     std::vector<GuestTextureCache::Entry*> dirty;
     std::vector<VAddr> changed_pages;
-    for(auto& image:textures_.Entries())if(!image->unprotected_cpu_pages.empty()){
-        if(!image->gpu_owned||!image->buffer_alias_version){image->unprotected_cpu_pages.clear();continue;}
-        const auto changed=ValidateGuestImageBoundary(image->unprotected_cpu_pages,image->desc.address,
+    for(auto& image:textures_.Entries())if(image->HasUnprotectedCpuPages()){
+        if(!image->gpu_owned||!image->buffer_alias_version){
+            image->unprotected_cpu_pages.clear();image->stencil_unprotected_cpu_pages.clear();continue;}
+        const auto changed=ValidateGuestImageBoundaries(image->ProtectionPlanes(),
             read_backing_,[this](u64 page,u64 size){return page_watch_->TrackReadOnly(page,size,true);});
         image->buffer_alias_watch=true;
         if(!changed.empty()){
@@ -438,7 +433,8 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
     if(!gpu_write&&!versions.empty())Finish();
     for(auto* image:versions){
         if(image->buffer_alias_watch){
-            ReleaseCpuBufferWatches(image->desc.address,image->layout.guest_bytes);
+            for(const auto& plane:image->ProtectionPlanes())if(plane.bytes)
+                ReleaseCpuBufferWatches(plane.address,plane.bytes);
         }
         // Retain other image witnesses as well as stronger buffer guards.
         // A whole-range read-only untrack would silently unprotect a sibling
@@ -450,8 +446,9 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
         std::vector<VAddr> released_pages;
         for(auto& image:textures_.Entries()){
             RememberImageBoundary(*image,address,size);
-            for(const auto& [page,saved]:image->unprotected_cpu_pages)
-                if(ShareGuestProtectionPages(address,size,page,4096))released_pages.push_back(page);
+            for(const auto& plane:image->ProtectionPlanes())if(plane.bytes)
+                for(const auto& [page,saved]:*plane.saved)
+                    if(ShareGuestProtectionPages(address,size,page,4096))released_pages.push_back(page);
         }
         // The store that raised the fault must be allowed to finish. Images
         // sharing only its page now carry bounded, full-byte B witnesses.
@@ -466,23 +463,21 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
     }
 }
 void GuestRasterizer::WatchBufferImageVersions(VAddr address,u64 size){
-    for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version&&
-        ShareGuestProtectionPages(address,size,image->desc.address,image->layout.guest_bytes)){
-        const auto pages=GuestProtectionPages(image->desc.address,image->layout.guest_bytes);
-        if(!page_watch_||!pages||!has_backing_(image->desc.address,image->layout.guest_bytes))
-            throw std::runtime_error("Independent image protection lost backing");
-        auto cursor=pages->address;bool tracked=true;
-        for(const auto& [page,bytes]:image->unprotected_cpu_pages){
-            if(cursor<page)tracked=tracked&&page_watch_->TrackReadOnly(cursor,page-cursor,true);
-            cursor=page+4096;
+    for(auto& image:textures_.Entries())if(image->gpu_owned&&image->buffer_alias_version){
+        const auto planes=image->ProtectionPlanes();
+        if(std::ranges::none_of(planes,[&](const auto& plane){return plane.bytes&&
+            ShareGuestProtectionPages(address,size,plane.address,plane.bytes);}))continue;
+        for(const auto& plane:planes)if(plane.bytes){
+            if(!page_watch_||!has_backing_(plane.address,plane.bytes))
+                throw std::runtime_error("Independent image plane protection lost backing");
+            VisitGuestImageProtectedRanges(plane,[&](u64 begin,u64 bytes){
+                if(!page_watch_->TrackReadOnly(begin,bytes,true))
+                    throw std::runtime_error("Cannot protect an independent image plane against CPU writes: address="+
+                        std::to_string(plane.address)+" bytes="+std::to_string(plane.bytes)+
+                        " uid="+std::to_string(image->image_uid));
+            });
         }
-        if(cursor<pages->address+pages->size)
-            tracked=tracked&&page_watch_->TrackReadOnly(cursor,pages->address+pages->size-cursor,true);
-        if(!tracked)
-            throw std::runtime_error("Cannot protect an independent image version against CPU writes: address="+
-                std::to_string(image->desc.address)+" bytes="+std::to_string(image->layout.guest_bytes)+
-                " uid="+std::to_string(image->image_uid));
-        image->buffer_alias_watch=image->unprotected_cpu_pages.empty();
+        image->buffer_alias_watch=!image->HasUnprotectedCpuPages();
     }
 }
 void GuestRasterizer::ReleaseBufferPageWatch(VAddr address,u64 size){
@@ -511,8 +506,9 @@ void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
     const auto validating=std::exchange(validating_image_watches_,true);
     SCOPE_EXIT {validating_image_watches_=validating;};
     const bool separate=std::ranges::any_of(textures_.Entries(),[address](const auto& image){
-        return image->gpu_owned&&image->buffer_alias_version&&
-            ShareGuestProtectionPages(address,1,image->desc.address,image->layout.guest_bytes);});
+        if(!image->gpu_owned||!image->buffer_alias_version)return false;
+        return std::ranges::any_of(image->ProtectionPlanes(),[address](const auto& plane){return plane.bytes&&
+            ShareGuestProtectionPages(address,1,plane.address,plane.bytes);});});
     if(!separate){
         if(writing)DiscardBufferImageVersions(address,1,false);
         GuestBufferAccess::ResolveCpuFault(address,writing);return;
@@ -1061,7 +1057,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         GuestTextureCache::Entry* depth_source{};
         if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]))
             for(const auto& candidate:textures_.Entries())if(candidate->gpu_owned&&candidate->HasValidLogicalImage()&&
-                candidate->unprotected_cpu_pages.empty()&&
+                !candidate->HasUnprotectedCpuPages()&&
                 CompatibleGuestAttachmentStorage(candidate->desc,descriptions[8])&&
                 MatchesGuestMipLayout(candidate->layout,layouts[8])){
                 if(depth_source&&depth_source->texture.handle.Get()!=candidate->texture.handle.Get())

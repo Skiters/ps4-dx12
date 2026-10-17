@@ -1537,7 +1537,7 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
            !MatchesGuestUploadStorage(*entry,desc,layout))continue;
-        if(!entry->unprotected_cpu_pages.empty())
+        if(entry->HasUnprotectedCpuPages())
             throw std::runtime_error("Independent image lookup requires boundary validation");
         if(result){
             const bool exact=entry->desc==desc,previous_exact=result->desc==desc;
@@ -1561,7 +1561,7 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
     Entry* result{};auto [first,last]=address_index_.equal_range(desc.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty)continue;
-        if(!entry->unprotected_cpu_pages.empty())
+        if(entry->HasUnprotectedCpuPages())
             throw std::runtime_error("Independent upload source requires boundary validation");
         const bool block=MatchesReferenceBlockImage(entry->desc,entry->layout,desc,layout)||
             MatchesReadonlyBlockMipPrefix(entry->desc,entry->layout,desc,layout)||
@@ -2352,7 +2352,7 @@ Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& 
 Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias,
     UINT plane,bool private_depth_snapshot){
-    if(!image.unprotected_cpu_pages.empty())
+    if(image.HasUnprotectedCpuPages())
         throw std::runtime_error("Independent image transfer requires boundary validation");
     const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
     if(image.logical_dirty&&!dependent)throw std::runtime_error("Independent image transfer requires a valid logical version");

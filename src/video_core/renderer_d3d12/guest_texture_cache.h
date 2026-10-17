@@ -166,7 +166,17 @@ public:
         bool buffer_alias_version=false,buffer_alias_watch=false;
         // Only unprotected boundary pages need a physical-B equality witness.
         // I remains logically distinct; compare these bytes before reusing I.
-        GuestImageBoundaryPages unprotected_cpu_pages;
+        GuestImageBoundaryPages unprotected_cpu_pages,stencil_unprotected_cpu_pages;
+        auto ProtectionPlanes(){return std::array{
+            GuestImageBoundaryPlane{desc.address,layout.guest_bytes,&unprotected_cpu_pages},
+            GuestImageBoundaryPlane{desc.stencil_address,desc.stencil_address?stencil_layout.guest_bytes:0,
+                &stencil_unprotected_cpu_pages}};}
+        auto ProtectionPlanes()const{return std::array{
+            GuestImageBoundaryPlane<const GuestImageBoundaryPages>{desc.address,layout.guest_bytes,&unprotected_cpu_pages},
+            GuestImageBoundaryPlane<const GuestImageBoundaryPages>{desc.stencil_address,
+                desc.stencil_address?stencil_layout.guest_bytes:0,&stencil_unprotected_cpu_pages}};}
+        bool HasUnprotectedCpuPages()const{
+            return !unprotected_cpu_pages.empty()||!stencil_unprotected_cpu_pages.empty();}
         bool linear_download_pending=false;
         // Ownership changes also invalidate the CP's authoritative-image index.
         void SetGpuOwned(bool);

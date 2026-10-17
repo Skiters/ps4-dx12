@@ -112,6 +112,18 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
                 try{cache.CaptureDepthPlane(image,0,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());}
                 catch(const std::runtime_error&){rejected=true;}
                 require(rejected,"Depth capture resurrected an invalid I");image.logical_dirty=false;
+                // An unvalidated stencil boundary also prevents using depth:
+                // the two aspects belong to this one logical native image.
+                image.stencil_unprotected_cpu_pages.emplace(desc.stencil_address&~u64(4095),
+                    std::vector<std::byte>{std::byte{0x17}});
+                for(const auto plane:{0u,1u}){
+                    rejected=false;
+                    try{cache.CaptureDepthPlane(image,plane,plane?stencil_gpu:depth_gpu,
+                        renderer.RecordingList(),renderer.CompletedFence());}
+                    catch(const std::runtime_error&){rejected=true;}
+                    require(rejected,"Native plane capture ignored an unvalidated stencil boundary");
+                }
+                image.stencil_unprotected_cpu_pages.clear();
             }
             auto captured_depth=cache.CaptureDepthPlane(image,0,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());
             auto captured_stencil=cache.CaptureDepthPlane(image,1,stencil_gpu,renderer.RecordingList(),renderer.CompletedFence());
