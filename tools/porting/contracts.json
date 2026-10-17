@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -127,7 +127,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -187,7 +187,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -250,7 +250,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -320,7 +320,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -374,6 +374,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -458,6 +463,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -496,7 +513,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -569,7 +586,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -623,6 +640,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -709,6 +731,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -747,7 +781,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -835,7 +869,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -903,7 +937,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -980,7 +1014,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1073,7 +1107,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1171,7 +1205,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1238,7 +1272,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1316,7 +1350,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1392,7 +1426,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1459,7 +1493,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1519,7 +1553,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1572,7 +1606,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1608,7 +1642,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1648,7 +1682,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1708,7 +1742,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1758,7 +1792,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1834,7 +1868,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1903,7 +1937,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1972,7 +2006,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2030,7 +2064,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2107,7 +2141,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2183,7 +2217,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2249,7 +2283,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2311,7 +2345,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2356,7 +2390,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2403,7 +2437,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2463,7 +2497,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2540,7 +2574,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2622,7 +2656,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2689,7 +2723,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2757,7 +2791,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2818,7 +2852,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2872,7 +2906,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2925,7 +2959,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2980,7 +3014,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3026,7 +3060,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3091,7 +3125,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3139,7 +3173,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3203,7 +3237,7 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3290,7 +3324,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3342,7 +3376,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3386,7 +3420,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3445,6 +3479,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -3565,6 +3604,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -3612,7 +3663,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3673,13 +3724,18 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
         "date": "2026-10-14",
         "reason": "Single-sample depth mip uploads and production Dsv mip/layer ranges verified by12 GPU cases. Stencil shader planes and coherent sampled fixture PASS after justified fixture corrections. Combined MSAA/cube/full game still open.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014"
+        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/black-continuation-20261014",
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
+        }
       },
       "prepared_checks": [
         {
@@ -3690,6 +3746,18 @@
           "kind": "source_paths",
           "paths": [
             "src/video_core/renderer_d3d12/guest_graphics_resources_test.cpp"
+          ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
           ]
         }
       ]
@@ -3777,7 +3845,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3847,6 +3915,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -3971,6 +4044,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -4043,7 +4128,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4097,6 +4182,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -4189,6 +4279,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -4231,7 +4333,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4293,7 +4395,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4354,7 +4456,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4415,7 +4517,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4478,7 +4580,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4546,7 +4648,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4611,7 +4713,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4673,7 +4775,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4741,7 +4843,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4813,7 +4915,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4881,7 +4983,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4941,7 +5043,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4998,7 +5100,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5063,7 +5165,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5131,7 +5233,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5199,7 +5301,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5277,7 +5379,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5334,7 +5436,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5401,6 +5503,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -5497,6 +5604,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -5540,7 +5659,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5597,7 +5716,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5664,6 +5783,11 @@
           "production_core_source_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae",
           "manifest": "F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
           "scope": "Extended readonly-sharp + DMA same-dispatch alias test passes with fixture/exact-runtime converters, standalone/linked; whole-group/core/game acceptance open."
+        },
+        "latest_single_plane_depth_evidence": {
+          "source_commit": "36f137329816f19ced7daa0069bca2f798234019",
+          "manifest": "F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
+          "scope": "8 exact scoped fixtures; six single-plane depth configurations plus48-case ordered-stage matrix; whole GuestRasterizer/PageWatch depth/core/game acceptance not_run."
         }
       },
       "prepared_checks": [
@@ -5749,6 +5873,18 @@
           "tests": [
             "native_dma_shader_addressing"
           ]
+        },
+        {
+          "kind": "verification_prepared",
+          "description": "D16/D32 native-plane oracle, GPU I/B directions, ordered formatted transfer, exact native sampled identity, compact pitch/padding, negative access/fence controls; actual execution is separate.",
+          "paths": [
+            "native-port/independent_depth_fixture.h",
+            "native-port/ordered_stage_bindings_fixture.h"
+          ],
+          "tests": [
+            "native_independent_depth_version_transfer",
+            "native_ordered_stage_image_buffer_bindings"
+          ]
         }
       ]
     },
@@ -5793,7 +5929,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5852,7 +5988,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5920,7 +6056,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5986,7 +6122,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6060,7 +6196,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6129,7 +6265,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6190,7 +6326,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6255,7 +6391,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6315,7 +6451,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6389,7 +6525,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6455,7 +6591,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6514,7 +6650,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6567,7 +6703,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6635,7 +6771,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6704,7 +6840,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6758,7 +6894,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6815,7 +6951,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6869,7 +7005,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6932,7 +7068,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7012,7 +7148,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7065,7 +7201,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7127,7 +7263,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7186,7 +7322,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7240,7 +7376,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7291,7 +7427,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7350,7 +7486,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7412,7 +7548,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7477,7 +7613,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7532,7 +7668,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7586,7 +7722,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7644,7 +7780,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7719,7 +7855,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7775,7 +7911,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7831,7 +7967,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7889,7 +8025,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7952,7 +8088,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8014,7 +8150,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8083,7 +8219,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8142,7 +8278,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8203,7 +8339,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8270,7 +8406,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8336,7 +8472,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8392,7 +8528,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8461,7 +8597,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8525,7 +8661,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8590,7 +8726,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8644,7 +8780,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8702,7 +8838,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8761,7 +8897,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8827,7 +8963,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8897,7 +9033,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8967,7 +9103,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9030,7 +9166,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9094,7 +9230,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9152,7 +9288,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9207,7 +9343,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2e01aa67acb768a1bfa58068a058e5912c4c05ae"
+        "core_release_build_commit": "36f137329816f19ced7daa0069bca2f798234019"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9240,8 +9376,8 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage",
-      "missing_semantics": "ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
-      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json",
+      "missing_semantics": "ordered split-stencil/MSAA depth I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
+      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json",
       "groups": [
         4,
         6,
@@ -9289,7 +9425,8 @@
         "51ec097 preserves complete all-owned B growth on the pending GPU timeline, inheriting exact dirty spans/CPU baselines/generations and fence leases. Only new gaps acquire ownership; failure/exception rolls back gaps without releasing source guards, and actual CPU markers reject deferred publication. Original large DMA no-submit/data/neighbor/GDS regression now passes. Actual PageWatch success/rejection/throw-retry/provisional CPU-winner controls and ten related GPU fixture cases pass; NATIVE_VERIFICATION.json. CPU-visible/unprotected/marked sources retain necessary reconciliation. Mixed-class splits/pressure/other listed gaps remain.",
         "a39144a retains complete canonical B for disjoint native SRV/UAV ranges over preceding GPU-only/owned versions. Original writable/publication ranges and ownership remain canonical; private DEFAULT read copies refresh after late preparation with strict original-generation identity, exact bounds and fence leases. The bounded reusable placed-copy pool never reuses a live state. Actual production ExecuteGuestBufferCompute, late-growth HLSL dispatch, protected PageWatch/sync/readback/reuse and alias/generation negatives pass, alongside original standalone/linked compiler-unified true aliases. Source/compiler/runtime identities in disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json. True ununified overlapping native aliases remain guarded; no pressure/whole-group/game acceptance claim.",
         "Pinned persistent resident B backing survives cache pressure: mandatory GPU-derived and selected generations are retained; only reconstructible inactive mappings are evicted with callback-safe rechecks. Soft cache target is separate from fresh actual-adapter/reserve native allocation admission. Remaining heap budget/current-page compaction, live zero-budget leases and exact guest visibility are preserved.16 scoped GPU/readback cases plus exact runtime alias/DMA pass at2e01aa6; whole-group/current-core/game acceptance remains open.",
-        "Production native_storage_buffer_uavs unifies original readonly/writable SSBO and raw DMA bank access to live UAV B in standalone/linked conversion; cache keys preserve the policy. Extended actual DMA shader retains original NonWritable input, validates reflected live UAV and reads same-dispatch writes through readonly sharp and ReadConst over distinct prior B1. Scoped GPU fixture/exact-runtime converter pass at9fdd733. Custom incompatible SRV/DMA guard remains; no snapshot can substitute true same-command alias semantics."
+        "Production native_storage_buffer_uavs unifies original readonly/writable SSBO and raw DMA bank access to live UAV B in standalone/linked conversion; cache keys preserve the policy. Extended actual DMA shader retains original NonWritable input, validates reflected live UAV and reads same-dispatch writes through readonly sharp and ReadConst over distinct prior B1. Scoped GPU fixture/exact-runtime converter pass at9fdd733. Custom incompatible SRV/DMA guard remains; no snapshot can substitute true same-command alias semantics.",
+        "Single-plane single-sample D16/D32 independent I and resident B are connected through exact readonly storage geometry, ordered formatted GPU retile, GPU depth upload and compact readback/linear retirement. No shared depth/color UAV permission. Valid smaller-mip I sources now survive private expansion instead of falling back to B0.8 scoped fixtures pass at36f1373, including six depth configurations and the full48-case unchanged ordered-stage oracle; exact-runtime alias additionally passes. Full GuestRasterizer/PageWatch depth lifecycle, whole groups and core/game acceptance remain open; split stencil/MSAA-depth domains remain explicit."
       ]
     },
     "depth-color-shared-storage": {
