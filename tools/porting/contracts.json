@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -127,7 +127,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -187,7 +187,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -250,7 +250,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -320,7 +320,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -376,7 +376,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -449,7 +449,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -507,7 +507,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -595,7 +595,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -663,7 +663,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -740,7 +740,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -833,7 +833,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -931,7 +931,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -998,7 +998,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1076,7 +1076,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1152,7 +1152,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1219,7 +1219,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1279,7 +1279,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1332,7 +1332,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1368,7 +1368,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1408,7 +1408,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1468,7 +1468,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1518,7 +1518,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1594,7 +1594,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1663,7 +1663,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1732,7 +1732,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1790,7 +1790,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1867,7 +1867,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1943,7 +1943,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2009,7 +2009,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2071,7 +2071,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2116,7 +2116,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2163,7 +2163,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2223,7 +2223,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2300,7 +2300,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2382,7 +2382,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2449,7 +2449,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2517,7 +2517,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2578,7 +2578,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2632,7 +2632,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2685,7 +2685,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2740,7 +2740,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2786,7 +2786,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2851,7 +2851,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2899,7 +2899,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2963,7 +2963,7 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3050,7 +3050,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3102,7 +3102,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3146,11 +3146,25 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary is still open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_dma_shader_addressing",
+            "sha256": "53dd9a7fbaf464cb0d0f7f25da17437372e4ea062d02ebd7ec407121a07ac9f2",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\late-image-dma-test3.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-dma-shader-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary is still open."
+        }
       },
       "prepared_checks": [
         {
@@ -3247,7 +3261,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3308,7 +3322,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3412,13 +3426,33 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "date": "2026-10-16",
-        "reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016"
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_independent_image_version_transfer",
+            "sha256": "796f655af3ffd24835dabda00d9eb93baa258a64532d61b531ea33eb2101737d",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\native_independent_image_version_transfer-8fb9c79.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-independent-version-transfer-test.exe"
+          },
+          {
+            "test": "native_guest_buffer_watch_transfer",
+            "sha256": "dd5f9530eec0e83118749ac9c99e9b46b5f9031e0be37de61640070a567b2c3d",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\native_guest_buffer_watch_transfer-8fb9c79.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-guest-buffer-access-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "date": "2026-10-16",
+          "reason": "Readonly history/source-selection production deltas and authored fixtures are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution. No full group closure or current FPS acceptance. Historical verification retained separately.",
+          "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/readonly-revalidation-20261016"
+        }
       },
       "prepared_checks": [
         {
@@ -3541,7 +3575,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3609,7 +3643,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3671,7 +3705,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3732,7 +3766,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3793,7 +3827,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3856,7 +3890,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3924,7 +3958,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3989,7 +4023,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4051,7 +4085,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4119,7 +4153,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4191,7 +4225,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4259,7 +4293,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4319,7 +4353,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4376,7 +4410,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4441,7 +4475,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4509,7 +4543,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4577,7 +4611,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4655,7 +4689,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4712,11 +4746,31 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          },
+          {
+            "test": "native_guest_buffer_watch_transfer",
+            "sha256": "dd5f9530eec0e83118749ac9c99e9b46b5f9031e0be37de61640070a567b2c3d",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\native_guest_buffer_watch_transfer-8fb9c79.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-guest-buffer-access-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        }
       },
       "prepared_checks": [
         {
@@ -4783,7 +4837,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4840,11 +4894,31 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          },
+          {
+            "test": "native_guest_buffer_watch_transfer",
+            "sha256": "dd5f9530eec0e83118749ac9c99e9b46b5f9031e0be37de61640070a567b2c3d",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\native_guest_buffer_watch_transfer-8fb9c79.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-guest-buffer-access-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        }
       },
       "prepared_checks": [
         {
@@ -4901,7 +4975,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4960,11 +5034,25 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        }
       },
       "prepared_checks": [
         {
@@ -5014,11 +5102,25 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        }
       },
       "prepared_checks": [
         {
@@ -5066,11 +5168,25 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "Full implementation boundary remains open."
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "Full implementation boundary remains open."
+        }
       },
       "prepared_checks": [
         {
@@ -5126,7 +5242,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5195,7 +5311,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5256,7 +5372,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5321,7 +5437,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5381,13 +5497,27 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
-        "date": "2026-10-15",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "reason": "This packed-MSAA continuation is source-reviewed only, not compiled/installed/executed. Historical results are unchanged; no group closure.",
+          "date": "2026-10-15",
+          "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/packed-msaa-20261015"
+        }
       },
       "prepared_checks": [
         {
@@ -5441,7 +5571,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5507,7 +5637,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5566,7 +5696,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5619,7 +5749,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5687,7 +5817,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5756,7 +5886,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5810,7 +5940,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5867,7 +5997,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5921,7 +6051,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -5984,13 +6114,27 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
-        "state": "not_run",
-        "date": "2026-10-16",
-        "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
-        "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        "state": "partial_gpu_verified",
+        "date": "2026-10-17",
+        "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
+        "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
+        "executed_checks": [
+          {
+            "test": "native_gpu_page_ownership",
+            "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",
+            "output": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\page-owned-final-test.txt",
+            "binary": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-artifacts-8fb9c79\\native-page-owned-gpu-test.exe"
+          }
+        ],
+        "previous_record": {
+          "state": "not_run",
+          "date": "2026-10-16",
+          "reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+          "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016"
+        }
       },
       "prepared_checks": [
         {
@@ -6050,7 +6194,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6103,7 +6247,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6165,7 +6309,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6224,7 +6368,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6278,7 +6422,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6329,7 +6473,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6388,7 +6532,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6450,7 +6594,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6515,7 +6659,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6570,7 +6714,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6624,7 +6768,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6682,7 +6826,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6757,7 +6901,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6813,7 +6957,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6869,7 +7013,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6927,7 +7071,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6990,7 +7134,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7052,7 +7196,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7121,7 +7265,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7180,7 +7324,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7241,7 +7385,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7308,7 +7452,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7374,7 +7518,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7430,7 +7574,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7499,7 +7643,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7563,7 +7707,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7628,7 +7772,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7682,7 +7826,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7740,7 +7884,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7799,7 +7943,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7865,7 +8009,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7935,7 +8079,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8005,7 +8149,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8068,7 +8212,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8132,7 +8276,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8190,7 +8334,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8245,7 +8389,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "2498c6fafe567e13a6b8fe71937aa967a1632b9b"
+        "core_release_build_commit": "8fb9c79ea55c8a71d5befebffa0797de98f59523"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8278,8 +8422,8 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency",
-      "missing_semantics": "Complete legal subpage materialization for tiny late DMA sharps; preplanned stable initialized B backing for image-source residency receipts through pressure/reservation; resource reservation before selected views can be replaced; GPU-preserving direct Find overlap, mixed native SRV/UAV splitting and inactive GPU-only B pressure backing; original private CPU index streams and SRV-only auxiliary DMA unification; ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred.",
-      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards",
+      "missing_semantics": "Late image-source DMA backing outside the connected ordered common native I/B domains (attachment-only, converted/BC/opaque receipts); stable initialized B backing and source identity through pressure/reservation; resource reservation before selected views can be replaced; GPU-preserving direct Find overlap, mixed native SRV/UAV splitting and inactive GPU-only B pressure backing; original private CPU index streams and SRV-only auxiliary DMA unification; ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred.",
+      "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json",
       "groups": [
         4,
         6,
@@ -8317,7 +8461,8 @@
         "284be47 connects pressure eviction of invalid independent I through retire_independent_ rather than a stale-pixel download, matching pinned TextureCache GC SafeToDownload = GpuModified && !Dirty. Pending/in-flight/pinned/preserved and valid tiled I remain protected. ReclaimResidentMemory shares actual admission/election with ReserveMemory, retains transitive preserve pins and reevaluates DXGI budget after recursive callbacks. New page_owned_gpu_test fixture covers linear/tiled invalid I, B/CPU/padding preservation, preexisting same-value CPU-store markers and a binding acquired during retirement; source C++ /Zs only. Primary and separate clean committed Release linked; runtime not_run. Valid tiled pressure retention is the pinned rule, not unfinished implementation.",
         "558baa3 preserves complete existing B geometry in compatible batch envelopes, initializes only new holes from physical B, copies old GPU bytes independently of CPU snapshots, carries actual-store pages and equality-proof holes, and transfers RO guards without RetireBuffer release. Provisional target tracking retains reentrant CPU stores outside the old sharp; all old/new allocation leases survive the copy fence. Existing ResolveGpuBuffers/Finish still reconciles actual dirty guest writes; clean owned reservations now downgrade and full RO proofs clear stale holes. Active content preparations cannot be erased, direct/mixed/pressure B1 loss is explicit rather than silent CPU recreation, and scalar-friendly aligned prefixes are used only inside mapped spans. Eleven ownership/growth/page-store controls are source-authored via guest_buffer_access_test.cpp; five clean fixture TUs pass C++ /Zs only. Primary and separate clean committed Release linked. Late complete-page planning/stable views, semantic residency publication and bounded pressure/direct-call paths remain unfinished; no runtime or FPS acceptance. f16630d also pins source mapping references during the witness callback and prohibits reentrant resource materialization in that phase; the prepared fixture contains a negative control. Final clean Release reproduced; unchanged four fixture typechecks reused from558, changed buffer-access TU typechecked atf166.",
         "d01969e separates physical DEFAULT/reservation allocation from semantic B residency using ShaderBufferRequest::publish_dma_residency. AppendRequests predicts ranges without committing later descriptor pages; complete materialized fault pages publish before buffer binds. Original shader buffers publish one by one in common native stage order and the single-stage transfer path. I-to-B copies clip/merge actual resident pages with original source offsets, retain leases and preserve unresident tails. Private clean-small shader streams retain full DWORD envelopes/byte adjustment and separate SRV/UAV classes; null/special/host/domain reservations do not publish. Masked final B supplies exact-base image refresh and mip growth snapshots, and selected resource states are restored before descriptors. Private independent-I conversions use nonpublishing CaptureShaderBuffer; other actual image-source callbacks retain explicit phase work. DMA simultaneous-SRV guards consider actual replacement descriptors rather than unused original envelopes. Primary and separate committed-source clean Release linked; five fixture TUs typechecked with /Zs in each checkout, including new retile residency/ordering/high-address and predicted-plan/private-capture controls; no runtime, shader conversion, GPU/game/XInput/UI or FPS acceptance.",
-        "2498c6f introduces GuestTextureCache::UploadPurpose and version-specific pending_buffer_residency. Partial block expansion returns a private snapshot plus its actual GPU B-source footprint without publishing early. Preparation uploads retain receipts; actual binding/reuse consumes them exactly once, and independent conversions inherit the source receipt chain before original ownership retires. Failed publication retains retry data; an actual content overwrite clears the previous version receipt. The core publisher verifies complete current backing and only observes sharps; it does not allocate or replace descriptors. Common stage/nonordered prewarm and depth feedback/metadata preparation are explicitly marked Preparation. Explicit prewrite shader/depth/stencil sources capture without publication, reserve complete physical source footprints before selected views, and publish at actual image/attachment use. Refreshed shared native I transfers pending provenance. A new prepared fixture covers deferred reuse, one-shot binding, failure/retry and overwrite; an existing native private conversion checks inheritance while retaining pixel/B-padding assertions. The independent fixture includes a local small-to-smaller rename to avoid a Windows macro collision. Primary and clean committed Release linked; six fixture TUs C++ /Zs in each checkout. No runtime/shader/GPU/game/XInput/UI execution or FPS acceptance. Complete tiny-page backing, late stable source identity and the existing nine-gap queue remain."
+        "2498c6f introduces GuestTextureCache::UploadPurpose and version-specific pending_buffer_residency. Partial block expansion returns a private snapshot plus its actual GPU B-source footprint without publishing early. Preparation uploads retain receipts; actual binding/reuse consumes them exactly once, and independent conversions inherit the source receipt chain before original ownership retires. Failed publication retains retry data; an actual content overwrite clears the previous version receipt. The core publisher verifies complete current backing and only observes sharps; it does not allocate or replace descriptors. Common stage/nonordered prewarm and depth feedback/metadata preparation are explicitly marked Preparation. Explicit prewrite shader/depth/stencil sources capture without publication, reserve complete physical source footprints before selected views, and publish at actual image/attachment use. Refreshed shared native I transfers pending provenance. A new prepared fixture covers deferred reuse, one-shot binding, failure/retry and overwrite; an existing native private conversion checks inheritance while retaining pixel/B-padding assertions. The independent fixture includes a local small-to-smaller rename to avoid a Windows macro collision. Primary and clean committed Release linked; six fixture TUs C++ /Zs in each checkout. No runtime/shader/GPU/game/XInput/UI execution or FPS acceptance. Complete tiny-page backing, late stable source identity and the existing nine-gap queue remain.",
+        "8fb9c79 reserves legal complete64KiB/4KiB backing for late image sources in ordered common native I/B domains before final views; prediction is nonpublishing, includes rounded independent-I retention and keeps original binding/masked-retile effects. Production ReadConst/DXIL/GPU full/partial controls pass with old B1, physical tails, private CPU stream and final identities. Other receipt domains and pressure/auxiliary paths remain open."
       ]
     },
     "depth-color-shared-storage": {

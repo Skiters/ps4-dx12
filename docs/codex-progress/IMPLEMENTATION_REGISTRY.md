@@ -1,5 +1,18 @@
 # Implementation and verification registry — 2026-10-17
 
+## Current crash / GPU-contract checkpoint — 2026-10-17
+
+Authoritative current state: SESSION_HANDOFF.md, crash evidence `F:/PS4Dev/handoff/breakpoint-crash-d01969e-20261016T234433Z`. This section supersedes older current/next claims and the old all-tests-deferred policy. Narrow regression and GPU/readback checks are now authorized; full suite and expanded gameplay acceptance remain final. No per-commit game launches, automatic core installation/selection, original Vulkan/save changes or user-app restart.
+
+Production935fb69 restores existing prepared writable B ownership after prewrite reads/Finish, without replacing selected resources or bypassing the ownership assertion; fatal messages synchronously reach stderr/log and the launcher captures per-launch streams/manifest/hex exit/report. db0812c preserves signed integer clear bits through compatible UINT views and explicit UAV ordering. Production8fb9c79 reserves complete legal DMA backing for late image sources in ordered common native I/B domains before final views, preserving original semantic publication phases.
+
+The original exactd01969e replay trapped in ExecuteGuestBufferCompute: `Independent image version lost its writable buffer ownership before execution`, followed by Liverpool coroutine UNREACHABLE -> int3. Original EXE/PDB/runtime, profile copy, logs, exception/context/stacks and dump are preserved. The exact935fb69 clean binary survived a120s bounded diagnostic startup exposure without this exception; its owned tree was stopped at deadline. No world/input/pixel/FPS acceptance, and that result is not transferred to8fb9c79.
+
+Six exact native fixture binaries are preserved with PASS records in `narrow-regressions-8fb9c79.json`: envelope/semantic B, DMA (including late image full/partial backing), independent I/B, buffer view lifetime, scheduler lifetime and PageWatch/GPU ownership. The latter also covers typed/converted image clears and gated resource lifetime;34.08s, not the former20s budget. Normalized half ties have tightly specified alternatives; original expected bytes/negative checks/padding remain. Clean committed Release at8fb9c79ea55c8a71d5befebffa0797de98f59523,54 pinned dependencies,2283 compile inputs, zero primary checkout inputs. Full runtime `F:/PS4Dev/handoff/breakpoint-crash-d01969e-20261016T234433Z/artifacts-8fb9c79`; EXE SHA256 `3e822bf2a7c46fcc8c8c7dc242c36df4ba895f65ce8dbd7ae03be1032f5a0fab`, PDB `765be1db16d597c59bd40f376e511e8a763d13dd0fd4cdbe18893dfb8c6a8e09`. This exact core is not game-tested or automatically installed.
+
+Full port is unfinished:129 independent implementation/behavior records, nine gap IDs retained. Next: extend pre-view source-footprint/backing planning beyond ordered common I/B domains to attachment-only/converted/BC/opaque source receipts; inspect GuestRasterizer::Draw submit_replay and ExecuteGuestResources before changing final views. Keep existing native identity/SRV-UAV/ownership guards. Direct Find/mixed-class/pressure B backing and private IA/auxiliary unification remain. App DLL was locked by the active user process: old DLL/PDB pair remains installed, new diagnostics pair staged; no process restart. Apply script/details in SESSION_HANDOFF.md.
+
+
 ## Current image-source publication checkpoint - 2026-10-17
 
 Production `2498c6fafe567e13a6b8fe71937aa967a1632b9b` connects version-specific image B-source residency: prewarm/capture reserves physical backing and retains deferred effects; actual image binding consumes them, including inherited independent I conversions and prewrite shader/depth/stencil sources. Publication preserves retry state, discards overwritten-version effects, checks existing source backing and does not replace native views. Primary and separate clean committed Release linked; six fixture TUs passed C++ /Zs in each checkout. All new runtime/shader/GPU/game/XInput/UI/FPS acceptance remains not_run.129 independent implementation/behavior records and nine gap IDs remain. Latest complete external runtime: F:/PS4Dev/handoff/image-source-publication-20261017/artifacts-2498c6f. Do not auto-install/select. Next: complete legal tiny DMA backing before final selected views, preserve GPU B/witnesses/fence leases, then the existing source-gap queue. SESSION_HANDOFF.md is authoritative; older sections preserve history.
@@ -50,7 +63,7 @@ The known backlog below retains real native guards; this registry does not certi
 | ID | Upstream symbol → native symbol | Missing semantics |
 |---|---|---|
 | color-attachment-feedback | Vulkan::Rasterizer::BindResources / BeginRendering → NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources | Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback. |
-| formatted-alias-ordering | Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage -> NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources | Complete legal subpage materialization for tiny late DMA sharps; preplanned stable initialized B backing for image-source residency receipts through pressure/reservation; resource reservation before selected views can be replaced; GPU-preserving direct Find overlap, mixed native SRV/UAV splitting and inactive GPU-only B pressure backing; original private CPU index streams and SRV-only auxiliary DMA unification; ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Runtime acceptance is deferred. |
+| formatted-alias-ordering | Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage -> NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources | Late image-source DMA backing outside the connected ordered common native I/B domains (attachment-only, converted/BC/opaque receipts); stable initialized B backing and source identity through pressure/reservation; resource reservation before selected views can be replaced; GPU-preserving direct Find overlap, mixed native SRV/UAV splitting and inactive GPU-only B pressure backing; original private CPU index streams and SRV-only auxiliary DMA unification; ordered opaque depth/stencil I/B transfers; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. |
 | depth-color-shared-storage | Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth → NativeDX12::GuestRasterizer::Draw | Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Opaque depth/stencil raw-DMA overlap retains the legacy physical-backing/exclusive-image path; ordered independent I/B transfer for this domain is unfinished. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback. |
 | signed-packed10-attachment | Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState → NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState | R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected. |
 | packed19-msaa-attachment | Vulkan::SurfaceFormat / GraphicsPipeline → NativeDX12::LayoutGuestTexture / GuestTextureCache::UploadVersion | Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented. |
@@ -113,10 +126,10 @@ Only concrete change IDs from the table above are listed. `—` means none estab
 | 46 | native-packed16-images | connected_with_known_gaps | color-attachment-feedback, packed19-msaa-attachment | not_run |
 | 47 | native-shader-debug-and-reload | connected | — | not_run |
 | 48 | native-buffer-extents-and-index-bounds | connected | — | not_run |
-| 49 | native-dma-page-table-growth | connected_with_known_gaps | formatted-alias-ordering | not_run |
+| 49 | native-dma-page-table-growth | connected_with_known_gaps | formatted-alias-ordering | partial_gpu_verified |
 | 50 | native-depth-stencil-shader-plane-access | connected_with_known_gaps | depth-color-shared-storage | not_run |
 | 51 | native-depth-shader-subresource-access | connected_with_known_gaps | color-attachment-feedback, depth-color-shared-storage | partial_gpu_verified |
-| 52 | native-independent-buffer-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
+| 52 | native-independent-buffer-image-versions | connected_with_known_gaps | formatted-alias-ordering | partial_gpu_verified |
 | 53 | native-independent-formatted-buffer-sync | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 54 | native-formatted-metadata-arena-synthesis | connected | — | not_run |
 | 55 | native-independent-r32-mip-chains | connected_with_known_gaps | formatted-alias-ordering | not_run |
@@ -135,18 +148,18 @@ Only concrete change IDs from the table above are listed. `—` means none estab
 | 68 | native-independent-packed16-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 69 | native-independent-r11-packed-float-image-versions | connected_with_known_gaps | formatted-alias-ordering | not_run |
 | 70 | native-independent-logical-partial-buffer-writes | connected_with_known_gaps | formatted-alias-ordering | not_run |
-| 71 | native-mixed-page-buffer-ownership | connected | — | not_run |
+| 71 | native-mixed-page-buffer-ownership | connected | — | partial_gpu_verified |
 | 72 | native-exact-subdword-buffer-write-ranges | connected_with_known_gaps | formatted-alias-ordering | not_run |
-| 73 | native-actual-cpu-store-formatted-buffer-pages | connected | — | not_run |
+| 73 | native-actual-cpu-store-formatted-buffer-pages | connected | — | partial_gpu_verified |
 | 74 | native-zero-clear-original-image-domain | connected | — | not_run |
-| 75 | native-image-clear-complete-subresources-padding | connected | — | not_run |
-| 76 | native-nonzero-wide-storage-image-clears | connected | — | not_run |
-| 77 | native-nonzero-typed-narrow-image-clears | connected | — | not_run |
+| 75 | native-image-clear-complete-subresources-padding | connected | — | partial_gpu_verified |
+| 76 | native-nonzero-wide-storage-image-clears | connected | — | partial_gpu_verified |
+| 77 | native-nonzero-typed-narrow-image-clears | connected | — | partial_gpu_verified |
 | 78 | native-raw-rgba8-converted-image-clears | connected | — | not_run |
 | 79 | native-packed16-sampled-volumes | connected | — | not_run |
 | 80 | native-packed16-nonzero-image-clears | connected | — | not_run |
 | 81 | native-packed10-converted-image-clears | connected_with_known_gaps | signed-packed10-attachment | not_run |
-| 82 | native-srgb-image-clears | connected | — | not_run |
+| 82 | native-srgb-image-clears | connected | — | partial_gpu_verified |
 | 83 | native-readonly-image-clear-promotion | connected | — | not_run |
 | 84 | native-compact-linear-image-download | connected | — | not_run |
 | 85 | native-queued-independent-image-downloads | connected | — | not_run |
@@ -156,7 +169,7 @@ Only concrete change IDs from the table above are listed. `—` means none estab
 | 89 | native-expanded-packed-image-clears | connected | — | not_run |
 | 90 | native-packed16-sampled-one-dimensional | connected | — | not_run |
 | 91 | native-priority-inflight-backing-generation | connected | — | not_run |
-| 92 | native-nonblocking-linear-pressure-source-residency | connected | — | not_run |
+| 92 | native-nonblocking-linear-pressure-source-residency | connected | — | partial_gpu_verified |
 | 93 | native-queued-linear-color-attachment-domains | connected | — | not_run |
 | 94 | native-compact-exact-expanded-packed-downloads | connected | — | not_run |
 | 95 | native-source-residency-format-and-sample-admission | connected | — | not_run |
