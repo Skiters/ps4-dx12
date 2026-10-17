@@ -16,7 +16,11 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         source.levels=1;source.layers=source.view_layers=growth?3:2;
         auto target=source;target.levels=growth?2:1;target.layers=growth?1:2;target.view_layers=1;
         if(color_source){source.depth_target=false;source.render_target=true;source.number_format=4;}
-        if(color_target){target.depth_target=false;target.render_target=true;target.number_format=7;}
+        if(color_target){
+            // Original ColorBuffer requests one mip; RT expansion grows layers.
+            source.layers=source.view_layers=growth?1:2;target.levels=1;target.layers=growth?3:2;
+            target.depth_target=false;target.render_target=true;target.number_format=7;
+        }
         const auto old_layout=LayoutGuestTexture(source),layout=LayoutGuestTexture(target);
         auto stencil_shape=target;stencil_shape.depth_target=true;stencil_shape.render_target=false;
         const auto sl=LayoutGuestTexture(DescribeGuestStencil(stencil_shape));
