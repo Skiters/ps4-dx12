@@ -2,6 +2,8 @@
 
 ## Authoritative initial physical DMA / private IA / GPU-fill continuation — 2026-10-17
 
+Focused copy diagnostic after the main checkpoint: the unchanged no-submit oracle now reports `before=0 prepared=0 copied=1` (command-20261017-060916-4476.log). The source preparation does not submit; the first submission occurs inside CopyBuffer/CopyBufferBatchImpl. Only the failure message was extended in native-port/copy_dirty_ranges_test.cpp, not its expected fences/data or any production path. Current production core remains7a59dd2 with its preserved identities. Continue by isolating CPU-visible-dirty reconciliation vs preserving source growth **inside copy**. Evidence and exact diagnostic fixture identity: H/copy-diagnostic-followup.json. This narrows the failure boundary; it does not establish whether production or the plain-Rasterizer ownership precondition is wrong.
+
 ### A. Current state and preserved crash evidence
 
 Branch fix/mixed-cmask; production `7a59dd26410aa2ba29b38d8fd1845af8b90c44fa`, following fcb67e1839e10a895d4849c148f074ae388b41ab and2d5e107b269b258b29a9fc1d797544591cf01a77. This section supersedes older current/next entries without deleting their evidence. Narrow compilation/regression/GPU checks are authorized; full suite/expanded gameplay remains final. No game, app/UI/XInput, profiler, core installation/selection or user-process restart this continuation. Original Vulkan/profile/saves remain untouched. Full port is not completed or accepted in Bloodborne.

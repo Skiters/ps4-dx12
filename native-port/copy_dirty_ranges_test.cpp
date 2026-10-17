@@ -62,9 +62,11 @@ void RunLargePacket(ID3D12Device* device) {
         constexpr u64 SourceEnvelope=(u64(Bytes)+1+3)&~u64(3);
         renderer.PrepareShaderBuffers(
             std::array<Rasterizer::ShaderBufferRequest,1>{{{base,SourceEnvelope,true,true}}});
+        const auto prepared=renderer.SubmittedFence();
         memset(memory+Destination,0xee,Bytes);
         renderer.CopyBuffer(base+Destination,base+1,Bytes,false,false);
-        if(renderer.SubmittedFence()!=before)throw std::runtime_error("DMA submitted the pending guest list");
+        if(renderer.SubmittedFence()!=before)throw std::runtime_error("DMA submitted the pending guest list: before="+
+            std::to_string(before)+" prepared="+std::to_string(prepared)+" copied="+std::to_string(renderer.SubmittedFence()));
         const auto retained=renderer.PrepareShaderBuffers(
             std::array<Rasterizer::ShaderBufferRequest,1>{{{base+Neighbour,65536,false,true}}})[0];
         if(retained.resource.Get()!=neighbour.resource.Get())
