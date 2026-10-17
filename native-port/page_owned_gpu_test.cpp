@@ -214,19 +214,36 @@ int main(int argc,char**){try{
         readback.Resolve(renderer.CompletedFence(),guest);
         const std::array<u32,4> words{0x3e800000u,0x3f000000u,0xbf000000u,0x3f800000u};
         const u32 rgba=0xff008040u;
+        // FLOAT->UNORM permits 0.6 integer ULP (D3D functional spec 3.2.3.6).
+        // The pinned Vulkan typed clear likewise does not specify a unique
+        // result at this tie: 0.5 * 255 = 127.5 permits either 127 or 128.
+        // Preserve the independently authored nearest-up bytes and admit only
+        // this one alternate logical component; padding and all other bytes
+        // remain exact. Never apply a blanket +/-1 tolerance to readbacks.
+        std::vector<bool> unorm_half_ties(guest.size());
         for(u32 mip=0;mip<d.levels;++mip)for(u32 layer=0;layer<d.layers;++layer)
         for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
-            memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),
+        {
+            const auto offset=GuestPixelOffset(d,layout,mip,layer,x,y);
+            memcpy(expected.data()+offset,
                    data==10?static_cast<const void*>(&rgba):words.data(),data==14?16:4);
-        if(guest!=expected||image.texture.handle!=original||image.desc!=d){
-            const auto mismatch=std::mismatch(guest.begin(),guest.end(),expected.begin());
+            if(data==10)unorm_half_ties[offset+1]=true;
+        }
+        const auto matches=[&](size_t offset,std::byte value){return value==expected[offset]||
+            (unorm_half_ties[offset]&&expected[offset]==std::byte{128}&&value==std::byte{127});};
+        for(size_t i=0;i<guest.size();++i)if(unorm_half_ties[i]){
+            Require(matches(i,std::byte{127})&&matches(i,std::byte{128}));
+            Require(!matches(i,std::byte{126})&&!matches(i,std::byte{129}));
+        }
+        size_t mismatch=0;while(mismatch<guest.size()&&matches(mismatch,guest[mismatch]))++mismatch;
+        if(mismatch!=guest.size()||image.texture.handle!=original||image.desc!=d){
             fprintf(stderr,"Typed clear mismatch: data=%u tile=%u swizzle=%u,%u,%u,%u offset=%zu actual=%u expected=%u resource_same=%u desc_same=%u\n",
-                data,tile,swizzle[0],swizzle[1],swizzle[2],swizzle[3],size_t(mismatch.first-guest.begin()),
-                mismatch.first==guest.end()?0:std::to_integer<unsigned>(*mismatch.first),
-                mismatch.second==expected.end()?0:std::to_integer<unsigned>(*mismatch.second),
+                data,tile,swizzle[0],swizzle[1],swizzle[2],swizzle[3],mismatch,
+                mismatch==guest.size()?0:std::to_integer<unsigned>(guest[mismatch]),
+                mismatch==expected.size()?0:std::to_integer<unsigned>(expected[mismatch]),
                 unsigned(image.texture.handle==original),unsigned(image.desc==d));
         }
-        Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+        Require(mismatch==guest.size()&&image.texture.handle==original&&image.desc==d);
         cache.Collect(renderer.CompletedFence());cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
     }
     for(const u32 samples:{2u,4u,8u})for(const u32 tile:{8u,13u})for(const u32 usage:{0u,1u,2u}){
@@ -413,14 +430,32 @@ int main(int argc,char**){try{
             const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
             readback.Resolve(renderer.CompletedFence(),guest);
             const u32 component_bytes=packed10?4:half||packed16?2:1,channels=layout.bytes_per_pixel/component_bytes;
+            auto validated=guest;
             for(u32 mip=0;mip<d.levels;++mip)
             for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
             for(u32 y=0;y<std::max(d.height>>mip,1u);++y)
             for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
-            for(u32 component=0;component<channels;++component)
-                memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y)+component*component_bytes,
-                    &components[component],component_bytes);
-            Require(guest==expected);
+            for(u32 component=0;component<channels;++component){
+                const auto offset=GuestPixelOffset(d,layout,mip,layer,x,y)+component*component_bytes;
+                memcpy(expected.data()+offset,&components[component],component_bytes);
+                // Only actual half-integer normalized components admit two
+                // nearest encodings (D3D 3.2.3.4/6, Vulkan fixed-point rules).
+                // Compare the complete component, never tolerate bytewise
+                // combinations across a 16-bit carry, nor any padding change.
+                if(!packed10&&!packed16&&(number==0||number==1)&&
+                   (component==1||(number==1&&component==2))){
+                    const u32 alternate=components[component]+(component==2?1u:UINT32_MAX);
+                    if(!memcmp(guest.data()+offset,&alternate,component_bytes))
+                        memcpy(validated.data()+offset,&components[component],component_bytes);
+                }
+            }
+            if(validated!=expected){
+                const auto mismatch=std::mismatch(validated.begin(),validated.end(),expected.begin());
+                fprintf(stderr,"Storage clear mismatch: data=%u number=%u tile=%u raw=%u readonly=%u offset=%zu actual=%u expected=%u\n",
+                    data,number,d.tile_mode,unsigned(raw),unsigned(readonly),size_t(mismatch.first-guest.begin()),
+                    std::to_integer<unsigned>(*mismatch.first),std::to_integer<unsigned>(*mismatch.second));
+            }
+            Require(validated==expected);
             if(packed10){
                 float edge[4];u32 values[4];
                 if(number==0){const float input[]{-1.f,1.f,2.f,0.5f};const u32 bits[]{0,1023,1023,2};
@@ -448,11 +483,17 @@ int main(int argc,char**){try{
                 GuestImageReadback edge_readback(device.Get(),image,renderer.RecordingList());
                 const auto edge_fence=renderer.Flush();cache.Submitted(edge_fence);edge_readback.Submitted(edge_fence);
                 renderer.Finish();edge_readback.Resolve(renderer.CompletedFence(),guest);
+                auto validated_edge=guest;
                 for(u32 mip=0;mip<d.levels;++mip)
                 for(u32 layer=0;layer<(d.volume_depth?std::max(d.volume_depth>>mip,1u):d.layers);++layer)
                 for(u32 y=0;y<std::max(d.height>>mip,1u);++y)for(u32 x=0;x<std::max(d.width>>mip,1u);++x)
-                    memcpy(expected.data()+GuestPixelOffset(d,layout,mip,layer,x,y),&encoded,4);
-                Require(guest==expected&&image.texture.handle==original&&image.desc==d);
+                {
+                    const auto offset=GuestPixelOffset(d,layout,mip,layer,x,y);
+                    memcpy(expected.data()+offset,&encoded,4);
+                    // sRGB alpha is linear UNORM, with the same exact half tie.
+                    if(guest[offset+3]==std::byte{127})validated_edge[offset+3]=std::byte{128};
+                }
+                Require(validated_edge==expected&&image.texture.handle==original&&image.desc==d);
             }
             if(raw||packed16||srgb||readonly){cache.Collect(renderer.CompletedFence());
                 Require(image.format_transfers.empty()&&image.format_retirement_bytes==0&&
@@ -497,14 +538,17 @@ int main(int argc,char**){try{
         const u32 words[]{0x3e800000,0x3f000000,0xbf000000},rgba=0xff008040;
         const u16 packed=data==16?0x4400:data==17?0xa200:data==18?0x4401:0x084f;
         const u32 signed_packed=0x70040080;
+        auto validated=backing;
         for(u32 layer=0;layer<d.layers;++layer)for(u32 z=0;z<std::max(d.volume_depth,1u);++z)
         for(u32 y=0;y<d.height;++y)for(u32 x=0;x<d.width;++x){
             auto* texel=expected.data()+((uint64_t(layer)*std::max(d.volume_depth,1u)+z)*d.height+y)*d.pitch*layout.bytes_per_pixel+x*layout.bytes_per_pixel;
             if(data>=16)memcpy(texel,&packed,2);
             else if(data==9)memcpy(texel,&signed_packed,4);
             else memcpy(texel,data==10?&rgba:words,layout.bytes_per_pixel);
+            const auto offset=size_t(texel-expected.data());
+            if(data==10&&backing[offset+1]==std::byte{127})validated[offset+1]=std::byte{128};
         }
-        Require(backing==expected);
+        Require(validated==expected);
         if(layout.expanded_bytes_per_pixel)image.SetGpuOwned(false);
         cache.Collect(renderer.CompletedFence());
         cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());

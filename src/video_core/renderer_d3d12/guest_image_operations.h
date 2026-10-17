@@ -87,7 +87,23 @@ struct GuestStorageImageClearLease {
         visible(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,e.desc.levels,true),
         cpu(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,e.desc.levels,false),mips(e.desc.levels){
         const auto clear_view=GuestImageClearView(e.desc);
-        for(uint32_t mip=0;mip<mips;++mip){const auto view=e.Uav(clear_view,mip);
+        for(uint32_t mip=0;mip<mips;++mip){auto view=e.Uav(clear_view,mip);
+            // Integer clears write the already converted guest bit pattern.
+            // Use the unsigned member of the same typeless family: passing a
+            // sign-extended UINT to a narrow SINT clear can saturate instead
+            // of retaining the guest's negative value on native drivers.
+            switch(view.Format){
+            case DXGI_FORMAT_R8_SINT:view.Format=DXGI_FORMAT_R8_UINT;break;
+            case DXGI_FORMAT_R8G8_SINT:view.Format=DXGI_FORMAT_R8G8_UINT;break;
+            case DXGI_FORMAT_R8G8B8A8_SINT:view.Format=DXGI_FORMAT_R8G8B8A8_UINT;break;
+            case DXGI_FORMAT_R16_SINT:view.Format=DXGI_FORMAT_R16_UINT;break;
+            case DXGI_FORMAT_R16G16_SINT:view.Format=DXGI_FORMAT_R16G16_UINT;break;
+            case DXGI_FORMAT_R16G16B16A16_SINT:view.Format=DXGI_FORMAT_R16G16B16A16_UINT;break;
+            case DXGI_FORMAT_R32_SINT:view.Format=DXGI_FORMAT_R32_UINT;break;
+            case DXGI_FORMAT_R32G32_SINT:view.Format=DXGI_FORMAT_R32G32_UINT;break;
+            case DXGI_FORMAT_R32G32B32A32_SINT:view.Format=DXGI_FORMAT_R32G32B32A32_UINT;break;
+            default:break;
+            }
             DX12_API_CALL(device->CreateUnorderedAccessView(texture.handle.Get(),nullptr,&view,visible.Cpu(mip)));
             DX12_API_CALL(device->CreateUnorderedAccessView(texture.handle.Get(),nullptr,&view,cpu.Cpu(mip)));
         }
@@ -149,6 +165,8 @@ inline std::shared_ptr<GuestStorageImageClearLease> RecordGuestStorageImageClear
     if(lease->texture.handle!=e.texture.handle||lease->mips!=e.desc.levels)
         throw std::invalid_argument("Mismatched prepared guest storage image clear");
     e.texture.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    // ClearUAV is a compute operation, including when the state is unchanged.
+    e.texture.UavBarrier(list);
     ID3D12DescriptorHeap* heaps[]{lease->visible.Heap()};DX12_API_CALL(list->SetDescriptorHeaps(1,heaps));
     // Pinned VkClearValue stores the input float vector's raw union bits for
     // integer images. R32 raw storage of a guest float also needs those exact
@@ -158,6 +176,15 @@ inline std::shared_ptr<GuestStorageImageClearLease> RecordGuestStorageImageClear
     const auto native_color=GuestNativeImageClearColor(e.desc,color);
     UINT bits[4];for(unsigned component=0;component<4;++component)
         bits[component]=std::bit_cast<uint32_t>(native_color[component]);
+    if(!e.desc.UsesRaw32()&&(e.desc.number_format==4||e.desc.number_format==5)){
+        // Vulkan ClearImage casts integer union values to the target component
+        // width. For representable SINT values this retains two's complement;
+        // UINT also retains its low bits. Keep raw R32 guest words untouched.
+        const auto data=e.desc.data_format;
+        const UINT mask=data==1||data==3||data==10?0xffu:
+            data==2||data==5||data==12?0xffffu:UINT_MAX;
+        for(auto& component:bits)component&=mask;
+    }
     const bool integer=e.desc.UsesRaw32()||e.desc.number_format==4||e.desc.number_format==5||
         (e.desc.data_format>=16&&e.desc.data_format<=19);
     for(uint32_t mip=0;mip<e.desc.levels;++mip){

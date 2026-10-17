@@ -218,8 +218,10 @@ add_executable(native-page-owned-gpu-test page_owned_gpu_test.cpp
 target_link_libraries(native-page-owned-gpu-test PRIVATE shadps4_native_guest_textures shadps4_native_d3d12)
 add_test(NAME native_gpu_page_ownership COMMAND native-page-owned-gpu-test)
 add_test(NAME native_gpu_page_ownership_360p COMMAND native-page-owned-gpu-test lowres)
-set_tests_properties(native_gpu_page_ownership_360p PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 20)
-set_tests_properties(native_gpu_page_ownership PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 20)
+# Includes typed/converted mip/layer/volume clears and gated allocation lifetime
+# controls; the old 20s limit expired before those controls completed on hardware.
+set_tests_properties(native_gpu_page_ownership_360p PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 90)
+set_tests_properties(native_gpu_page_ownership PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 90)
 add_executable(native-packed-backing-test packed_backing_test.cpp)
 add_executable(native-device-configuration-test device_configuration_test.cpp)
 target_link_libraries(native-device-configuration-test PRIVATE shadps4_native_guest_textures shadps4_native_d3d12)
