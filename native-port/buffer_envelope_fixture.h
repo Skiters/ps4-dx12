@@ -229,6 +229,53 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
                 "Joined B committed formatted bytes, gaps or outside padding");}
         renderer.ValidateDebugMessages();
     }
+    for(const bool prior_write:{false,true}){
+        // Disjoint SRV/UAV byte ranges can share an old B allocation. Preserve
+        // that complete canonical version/guard; the private SRV is a late
+        // GPU snapshot, not CPU B0 and not an immutable early-stage snapshot.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        const Rasterizer::ShaderBufferRequest initial{base,16384,prior_write,true,true};
+        const Rasterizer::BufferWrite actual{base+4,4};
+        renderer.PrepareShaderBuffers(std::span(&initial,1),prior_write?std::span(&actual,1):std::span<const Rasterizer::BufferWrite>{});
+        renderer.FillPreparedShaderBuffer(base,16384,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const Rasterizer::ShaderBufferRequest requests[]{{base+12,4096,false,false,true},{base+12352,4,true,true,true}};
+        auto selected=renderer.PrepareShaderBuffers(requests);
+        require(selected[0].read_snapshot&&selected[0].resource.Get()!=selected[1].resource.Get()&&
+            renderer.CachedBufferBytes()==16384,"Protected mixed views replaced/split canonical B");
+        renderer.FillPreparedShaderBuffer(base+12,4,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.FillPreparedShaderBuffer(base+12352,4,0x61626364,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.SynchronizePreparedDmaBuffers(requests,selected);
+        const Rasterizer::ShaderBufferRequest extension{base+16380,4100,false,true,true};
+        const auto before=renderer.SubmittedFence();renderer.PrepareShaderBuffers(std::span(&extension,1));
+        auto final=renderer.RefreshPreparedShaderBuffers(requests,selected);
+        MEMORY_BASIC_INFORMATION protection{};VirtualQuery(reinterpret_cast<void*>(base),&protection,sizeof(protection));
+        require(protection.Protect==PAGE_NOACCESS&&renderer.SubmittedFence()==before&&commits==0&&
+            final[0].resource.Get()==selected[0].resource.Get(),"Private GPU read refresh lost protection/pending writes or reallocated its bound resource");
+        auto rb=Buffer(device,4096,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const auto native=final[0].resource.Get();std::weak_ptr<Rasterizer::ShaderReadSnapshot> lifetime=final[0].read_snapshot;
+        final[0].read_snapshot->gpu->Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,final[0].resource.Get(),0,4096);
+        selected.clear();final.clear();require(!lifetime.expired(),"Private shader-read allocation died before its recorded copy fence");
+        renderer.Finish();void* mapped{};D3D12_RANGE all{0,4096};Check(rb.handle->Map(0,&all,&mapped));
+        bool valid=true;for(size_t offset=0;offset<4096;offset+=4){u32 word{};memcpy(&word,static_cast<const std::byte*>(mapped)+offset,4);
+            valid&=word==(offset==0?0x51525354U:0x41424344U);}
+        D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);require(valid,"Protected private shader read used stale contents or CPU B0");
+        renderer.CollectRetirements();require(lifetime.expired(),"Completed private shader-read state remained pinned");
+        const auto canonical=read(renderer,base,20480);
+        for(size_t offset=0;offset<canonical.size();offset+=4){u32 word{};memcpy(&word,canonical.data()+offset,4);
+            const auto expected=offset==12?0x51525354U:offset==12352?0x61626364U:offset<16384?0x41424344U:0x31313131U;
+            require(word==expected,"Mixed-view preparation lost canonical GPU bytes, writes, gaps or padding");}
+        require(renderer.ReadMemory(base,20480)&&committed==(prior_write?8u:4u),"Mixed views committed an envelope instead of original exact writes");
+        for(size_t offset=0;offset<bytes;offset+=4){u32 word{};memcpy(&word,physical+offset,4);
+            require(word==(offset==12352?0x61626364U:prior_write&&offset==4?0x41424344U:0x31313131U),
+                "Mixed native views changed physical B0 outside actual guest stores");}
+        auto readonly=std::vector<Rasterizer::ShaderBufferRequest>(std::begin(requests),std::end(requests));
+        for(auto& request:readonly)request.written=false;
+        auto reused=renderer.PrepareShaderBuffers(readonly);
+        require(reused[0].resource.Get()==native,"Retired private shader-read GPU storage was not reused");
+        renderer.ValidateDebugMessages();
+    }
     {
         // Follow an original view across two successive generations, but never
         // accept a retired/recreated mapping merely because its address matches.

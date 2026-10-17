@@ -367,6 +367,10 @@ void Rasterizer::RetireBuffer(Mapping& mapping){
     }
 }
 void Rasterizer::TrimPools(){
+    if(memory_pressure_)for(auto it=shader_read_copy_pool_.begin();it!=shader_read_copy_pool_.end();){
+        if(it->use_count()!=1){++it;continue;}
+        shader_read_copy_pool_bytes_-=(*it)->handle->GetDesc().Width;it=shader_read_copy_pool_.erase(it);
+    }
     if(!memory_perf_.enabled)return;
     const auto limit=memory_pressure_?0:gpu_pool_budget_;
     for(auto it=buffer_pool_.begin();it!=buffer_pool_.end()&&pooled_buffer_bytes_>limit;){
@@ -1074,6 +1078,33 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
     Diagnostics::Scope diagnostic(Diagnostics::Kind::BufferViews,"validate-ranges");
     std::lock_guard lock(execution_mutex_);
     RefreshBufferBudget();
+    bool has_srv=false,has_uav=false,preserve_version=false,valid=true;
+    for(const auto& request:requests)(request.unordered_access?has_uav:has_srv)=true;
+    if(has_srv&&has_uav)for(const auto& request:requests){
+        valid&=request.address&&request.size&&request.address<=UINT64_MAX-request.size&&
+            !(request.address%4)&&!(request.size%4)&&IsMapped(request.address,request.size)&&
+            (!request.written||request.unordered_access);
+    }
+    if(valid&&has_srv&&has_uav){
+        for(const auto& request:requests){
+            for(auto it=FirstOverlapping(request.address);it!=mappings_.end()&&it->first<request.address+request.size;++it)
+                preserve_version|=it->second.gpu_cpu_diverged||it->second.gpu_owned;
+            if(!request.unordered_access)for(const auto& other:requests)if(other.unordered_access&&
+                request.address<other.address+other.size&&other.address<request.address+request.size)
+                throw std::runtime_error("Overlapping guest SRV/UAV buffer aliases need compiler access unification");
+        }
+        if(preserve_version){
+            // These logical bytes do not overlap, but their native arena can.
+            // Keep the complete B version/owner and copy only SRV reads to
+            // private GPU storage. Writes still update the canonical arena.
+            auto canonical=std::vector<ShaderBufferRequest>(requests.begin(),requests.end());
+            for(auto& request:canonical)request.unordered_access=true;
+            auto result=PrepareShaderBuffersImpl(canonical,known_writes,physical_dma);
+            for(size_t i=0;i<requests.size();++i)if(!requests[i].unordered_access)
+                result[i]=SnapshotShaderBufferRead(requests[i],result[i]);
+            return result;
+        }
+    }
     std::vector<std::pair<VAddr,VAddr>> ranges;
     for(const auto& request:requests) {
         if(!request.address||!request.size||request.address>UINT64_MAX-request.size||
@@ -1306,6 +1337,38 @@ std::optional<Rasterizer::ShaderBufferView> Rasterizer::PreparedDmaBuffer(VAddr 
        size>mapping.size-(address-mapping.base))return {};
     return ShaderBufferView{mapping.gpu.handle,address-mapping.base,size,{},mapping.gpu.allocation,mapping.backing_version};
 }
+Rasterizer::ShaderBufferView Rasterizer::SnapshotShaderBufferRead(const ShaderBufferRequest& request,const ShaderBufferView& source){
+    if(request.written||request.unordered_access||source.lease||source.read_snapshot||!source.backing_version)
+        throw std::logic_error("Invalid private GPU shader-read source");
+    if(memory_pressure_)TrimPools();
+    std::shared_ptr<Resource> copy;
+    for(const auto& candidate:shader_read_copy_pool_)if(candidate.use_count()==1&&candidate->handle->GetDesc().Width>=request.size&&
+        candidate->handle->GetDesc().Width-request.size<=std::max<u64>(65536,request.size/4)&&
+        (!copy||candidate->handle->GetDesc().Width<copy->handle->GetDesc().Width))copy=candidate;
+    if(!copy){
+        copy=std::make_shared<Resource>(AcquireBuffer(request.size));
+        const auto bytes=copy->handle->GetDesc().Width;
+        if(shader_read_copy_pool_.size()<256&&bytes<=128*MemoryMiB-shader_read_copy_pool_bytes_){
+            shader_read_copy_pool_.push_back(copy);shader_read_copy_pool_bytes_+=bytes;}
+    }
+    auto snapshot=std::make_shared<ShaderReadSnapshot>(ShaderReadSnapshot{copy,request.address,request.size,source});
+    ShaderBufferView result{copy->handle,0,request.size,{},snapshot,source.backing_version,snapshot};
+    return RefreshPreparedShaderBuffers(std::span(&request,1),std::span(&result,1)).front();
+}
+void Rasterizer::RefreshShaderReadSnapshot(const ShaderBufferRequest& request,const ShaderBufferView& view,Mapping& mapping){
+    const auto& snapshot=view.read_snapshot;
+    // Retain both placed allocations before recording, including a canonical
+    // generation newer than the snapshot's original selected source.
+    RetainUntilFinish([source=mapping.gpu,snapshot](u64){(void)source;(void)snapshot;});
+    const auto previous=mapping.gpu.state;
+    mapping.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+    snapshot->gpu->Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+    DX12_API_CALL(RecordingList()->CopyBufferRegion(snapshot->gpu->handle.Get(),0,mapping.gpu.handle.Get(),
+        request.address-mapping.base,request.size));
+    mapping.gpu.Transition(RecordingList(),previous);
+    snapshot->gpu->Transition(RecordingList(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Diagnostics::Count("buffer-read.private-gpu-copy.bytes",request.size);
+}
 std::vector<Rasterizer::ShaderBufferView> Rasterizer::RefreshPreparedShaderBuffers(
     std::span<const ShaderBufferRequest> requests,std::span<const ShaderBufferView> selected){
     std::lock_guard lock(execution_mutex_);
@@ -1320,13 +1383,21 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::RefreshPreparedShaderBuffe
            previous.size>previous.resource->GetDesc().Width-previous.offset)
             throw std::logic_error("Invalid preceding prepared buffer view");
         if(previous.lease){
-            if(request.written||request.unordered_access)
+            if(request.written||request.unordered_access||previous.read_snapshot)
                 throw std::logic_error("Immutable CPU stream cannot become writable");
             result.push_back(previous);continue;
         }
-        const auto& version=previous.backing_version;
-        if(!version||previous.resource.Get()!=version->resource||request.address<version->base||request.address-version->base!=previous.offset||
-           previous.offset>version->size||request.size>version->size-previous.offset)
+        if(const auto& snapshot=previous.read_snapshot;snapshot){
+            if(request.written||request.unordered_access||request.address!=snapshot->address||request.size!=snapshot->size||
+               previous.offset||!snapshot->gpu||previous.resource.Get()!=snapshot->gpu->handle.Get()||
+               previous.allocation.get()!=snapshot.get()||snapshot->source.read_snapshot||snapshot->source.lease||
+               previous.backing_version!=snapshot->source.backing_version)
+                throw std::logic_error("Private GPU shader-read view lost its original identity");
+        }
+        const auto& origin=previous.read_snapshot?previous.read_snapshot->source:previous;
+        const auto& version=origin.backing_version;
+        if(!version||origin.resource.Get()!=version->resource||origin.size!=request.size||request.address<version->base||request.address-version->base!=origin.offset||
+           origin.offset>version->size||request.size>version->size-origin.offset)
             throw std::logic_error("Prepared buffer view lost its original range generation");
         auto it=mappings_.upper_bound(request.address);
         if(it==mappings_.begin())throw std::logic_error("Final buffer backing was retired");--it;
@@ -1336,8 +1407,9 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::RefreshPreparedShaderBuffe
         if(!preserved||mapping.initial_upload_failed||request.address-mapping.base>mapping.size||
            request.size>mapping.size-(request.address-mapping.base))
             throw std::logic_error("Final buffer backing was replaced without GPU-preserving continuity");
-        result.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation,mapping.backing_version});
-        states[mapping.base]|=request.unordered_access;
+        if(previous.read_snapshot){RefreshShaderReadSnapshot(request,previous,it->second);result.push_back(previous);}
+        else result.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation,mapping.backing_version});
+        states[mapping.base]|=request.unordered_access||bool(previous.read_snapshot);
     }
     // Finish/retile/capture can leave an otherwise valid arena in COPY_SOURCE.
     // Preserve already prepared IA/indirect read bits on shared read-only B.
@@ -1363,6 +1435,20 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
         auto it=mappings_.upper_bound(request.address);
         if(it==mappings_.begin())throw std::logic_error("DMA synchronization lost a prepared mapping");--it;
         const auto& mapping=it->second;
+        if(const auto& snapshot=view.read_snapshot;snapshot){
+            const auto& source=snapshot->source;const auto& version=source.backing_version;
+            const bool preserved=version&&(mapping.backing_version==version||
+                std::ranges::any_of(mapping.preserved_versions,[&](const auto& weak){return weak.lock()==version;}));
+            if(request.written||request.unordered_access||snapshot->address!=request.address||snapshot->size!=request.size||
+               !snapshot->gpu||view.resource.Get()!=snapshot->gpu->handle.Get()||view.offset||view.size!=request.size||
+               view.allocation.get()!=snapshot.get()||source.lease||source.read_snapshot||!preserved||mapping.initial_upload_failed||
+               source.resource.Get()!=version->resource||source.size!=request.size||view.backing_version!=version||
+               request.address<version->base||request.address-version->base!=source.offset||
+               source.offset>version->size||request.size>version->size-source.offset||
+               request.address-mapping.base>mapping.size||request.size>mapping.size-(request.address-mapping.base))
+                throw std::logic_error("DMA synchronization lost its private shader-read source");
+            active[mapping.base]=true;continue;
+        }
         if(request.address-mapping.base>mapping.size||request.size>mapping.size-(request.address-mapping.base)||
            view.resource.Get()!=mapping.gpu.handle.Get()||view.offset!=request.address-mapping.base||view.size!=request.size)
             throw std::logic_error("DMA synchronization cannot replace an already bound resource");
@@ -1400,6 +1486,8 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }else PrepareBufferContents(mapping,false,uav,false,{},std::span<const BufferWrite>{},diagnostic);
     }
+    for(size_t i=0;i<requests.size();++i)if(views[i].read_snapshot)
+        (void)RefreshPreparedShaderBuffers(requests.subspan(i,1),views.subspan(i,1));
 }
 Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency){
     std::lock_guard lock(execution_mutex_);

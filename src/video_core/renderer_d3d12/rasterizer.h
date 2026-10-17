@@ -42,6 +42,8 @@ private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
     std::vector<std::shared_ptr<Resource>> index_copy_pool_;
     u64 index_copy_pool_bytes_{};
+    std::vector<std::shared_ptr<Resource>> shader_read_copy_pool_;
+    u64 shader_read_copy_pool_bytes_{};
     struct IndexStreamPage {std::shared_ptr<UploadArena> arena;u64 used{};};
     std::vector<IndexStreamPage> index_stream_pages_;
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
@@ -212,14 +214,23 @@ public:
     bool BuffersMayDefer(std::span<const ShaderBufferRequest>);
     virtual void NotifyGpuBufferWrite(VAddr,u64) {}
     void MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests);
+    struct ShaderReadSnapshot;
     struct ShaderBufferView {
         ComPtr<ID3D12Resource> resource;u64 offset,size;
         std::shared_ptr<UploadArena> lease;
         // Keep placed memory alive and prevent pool reuse until the last GPU view retires.
         std::shared_ptr<void> allocation;
         std::shared_ptr<const BufferBackingVersion> backing_version;
+        std::shared_ptr<ShaderReadSnapshot> read_snapshot;
+    };
+    struct ShaderReadSnapshot {
+        std::shared_ptr<Resource> gpu;
+        VAddr address;u64 size;
+        ShaderBufferView source;
     };
 private:
+    ShaderBufferView SnapshotShaderBufferRead(const ShaderBufferRequest&,const ShaderBufferView&);
+    void RefreshShaderReadSnapshot(const ShaderBufferRequest&,const ShaderBufferView&,Mapping&);
     void PrepareBufferContents(Mapping&,bool written,bool uav,bool fresh,
         std::span<const ShaderBufferRequest>,std::optional<std::span<const BufferWrite>>,Diagnostics::Scope&);
     std::vector<ShaderBufferView> PrepareShaderBuffersImpl(std::span<const ShaderBufferRequest>,
@@ -235,8 +246,9 @@ public:
     void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     // Select only fully materialized backing; never reserve, resize or upload.
     std::optional<ShaderBufferView> PreparedDmaBuffer(VAddr,u64)const;
-    // Re-select after attachment preparation without allocating or replaying
-    // stage effects. Reject unrelated replacements, even at the same address.
+    // Re-select after attachment preparation without GPU allocation or replaying
+    // stage effects. Refresh existing disjoint GPU-read copies at this phase.
+    // Reject unrelated replacements, even at the same address.
     std::vector<ShaderBufferView> RefreshPreparedShaderBuffers(
         std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     Resource CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency=true);
