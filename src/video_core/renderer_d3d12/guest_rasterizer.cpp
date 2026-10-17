@@ -370,7 +370,8 @@ void GuestRasterizer::RetireImageForPressure(GuestTextureCache::Entry& image){
     if(!image.gpu_owned)return;
     if(!image.buffer_alias_version||image.desc.tile_mode!=8||image.desc.samples!=1||
        (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
-       (image.desc.depth_target&&!IsIndependentGuestDepthStorage(image.desc,image.layout))||image.desc.stencil_address){
+       (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
+       (image.desc.stencil_address&&!image.desc.depth_target)){
         ResolveImage(image);return;
     }
     auto source=textures_.RetainPressureSource(image);
@@ -398,7 +399,8 @@ void GuestRasterizer::ResolveImage(GuestTextureCache::Entry& image){
     if(image.buffer_alias_version){
         if((image.desc.tile_mode!=8&&image.desc.width>8)||image.desc.samples!=1||
            (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
-           (image.desc.depth_target&&!IsIndependentGuestDepthStorage(image.desc,image.layout))||image.desc.stencil_address)
+           (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
+           (image.desc.stencil_address&&!image.desc.depth_target))
             throw std::runtime_error("Independent buffer/image version needs a domain-preserving format/pressure resolver");
         DownloadIndependentImage(image);
         ReleaseIndependentImageWatches(image);

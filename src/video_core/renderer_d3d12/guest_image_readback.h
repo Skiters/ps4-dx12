@@ -30,7 +30,7 @@ public:
 // Pinned DownloadImageMemory copies mip zero into a compact pitch-based CPU
 // span, independently of the full guest mip/layer allocation layout.
 class GuestLinearImageReadback {
-    struct Slice {Resource buffer;D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT layer;};
+    struct Slice {Resource buffer;D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT layer,native_bytes;};
     Resource source_;
     Resource packed_source_,packed_readback_;
     GuestTextureDesc desc_;

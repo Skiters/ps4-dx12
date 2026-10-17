@@ -3,6 +3,7 @@
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "video_core/renderer_d3d12/multisample_readback.h"
+#include "video_core/renderer_d3d12/guest_image_readback.h"
 #include <bit>
 #include <cstring>
 #include <string>
@@ -12,7 +13,7 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
     D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
     Check(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,&options,sizeof(options)));
-    unsigned executed{};
+    unsigned executed{},compact_executed{};
     for(const UINT data_format:{2u,4u})for(const UINT tile:{0u,8u})for(const UINT samples:{1u,4u}){
         if(samples>1){
             D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{DXGI_FORMAT_D32_FLOAT_S8X24_UINT,samples,
@@ -135,6 +136,14 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
             auto restored_desc=desc;restored_desc.address+=0x100000;restored_desc.stencil_address+=0x100000;
             auto& restored=cache.Upload(restored_desc,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,
                 &captured_depth,false,false,GuestTextureCache::UploadPurpose::Binding,&captured_stencil);
+            std::unique_ptr<GuestLinearImageReadback> compact;
+            if(samples==1)compact=std::make_unique<GuestLinearImageReadback>(device,image,renderer.RecordingList());
+            else if(mode==0){
+                bool rejected=false;
+                try{GuestLinearImageReadback invalid(device,image,renderer.RecordingList());}
+                catch(const std::invalid_argument&){rejected=true;}
+                require(rejected,"Compact depth download accepted an unimplemented MSAA download domain");
+            }
             require(image.gpu_owned&&!image.buffer_alias_version&&image.HasValidLogicalImage(),
                 "Private plane capture changed source I ownership or logical validity");
             struct Probe {Resource result,upload,readback,source_readback;std::shared_ptr<Descriptors> descriptors;
@@ -241,6 +250,15 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             captured_depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             captured_stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             const auto fence=renderer.Flush();cache.Submitted(fence);
+            if(compact){
+                compact->Submitted(fence);
+                std::vector<std::byte> pending(size_t(compact->Bytes()),std::byte{0xb6});
+                bool rejected=false;
+                try{compact->Resolve(renderer.CompletedFence(),pending);}
+                catch(const std::logic_error&){rejected=true;}
+                require(rejected&&std::all_of(pending.begin(),pending.end(),[](auto b){return b==std::byte{0xb6};}),
+                    "Compact paired-depth readback ignored its held GPU fence");
+            }
             cache.Collect(renderer.CompletedFence());
             const bool held=renderer.CompletedFence()<fence&&!image.buffer_sync_resources.empty();
             captured_depth={};captured_stencil={}; // Entry and queue leases must retain the copies.
@@ -258,6 +276,24 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             const bool valid=!memcmp(mapped,expected.data(),size_t(bytes));probe->readback.handle->Unmap(0,&empty);
             if(!valid)throw std::runtime_error("Paired depth GPU result mismatch: format="+std::to_string(data_format)+
                 " tile="+std::to_string(tile)+" samples="+std::to_string(samples)+" mode="+std::to_string(mode));
+            if(compact){
+                std::vector<std::byte> actual(size_t(compact->Bytes()),std::byte{0xb6}),wanted=actual;
+                require(actual.size()==u64(desc.pitch)*desc.height*desc.layers*layout.bytes_per_pixel,
+                    "Compact paired depth changed the original download extent");
+                bool rejected=false;
+                try{compact->Resolve(renderer.CompletedFence(),std::span(actual).first(actual.size()-1));}
+                catch(const std::invalid_argument&){rejected=true;}
+                require(rejected&&actual==wanted,"Short compact paired-depth span was accepted or changed");
+                for(UINT layer=0;layer<desc.layers;++layer)for(UINT y=0;y<desc.height;++y)
+                for(UINT x=0;x<desc.width;++x){
+                    const auto value=depth_bits(gpu_depth?gpu_phase:cpu_phase,layer,0,x,y);
+                    const auto at=((u64(layer)*desc.height+y)*desc.pitch+x)*layout.bytes_per_pixel;
+                    memcpy(wanted.data()+at,&value,layout.bytes_per_pixel);
+                }
+                compact->Resolve(renderer.CompletedFence(),actual);
+                require(actual==wanted,"Compact paired depth changed bits, pitch padding or native D16 stride");
+                ++compact_executed;
+            }
             auto expected_depth_capture=depth_gpu_bytes,expected_stencil_capture=stencil_gpu_bytes;
             expected_depth_capture.resize(size_t(depth_capacity),std::byte{0x79});
             expected_stencil_capture.resize(size_t(stencil_capacity),std::byte{0x79});
@@ -287,6 +323,8 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
         }
     }
     require(executed>=12,"Paired single-sample depth controls did not execute");
+    require(compact_executed==12,"Compact paired depth controls did not execute");
+    printf("PASS: %u compact D16/S8 and D32/S8 depth-only downloads, native footprint strides, padding and fence/extent negatives\n",compact_executed);
     printf("PASS: %u paired native I captures and GPU uploads, D16/D32, samples/layers, mixed CPU/GPU inputs, exact private padding and held-fence leases; PS stencil ref=%u\n",executed,options.PSSpecifiedStencilRefSupported);
 }
 } // namespace NativeDX12

@@ -12,6 +12,16 @@ struct GuestImageOwnershipGeometry {
     GuestTextureLayout layout;
 };
 
+// Physical depth-plane transfer capability is independent from admitting the
+// full image to independent ownership. Optional S keeps its own guest range.
+inline bool IsGuestDepthPlaneStorage(const GuestTextureDesc& desc,const GuestTextureLayout& layout) {
+    return desc.depth_target&&!desc.render_target&&!desc.writable&&!desc.volume_depth&&!desc.one_dimensional&&
+        desc.samples&&std::has_single_bit(desc.samples)&&desc.samples<=16&&
+        (desc.samples==1||desc.levels==1)&&layout.block_extent==1&&!layout.expanded_bytes_per_pixel&&
+        ((desc.data_format==2&&desc.number_format==0&&layout.bytes_per_pixel==2&&layout.format==DXGI_FORMAT_R16_UNORM)||
+         (desc.data_format==4&&desc.number_format==7&&layout.bytes_per_pixel==4&&layout.format==DXGI_FORMAT_R32_FLOAT));
+}
+
 // D16/D32 depth storage has one exact physical plane. The native depth
 // attachment remains typed/readonly to shaders; only ownership uses a writable
 // color-shaped description of the same guest words. Split stencil and MSAA

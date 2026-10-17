@@ -63,8 +63,8 @@ GuestImageReadback::GuestImageReadback(ID3D12Device* device,GuestTextureCache::E
 }
 GuestLinearImageReadback::GuestLinearImageReadback(ID3D12Device* device,GuestTextureCache::Entry& image,
     ID3D12GraphicsCommandList* list):source_(image.texture),desc_(image.desc),layout_(image.layout){
-    if(!device||!list||(desc_.depth_target&&!IsIndependentGuestDepthStorage(desc_,layout_))||
-       desc_.stencil_address||desc_.samples!=1||
+    if(!device||!list||(desc_.depth_target&&!IsGuestDepthPlaneStorage(desc_,layout_))||
+       (desc_.stencil_address&&!desc_.depth_target)||desc_.samples!=1||
        layout_.block_extent!=1||!source_.handle)
         throw std::invalid_argument("Unsupported compact linear image readback");
     bytes_=uint64_t(desc_.pitch)*desc_.height*std::max(desc_.volume_depth,1u)*desc_.layers*layout_.bytes_per_pixel;
@@ -92,9 +92,18 @@ GuestLinearImageReadback::GuestLinearImageReadback(ID3D12Device* device,GuestTex
     }
     slices_.reserve(desc_.layers);
     for(UINT layer=0;layer<desc_.layers;++layer){
-        D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};UINT64 total;
-        DX12_API_CALL(device->GetCopyableFootprints(&texture,layer*desc_.levels,1,0,&fp,nullptr,nullptr,&total));
-        slices_.push_back({Buffer(device,total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST),fp,layer});
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};UINT64 total{},row_bytes{};
+        DX12_API_CALL(device->GetCopyableFootprints(&texture,layer*desc_.levels,1,0,&fp,nullptr,&row_bytes,&total));
+        if(!fp.Footprint.Width||row_bytes%fp.Footprint.Width)
+            throw std::invalid_argument("Invalid compact image native plane footprint");
+        const auto native_bytes=row_bytes/fp.Footprint.Width;
+        // Guest D16/S8 uses a native D32/S8 allocation. DownloadImageMemory
+        // still emits only compact guest D16 depth bytes, never stencil.
+        const bool widened_depth=desc_.depth_target&&desc_.stencil_address&&
+            layout_.bytes_per_pixel==2&&native_bytes==4;
+        if(native_bytes!=layout_.HostBytesPerPixel()&&!widened_depth)
+            throw std::invalid_argument("Compact image native/guest plane stride mismatch");
+        slices_.push_back({Buffer(device,total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST),fp,layer,UINT(native_bytes)});
         const auto buffer=slices_.back().buffer.handle->GetDesc();
         const auto allocation=device->GetResourceAllocationInfo(0,1,&buffer);
         if(!allocation.SizeInBytes||allocation.SizeInBytes==UINT64_MAX||
@@ -117,7 +126,7 @@ void GuestLinearImageReadback::Resolve(uint64_t completed,std::span<std::byte> g
     if(!fence_||completed<fence_)throw std::logic_error("Compact linear image readback still in flight");
     if(guest.size()<bytes_)throw std::invalid_argument("Short compact linear image backing");
     auto& result=readback_scratch.color;result.assign(guest.begin(),guest.begin()+size_t(bytes_));
-    const auto host=layout_.HostBytesPerPixel(),physical=layout_.bytes_per_pixel;
+    const auto physical=layout_.bytes_per_pixel;
     if(packed_readback_.handle){
         void* mapped{};const D3D12_RANGE range{0,SIZE_T(layout_.guest_bytes)};
         Check(DX12_API_CALL(packed_readback_.handle->Map(0,&range,&mapped)));
@@ -133,6 +142,7 @@ void GuestLinearImageReadback::Resolve(uint64_t completed,std::span<std::byte> g
         memcpy(guest.data(),result.data(),result.size());return;
     }
     for(const auto& slice:slices_){void* mapped{};
+        const auto host=slice.native_bytes;
         const D3D12_RANGE range{0,SIZE_T(slice.buffer.handle->GetDesc().Width)};
         Check(DX12_API_CALL(slice.buffer.handle->Map(0,&range,&mapped)));
         struct Unmap {ID3D12Resource* resource;~Unmap(){const D3D12_RANGE empty{};
@@ -142,7 +152,14 @@ void GuestLinearImageReadback::Resolve(uint64_t completed,std::span<std::byte> g
             const auto* from=static_cast<const std::byte*>(mapped)+slice.footprint.Offset+
                 (uint64_t(z)*desc_.height+row)*slice.footprint.Footprint.RowPitch+uint64_t(x)*host;
             auto* to=result.data()+((uint64_t(slice.layer)*depth+z)*desc_.height+row)*desc_.pitch*physical+uint64_t(x)*physical;
-            if(host==2&&(desc_.data_format==18||desc_.data_format==19)){
+            if(desc_.depth_target&&physical==2&&host==4){
+                float value{};memcpy(&value,from,4);
+                // Match the GPU tiler's saturate before UNORM16 conversion;
+                // a native float NaN must not reach an undefined integer cast.
+                const auto normalized=value>0.f?std::min(value,1.f):0.f;
+                const auto word=uint16_t(normalized*65535.f+0.5f);
+                memcpy(to,&word,2);
+            }else if(host==2&&(desc_.data_format==18||desc_.data_format==19)){
                 uint16_t word;memcpy(&word,from,2);
                 if(desc_.data_format==18)word=uint16_t((word<<1)|(word>>15));
                 else word=uint16_t(((word&15u)<<12)|((word&240u)<<4)|((word&3840u)>>4)|((word&61440u)>>12));
