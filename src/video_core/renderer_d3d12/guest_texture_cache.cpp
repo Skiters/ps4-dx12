@@ -1319,8 +1319,12 @@ void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* p
     }
 }
 bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const GuestTextureLayout& layout,bool writable_snapshot){
-    return (!d.writable||writable_snapshot)&&!d.stencil_address&&
-        (d.samples==1||CanTransferIndependentMultisample(d,layout))&&d.address%4==0&&
+    const bool depth=d.depth_target&&!d.writable&&!d.render_target&&!d.volume_depth&&!d.one_dimensional&&
+        ((d.data_format==2&&d.number_format==0&&layout.format==DXGI_FORMAT_R16_UNORM)||
+         (d.data_format==4&&d.number_format==7&&layout.format==DXGI_FORMAT_R32_FLOAT));
+    return (!d.writable||writable_snapshot)&&(!d.stencil_address||(depth&&d.stencil_address%4==0))&&
+        (d.samples==1||CanTransferIndependentMultisample(d,layout)||
+         (depth&&d.levels==1&&std::has_single_bit(d.samples)&&d.samples<=16))&&d.address%4==0&&
         layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
@@ -1778,18 +1782,20 @@ void GuestTextureCache::PublishBufferResidency(Entry& entry){
     publish_buffer_residency_(entry.pending_buffer_residency);
     entry.pending_buffer_residency.clear();
 }
-GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot,UploadPurpose purpose){
+GuestTextureCache::Entry& GuestTextureCache::Upload(const GuestTextureDesc& d,std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,bool writable_snapshot,bool current_buffer_snapshot,UploadPurpose purpose,const Resource* stencil_gpu_snapshot){
     return UploadVersion(d,bytes,list,completed,stencil_bytes,guest_snapshot,gpu_snapshot,
-        writable_snapshot,current_buffer_snapshot,nullptr,purpose);
+        writable_snapshot,current_buffer_snapshot,nullptr,purpose,stencil_gpu_snapshot);
 }
 GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDesc& d,
     std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,
     std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,
-    bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency,UploadPurpose purpose){
+    bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency,UploadPurpose purpose,
+    const Resource* stencil_gpu_snapshot){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
     auto layout=LayoutGuestTexture(d);
+    const bool gpu_snapshot_any=gpu_snapshot||stencil_gpu_snapshot;
     const bool dependent=dependency&&d.writable&&guest_snapshot&&gpu_snapshot&&writable_snapshot&&
         !current_buffer_snapshot&&stencil_bytes.empty()&&!dependency->image&&!dependency->image_pin&&
         !d.first_layer&&d.view_layers==d.layers&&IsLiveBlockParent(*dependency,d,layout);
@@ -1861,7 +1867,13 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(d.writable)ValidateWritableFormat(layout.format);
     GuestTextureDesc stencil_desc;GuestTextureLayout stencil_layout;
     if(d.stencil_address){stencil_desc=DescribeGuestStencil(d);stencil_layout=LayoutGuestTexture(stencil_desc);
-        if(stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
+        if(!stencil_gpu_snapshot&&stencil_bytes.size()<stencil_layout.guest_bytes)throw std::invalid_argument("Short guest stencil upload");}
+    if(stencil_gpu_snapshot&&(!guest_snapshot||!d.stencil_address||!d.depth_target||
+       !CanUploadGpuSnapshot(d,layout,writable_snapshot)||!stencil_gpu_snapshot->handle||
+       stencil_gpu_snapshot->handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
+       stencil_gpu_snapshot->handle->GetDesc().Width<stencil_layout.guest_bytes||
+       stencil_gpu_snapshot->state!=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
+        throw std::invalid_argument("Invalid GPU guest stencil snapshot");
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
     auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
@@ -1874,7 +1886,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
       if(guest_snapshot&&existing->cpu_watched){
         if(release_immutable_)release_immutable_(*existing);existing->cpu_watched=false;
       }
-      const bool pending_coherent=!gpu_snapshot&&!existing->gpu_owned&&!existing->cpu_watched&&existing->pending&&existing->sampled_snapshot.size()==layout.guest_bytes&&
+      const bool pending_coherent=!gpu_snapshot_any&&!existing->gpu_owned&&!existing->cpu_watched&&existing->pending&&existing->sampled_snapshot.size()==layout.guest_bytes&&
         !memcmp(existing->sampled_snapshot.data(),bytes.data(),size_t(layout.guest_bytes))&&
         (!d.stencil_address||(existing->stencil_snapshot.size()==stencil_layout.guest_bytes&&
          !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes))));
@@ -1989,7 +2001,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     // its native texture avoids a 64MiB CPU detile/upload for 4096² shadows.
     // Compare the complete backing, including padding: CPU changes fall back to
     // the original checked upload path. No guest readback or fence is skipped.
-    if(!gpu_snapshot&&!d.writable&&!d.render_target&&!d.depth_target&&!d.stencil_address){
+    if(!gpu_snapshot_any&&!d.writable&&!d.render_target&&!d.depth_target&&!d.stencil_address){
         static unsigned large_traces{};
         if(Diagnostics::Enabled()&&d.width>=4096&&large_traces++<8){
             auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed){auto* existing=indexed->second;
@@ -2035,7 +2047,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
            (indexed->second->desc==d||CompatibleGuestAttachmentStorage(indexed->second->desc,d)||
             CompatibleGuestWritableStorage(indexed->second->desc,d))){entry=indexed->second;break;}}
     const bool immutable_view=!d.writable;
-    if(entry&&immutable_view&&!gpu_snapshot&&
+    if(entry&&immutable_view&&!gpu_snapshot_any&&
        ((!entry->pending&&entry->fence<=completed)||(!d.render_target&&!d.depth_target))&&
        entry->sampled_snapshot.size()==layout.guest_bytes&&
        std::equal(entry->sampled_snapshot.begin(),entry->sampled_snapshot.end(),bytes.begin())&&
@@ -2052,12 +2064,13 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(entry->pending||entry->fence>completed)
             throw std::runtime_error("guest texture upload still in flight");
     }
-    const bool gpu_detile=gpu_snapshot||HasExactPackedExpansion(d,layout)||
+    const bool gpu_detile=gpu_snapshot_any||HasExactPackedExpansion(d,layout)||
         (!layout.expanded_bytes_per_pixel&&(d.data_format==13||(d.data_format>=16&&d.data_format<=19)||d.samples>1||(d.tile_mode!=8&&d.tile_mode!=31)||
         (d.depth_target&&d.stencil_address&&layout.bytes_per_pixel==2)));
-    if(entry&&gpu_snapshot){
-        const auto previous=entry->tiler_input_pool.empty()?0:entry->tiler_input_pool[0].handle->GetDesc().Width;
-        const auto incoming=gpu_snapshot->handle->GetDesc().Width;
+    const Resource* snapshots[]{gpu_snapshot,stencil_gpu_snapshot};
+    if(entry)for(size_t plane=0;plane<std::size(snapshots);++plane)if(const auto* snapshot=snapshots[plane]){
+        const auto previous=plane<entry->tiler_input_pool.size()?entry->tiler_input_pool[plane].handle->GetDesc().Width:0;
+        const auto incoming=snapshot->handle->GetDesc().Width;
         if(incoming>previous)ReserveMemory(incoming-previous,completed,entry);
     }
     if(layout.expanded_bytes_per_pixel&&d.data_format>=35&&!bc_decoder_)bc_decoder_=std::make_unique<GuestBcDecoder>(converter_);
@@ -2144,13 +2157,14 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             new_entry->allocation_bytes+=storage_allocation.SizeInBytes*d.samples+linear_allocation.SizeInBytes;
         }
         const uint64_t physical_bytes=(gpu_snapshot?gpu_snapshot->handle->GetDesc().Width:((layout.guest_bytes+3)&~uint64_t(3)))+
-            (d.stencil_address?((stencil_layout.guest_bytes+3)&~uint64_t(3)):0);
+            (d.stencil_address?(stencil_gpu_snapshot?stencil_gpu_snapshot->handle->GetDesc().Width:
+                ((stencil_layout.guest_bytes+3)&~uint64_t(3))):0);
         const uint64_t masks=GuestTiler::WrittenBytes(layout.guest_bytes)+
             (d.stencil_address?GuestTiler::WrittenBytes(stencil_layout.guest_bytes):0);
         if(d.writable||d.render_target||d.depth_target)
             new_entry->readback_reserve_bytes=transfer_bytes+(gpu_detile?physical_bytes*2+masks*2:0);
         const uint64_t required=new_entry->allocation_bytes+expanded_snapshot_bytes+
-            (immutable_view&&!gpu_snapshot?layout.guest_bytes+(d.stencil_address?stencil_layout.guest_bytes:0):0)+
+            (immutable_view&&!gpu_snapshot_any?layout.guest_bytes+(d.stencil_address?stencil_layout.guest_bytes:0):0)+
             transfer_bytes+(gpu_detile?physical_bytes:0)+new_entry->readback_reserve_bytes;
         ReserveMemory(required,completed);
         // Copy queues require COMMON on entry and decay back to COMMON at
@@ -2178,7 +2192,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry->expanded_guest_backing=std::move(original);entry->expanded_written_mask=std::move(written);
         entry->expanded_backing_bytes=expanded_snapshot_bytes;
     }else{entry->expanded_guest_backing={};entry->expanded_written_mask={};entry->expanded_backing_bytes=0;}
-    entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();entry->pending_buffer_residency.clear();
+    entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();entry->stencil_snapshot.clear();
+    entry->pending_buffer_residency.clear();
     const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target&&!gpu_detile;
     entry->pending=true;
     if(!copy_upload)entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -2199,10 +2214,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             const auto backing=plane?stencil_bytes:bytes;
             if(physical.guest_bytes>UINT32_MAX-3)throw std::out_of_range("Native tiling upload exceeds guest buffer addressing");
             const auto size=(physical.guest_bytes+3)&~uint64_t(3);
-            if(gpu_snapshot){
-                if(plane)throw std::logic_error("GPU image snapshot has an unexpected stencil plane");
-                if(entry->tiler_input_pool.empty())entry->tiler_input_pool.push_back(*gpu_snapshot);
-                else entry->tiler_input_pool[0]=*gpu_snapshot;
+            if(const auto* snapshot=snapshots[plane]){
+                if(plane==entry->tiler_input_pool.size())entry->tiler_input_pool.push_back(*snapshot);
+                else entry->tiler_input_pool.at(plane)=*snapshot;
                 continue;
             }
             if(plane<entry->tiler_input_pool.size()){
@@ -2317,7 +2331,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             &copy.destination,0,0,0,&copy.source,nullptr));
     });
     diagnostic.Stage("cpu-coherence-snapshot");
-    if(immutable_view&&!gpu_snapshot)entry->RememberSnapshot(bytes,stencil_bytes);
+    if(immutable_view&&!gpu_snapshot_any)entry->RememberSnapshot(bytes,stencil_bytes);
     if(immutable_view&&!guest_snapshot&&!d.render_target&&!d.depth_target&&!d.stencil_address&&watch_immutable_)watch_immutable_(*entry);
     entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
 }

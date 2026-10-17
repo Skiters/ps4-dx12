@@ -16,6 +16,8 @@ class GuestMultisample {
     struct Program {
         ComPtr<ID3D12RootSignature> root;
         ComPtr<ID3D12PipelineState> pipeline;
+        std::array<ComPtr<ID3D12PipelineState>,8> stencil_bits;
+        bool stencil_bit_upload=false;
     };
     ComPtr<ID3D12Device> device_;
     using Key=std::tuple<DXGI_FORMAT,DXGI_FORMAT,UINT,bool,bool,bool>;

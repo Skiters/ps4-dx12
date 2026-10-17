@@ -215,7 +215,8 @@ private:
     bool IsLiveBlockParent(const WritableBlockAlias&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
     Entry& UploadVersion(const GuestTextureDesc&,std::span<const std::byte>,ID3D12GraphicsCommandList*,
-        uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose);
+        uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose,
+        const Resource* stencil_gpu_snapshot=nullptr);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
         const WritableBlockAlias*);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
@@ -292,7 +293,8 @@ public:
                   ID3D12GraphicsCommandList*,uint64_t completed_fence,
                   std::span<const std::byte> stencil_bytes={},bool guest_snapshot=false,
                   const Resource* gpu_snapshot=nullptr,bool writable_snapshot=false,
-                  bool current_buffer_snapshot=false,UploadPurpose purpose=UploadPurpose::Binding);
+                  bool current_buffer_snapshot=false,UploadPurpose purpose=UploadPurpose::Binding,
+                  const Resource* stencil_gpu_snapshot=nullptr);
     // Only an actual image use consumes a prepared B-source residency effect.
     void PublishBufferResidency(Entry&);
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.

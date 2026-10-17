@@ -1053,7 +1053,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const auto desc=DescribeGuestTexture(sharp);const auto layout=LayoutGuestTexture(desc);
         record_depth_writer(desc.address,layout.guest_bytes);
     }
-    Resource depth_gpu_snapshot;
+    Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
     std::optional<u32> depth_meta_snapshot;
@@ -1083,27 +1083,38 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 throw std::runtime_error("Native simultaneous buffer/HTILE depth clear requires shared ownership");
         }
         diagnostic.Stage("shader-depth-prewrite-snapshot");
-        if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8])&&
-           IsGpuBufferModified(descriptions[8].address,layouts[8].guest_bytes)){
-            depth_gpu_snapshot=CaptureShaderBuffer(descriptions[8].address,layouts[8].guest_bytes,false);
-            Diagnostics::Count("shader-depth.gpu-snapshot.bytes",layouts[8].guest_bytes);
-        }else{
-            const auto capture=[&](VAddr address,u64 bytes,std::vector<std::byte>& result){
-                if(!ReadMemory(address,bytes))
-                    throw std::out_of_range("Native depth/stencil snapshot has no readable guest backing");
-                ValidateHostMemory(address,bytes);
-                result.resize(size_t(bytes));memcpy(result.data(),reinterpret_cast<const void*>(address),result.size());
-                Diagnostics::Count("shader-depth.cpu-snapshot.bytes",bytes);
-            };
+        const bool gpu_planes=GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]);
+        const auto capture_gpu=[&](VAddr address,u64 bytes){
+            ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+            // These are raw B sources for an image, not another shader-buffer
+            // bind. Preserve B1 without replaying formatted I effects or
+            // publishing residency before the actual depth/stencil bind.
+            PreparePhysicalDmaBuffers(std::span(&request,1));
+            auto snapshot=CapturePreparedShaderBuffer(address,bytes);
+            Diagnostics::Count("shader-depth.gpu-snapshot.bytes",bytes);return snapshot;
+        };
+        // Capture all GPU versions first. Each input has its own native
+        // resource and stays immutable while current shader writes target B.
+        if(gpu_planes&&depth_buffer_source)
+            depth_gpu_snapshot=capture_gpu(descriptions[8].address,layouts[8].guest_bytes);
+        if(gpu_planes&&stencil_buffer_source)
+            stencil_gpu_snapshot=capture_gpu(stencil_desc.address,stencil_layout.guest_bytes);
+        const auto capture=[&](VAddr address,u64 bytes,std::vector<std::byte>& result){
+            if(!ReadMemory(address,bytes))
+                throw std::out_of_range("Native depth/stencil snapshot has no readable guest backing");
+            ValidateHostMemory(address,bytes);
+            result.resize(size_t(bytes));memcpy(result.data(),reinterpret_cast<const void*>(address),result.size());
+            Diagnostics::Count("shader-depth.cpu-snapshot.bytes",bytes);
+        };
+        if(!depth_gpu_snapshot.handle)
             capture(descriptions[8].address,layouts[8].guest_bytes,depth_guest_snapshot);
-            if(descriptions[8].stencil_address)
-                capture(stencil_desc.address,stencil_layout.guest_bytes,stencil_guest_snapshot);
-        }
+        if(descriptions[8].stencil_address&&!stencil_gpu_snapshot.handle)
+            capture(stencil_desc.address,stencil_layout.guest_bytes,stencil_guest_snapshot);
         std::vector<ShaderBufferRequest> backing;
         if(depth_buffer_source)backing.push_back({descriptions[8].address,layouts[8].guest_bytes,false,true,true});
         if(stencil_buffer_source)backing.push_back({stencil_desc.address,stencil_layout.guest_bytes,false,true,true});
         for(auto& request:backing)request.publish_dma_residency=false;
-        if(!backing.empty())PrepareShaderBuffers(backing,std::span<const BufferWrite>{});
+        if(!backing.empty())PreparePhysicalDmaBuffers(backing);
     }
     GuestTextureCache::Entry* feedback_depth{};
     std::shared_ptr<void> feedback_depth_pin;
@@ -1284,7 +1295,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 std::span<const std::byte>(stencil_memory);
             auto& entry=feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
                 depth_bytes,RecordingList(),CompletedFence(),stencil_bytes,
-                depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr);
+                depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr,
+                false,false,GuestTextureCache::UploadPurpose::Binding,
+                stencil_gpu_snapshot.handle?&stencil_gpu_snapshot:nullptr);
             if(depth_buffer_source){
                 const ShaderBufferRequest resident{descriptions[8].address,layouts[8].guest_bytes,false,true,true};
                 DmaMemory().ObserveResidentSharps(std::span(&resident,1));

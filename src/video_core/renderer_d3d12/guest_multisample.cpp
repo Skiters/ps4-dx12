@@ -157,23 +157,24 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
         Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality))));
         if(!quality.NumQualityLevels)throw std::runtime_error("Native guest MSAA transfer view sample count is unsupported");
     }
+    bool stencil_bit_upload=false;
     if(stencil&&upload){
         D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
         Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,&options,sizeof(options))));
-        if(!options.PSSpecifiedStencilRefSupported)
-            throw std::runtime_error("Native guest MSAA stencil upload requires pixel shader stencil reference");
+        stencil_bit_upload=!options.PSSpecifiedStencilRefSupported;
     }
     const Key key{buffer_format,upload?attachment_format:texture_format,d.samples,depth,stencil,upload};
     auto& program=programs_[key];
     if(!program){
         auto compiled=std::make_shared<Program>();
+        compiled->stencil_bit_upload=stencil_bit_upload;
         D3D12_DESCRIPTOR_RANGE ranges[2]{{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,0},
                                         {D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,0,0,1}};
         D3D12_ROOT_PARAMETER parameters[2]{};
         parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         parameters[0].DescriptorTable={upload?1u:2u,ranges};
         parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        parameters[1].Constants={0,0,4};
+        parameters[1].Constants={0,0,stencil_bit_upload?5u:4u};
         D3D12_ROOT_SIGNATURE_DESC signature{2,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
         ComPtr<ID3DBlob> blob,errors;
         Check(DX12_API_CALL(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors)));
@@ -181,7 +182,8 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
         const D3D_SHADER_MACRO macros[]{{"VALUE_TYPE",ValueType(buffer_format)},
             {"TEXTURE_TYPE",ValueType(texture_format)},
             {"PACKED_MODE",!packed?"0":d.data_format==16?"1":d.data_format==19?"3":"2"},
-            {"NATIVE_DEPTH",depth?"1":"0"},{"NATIVE_STENCIL",stencil?"1":"0"},{nullptr,nullptr}};
+            {"NATIVE_DEPTH",depth?"1":"0"},{"NATIVE_STENCIL",stencil?"1":"0"},
+            {"STENCIL_BIT_UPLOAD",stencil_bit_upload?"1":"0"},{nullptr,nullptr}};
         if(upload){
             const auto vs=Compile("float4 main(uint id:SV_VertexID):SV_Position{return float4(id==2?3:-1,id==1?3:-1,0,1);}","vs_5_1");
             const auto ps=Compile(GuestMsaaUploadSource,"ps_5_1",macros);
@@ -205,6 +207,10 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
                 state.BlendState.RenderTarget[0].RenderTargetWriteMask=D3D12_COLOR_WRITE_ENABLE_ALL;
             }
             Check(DX12_API_CALL(device_->CreateGraphicsPipelineState(&state,IID_PPV_ARGS(&compiled->pipeline))));
+            if(stencil_bit_upload)for(UINT bit=0;bit<8;++bit){
+                state.DepthStencilState.StencilWriteMask=UINT8(1u<<bit);
+                Check(DX12_API_CALL(device_->CreateGraphicsPipelineState(&state,IID_PPV_ARGS(&compiled->stencil_bits[bit]))));
+            }
         }else{
             const auto cs=Compile(GuestMsaaReadbackSource,"cs_5_1",macros);
             D3D12_COMPUTE_PIPELINE_STATE_DESC state{};state.pRootSignature=compiled->root.Get();
@@ -279,7 +285,22 @@ void GuestMultisample::Lease::Record(ID3D12GraphicsCommandList* list,Resource& s
         DX12_API_CALL(list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST));
         const auto handle=attachment->Cpu(0);
         DX12_API_CALL(list->OMSetRenderTargets(depth?0:1,depth?nullptr:&handle,FALSE,depth?&handle:nullptr));
-        DX12_API_CALL(list->DrawInstanced(3,1,0,0));
+        if(program->stencil_bit_upload){
+            // Full-plane initialization above already set zero. For a partial
+            // rectangle, clear only its covered samples before setting bits;
+            // every other layer/texel and the complete depth plane stay intact.
+            if(desc.Width!=constants[0]||desc.Height!=constants[1]){
+                DX12_API_CALL(list->OMSetStencilRef(0));
+                DX12_API_CALL(list->SetGraphicsRoot32BitConstant(1,0,4));
+                DX12_API_CALL(list->DrawInstanced(3,1,0,0));
+            }
+            DX12_API_CALL(list->OMSetStencilRef(255));
+            for(UINT bit=0;bit<8;++bit){
+                DX12_API_CALL(list->SetPipelineState(program->stencil_bits[bit].Get()));
+                DX12_API_CALL(list->SetGraphicsRoot32BitConstant(1,1u<<bit,4));
+                DX12_API_CALL(list->DrawInstanced(3,1,0,0));
+            }
+        }else DX12_API_CALL(list->DrawInstanced(3,1,0,0));
     }else{
         source_texture.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         buffer.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
