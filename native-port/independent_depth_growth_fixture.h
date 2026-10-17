@@ -111,8 +111,9 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device,bool crossed=f
                     "Reverse resource request recreated a retained parent");
             }
         }
-        auto source_native=std::make_shared<GuestImageReadback>(device,image,renderer.RecordingList());
-        renderer.RetainUntilFinish([source_native](u64){(void)source_native;});
+        // Hold an actual preceding allocation through the later transfer and
+        // post-transfer readback, including source layers outside the target.
+        auto source_pin=cache.PinBinding(image);
         const GuestTextureCache::BufferResidency ancestor{{source.address,old_layout.guest_bytes}};
         // Pinned ResolveDepthOverlap calls the additional RefreshImage only
         // for single-sample growth. MSAA replacement must not invent that B
@@ -150,6 +151,9 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device,bool crossed=f
             reads==2&&!publications&&grown.pending_buffer_residency==wanted_receipts,"Growth lost owner/validity/deferred seed provenance");
         cache.Upload(target,cpu_d,renderer.RecordingList(),renderer.CompletedFence(),cpu_s);
         require(publications==1&&published==wanted_receipts&&grown.pending_buffer_residency.empty(),"Growth bind did not consume both receipts once");
+        // Observe old I AFTER conversion/upload, not only its initial contents.
+        auto source_native=std::make_shared<GuestImageReadback>(device,image,renderer.RecordingList());
+        renderer.RetainUntilFinish([source_native](u64){(void)source_native;});
         auto native=std::make_shared<GuestImageReadback>(device,grown,renderer.RecordingList());
         renderer.RetainUntilFinish([native](u64){(void)native;});
         struct Segment {Resource* resource;const std::vector<std::byte>* expected;u64 offset;};
