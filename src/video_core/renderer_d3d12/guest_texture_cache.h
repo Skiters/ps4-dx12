@@ -128,6 +128,7 @@ public:
         Resource snapshot;
         BufferResidency residency;
     };
+    struct IndependentImageVersion {Resource depth,stencil;};
     struct Entry {
         GuestTextureDesc desc;GuestTextureLayout layout;Resource texture;
         GuestTextureCache* cache{};
@@ -268,6 +269,7 @@ private:
     }
     std::function<void(Entry&)> resolve_owned_;
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
+    std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_independent_image_;
     std::function<void()> transfer_submission_;
     std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
@@ -352,6 +354,13 @@ public:
         std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand){
         expand_block_=std::move(expand);
     }
+    void SetIndependentImageTransfer(std::function<IndependentImageVersion(
+        Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_independent_image_=std::move(read);}
+    // Original depth/color overlap copies use private image inputs. Matching
+    // D/S aspects preserve S; CopyImageWithBuffer aspect changes do not copy S.
+    IndependentImageVersion CaptureIndependentImageVersion(Entry&,const GuestTextureDesc&,
+        const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t completed,
+        const std::function<Resource(uint64_t,uint64_t)>& capture_buffer);
     void SetBufferResidencyPublisher(std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish){
         publish_buffer_residency_=std::move(publish);
     }

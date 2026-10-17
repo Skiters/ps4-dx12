@@ -105,7 +105,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 throw std::runtime_error("Ordered stages require shifted image-domain ownership adaptation");
         GuestTextureCache::Entry geometry;geometry.desc=domain.desc;geometry.layout=domain.layout;
         const auto owner=DescribeGuestImageOwnership(geometry);
-        if(!owner||!textures.CanRetainIndependentImage(owner->desc,owner->layout)||
+        if(!owner||!CanRetainGuestImageOwnership(textures,*owner)||
            !GuestTextureCache::CanUploadGpuSnapshot(domain.desc,domain.layout,domain.desc.writable))
             throw std::runtime_error("Ordered stage image domain has no exact independent transfer/ownership");
         for(size_t i=0;i<buffers.size();++i)if(Overlaps(address,domain.layout.guest_bytes,requests[i].address,requests[i].size)){

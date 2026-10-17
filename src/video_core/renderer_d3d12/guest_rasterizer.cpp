@@ -149,6 +149,14 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return version;
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
+    textures_.SetIndependentImageTransfer([this](auto& image,const auto& desc,const auto& layout){
+        return textures_.CaptureIndependentImageVersion(image,desc,layout,RecordingList(),CompletedFence(),
+            [this](u64 address,u64 bytes){
+                ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+                PreparePhysicalDmaBuffers(std::span(&request,1));
+                return CapturePreparedShaderBuffer(address,bytes);
+            });
+    });
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
         // Pinned ObtainBufferForImage chooses B only for GPU-modified target
         // pages. A resident arena alone is not proof that B is the refresh seed.
@@ -207,7 +215,8 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
 }
 bool GuestRasterizer::OwnImage(GuestTextureCache::Entry& image){
     if(image.gpu_owned&&image.buffer_alias_version)return true;
-    if(HasDmaReadOverlap(image.desc.address,image.layout.guest_bytes)){
+    if(HasDmaReadOverlap(image.desc.address,image.layout.guest_bytes)||
+       (image.desc.stencil_address&&HasDmaReadOverlap(image.desc.stencil_address,image.stencil_layout.guest_bytes))){
         // A bound ReadConst bank continues to read B while this attachment
         // writes I. Do not replace B's authority with exclusive image pages.
         if(OwnIndependentImage(image))return true;
@@ -243,27 +252,18 @@ bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     // A cached image can keep a version distinct from its physical/resident
     // buffer, including a read-only descriptor or ordinary owned attachment.
     const auto owner=DescribeGuestImageOwnership(image);
-    if(!owner||!textures_.CanRetainIndependentImage(owner->desc,owner->layout))return false;
+    if(!owner||!CanRetainGuestImageOwnership(textures_,*owner))return false;
     // Repeated image uses validate the physical owner, including a retained
     // read-only descriptor, without changing an overlapping buffer's guard.
     if(image.buffer_alias_version){image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;}
     if(!page_watch_)return false;
-    std::vector<std::pair<u64,u64>> planes,strong_buffers;
-    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes){
-        const auto pages=GuestProtectionPages(plane.address,plane.bytes);
-        if(!pages||!has_backing_(plane.address,plane.bytes))return false;
-        planes.emplace_back(pages->address,pages->size);
-        const auto strong=GpuOwnedBufferProtectionRanges(plane.address,plane.bytes);
-        strong_buffers.insert(strong_buffers.end(),strong.begin(),strong.end());
-    }
-    if(!page_watch_->TrackImageReadOnly(planes,image.gpu_owned,strong_buffers)){
+    if(!AcquireGuestImageOwnership(textures_,image,*page_watch_,has_backing_,
+        [this](u64 address,u64 bytes){return GpuOwnedBufferProtectionRanges(address,bytes);})){
         if(image.gpu_owned)throw std::runtime_error("Cannot transfer independent image plane ownership to read-only protection");
         return false;
     }
     // The image equality witness ends, but protection stays in place. CPU
     // buffer witnesses still describe their unchanged physical/GPU version.
-    image.cpu_watched=false;
-    image.buffer_alias_version=true;image.SetGpuOwned(true);
     WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);
     return true;
 }
@@ -309,10 +309,8 @@ void GuestRasterizer::ProcessDownloadImages(){
     }
 }
 void GuestRasterizer::ReleaseIndependentImageWatches(GuestTextureCache::Entry& image){
-    image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);
-    image.unprotected_cpu_pages.clear();image.stencil_unprotected_cpu_pages.clear();image.linear_download_pending=false;
-    image.sampled_snapshot.clear();image.stencil_snapshot.clear();
-    ReleaseImageProtection(image);
+    ReleaseGuestImageOwnership(textures_,image,[this](u64 address,u64 bytes,const auto& retained){
+        ReleaseUnusedReadOnlyWatches(address,bytes,retained);});
 }
 void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
     const auto retained=ImageProtectionRanges(&image);
@@ -320,12 +318,7 @@ void GuestRasterizer::ReleaseImageProtection(GuestTextureCache::Entry& image){
         ReleaseUnusedReadOnlyWatches(plane.address,plane.bytes,retained);
 }
 std::vector<std::pair<VAddr,u64>> GuestRasterizer::ImageProtectionRanges(const GuestTextureCache::Entry* exclude)const{
-    std::vector<std::pair<VAddr,u64>> retained;
-    for(const auto& other:textures_.Entries())if(other.get()!=exclude&&(other->gpu_owned||other->cpu_watched)){
-        for(const auto& plane:other->ProtectionPlanes())
-            VisitGuestImageProtectedRanges(plane,[&](u64 address,u64 bytes){retained.emplace_back(address,bytes);});
-    }
-    return retained;
+    return GuestImageProtectionRanges(textures_,exclude);
 }
 void GuestRasterizer::RememberImageBoundary(GuestTextureCache::Entry& image,VAddr address,u64 size){
     if(!image.gpu_owned||!image.buffer_alias_version)return;

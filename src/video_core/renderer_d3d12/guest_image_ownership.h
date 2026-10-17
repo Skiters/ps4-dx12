@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "guest_texture_cache.h"
+#include "page_watch.h"
 #include <algorithm>
 #include <bit>
 #include <optional>
@@ -10,6 +11,7 @@ namespace NativeDX12 {
 struct GuestImageOwnershipGeometry {
     GuestTextureDesc desc;
     GuestTextureLayout layout;
+    std::optional<std::pair<GuestTextureDesc,GuestTextureLayout>> stencil;
 };
 
 // Physical depth-plane transfer capability is independent from admitting the
@@ -24,8 +26,8 @@ inline bool IsGuestDepthPlaneStorage(const GuestTextureDesc& desc,const GuestTex
 
 // D16/D32 depth storage has one exact physical plane. The native depth
 // attachment remains typed/readonly to shaders; only ownership uses a writable
-// color-shaped description of the same guest words. Split stencil and MSAA
-// need their own plane/sample transfer and must not enter this contract.
+// color-shaped description of the same guest words. This single-plane helper
+// remains stricter than the complete multi-plane ownership description below.
 inline bool IsIndependentGuestDepthStorage(const GuestTextureDesc& desc) {
     return desc.depth_target&&!desc.render_target&&!desc.writable&&!desc.stencil_address&&
         desc.samples==1&&!desc.volume_depth&&!desc.one_dimensional&&
@@ -76,8 +78,9 @@ inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
     const GuestTextureCache::Entry& image) {
     auto owner=image.desc;owner.writable=true;owner.render_target=false;
     if(image.desc.depth_target){
-        if(!IsIndependentGuestDepthStorage(image.desc,image.layout))return std::nullopt;
-        owner.depth_target=false;
+        if(!IsGuestDepthPlaneStorage(image.desc,image.layout)||
+           !GuestTextureCache::CanUploadGpuSnapshot(image.desc,image.layout))return std::nullopt;
+        owner.depth_target=false;owner.stencil_address=0;
     }
     const bool block=image.layout.block_extent==4;
     const bool block_words=block&&IsIndependentGuestBlockStorage(image.desc,image.layout);
@@ -117,6 +120,62 @@ inline std::optional<GuestImageOwnershipGeometry> DescribeGuestImageOwnership(
            a.slice_bytes!=b.slice_bytes||a.macro!=b.macro||a.thickness!=b.thickness)
             return std::nullopt;
     }
-    return GuestImageOwnershipGeometry{std::move(owner),std::move(layout)};
+    GuestImageOwnershipGeometry result{std::move(owner),std::move(layout),{}};
+    if(image.desc.stencil_address){
+        if(!image.desc.depth_target)return std::nullopt;
+        auto stencil=DescribeGuestStencil(image.desc);stencil.writable=true;
+        auto stencil_layout=LayoutGuestTexture(stencil);
+        if(!MatchesGuestMipLayout(stencil_layout,image.stencil_layout))return std::nullopt;
+        result.stencil.emplace(std::move(stencil),std::move(stencil_layout));
+    }
+    return result;
+}
+
+inline bool CanRetainGuestImageOwnership(const GuestTextureCache& cache,
+    const GuestImageOwnershipGeometry& owner){
+    return cache.CanRetainIndependentImage(owner.desc,owner.layout)&&
+        (!owner.stencil||cache.CanRetainIndependentImage(owner.stencil->first,owner.stencil->second));
+}
+
+inline std::vector<std::pair<uint64_t,uint64_t>> GuestImageProtectionRanges(
+    const GuestTextureCache& cache,const GuestTextureCache::Entry* exclude=nullptr){
+    std::vector<std::pair<uint64_t,uint64_t>> result;
+    for(const auto& image:cache.Entries())if(image.get()!=exclude&&(image->gpu_owned||image->cpu_watched))
+        for(const auto& plane:image->ProtectionPlanes())
+            VisitGuestImageProtectedRanges(plane,[&](uint64_t address,uint64_t bytes){result.emplace_back(address,bytes);});
+    return result;
+}
+
+// Shared production ownership operation: validate BOTH physical geometries,
+// backing and native guards before publishing any new ownership flags.
+template <class HasBacking,class StrongBuffers>
+bool AcquireGuestImageOwnership(GuestTextureCache& cache,GuestTextureCache::Entry& image,
+    PageWatch& watch,HasBacking&& has_backing,StrongBuffers&& strong_buffers){
+    if(image.cache!=&cache)return false;
+    const auto owner=DescribeGuestImageOwnership(image);
+    if(!owner||!CanRetainGuestImageOwnership(cache,*owner))return false;
+    if(image.HasUnprotectedCpuPages())
+        throw std::runtime_error("Image ownership requires validated boundary witnesses");
+    std::vector<std::pair<uint64_t,uint64_t>> planes,strong;
+    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes){
+        const auto pages=GuestProtectionPages(plane.address,plane.bytes);
+        if(!pages||!has_backing(plane.address,plane.bytes))return false;
+        planes.emplace_back(pages->address,pages->size);
+        auto retained=strong_buffers(plane.address,plane.bytes);
+        strong.insert(strong.end(),retained.begin(),retained.end());
+    }
+    if(!watch.TrackImageReadOnly(planes,image.gpu_owned&&!image.buffer_alias_version,strong))return false;
+    image.cpu_watched=false;image.buffer_alias_version=true;image.SetGpuOwned(true);
+    image.buffer_alias_watch=true;return true;
+}
+
+template <class Release>
+void ReleaseGuestImageOwnership(GuestTextureCache& cache,GuestTextureCache::Entry& image,Release&& release){
+    if(image.cache!=&cache)throw std::invalid_argument("Independent image retirement belongs to another cache");
+    image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);
+    image.unprotected_cpu_pages.clear();image.stencil_unprotected_cpu_pages.clear();image.linear_download_pending=false;
+    image.sampled_snapshot.clear();image.stencil_snapshot.clear();
+    const auto retained=GuestImageProtectionRanges(cache,&image);
+    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes)release(plane.address,plane.bytes,retained);
 }
 } // namespace NativeDX12

@@ -650,7 +650,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                    (reads_image&&!clean_small&&(!image_fits_reader_arena||
                     (!image_fits_reader_blocks&&!covering_writer)))||
                    textures->GetMetaInfo(desc.address)||!ownership||
-                   !textures->CanRetainIndependentImage(ownership->desc,ownership->layout)||
+                   !CanRetainGuestImageOwnership(*textures,*ownership)||
                    native.SampleDesc.Count!=desc.samples||
                    (desc.samples>1&&!GuestTextureCache::CanTransferIndependentMultisample(desc,layout))||
                    (layout.expanded_bytes_per_pixel&&(!HasExactPackedExpansion(desc,layout)||

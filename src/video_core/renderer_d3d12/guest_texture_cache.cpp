@@ -1357,6 +1357,18 @@ bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
 }
+bool MatchesReferenceDepthImage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
+    GuestTextureDesc view,const GuestTextureLayout& view_layout){
+    if(!source.depth_target&&!view.depth_target)return false;
+    if((source.depth_target&&!IsGuestDepthPlaneStorage(source,source_layout))||
+       (view.depth_target&&!IsGuestDepthPlaneStorage(view,view_layout)))return false;
+    // CopyColorAndDepth moves logical depth/color words, not a depth UAV. Keep
+    // exact physical/sample geometry here; other overlap domains need their
+    // explicit mapping plan rather than a byte-prefix reinterpretation.
+    source.depth_target=view.depth_target=false;source.render_target=view.render_target=false;
+    source.stencil_address=view.stencil_address=0;
+    return MatchesReferenceColorImage(source,source_layout,view,view_layout);
+}
 bool MatchesReferenceBlockStorage(GuestTextureDesc source,const GuestTextureLayout& source_layout,
     GuestTextureDesc view,const GuestTextureLayout& view_layout){
     const bool source_block=IsIndependentGuestBlockStorage(source,source_layout);
@@ -1575,7 +1587,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
             CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout);
         if(!block&&!mip_growth&&(!MatchesGuestMipLayout(entry->layout,layout)||
            (!CompatibleGuestPackedStorage(entry->desc,desc)&&
-            !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout))))continue;
+            !MatchesReferenceColorImage(entry->desc,entry->layout,desc,layout)&&
+            !MatchesReferenceDepthImage(entry->desc,entry->layout,desc,layout))))continue;
         if(result&&(entry->texture.handle.Get()!=result->texture.handle.Get()||
             entry->expanded_guest_backing.handle.Get()!=result->expanded_guest_backing.handle.Get()||
             entry->expanded_written_mask.handle.Get()!=result->expanded_written_mask.handle.Get()))
@@ -1820,6 +1833,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                !CompatibleGuestAttachmentStorage(previous.desc,d)&&
                !CompatibleGuestSampledStorage(previous.desc,d)&&
                 !MatchesReferenceColorImage(previous.desc,previous.layout,d,layout)&&
+                !MatchesReferenceDepthImage(previous.desc,previous.layout,d,layout)&&
                 !CompatibleGuestImageMipGeometry(previous.desc,previous.layout,d,layout)&&!block)continue;
             // ReserveMemory may evict cache entries. Keep the logical identity
             // witness alive until the replacement's refresh is published.
@@ -1950,18 +1964,27 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                    existing->desc.data_format!=d.data_format)continue;
                 throw std::runtime_error("Independent block image view has no proven word/layout transfer");
             }
-            if((partial_block?!expand_block_:!read_independent_)||!acquire_independent_||!retire_independent_||
-               !CanUploadGpuSnapshot(d,layout,d.writable)||d.stencil_address)
+            const bool depth_transfer=existing->desc.depth_target||d.depth_target;
+            if((depth_transfer?!read_independent_image_:(partial_block?!expand_block_:!read_independent_))||
+               !acquire_independent_||!retire_independent_||!CanUploadGpuSnapshot(d,layout,d.writable))
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
+            if(depth_transfer&&!MatchesReferenceDepthImage(existing->desc,existing->layout,d,layout))
+                throw std::runtime_error("Independent depth/color overlap needs an exact physical transfer plan");
+            const auto samples_supported=[](const auto& desc,const auto& physical){
+                return IsGuestDepthPlaneStorage(desc,physical)||CanTransferIndependentMultisample(desc,physical);};
             if((existing->desc.samples>1||d.samples>1)&&
                (existing->desc.samples!=d.samples||
-                !CanTransferIndependentMultisample(existing->desc,existing->layout)||
-                !CanTransferIndependentMultisample(d,layout)))
+                !samples_supported(existing->desc,existing->layout)||!samples_supported(d,layout)))
                 throw std::runtime_error("Independent MSAA image transfer needs matching raw-component sample domains");
             auto* source=existing;auto pin=PinBinding(*source);
             auto residency=source->pending_buffer_residency;
-            Resource snapshot;
-            if(partial_block){
+            Resource snapshot,stencil_snapshot;
+            if(depth_transfer){
+                auto captured=read_independent_image_(*source,d,layout);
+                snapshot=std::move(captured.depth);stencil_snapshot=std::move(captured.stencil);
+                if(bool(stencil_snapshot.handle)!=bool(d.stencil_address))
+                    throw std::runtime_error("Independent depth conversion lost its stencil input");
+            }else if(partial_block){
                 auto expanded=expand_block_(*source,d,layout);
                 snapshot=std::move(expanded.snapshot);
                 residency.insert(residency.end(),expanded.residency.begin(),expanded.residency.end());
@@ -1971,7 +1994,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // retain the old allocation/descriptors through normal cache fences.
             // First attach the complete dependency chain, then publish only at
             // the actual bind. Recursive upload cannot consume it prematurely.
-            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable,false,UploadPurpose::Preparation);
+            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable,false,
+                UploadPurpose::Preparation,stencil_snapshot.handle?&stencil_snapshot:nullptr);
             converted.pending_buffer_residency=std::move(residency);
             if(private_block_view){
                 // Do not publish a second mutable owner or retire the BC parent:
@@ -2339,7 +2363,48 @@ void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_a
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}
 Resource GuestTextureCache::RetileBufferVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
+    if(image.desc.depth_target){
+        const auto owner=DescribeGuestImageOwnership(image);
+        if(!image.gpu_owned||!image.buffer_alias_version||!owner||!CanRetainGuestImageOwnership(*this,*owner))
+            throw std::invalid_argument("Formatted depth transfer has no complete independent owner");
+        // Native D16/S8 needs a float32 -> guest16 transfer. The formatted
+        // contract remains depth-only; private plane capture does not publish B.
+        return CaptureDepthPlane(image,0,initial,list,completed);
+    }
     return RetileImageVersion(image,initial,list,completed,nullptr);
+}
+GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependentImageVersion(
+    Entry& image,const GuestTextureDesc& target,const GuestTextureLayout& physical,
+    ID3D12GraphicsCommandList* list,uint64_t completed,
+    const std::function<Resource(uint64_t,uint64_t)>& capture_buffer){
+    const auto owner=DescribeGuestImageOwnership(image);
+    if(image.cache!=this||!image.gpu_owned||!image.buffer_alias_version||!image.HasValidLogicalImage()||
+       image.HasUnprotectedCpuPages()||!owner||!CanRetainGuestImageOwnership(*this,*owner)||
+       !list||!capture_buffer||!CanUploadGpuSnapshot(target,physical,target.writable)||
+       !MatchesReferenceDepthImage(image.desc,image.layout,target,physical))
+        throw std::invalid_argument("Independent depth conversion has no exact live image source");
+    const bool copy_stencil=image.desc.depth_target&&target.depth_target&&
+        image.desc.stencil_address&&target.stencil_address;
+    GuestTextureLayout stencil;
+    if(target.stencil_address){
+        stencil=LayoutGuestTexture(DescribeGuestStencil(target));
+        if(copy_stencil&&!MatchesGuestMipLayout(image.stencil_layout,stencil))
+            throw std::invalid_argument("Independent stencil conversion needs its physical layout mapping");
+    }
+    auto pin=PinBinding(image);
+    auto depth_seed=capture_buffer(target.address,physical.guest_bytes);
+    auto stencil_seed=target.stencil_address?capture_buffer(target.stencil_address,stencil.guest_bytes):Resource{};
+    IndependentImageVersion result;
+    result.depth=RetileBufferVersion(image,depth_seed,list,completed);
+    result.depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if(target.stencil_address){
+        // Pinned CopyImage preserves matching D/S aspects. Its buffer-mediated
+        // depth/color or aspect-changing path excludes S at BOTH endpoints.
+        // Keep the new image's explicit initialization seed in that case.
+        result.stencil=copy_stencil?CaptureDepthPlane(image,1,stencil_seed,list,completed):std::move(stencil_seed);
+        result.stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+    return result;
 }
 Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
@@ -2364,7 +2429,7 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     else if(!dependent){
         const auto ownership=DescribeGuestImageOwnership(image);
         if(!image.gpu_owned||!image.buffer_alias_version||!ownership||
-           !CanRetainIndependentImage(ownership->desc,ownership->layout))
+           !CanRetainGuestImageOwnership(*this,*ownership))
             throw std::invalid_argument("Unsupported independent image ownership for formatted transfer");
     }
     const auto interpreted=plane?DescribeGuestStencil(image.desc):image.desc;
