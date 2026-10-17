@@ -5,6 +5,7 @@
 #include "core/emulator_settings.h"
 #include "common/elf_info.h"
 #include "gcn_ordered_formatted_fixture.h"
+#include "gcn_cached_depth_storage_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -32,6 +33,8 @@ int main(int argc,char** argv){try{
     const bool linear_attachment=mode=="linear-attachment-owned";
     const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
     const bool formatted_cmask=mode=="formatted-cmask-owned";
+    const bool cached_depth_storage_ordered=mode=="cached-depth-storage-ordered-owned";
+    const bool cached_depth_storage=cached_depth_storage_ordered||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
@@ -39,7 +42,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -96,7 +99,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(ordered_formatted){
+    if(cached_depth_storage){
+        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize);
+    }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
     }else if(formatted_cmask){
         initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
@@ -954,7 +959,8 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(planned_depth?
+    puts(cached_depth_storage?
+        "PASS: eight actual GCN cached-depth storage transfers (clean/dirty, single/ordered stage mode), formatted-before-image and raw B versus native I probes, optional source S/HTILE and full physical padding":planned_depth?
         "PASS: four actual GCN late cached-depth recreations, PS current-B versus native D, interior VS writer, HTILE and full allocation/padding":ordered_formatted?
         "PASS: actual GCN descriptor-ordered formatted read/write, independent domains, image invalidation and physical padding":linear_attachment?
         "PASS: actual GCN queued linear MRT, repeated owned bindings, independent raw arena, CPU store and full padding":formatted_cmask?

@@ -1660,7 +1660,7 @@ bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const G
     const GuestTextureLayout& layout)const{
     const auto found=image_uids_.find(image.image_uid);
     const bool depth_target=IsGuestDepthPlaneStorage(target,layout);
-    const bool color_target=target.render_target&&!target.depth_target&&!target.writable&&
+    const bool color_target=(target.render_target||target.writable)&&!target.depth_target&&
         !target.stencil_address&&image.desc.depth_target&&
         (target.data_format==2||target.data_format==4)&&layout.block_extent==1&&!layout.expanded_bytes_per_pixel;
     if(image.cache!=this||found==image_uids_.end()||found->second!=&image||
@@ -1703,14 +1703,29 @@ void GuestTextureCache::ForgetRecreatedSourceMeta(Entry& source){
         address=0;
     }
 }
-std::shared_ptr<const GuestTextureCache::CachedDepthBindingPlan> GuestTextureCache::PlanCachedDepthBinding(
+GuestTextureCache::Entry* GuestTextureCache::FindImageRecreationBindingSource(const GuestTextureDesc& target,
+    const GuestTextureLayout& layout)const{
+    if(auto* source=FindIndependentUploadSource(target,layout)){
+        const bool recreate=target.depth_target!=source->desc.depth_target||
+            bool(target.stencil_address)!=bool(source->desc.stencil_address)||
+            std::pair(target.levels,target.layers)>std::pair(source->desc.levels,source->desc.layers);
+        if(recreate&&(target.depth_target||source->desc.depth_target)&&
+           CanMapIndependentDepthImage(source->desc,source->layout,target,layout))return source;
+    }
+    return FindCachedDepthRecreationSource(target,layout);
+}
+std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> GuestTextureCache::PlanCachedImageBinding(
     const GuestTextureDesc& target,const GuestTextureLayout& layout){
-    if(!target.depth_target)return {};
-    auto* source=FindCachedDepthRecreationSource(target,layout);if(!source)return {};
-    if(!prepare_image_buffer_||!current_image_buffer_||!CanUploadGpuSnapshot(target,layout))
-        throw std::runtime_error("Cached depth binding has no prepared current-B source");
-    auto plan=std::shared_ptr<CachedDepthBindingPlan>(new CachedDepthBindingPlan);
+    auto* source=FindImageRecreationBindingSource(target,layout);if(!source)return {};
+    if(!prepare_image_buffer_||!current_image_buffer_||!CanUploadGpuSnapshot(target,layout,target.writable))
+        throw std::runtime_error("Cached image binding has no prepared current-B source");
+    auto plan=std::shared_ptr<CachedImageBindingPlan>(new CachedImageBindingPlan);
     plan->cache_=this;plan->storage_=target;plan->source_pin_=PinBinding(*source);
+    // Retain the ALREADY published I before raw B reservation can reconcile
+    // an exclusive owner. This creates no future target class or metadata.
+    if(HasCurrentNativeContents(*source)&&source->HasValidLogicalImage()&&
+       !source->buffer_alias_version&&!RevalidateReadonly(*source))
+        throw std::runtime_error("Cannot retain original image before recreation capacity reservation");
     // Capacity only. No new image, native copy, I validity, metadata, ownership
     // or deferred semantic residency is published before shader bindings.
     prepare_image_buffer_(target.address,layout.guest_bytes);
@@ -1718,16 +1733,16 @@ std::shared_ptr<const GuestTextureCache::CachedDepthBindingPlan> GuestTextureCac
         LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes);
     return plan;
 }
-GuestTextureCache::Entry& GuestTextureCache::BindPlannedDepth(const CachedDepthBindingPlan& plan,
+GuestTextureCache::Entry& GuestTextureCache::BindPlannedImage(const CachedImageBindingPlan& plan,
     ID3D12GraphicsCommandList* list,uint64_t completed){
     if(plan.cache_!=this||!list||!current_image_buffer_)
-        throw std::invalid_argument("Depth binding plan belongs to another cache or has no source");
-    struct Scope {bool& flag;bool old;~Scope(){flag=old;}} scope{planned_depth_bind_,planned_depth_bind_};
-    planned_depth_bind_=true;
+        throw std::invalid_argument("Image binding plan belongs to another cache or has no source");
+    struct Scope {bool& flag;bool old;~Scope(){flag=old;}} scope{planned_image_bind_,planned_image_bind_};
+    planned_image_bind_=true;
     // Earlier shader binds may refresh or replace the source class. Select
     // CURRENT original I/B at the real bind, not a copied prewarm version.
     const auto target=ResolveDepthViewStorage(plan.storage_);const auto layout=LayoutGuestTexture(target);
-    if(!CanUploadGpuSnapshot(target,layout))throw std::runtime_error("Planned depth binding lost its exact transfer domain");
+    if(!CanUploadGpuSnapshot(target,layout,target.writable))throw std::runtime_error("Planned image binding lost its exact transfer domain");
     auto* parent=FindDepthViewParent(target,layout);
     if(FindIndependentUploadSource(target,layout)||FindCachedDepthRecreationSource(target,layout)||
        (parent&&!parent->logical_dirty&&(parent->gpu_owned||parent->cpu_watched))){
@@ -1746,7 +1761,7 @@ GuestTextureCache::Entry& GuestTextureCache::BindPlannedDepth(const CachedDepthB
     auto depth=current_image_buffer_(target.address,layout.guest_bytes);
     auto stencil=target.stencil_address&&!retain_s?current_image_buffer_(target.stencil_address,
         LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes):BufferImageSource{};
-    auto& result=Upload(target,{},list,completed,{},true,&depth.snapshot,false,true,
+    auto& result=Upload(target,{},list,completed,{},true,&depth.snapshot,target.writable,true,
         UploadPurpose::Preparation,stencil.snapshot.handle?&stencil.snapshot:nullptr);
     if(!acquire_independent_||!acquire_independent_(result))
         throw std::runtime_error("Actual current-B depth binding cannot retain I ownership");
@@ -1774,7 +1789,7 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     const GuestTextureLayout& layout,ID3D12GraphicsCommandList* list,uint64_t completed){
     auto* source=&image;
     if(!list||!read_cached_depth_||!acquire_independent_||!retire_independent_||
-       !CanUploadGpuSnapshot(source->desc,source->layout)||!CanUploadGpuSnapshot(target,layout))
+       !CanUploadGpuSnapshot(source->desc,source->layout)||!CanUploadGpuSnapshot(target,layout,target.writable))
         throw std::runtime_error("Cached depth recreation has no exact native source/seed/ownership transfer");
     auto pin=PinBinding(*source);const bool modified=source->logical_gpu_modified;
     auto residency=source->pending_buffer_residency;
@@ -1782,7 +1797,7 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     if(bool(captured.stencil.handle)!=bool(target.stencil_address))
         throw std::runtime_error("Cached depth recreation lost its target stencil seed");
     residency.insert(residency.end(),captured.seed_residency.begin(),captured.seed_residency.end());
-    auto& result=UploadVersion(target,{},list,completed,{},true,&captured.depth,false,false,nullptr,
+    auto& result=UploadVersion(target,{},list,completed,{},true,&captured.depth,target.writable,false,nullptr,
         UploadPurpose::Preparation,captured.stencil.handle?&captured.stencil:nullptr,true);
     // An actual copy initialized the NEW native I. Do not revive the dirty old
     // I or invent original GpuModified history for a CPU-initialized source.
@@ -1797,8 +1812,7 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     return result;
 }
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
-    if(requested.writable||
-       (requested.data_format!=2&&requested.data_format!=4))return requested;
+    if(requested.data_format!=2&&requested.data_format!=4)return requested;
     const auto layout=LayoutGuestTexture(requested);
     auto* parent=FindDepthViewParent(requested,layout);
     if(parent){
@@ -1807,7 +1821,7 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
         storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
         return storage;
     }
-    if(!requested.depth_target&&!requested.render_target)return requested;
+    if(!requested.depth_target&&!requested.render_target&&!requested.writable)return requested;
     // ResolveDepthOverlap recreates the requested depth/aspect image with
     // max(requested.resources, cached.resources). SubresourceExtent orders
     // levels first, then layers; independently maximizing both is different.
@@ -2757,7 +2771,7 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureCachedDepth
     ID3D12GraphicsCommandList* list,uint64_t completed,
     const std::function<Resource(uint64_t,uint64_t)>& capture_buffer){
     if(!list||!capture_buffer||!IsCachedDepthRecreationSource(image,target,layout)||
-       !CanUploadGpuSnapshot(image.desc,image.layout)||!CanUploadGpuSnapshot(target,layout))
+       !CanUploadGpuSnapshot(image.desc,image.layout)||!CanUploadGpuSnapshot(target,layout,target.writable))
         throw std::invalid_argument("Cached depth recreation has no initialized native allocation mapping");
     auto pin=PinBinding(image);
     auto seed=capture_buffer(target.address,layout.guest_bytes);

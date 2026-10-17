@@ -27,6 +27,7 @@ struct OrderedGuestImage {
     GuestTextureDesc storage;
     GuestTextureLayout layout;
     bool written, null_resource;
+    std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> cached_plan;
 };
 struct OrderedGuestBindings {
     std::vector<Rasterizer::ShaderBufferView> buffers;

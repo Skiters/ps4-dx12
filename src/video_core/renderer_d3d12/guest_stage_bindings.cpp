@@ -66,7 +66,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     if(next_buffer!=buffers.size()||next_image!=images.size())
         throw std::invalid_argument("Ordered stages omit original resource slots");
     std::vector<OrderedGuestImage> physical_images;
-    for(size_t i=0;i<images.size();++i)if(!images[i].null_resource&&!images[i].storage.writable){
+    for(size_t i=0;i<images.size();++i)if(!images[i].null_resource){
         const auto storage=textures.ResolveDepthViewStorage(images[i].storage);
         if(storage!=images[i].storage){
             if(physical_images.empty())physical_images.assign(images.begin(),images.end());
@@ -77,11 +77,14 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     OrderedGuestBindings result;result.stream_views.resize(buffers.size());result.images.resize(images.size());
     result.pins=std::make_shared<std::vector<std::shared_ptr<void>>>();
     struct Domain {GuestTextureDesc desc;GuestTextureLayout layout;GuestTextureCache::Entry* bound{};
-        uint64_t generation{},bound_generation{},initial_bytes{};Resource initial_tiled;};
+        uint64_t generation{},bound_generation{},initial_bytes{};Resource initial_tiled;
+        std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> cached_plan;};
     std::map<VAddr,Domain> domains;
     const auto add_domain=[&](const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool cached=false){
         auto [it,inserted]=domains.try_emplace(desc.address,Domain{desc,layout});
         if(!inserted){auto& old=it->second;
+            if(cached)if(auto* original=textures.FindImageRecreationBindingSource(old.desc,old.layout);
+                original&&original->desc==desc)return; // Original I, not the future domain class.
             if(old.desc.samples==1&&CompatibleGuestDepthSubview(old.desc,old.layout,desc,layout))return;
             if(desc.samples==1&&CompatibleGuestDepthSubview(desc,layout,old.desc,old.layout)){
                 old.desc=desc;old.layout=layout;return;
@@ -134,6 +137,11 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 throw std::runtime_error("Ordered formatted readers retain the original exact-base image contract");
         }
     }
+    for(const auto& image:images)if(image.cached_plan){
+        const auto found=domains.find(image.storage.address);
+        if(found!=domains.end()&&found->second.desc==image.cached_plan->Storage())
+            found->second.cached_plan=image.cached_plan;
+    }
     const auto arm=[&]{
         rasterizer.NotifyOnSubmission([&textures](uint64_t fence){textures.Submitted(fence);});
         rasterizer.RetainUntilFinish([pins=result.pins](uint64_t){(void)pins;});
@@ -144,7 +152,9 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         // host/image envelopes only. Raw DMA B is materialized independently
         // after binding effects; it neither resolves nor acquires an I version.
         // Protect I as a distinct version before preparing/owning overlapping B.
-        for(const auto& [address,domain]:domains){
+        for(auto& [address,domain]:domains){
+            if(!domain.cached_plan)domain.cached_plan=textures.PlanCachedImageBinding(domain.desc,domain.layout);
+            if(domain.cached_plan)continue;
             for(const auto& entry:textures.Entries())if(entry->gpu_owned&&entry->HasValidLogicalImage()&&
                 (CompatibleGuestImageMipGeometry(domain.desc,domain.layout,entry->desc,entry->layout)||
                  (domain.desc.samples==1&&CompatibleGuestDepthSubview(entry->desc,entry->layout,domain.desc,domain.layout)))){
@@ -153,6 +163,31 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             }
         }
         for(auto& [address,domain]:domains){
+            if(domain.cached_plan){
+                // Preserve ORIGINAL I for an earlier formatted BindBuffers.
+                // Recreating its future class here would expose new metadata;
+                // omitting this witness would instead return unrelated B.
+                const bool prior_formatted=[&]{
+                    for(const auto& stage:stages){
+                        for(size_t i=stage.first_buffer;i<stage.end_buffer;++i)
+                            if(buffers[i].formatted&&!buffers[i].cpu_stream&&
+                               Overlaps(address,domain.layout.guest_bytes,requests[i].address,requests[i].size))return true;
+                        for(size_t i=stage.first_image;i<stage.end_image;++i)
+                            if(!images[i].null_resource&&images[i].storage.address==address)return false;
+                    }
+                    return false;
+                }();
+                if(auto* original=textures.FindImageRecreationBindingSource(domain.desc,domain.layout);
+                    prior_formatted&&original&&original->HasValidLogicalImage()&&original->buffer_alias_version){
+                    domain.initial_bytes=original->layout.guest_bytes;
+                    auto initial=rasterizer.CaptureShaderBuffer(address,domain.initial_bytes,false);
+                    domain.initial_tiled=textures.RetileBufferVersion(*original,initial,
+                        rasterizer.RecordingList(),rasterizer.CompletedFence());
+                    rasterizer.RetainUntilFinish([snapshot=domain.initial_tiled,plan=domain.cached_plan](uint64_t){(void)snapshot;(void)plan;});
+                    arm();
+                }
+                continue;
+            }
             if(auto* previous=textures.FindIndependentUploadSource(domain.desc,domain.layout)){
                 // Host allocation growth must precede final B views, but the
                 // original I remains the semantic source until BindTextures.
@@ -259,7 +294,9 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 auto& domain=found->second;GuestTextureCache::Entry* entry=domain.bound;
                 if(!entry||domain.bound_generation!=domain.generation){
                     arm();GuestTextureCache::Entry* refreshed{};
-                    if(textures.FindIndependentUploadSource(domain.desc,domain.layout)){
+                    if(domain.cached_plan){
+                        refreshed=&textures.BindPlannedImage(*domain.cached_plan,rasterizer.RecordingList(),rasterizer.CompletedFence());
+                    }else if(textures.FindIndependentUploadSource(domain.desc,domain.layout)){
                         const auto guest=std::span(reinterpret_cast<const std::byte*>(domain.desc.address),size_t(domain.layout.guest_bytes));
                         refreshed=&textures.Upload(domain.desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence());
                     }else{

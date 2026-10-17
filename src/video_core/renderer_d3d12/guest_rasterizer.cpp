@@ -154,7 +154,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
             IsGpuBufferModified(desc.address,layout.guest_bytes);
         const auto capture=[this](u64 address,u64 bytes){
                 ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
-                if(textures_.IsPlannedDepthBind())ValidatePreparedShaderBufferRange(address,bytes);
+                if(textures_.IsPlannedImageBind())ValidatePreparedShaderBufferRange(address,bytes);
                 // Refresh current CPU/store-marker contents within the already
                 // reserved envelope; a late snapshot must not reuse stale B.
                 PreparePhysicalDmaBuffers(std::span(&request,1));
@@ -1098,7 +1098,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         deferred_color_clear[i]=source&&source->desc.depth_target;
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
-    auto depth_binding_plan=has_depth?textures_.PlanCachedDepthBinding(descriptions[8],layouts[8]):nullptr;
+    auto depth_binding_plan=has_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8]):nullptr;
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
@@ -1368,7 +1368,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes));
             const auto stencil_bytes=depth_attachment_snapshot?std::span<const std::byte>(stencil_guest_snapshot):
                 std::span<const std::byte>(stencil_memory);
-            auto& entry=depth_binding_plan?textures_.BindPlannedDepth(*depth_binding_plan,RecordingList(),CompletedFence()):
+            auto& entry=depth_binding_plan?textures_.BindPlannedImage(*depth_binding_plan,RecordingList(),CompletedFence()):
                 feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
                 depth_bytes,RecordingList(),CompletedFence(),stencil_bytes,
                 depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr,

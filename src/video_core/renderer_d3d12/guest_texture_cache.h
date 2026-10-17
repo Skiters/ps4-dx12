@@ -134,12 +134,12 @@ public:
     };
     struct IndependentImageVersion {Resource depth,stencil;BufferResidency seed_residency;};
     struct BufferImageSource {Resource snapshot;bool resident{};};
-    class CachedDepthBindingPlan {
+    class CachedImageBindingPlan {
         friend class GuestTextureCache;
         const GuestTextureCache* cache_{};
         GuestTextureDesc storage_;
         std::shared_ptr<void> source_pin_;
-        CachedDepthBindingPlan()=default;
+        CachedImageBindingPlan()=default;
     public:
         const GuestTextureDesc& Storage()const{return storage_;}
     };
@@ -301,7 +301,7 @@ private:
     std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_cached_depth_;
     std::function<void(uint64_t,uint64_t)> prepare_image_buffer_;
     std::function<BufferImageSource(uint64_t,uint64_t)> current_image_buffer_;
-    bool planned_depth_bind_{};
+    bool planned_image_bind_{};
     std::function<void()> transfer_submission_;
     std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
@@ -352,9 +352,10 @@ public:
         std::function<BufferImageSource(uint64_t,uint64_t)> current){
         prepare_image_buffer_=std::move(prepare);current_image_buffer_=std::move(current);
     }
-    bool IsPlannedDepthBind()const{return planned_depth_bind_;}
-    std::shared_ptr<const CachedDepthBindingPlan> PlanCachedDepthBinding(const GuestTextureDesc&,const GuestTextureLayout&);
-    Entry& BindPlannedDepth(const CachedDepthBindingPlan&,ID3D12GraphicsCommandList*,uint64_t);
+    bool IsPlannedImageBind()const{return planned_image_bind_;}
+    Entry* FindImageRecreationBindingSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    std::shared_ptr<const CachedImageBindingPlan> PlanCachedImageBinding(const GuestTextureDesc&,const GuestTextureLayout&);
+    Entry& BindPlannedImage(const CachedImageBindingPlan&,ID3D12GraphicsCommandList*,uint64_t);
     bool HasCurrentNativeContents(const Entry&)const;
     bool HasCurrentDepthContents(const Entry&)const;
     // A cache recreation reads old initialized native I even after CPU dirtying.

@@ -126,6 +126,8 @@ public:
     }
 
     inline ComputeProgram& GetCsRegs() {
+        ASSERT_MSG(curr_qid >= 0 && curr_qid < num_mapped_queues,
+                   "Compute register access requires an active GPU queue");
         return mapped_queues[curr_qid].cs_state;
     }
 

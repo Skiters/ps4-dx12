@@ -290,6 +290,8 @@ add_test(NAME native_dirty_cached_color_depth COMMAND native-independent-version
 set_tests_properties(native_dirty_cached_color_depth PROPERTIES TIMEOUT 180)
 add_test(NAME native_cached_depth_render_target COMMAND native-independent-version-transfer-test --cached-depth-rt)
 set_tests_properties(native_cached_depth_render_target PROPERTIES TIMEOUT 180)
+add_test(NAME native_cached_depth_writable_image COMMAND native-independent-version-transfer-test --cached-depth-uav)
+set_tests_properties(native_cached_depth_writable_image PROPERTIES TIMEOUT 180)
 add_test(NAME native_private_depth_late_native_source COMMAND native-independent-version-transfer-test --planned-depth-native-change)
 add_test(NAME native_private_depth_late_current_buffer COMMAND native-independent-version-transfer-test --planned-depth-current-buffer)
 set_tests_properties(native_private_depth_late_native_source native_private_depth_late_current_buffer PROPERTIES TIMEOUT 180)
