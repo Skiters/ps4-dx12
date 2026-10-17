@@ -89,7 +89,12 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device){
             [&](u64 a,u64 n){return a>=base&&a-base<=backing_bytes&&n<=backing_bytes-(a-base);},
             [](u64,u64){return std::vector<std::pair<u64,u64>>{};});};
         require(acquire(image),"Growth source independent owner failed");
-        const GuestTextureCache::BufferResidency ancestor{{source.address,old_layout.guest_bytes}},extra{{target.address,new_layout.guest_bytes}};
+        const GuestTextureCache::BufferResidency ancestor{{source.address,old_layout.guest_bytes}};
+        // Pinned ResolveDepthOverlap calls the additional RefreshImage only
+        // for single-sample growth. MSAA replacement must not invent that B
+        // residency effect; both modes retain their original ancestor receipt.
+        const auto extra=samples==1?GuestTextureCache::BufferResidency{{target.address,new_layout.guest_bytes}}:
+            GuestTextureCache::BufferResidency{};
         auto wanted_receipts=ancestor;wanted_receipts.insert(wanted_receipts.end(),extra.begin(),extra.end());
         image.pending_buffer_residency=ancestor;GuestTextureCache::BufferResidency published;unsigned publications{};
         cache.SetBufferResidencyPublisher([&](auto ranges){++publications;published.assign(ranges.begin(),ranges.end());});
