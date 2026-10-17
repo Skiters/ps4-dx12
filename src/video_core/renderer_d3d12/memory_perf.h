@@ -30,20 +30,21 @@ struct MemoryPerfConfig {
         return c;
     }
     struct Limits {u64 cache,arena;};
+    u64 AvailableBacking(u64 budget,u64 usage,u64 buffer_commitment)const {
+        const auto other=usage>buffer_commitment?usage-buffer_commitment:0;
+        const auto reserve=std::max<u64>((enabled?2048:256)*MemoryMiB,budget/8);
+        return budget>other&&budget-other>reserve?budget-other-reserve:0;
+    }
     Limits Budget(u64 budget,u64 usage,u64 buffer_commitment)const {
         if(!enabled){
-            const auto other=usage>buffer_commitment?usage-buffer_commitment:0;
-            const auto reserve=std::max<u64>(256*MemoryMiB,budget/8);
-            const auto arena=budget>other&&budget-other>reserve?budget-other-reserve:0;
+            const auto arena=AvailableBacking(budget,usage,buffer_commitment);
             auto cache=arena/5*4;
             if(requested)cache=std::min(cache,requested);
             return {cache,arena};
         }
         // Account for other process resources and leave at least 2 GiB spare.
         // No reservation: these are caps on lazy allocation, not allocations.
-        const auto other=usage>buffer_commitment?usage-buffer_commitment:0;
-        const auto reserve=std::max<u64>(2048*MemoryMiB,budget/8);
-        const auto available=budget>other&&budget-other>reserve?budget-other-reserve:0;
+        const auto available=AvailableBacking(budget,usage,buffer_commitment);
         const auto arena=std::min<u64>(requested+requested/4,available);
         return {std::min(requested,arena*4/5),arena};
     }

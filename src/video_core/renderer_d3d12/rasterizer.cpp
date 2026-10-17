@@ -64,9 +64,9 @@ struct BufferBudgetObserver {
         if(registered)DX12_API_CALL(adapter->UnregisterVideoMemoryBudgetChangeNotification(cookie));
         if(event)CloseHandle(event);
     }
-    bool Query(DXGI_QUERY_VIDEO_MEMORY_INFO& memory){
+    bool Query(DXGI_QUERY_VIDEO_MEMORY_INFO& memory,bool force=false){
         const auto now=GetTickCount64();
-        if(checked&&now-checked<1000&&(!event||WaitForSingleObject(event,0)!=WAIT_OBJECT_0))return false;
+        if(!force&&checked&&now-checked<1000&&(!event||WaitForSingleObject(event,0)!=WAIT_OBJECT_0))return false;
         checked=now;
         return adapter&&SUCCEEDED(DX12_API_CALL(adapter->QueryVideoMemoryInfo(0,DXGI_MEMORY_SEGMENT_GROUP_LOCAL,&memory)))&&memory.Budget;
     }
@@ -253,6 +253,45 @@ void Rasterizer::ScopedMarkerInsertColor(const std::string_view& text,u32 color,
 void Rasterizer::ScopedMarkerInsert(const std::string_view& text,bool guest){
     ScopedMarkerInsertColor(text,0,guest);
 }
+bool Rasterizer::PreserveBufferBacking(const Mapping& mapping)const{
+    return mapping.gpu_cpu_diverged||resolving_buffers_.contains(mapping.base)||
+        std::ranges::find(preparing_buffer_contents_,&mapping)!=preparing_buffer_contents_.end()||
+        (mapping.backing_version&&mapping.backing_version.use_count()>1)||
+        std::ranges::any_of(mapping.preserved_versions,[](const auto& weak){return !weak.expired();});
+}
+u64 Rasterizer::AdmitBufferCache(std::span<const std::pair<VAddr,VAddr>> active,u64 budget,u64 additional,u64 savings){
+    const auto fits=[&]{const auto used=CachedBufferBytes()>savings?CachedBufferBytes()-savings:0;
+        return additional<=budget&&used<=budget-additional;};
+    if(fits())return budget;
+    // Pinned Vulkan resident_ranges keep B backing through arena migration.
+    // A cache target may reclaim reconstructible B, not an independent B1 or
+    // a generation selected by a still-live binding/preparation.
+    Finish();
+    const auto overlaps=[&](const Mapping& mapping){return std::ranges::any_of(active,[&](const auto& range){
+        return mapping.base<range.second&&range.first<mapping.base+mapping.size;});};
+    while(!fits()){
+        u64 required{};
+        for(const auto& [begin,end]:active){if(end-begin>UINT64_MAX-required)throw std::overflow_error("Buffer admission footprint overflow");required+=end-begin;}
+        for(const auto& [_,mapping]:mappings_)if(PreserveBufferBacking(mapping)){
+            auto outside=mapping.size;
+            for(const auto& [begin,end]:active){const auto a=std::max(begin,mapping.base),b=std::min(end,mapping.base+mapping.size);
+                if(a<b)outside-=b-a;}
+            if(outside>UINT64_MAX-required)throw std::overflow_error("Preserved buffer footprint overflow");required+=outside;
+        }
+        if(required>budget){Diagnostics::Count("buffer-cache.mandatory-admitted.bytes",required-budget);budget=required;}
+        if(fits())break;
+        auto chosen=mappings_.end();
+        for(auto it=mappings_.begin();it!=mappings_.end();++it)if(!PreserveBufferBacking(it->second)&&!overlaps(it->second)&&
+            (chosen==mappings_.end()||(memory_perf_.enabled&&it->second.last_use<chosen->second.last_use)))chosen=it;
+        if(chosen==mappings_.end())throw std::logic_error("Active buffer admission footprint changed during preparation");
+        const auto base=chosen->first,size=chosen->second.size;
+        ResolveGpuBuffers(base,size);Finish();chosen=mappings_.find(base);
+        if(chosen==mappings_.end()||PreserveBufferBacking(chosen->second)||overlaps(chosen->second))continue;
+        TraceMapping(chosen->second,"budget");cached_buffer_bytes_-=chosen->second.size;
+        dirty_mappings_.erase(base);RemoveBufferIndex(base);RetireBuffer(chosen->second);mappings_.erase(chosen);
+    }
+    return budget;
+}
 Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_budget,bool physical_dma){
     if(preparing_buffer_envelope_)
         throw std::logic_error("Cannot materialize buffers from a growth witness callback");
@@ -277,17 +316,14 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     // Raw descriptor element counts bound each view; aggregate resident bytes
     // are governed separately by the adapter's current memory budget.
     constexpr u64 max_slice=Shader::NativeDma::MaxBufferBytes;
-    const auto cache_budget=std::max(buffer_cache_budget_,batch_budget);
+    auto cache_budget=std::max(buffer_cache_budget_,batch_budget);
     if(size>max_slice||size>cache_budget)throw std::runtime_error("Native buffer slice exceeds current slice/residency budget");
     for(auto overlap=FirstOverlapping(address);overlap!=mappings_.end()&&overlap->first<address+size;++overlap)
         if(overlap->second.gpu_cpu_diverged)
             throw std::runtime_error("GPU-only B overlap requires preserving batch materialization");
     DropCached(address,size,true);
-    if(CachedBufferBytes()>cache_budget-size){
-        for(const auto& [base,mapping]:mappings_)if(mapping.gpu_cpu_diverged)
-            throw std::runtime_error("GPU-only B requires preserving residency under buffer allocation pressure");
-        ResolveGpuBuffers(0,UINT64_MAX);Finish();for(auto& [_,m]:mappings_)TraceMapping(m,"budget");ClearMappings();
-    }
+    const std::pair<VAddr,VAddr> active{address,address+size};
+    cache_budget=AdmitBufferCache(std::span(&active,1),cache_budget,size);
     if(physical_dma)ValidateGpuBacking(address,size,false);
     else CheckBacking(address,size,false);
     // Publish before GPU allocation/upload; concurrent CPU invalidation must
@@ -338,7 +374,22 @@ Resource Rasterizer::AcquireBuffer(u64 size){
                 pooled_buffer_bytes_-=it->gpu.handle->GetDesc().Width;it=buffer_pool_.erase(it);
             }
             buffer_allocator_.Trim();Diagnostics::Count("buffer-allocation.pressure-retry");
-            return buffer_allocator_.Allocate(size);
+            try{return buffer_allocator_.Allocate(size);}
+            catch(const BufferBudgetExhausted&){
+                // The configured cache/arena target is not permission to drop
+                // pinned guest B or in-flight copy sources. Admit mandatory
+                // backing only within a fresh real adapter budget/reserve.
+                DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
+                if(!buffer_budget_observer_->Query(memory,true))throw;
+                const auto available=memory_perf_.AvailableBacking(memory.Budget,memory.CurrentUsage,buffer_allocator_.CommittedBytes());
+                constexpr u64 alignment=D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+                if(size>UINT64_MAX-(alignment-1))throw;
+                const auto minimum=(size+alignment-1)&~(alignment-1),committed=buffer_allocator_.CommittedBytes();
+                if(committed>available||minimum>available-committed)throw;
+                buffer_allocator_.SetBudget(committed+minimum);
+                Diagnostics::Count("buffer-allocation.mandatory-admission");
+                return buffer_allocator_.Allocate(size);
+            }
         }
     }
     Diagnostics::Count("buffer-allocation.reuse");
@@ -1088,7 +1139,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
     if(valid&&has_srv&&has_uav){
         for(const auto& request:requests){
             for(auto it=FirstOverlapping(request.address);it!=mappings_.end()&&it->first<request.address+request.size;++it)
-                preserve_version|=it->second.gpu_cpu_diverged||it->second.gpu_owned;
+                preserve_version|=PreserveBufferBacking(it->second)||it->second.gpu_owned;
             if(!request.unordered_access)for(const auto& other:requests)if(other.unordered_access&&
                 request.address<other.address+other.size&&other.address<request.address+request.size)
                 throw std::runtime_error("Overlapping guest SRV/UAV buffer aliases need compiler access unification");
@@ -1212,7 +1263,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
     // A shrinking OS target cannot evict resources used by this very command.
     // Trim inactive mappings first, while preserving the complete active batch.
     // The placed allocator still enforces the physical arena growth budget.
-    const auto cache_budget=std::max(buffer_cache_budget_,total);
+    auto cache_budget=std::max(buffer_cache_budget_,total);
     for(auto [first,last]:merged) {
         bool srv=false,uav=false;for(const auto& request:requests)if(request.address>=first&&request.address+request.size<=last)
             (request.unordered_access?uav:srv)=true;
@@ -1262,37 +1313,9 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
         for(auto it=FirstOverlapping(first);it!=mappings_.end()&&it->first<last;++it)
             if(replaced.insert(it->first).second)replaced_bytes+=it->second.size;
     }
+    const auto savings=replaced_bytes>additional?replaced_bytes-additional:0;
     additional=additional>replaced_bytes?additional-replaced_bytes:0;
-    if(CachedBufferBytes()>cache_budget-additional){
-        // Cache eviction destroys resources referenced by recorded commands.
-        // The read-only fast path above does not retire those users.
-        Finish();
-        std::set<VAddr> protected_mappings;
-        for(const auto* active:preparing_buffer_contents_)protected_mappings.insert(active->base);
-        for(auto [first,last]:merged){
-            for(auto it=FirstOverlapping(first);it!=mappings_.end()&&it->first<last;++it)
-                protected_mappings.insert(it->first);
-        }
-        // Finish has retired all users. Drop only inactive mappings before
-        // considering full rematerialization of oversized covered allocations.
-        std::vector<VAddr> candidates;
-        for(const auto& [base,mapping]:mappings_)if(!protected_mappings.contains(base)&&!mapping.gpu_cpu_diverged)candidates.push_back(base);
-        if(memory_perf_.enabled)std::sort(candidates.begin(),candidates.end(),[&](VAddr a,VAddr b){
-            return mappings_.at(a).last_use<mappings_.at(b).last_use;
-        });
-        for(const auto base:candidates){
-            if(CachedBufferBytes()<=cache_budget-additional)break;
-            auto it=mappings_.find(base);ResolveGpuBuffers(it->first,it->second.size);
-            TraceMapping(it->second,"budget");cached_buffer_bytes_-=it->second.size;dirty_mappings_.erase(it->first);RemoveBufferIndex(it->first);RetireBuffer(it->second);mappings_.erase(it);
-        }
-        if(CachedBufferBytes()>cache_budget-additional){
-            if(!preparing_buffer_contents_.empty())
-                throw std::runtime_error("Cannot clear active buffer preparation under residency pressure");
-            for(const auto& [base,mapping]:mappings_)if(mapping.gpu_cpu_diverged)
-                throw std::runtime_error("GPU-only B needs preserving residency under the reduced buffer budget");
-            ResolveGpuBuffers(0,UINT64_MAX);ClearMappings();
-        }
-    }
+    cache_budget=AdmitBufferCache(merged,cache_budget,additional,savings);
     diagnostic.Stage("materialize-resident-backing");
     diagnostic.Detail("requests=%zu merged=%zu bytes=%llu additional=%llu cached=%llu",requests.size(),merged.size(),
         (unsigned long long)total,(unsigned long long)additional,(unsigned long long)CachedBufferBytes());

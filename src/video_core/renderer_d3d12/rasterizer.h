@@ -149,6 +149,8 @@ private:
     std::vector<std::function<void(u64)>> submission_callbacks_;
     void Begin();
     Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0,bool physical_dma=false);
+    bool PreserveBufferBacking(const Mapping&)const;
+    u64 AdmitBufferCache(std::span<const std::pair<VAddr,VAddr>>,u64 budget,u64 additional,u64 savings=0);
     void DropCached(VAddr address,u64 size,bool reconcile,const char* reason="overlap");
     bool RematerializeBufferEnvelope(VAddr,u64,bool physical_dma=false,bool defer_owned=true);
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);

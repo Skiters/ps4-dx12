@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/rasterizer.h"
+#include "preserved_buffer_budget_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -17,8 +18,9 @@ int main(int argc,char** argv){try{
     const bool lru=argc>1&&std::string_view(argv[1])=="lru";
     const bool copy=argc>1&&std::string_view(argv[1])=="copy";
     const bool ranges=argc>1&&std::string_view(argv[1])=="ranges";
+    const bool preserved=argc>1&&std::string_view(argv[1])=="preserved";
     _putenv_s("SHADPS4_DX12_MEMORY_PERF","1");
-    _putenv_s("SHADPS4_DX12_BUFFER_BUDGET_MB",(copy||ranges)?"256":lru?"4":"32");
+    _putenv_s("SHADPS4_DX12_BUFFER_BUDGET_MB",(copy||ranges)?"256":(lru||preserved)?"4":"32");
     _putenv_s("SHADPS4_DX12_CPU_POOL_MB","32");
     MemoryPerfConfig config;config.enabled=true;config.requested=8192*MemoryMiB;
     const auto full=config.Budget(16*1024*MemoryMiB,2*1024*MemoryMiB,0);
@@ -66,6 +68,31 @@ int main(int argc,char** argv){try{
         bool rejected=false;try{arena.Allocate(65536);}catch(const BufferBudgetExhausted&){rejected=true;}
         Require(rejected,"zero pressure budget allowed new heap allocation");
     }
+    {
+        // Two live pages must share the configured budget. The second page
+        // needs four MiB, not another complete eight-MiB page target.
+        PlacedBufferAllocator arena(device.Get(),8*MemoryMiB,12*MemoryMiB);
+        auto a=arena.Allocate(2*MemoryMiB),b=arena.Allocate(4*MemoryMiB),c=arena.Allocate(4*MemoryMiB);
+        Require(arena.CommittedBytes()==12*MemoryMiB,"remaining placed-heap budget was not admitted");
+        Rasterizer commands(device.Get());
+        auto upload=Buffer(device.Get(),12,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto readback=Buffer(device.Get(),12,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const u32 expected[]{0x11223344,0x51525354,0x61626364};void* cpu{};D3D12_RANGE empty{0,0};
+        Check(upload.handle->Map(0,&empty,&cpu));memcpy(cpu,expected,sizeof(expected));upload.handle->Unmap(0,nullptr);
+        Resource* resources[]{&a,&b,&c};
+        for(unsigned i=0;i<3;++i){auto& resource=*resources[i];resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+            commands.RecordingList()->CopyBufferRegion(resource.handle.Get(),0,upload.handle.Get(),i*4,4);
+            resource.Transition(commands.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            commands.RecordingList()->CopyBufferRegion(readback.handle.Get(),i*4,resource.handle.Get(),0,4);}
+        commands.Finish();D3D12_RANGE all{0,12};Check(readback.handle->Map(0,&all,&cpu));
+        const bool valid=!memcmp(cpu,expected,sizeof(expected));readback.handle->Unmap(0,&empty);
+        Require(valid,"second placed-heap page corrupted live resource contents");
+        arena.SetBudget(0);arena.Trim();Require(arena.CommittedBytes()==12*MemoryMiB,"reduced budget destroyed live pages");
+        bool rejected=false;try{arena.Allocate(16*MemoryMiB);}catch(const BufferBudgetExhausted&){rejected=true;}
+        Require(rejected,"zero actual heap budget admitted another page");
+        a={};b={};c={};arena.Trim();Require(arena.CommittedBytes()==0,"completed heap pages did not retire");
+        commands.ValidateDebugMessages();
+    }
     if(argc>1&&std::string_view(argv[1])=="fence"){
         Guest guest(65536);Rasterizer raster(device.Get());raster.MapMemory(guest.Base(),guest.size);
         static_cast<u32*>(guest.data)[0]=0x12345678;
@@ -88,6 +115,7 @@ int main(int argc,char** argv){try{
         Require(word==0x12345678,"pending GPU copy lost its resource");
         raster.ValidateDebugMessages();puts("PASS: eviction blocks behind unfinished GPU fence and preserves readback");return 0;
     }
+    if(preserved){RunPreservedBufferBudgetFixture(device.Get());puts("PASS: retained B1/selected generations, bounded reconstructible cache, semantic residency, CPU-store proofs and exact GPU visibility under pressure");return 0;}
     if(copy){
         Guest guest(96*MemoryMiB);Rasterizer raster(device.Get());raster.MapMemory(guest.Base(),guest.size);
         const Rasterizer::ShaderBufferRequest request[]{{guest.Base(),80*MemoryMiB}};

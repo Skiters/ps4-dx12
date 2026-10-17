@@ -55,14 +55,17 @@ void PlacedBufferAllocator::Trim(){
 std::shared_ptr<PlacedBufferAllocator::Page> PlacedBufferAllocator::CreatePage(u64 minimum){
     // Large non-power-of-two buffers otherwise waste nearly an entire arena
     // page each (e.g. twelve 160-MiB buffers consume twelve 256-MiB heaps).
-    const auto bytes=compact_large_pages_&&minimum>=page_size_/2?AlignHeap(minimum):
-        std::max(std::min(page_size_,budget_),AlignHeap(minimum));
     // Leases are the only owners besides pages_.  Drop completely unused
     // heaps before enforcing the current Windows memory budget.
     for(auto it=pages_.begin();it!=pages_.end();){
         if(it->use_count()==1){committed_-=(*it)->size;it=pages_.erase(it);}
         else ++it;
     }
+    // Existing live pages already consume part of the budget. A second page
+    // uses its remainder, rather than requesting the complete budget again.
+    const auto available=budget_>committed_?budget_-committed_:0;
+    const auto bytes=compact_large_pages_&&minimum>=page_size_/2?AlignHeap(minimum):
+        std::max(std::min(page_size_,available),AlignHeap(minimum));
     if(bytes>budget_||committed_>budget_-bytes)throw BufferBudgetExhausted();
     D3D12_HEAP_DESC description{};description.SizeInBytes=bytes;description.Alignment=HeapAlignment;
     description.Properties.Type=D3D12_HEAP_TYPE_DEFAULT;
