@@ -1646,6 +1646,78 @@ GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestText
     }
     return parent;
 }
+bool GuestTextureCache::HasCurrentDepthContents(const Entry& image)const{
+    const auto found=image_uids_.find(image.image_uid);
+    return image.cache==this&&found!=image_uids_.end()&&found->second==&image&&
+        (image.HasValidLogicalImage()||image.depth_storage_current)&&image.texture.handle&&image.gpu_owned&&!image.logical_dirty&&
+        !image.HasUnprotectedCpuPages()&&IsGuestDepthPlaneStorage(image.desc,image.layout);
+}
+bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const GuestTextureDesc& target,
+    const GuestTextureLayout& layout)const{
+    const auto found=image_uids_.find(image.image_uid);
+    if(image.cache!=this||found==image_uids_.end()||found->second!=&image||
+       !image.depth_storage_current||!image.texture.handle||
+       image.desc.samples!=1||target.samples!=1||
+       !IsGuestDepthPlaneStorage(image.desc,image.layout)||!IsGuestDepthPlaneStorage(target,layout)||
+       std::pair(target.levels,target.layers)<std::pair(image.desc.levels,image.desc.layers))return false;
+    // ResolveDepthOverlap recreates on resource growth or changed S presence.
+    // Same-resource CPU/B dirtying must instead refresh D from current B.
+    const bool recreate=std::pair(target.levels,target.layers)>std::pair(image.desc.levels,image.desc.layers)||
+        bool(target.stencil_address)!=bool(image.desc.stencil_address);
+    // Differing-aspect CopyImageWithBuffer asserts a one-mip intersection.
+    if(bool(target.stencil_address)!=bool(image.desc.stencil_address)&&
+       std::min(target.levels,image.desc.levels)!=1)return false;
+    return recreate&&CanMapIndependentDepthImage(image.desc,image.layout,target,layout);
+}
+GuestTextureCache::Entry* GuestTextureCache::FindCachedDepthRecreationSource(const GuestTextureDesc& target,
+    const GuestTextureLayout& layout)const{
+    Entry* source{};auto [first,last]=address_index_.equal_range(target.address);
+    for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
+        if(candidate->gpu_owned&&candidate->buffer_alias_version&&candidate->HasValidLogicalImage())continue;
+        if(!IsCachedDepthRecreationSource(*candidate,target,layout))continue;
+        if(source&&source->texture.handle.Get()!=candidate->texture.handle.Get())
+            throw std::runtime_error("Ambiguous initialized cached-depth recreation source");
+        source=candidate;
+    }
+    // A current independent version takes precedence over older cached native
+    // history. Query it only when a cached candidate exists (usual binds do not).
+    return source&&FindIndependentUploadSource(target,layout)?nullptr:source;
+}
+void GuestTextureCache::ForgetRecreatedSourceMeta(Entry& source){
+    // Original FreeImage unregisters metadata, even while queued descriptors
+    // still keep the old native allocation alive.
+    for(auto& address:source.metadata_addresses){
+        const auto found=surface_metas_.find(address);
+        if(found!=surface_metas_.end()&&found->second.owner_uid==source.image_uid)surface_metas_.erase(found);
+        address=0;
+    }
+}
+GuestTextureCache::Entry* GuestTextureCache::PrepareCachedDepthRecreation(const GuestTextureDesc& target,
+    const GuestTextureLayout& layout,ID3D12GraphicsCommandList* list,uint64_t completed,UploadPurpose purpose){
+    auto* source=FindCachedDepthRecreationSource(target,layout);if(!source)return nullptr;
+    if(!list||!read_cached_depth_||!acquire_independent_||!retire_independent_||
+       !CanUploadGpuSnapshot(source->desc,source->layout)||!CanUploadGpuSnapshot(target,layout))
+        throw std::runtime_error("Cached depth recreation has no exact native source/seed/ownership transfer");
+    auto pin=PinBinding(*source);const bool modified=source->logical_gpu_modified;
+    auto residency=source->pending_buffer_residency;
+    auto captured=read_cached_depth_(*source,target,layout);
+    if(bool(captured.stencil.handle)!=bool(target.stencil_address))
+        throw std::runtime_error("Cached depth recreation lost its target stencil seed");
+    residency.insert(residency.end(),captured.seed_residency.begin(),captured.seed_residency.end());
+    auto& result=UploadVersion(target,{},list,completed,{},true,&captured.depth,false,false,nullptr,
+        UploadPurpose::Preparation,captured.stencil.handle?&captured.stencil:nullptr,true);
+    // An actual copy initialized the NEW native I. Do not revive the dirty old
+    // I or invent original GpuModified history for a CPU-initialized source.
+    result.htile_initial_mask=0;
+    result.pending_buffer_residency=std::move(residency);
+    if(!acquire_independent_(result))throw std::runtime_error("Recreated cached depth could not retain target ownership");
+    retire_independent_(*source);source->MarkLogicalDirty();
+    ForgetRecreatedSourceMeta(*source);
+    result.logical_gpu_modified=modified;result.logical_dirty=false;
+    RememberDepthViewStorage(result,target);
+    if(purpose==UploadPurpose::Binding)PublishBufferResidency(result);
+    return &result;
+}
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
     if(requested.writable||requested.render_target||
        (requested.data_format!=2&&requested.data_format!=4))return requested;
@@ -1663,10 +1735,9 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
     // levels first, then layers; independently maximizing both is different.
     // Resolve BEFORE caller source/prewrite captures, not inside Upload after
     // it has already been given a smaller guest byte envelope.
-    Entry* preceding{};auto resolved=requested;
+    Entry* preceding{};bool preceding_independent=false;auto resolved=requested;
     auto [first,last]=address_index_.equal_range(requested.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
-        if(!candidate->gpu_owned||!candidate->buffer_alias_version||!candidate->HasValidLogicalImage())continue;
         auto storage=requested;
         if(std::pair(candidate->desc.levels,candidate->desc.layers)>std::pair(storage.levels,storage.layers)){
             storage.levels=candidate->desc.levels;storage.layers=candidate->desc.layers;
@@ -1674,11 +1745,18 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
         if(storage==requested||(storage.samples>1&&storage.levels!=1))continue;
         const auto physical=LayoutGuestTexture(storage);
         if(!CanMapIndependentDepthImage(candidate->desc,candidate->layout,storage,physical))continue;
-        if(candidate->HasUnprotectedCpuPages())
+        const bool independent=candidate->gpu_owned&&candidate->buffer_alias_version&&candidate->HasValidLogicalImage();
+        const bool cached=IsCachedDepthRecreationSource(*candidate,storage,physical);
+        if(!independent&&!cached)continue;
+        if(!cached&&candidate->HasUnprotectedCpuPages())
             throw std::runtime_error("Depth recreation extent requires boundary validation");
+        if(preceding&&preceding_independent!=independent){
+            if(!independent)continue;
+            preceding=nullptr;
+        }
         if(preceding&&candidate->texture.handle.Get()!=preceding->texture.handle.Get())
             throw std::runtime_error("Ambiguous depth recreation extent source");
-        preceding=candidate;resolved=storage;
+        preceding=candidate;preceding_independent=independent;resolved=storage;
     }
     return resolved;
 }
@@ -1920,7 +1998,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     std::span<const std::byte> bytes,ID3D12GraphicsCommandList* list,uint64_t completed,
     std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,
     bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency,UploadPurpose purpose,
-    const Resource* stencil_gpu_snapshot){
+    const Resource* stencil_gpu_snapshot,bool fresh_depth_recreation){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
@@ -2018,6 +2096,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
        stencil_gpu_snapshot->handle->GetDesc().Width<stencil_layout.guest_bytes||
        stencil_gpu_snapshot->state!=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
         throw std::invalid_argument("Invalid GPU guest stencil snapshot");
+    if(!guest_snapshot)if(auto* recreated=PrepareCachedDepthRecreation(d,layout,list,completed,purpose))return *recreated;
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
     auto* independent_source=guest_snapshot?nullptr:FindIndependentUploadSource(d,layout);
@@ -2131,8 +2210,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // retain the old allocation/descriptors through normal cache fences.
             // First attach the complete dependency chain, then publish only at
             // the actual bind. Recursive upload cannot consume it prematurely.
-            auto& converted=Upload(d,{},list,completed,{},true,&snapshot,d.writable,false,
-                UploadPurpose::Preparation,stencil_snapshot.handle?&stencil_snapshot:nullptr);
+            auto& converted=UploadVersion(d,{},list,completed,{},true,&snapshot,d.writable,false,nullptr,
+                UploadPurpose::Preparation,stencil_snapshot.handle?&stencil_snapshot:nullptr,d.depth_target);
             converted.pending_buffer_residency=std::move(residency);
             if(color_ms_depth){
                 // Pinned CopyColorAndDepth/ReinterpretColorAsMsDepth samples
@@ -2160,7 +2239,11 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             }
             if(!acquire_independent_(converted))
                 throw std::runtime_error("Converted independent image could not retain ownership");
+            if(d.depth_target)converted.htile_initial_mask=0;
             retire_independent_(*source);
+            if(depth_transfer&&(d.depth_target||d.writable||d.render_target||
+               std::pair(d.levels,d.layers)>std::pair(source->desc.levels,source->desc.layers)))
+                ForgetRecreatedSourceMeta(*source);
             Diagnostics::Count("image-version.gpu-reinterpret");
             return finish_refresh(converted);
         }
@@ -2216,8 +2299,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             return finish_refresh(*existing);
         }
     }
-    Entry* entry=nullptr;{auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
-        if(!(guest_snapshot&&(indexed->second->gpu_owned||indexed->second->BindingPinned()))&&
+    Entry* entry=nullptr;if(!fresh_depth_recreation){auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
+        if(!(guest_snapshot&&(indexed->second->gpu_owned||indexed->second->BindingPinned()||
+             (!current_buffer_snapshot&&indexed->second->depth_storage_current)))&&
            (indexed->second->desc==d||CompatibleGuestAttachmentStorage(indexed->second->desc,d)||
             CompatibleGuestWritableStorage(indexed->second->desc,d))){entry=indexed->second;break;}}
     const bool immutable_view=!d.writable;
@@ -2583,6 +2667,25 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     }
     return result;
 }
+GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureCachedDepthRecreationVersion(
+    Entry& image,const GuestTextureDesc& target,const GuestTextureLayout& layout,
+    ID3D12GraphicsCommandList* list,uint64_t completed,
+    const std::function<Resource(uint64_t,uint64_t)>& capture_buffer){
+    if(!list||!capture_buffer||!IsCachedDepthRecreationSource(image,target,layout)||
+       !CanUploadGpuSnapshot(image.desc,image.layout)||!CanUploadGpuSnapshot(target,layout))
+        throw std::invalid_argument("Cached depth recreation has no initialized native allocation mapping");
+    auto pin=PinBinding(image);
+    auto seed=capture_buffer(target.address,layout.guest_bytes);
+    auto stencil=target.stencil_address?capture_buffer(target.stencil_address,
+        LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes):Resource{};
+    IndependentImageVersion result;
+    result.depth=RetileImageVersion(image,seed,list,completed,nullptr,0,true,&target,&layout,
+        NativeReadPurpose::CachedDepthRecreation);
+    result.depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    result.stencil=std::move(stencil);
+    if(result.stencil.handle)result.stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    return result;
+}
 Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed){
     if(image.cache!=this)throw std::invalid_argument("Depth snapshot source belongs to another cache");
@@ -2593,13 +2696,22 @@ Resource GuestTextureCache::CaptureDepthPlane(Entry& image,UINT plane,Resource& 
 }
 Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     ID3D12GraphicsCommandList* list,uint64_t completed,const WritableBlockAlias* alias,
-    UINT plane,bool private_depth_snapshot,const GuestTextureDesc* mapped_desc,const GuestTextureLayout* mapped_layout){
-    if(image.HasUnprotectedCpuPages())
+    UINT plane,bool private_depth_snapshot,const GuestTextureDesc* mapped_desc,const GuestTextureLayout* mapped_layout,
+    NativeReadPurpose read_purpose){
+    const bool cached=read_purpose==NativeReadPurpose::CachedDepthRecreation;
+    if(cached&&(!mapped_desc||!mapped_layout||!private_depth_snapshot||plane||
+       !IsCachedDepthRecreationSource(image,*mapped_desc,*mapped_layout)))
+        throw std::invalid_argument("Cached native depth read lost its initialized recreation source");
+    // Cached recreation reads retained native allocation contents, not current
+    // guest memory. CPU dirtying/boundary equality cannot certify independent I
+    // reuse, but does not destroy these old native contents either.
+    if(!cached&&image.HasUnprotectedCpuPages())
         throw std::runtime_error("Independent image transfer requires boundary validation");
     const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
-    if(image.logical_dirty&&!dependent)throw std::runtime_error("Independent image transfer requires a valid logical version");
+    if(image.logical_dirty&&!dependent&&!cached)throw std::runtime_error("Independent image transfer requires a valid logical version");
     if(private_depth_snapshot){
-        if(alias||!image.desc.depth_target||!image.gpu_owned||!image.HasValidLogicalImage()||
+        if(alias||!image.desc.depth_target||(!cached&&(!image.gpu_owned||
+           (!image.HasValidLogicalImage()&&!HasCurrentDepthContents(image))))||
            plane>1||(plane&&!image.desc.stencil_address)||!CanUploadGpuSnapshot(image.desc,image.layout))
             throw std::invalid_argument("Unsupported native depth snapshot source/plane");
     }else if(plane)throw std::invalid_argument("Formatted image transfer cannot publish a stencil plane");

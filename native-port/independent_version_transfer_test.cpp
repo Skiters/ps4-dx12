@@ -9,6 +9,7 @@
 #include "paired_depth_snapshot_fixture.h"
 #include "independent_depth_growth_fixture.h"
 #include "depth_subview_fixture.h"
+#include "dirty_cached_depth_fixture.h"
 #include "color_to_ms_depth_fixture.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
@@ -539,6 +540,7 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--depth")==0){RunIndependentDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--paired-depth")==0){RunPairedDepthSnapshotFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-recreation-extents")==0){RunColorToMsDepthFixture(device.Get(),false,false,0,true);return 0;}
+    if(argc==2&&strcmp(argv[1],"--dirty-cached-depth")==0){RunDirtyCachedDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-subviews")==0){RunDepthSubviewFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-crossed-resources")==0){RunIndependentDepthGrowthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-growth")==0){RunIndependentDepthGrowthFixture(device.Get());return 0;}

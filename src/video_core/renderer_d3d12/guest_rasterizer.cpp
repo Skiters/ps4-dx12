@@ -149,21 +149,26 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         return version;
     },[this](auto& image){return OwnIndependentImage(image);},
       [this](auto& image){ReleaseIndependentImageWatches(image);});
-    textures_.SetIndependentImageTransfer([this](auto& image,const auto& desc,const auto& layout){
+    const auto image_transfer=[this](auto& image,const auto& desc,const auto& layout,bool cached){
         const bool seed_resident=desc.samples==1&&(desc.levels>image.desc.levels||desc.layers>image.desc.layers)&&
             IsGpuBufferModified(desc.address,layout.guest_bytes);
-        auto captured=textures_.CaptureIndependentImageVersion(image,desc,layout,RecordingList(),CompletedFence(),
-            [this](u64 address,u64 bytes){
+        const auto capture=[this](u64 address,u64 bytes){
                 ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
                 PreparePhysicalDmaBuffers(std::span(&request,1));
                 return CapturePreparedShaderBuffer(address,bytes);
-            });
+            };
+        auto captured=cached?textures_.CaptureCachedDepthRecreationVersion(image,desc,layout,RecordingList(),CompletedFence(),capture):
+            textures_.CaptureIndependentImageVersion(image,desc,layout,RecordingList(),CompletedFence(),capture);
         // Pinned single-sample growth RefreshImage obtains target B before I is
         // copied. Preserve that additional EnsureResident effect until bind;
         // private allocation/capture alone must not publish it early.
         if(seed_resident)captured.seed_residency.emplace_back(desc.address,layout.guest_bytes);
         return captured;
-    });
+    };
+    textures_.SetIndependentImageTransfer([image_transfer](auto& image,const auto& desc,const auto& layout){
+        return image_transfer(image,desc,layout,false);});
+    textures_.SetCachedDepthRecreationTransfer([image_transfer](auto& image,const auto& desc,const auto& layout){
+        return image_transfer(image,desc,layout,true);});
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
         // Pinned ObtainBufferForImage chooses B only for GPU-modified target
         // pages. A resident arena alone is not proof that B is the refresh seed.
@@ -1065,6 +1070,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const auto desc=DescribeGuestTexture(sharp);const auto layout=LayoutGuestTexture(desc);
         record_depth_writer(desc.address,layout.guest_bytes);
     }
+    // Match FindImage -> ResolveDepthOverlap BEFORE shader buffer binding and
+    // prewrite snapshots. A dirty cached native allocation is a recreation copy
+    // source, never proof of current independent I/guest-memory ownership.
+    auto* recreated_depth=has_depth?textures_.PrepareCachedDepthRecreation(descriptions[8],layouts[8],RecordingList(),CompletedFence()):nullptr;
+    auto recreated_depth_pin=recreated_depth?textures_.PinBinding(*recreated_depth):std::shared_ptr<void>{};
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
@@ -1072,7 +1082,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     if(depth_attachment_snapshot){
         GuestTextureCache::Entry* depth_source{};
         if(GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]))
-            for(const auto& candidate:textures_.Entries())if(candidate->gpu_owned&&candidate->HasValidLogicalImage()&&
+            for(const auto& candidate:textures_.Entries())if(textures_.HasCurrentDepthContents(*candidate)&&
                 !candidate->HasUnprotectedCpuPages()&&
                 CompatibleGuestAttachmentStorage(candidate->desc,descriptions[8])&&
                 MatchesGuestMipLayout(candidate->layout,layouts[8])){

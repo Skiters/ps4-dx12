@@ -284,6 +284,8 @@ add_test(NAME native_paired_depth_gpu_snapshot COMMAND native-independent-versio
 set_tests_properties(native_paired_depth_gpu_snapshot PROPERTIES TIMEOUT 180)
 add_test(NAME native_depth_recreation_extents COMMAND native-independent-version-transfer-test --depth-recreation-extents)
 set_tests_properties(native_depth_recreation_extents PROPERTIES TIMEOUT 180)
+add_test(NAME native_dirty_cached_depth_recreation COMMAND native-independent-version-transfer-test --dirty-cached-depth)
+set_tests_properties(native_dirty_cached_depth_recreation PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_depth_subviews COMMAND native-independent-version-transfer-test --depth-subviews)
 set_tests_properties(native_independent_depth_subviews PROPERTIES TIMEOUT 180)
 add_test(NAME native_depth_crossed_resources COMMAND native-independent-version-transfer-test --depth-crossed-resources)

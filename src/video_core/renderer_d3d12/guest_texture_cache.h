@@ -233,15 +233,19 @@ public:
     };
 private:
     void RememberDepthViewStorage(Entry&,const GuestTextureDesc&);
+    void ForgetRecreatedSourceMeta(Entry&);
+    bool IsCachedDepthRecreationSource(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
+    enum class NativeReadPurpose { Independent, CachedDepthRecreation };
     bool CanTransferDependentBlockView(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveBlockParent(const WritableBlockAlias&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     bool IsLiveWritableBlockAlias(const WritableBlockAlias&)const;
     Entry& UploadVersion(const GuestTextureDesc&,std::span<const std::byte>,ID3D12GraphicsCommandList*,
         uint64_t,std::span<const std::byte>,bool,const Resource*,bool,bool,const WritableBlockAlias*,UploadPurpose,
-        const Resource* stencil_gpu_snapshot=nullptr);
+        const Resource* stencil_gpu_snapshot=nullptr,bool fresh_depth_recreation=false);
     Resource RetileImageVersion(Entry&,Resource&,ID3D12GraphicsCommandList*,uint64_t,
         const WritableBlockAlias*,UINT plane=0,bool private_depth_snapshot=false,
-        const GuestTextureDesc* mapped_desc=nullptr,const GuestTextureLayout* mapped_layout=nullptr);
+        const GuestTextureDesc* mapped_desc=nullptr,const GuestTextureLayout* mapped_layout=nullptr,
+        NativeReadPurpose=NativeReadPurpose::Independent);
     ComPtr<ID3D12Device> device_;std::vector<std::unique_ptr<Entry>> entries_;
     std::shared_ptr<GuestTiler> tiler_;
     std::shared_ptr<GuestMultisample> multisample_;
@@ -282,6 +286,7 @@ private:
     std::function<void(Entry&)> resolve_owned_;
     std::function<Resource(Entry&,uint64_t,uint64_t)> read_independent_;
     std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_independent_image_;
+    std::function<IndependentImageVersion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read_cached_depth_;
     std::function<void()> transfer_submission_;
     std::function<BlockExpansion(Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> expand_block_;
     std::function<void(std::span<const std::pair<uint64_t,uint64_t>>)> publish_buffer_residency_;
@@ -327,6 +332,13 @@ public:
     // Uses the owned Upload reuse predicate; ambiguous clean sources fail closed.
     Entry* FindValidIndependentImage(const GuestTextureDesc&,const GuestTextureLayout&)const;
     Entry* FindDepthViewParent(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    // Native allocation contents and original GpuModified history are distinct.
+    bool HasCurrentDepthContents(const Entry&)const;
+    // A cache recreation reads old initialized native I even after CPU dirtying.
+    // This does NOT admit the old entry to ordinary independent/readonly reuse.
+    Entry* FindCachedDepthRecreationSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
+    Entry* PrepareCachedDepthRecreation(const GuestTextureDesc&,const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t,
+        UploadPurpose=UploadPurpose::Preparation);
     // Resolve full parent/recreated depth storage BEFORE caller source/prewrite
     // captures. Requested selectors stay on the binding view.
     GuestTextureDesc ResolveDepthViewStorage(const GuestTextureDesc&)const;
@@ -372,6 +384,11 @@ public:
     }
     void SetIndependentImageTransfer(std::function<IndependentImageVersion(
         Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_independent_image_=std::move(read);}
+    void SetCachedDepthRecreationTransfer(std::function<IndependentImageVersion(
+        Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_cached_depth_=std::move(read);}
+    IndependentImageVersion CaptureCachedDepthRecreationVersion(Entry&,const GuestTextureDesc&,
+        const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t,
+        const std::function<Resource(uint64_t,uint64_t)>& capture_buffer);
     // Original overlap copies use private depth/color inputs. Both CopyImage
     // and CopyImageWithBuffer exclude S; explicit CopyDepthStencil is separate.
     // Color->MS depth returns initialization seeds here; UploadVersion records

@@ -84,6 +84,7 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
             result.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);return result;
         };
         for(UINT mode=0;mode<3;++mode){
+            printf("CASE: paired depth format=%u tile=%u samples=%u mode=%u\n",data_format,tile,samples,mode);fflush(stdout);
             // Both GPU; CPU depth + GPU stencil; GPU depth + CPU stencil.
             // Values change every reuse and each GPU B1 differs from CPU B0.
             const UINT cpu_phase=mode+1,gpu_phase=mode+5;
@@ -160,8 +161,11 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
             restored_desc.stencil_address+=depth_stride+stencil_stride;
             auto& restored=cache.Upload(restored_desc,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,
                 &captured_depth,false,false,GuestTextureCache::UploadPurpose::Binding,&captured_stencil);
-            std::unique_ptr<GuestLinearImageReadback> compact;
-            if(samples==1)compact=std::make_unique<GuestLinearImageReadback>(device,image,renderer.RecordingList());
+            std::shared_ptr<GuestLinearImageReadback> compact;
+            if(samples==1){
+                compact=std::make_shared<GuestLinearImageReadback>(device,image,renderer.RecordingList());
+                renderer.RetainUntilFinish([compact](u64){(void)compact;});
+            }
             else if(mode==0){
                 bool rejected=false;
                 try{GuestLinearImageReadback invalid(device,image,renderer.RecordingList());}
@@ -472,24 +476,26 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
                 live_owner=&color;
                 require(color.gpu_owned&&color.buffer_alias_version&&color.HasValidLogicalImage()&&
                     !converted.gpu_owned&&conversions==2,"Depth/color aspect transfer lost its independent I");
-                GuestLinearImageReadback color_native(device,color,renderer.RecordingList());
+                auto color_native=std::make_shared<GuestLinearImageReadback>(device,color,renderer.RecordingList());
+                renderer.RetainUntilFinish([color_native](u64){(void)color_native;});
                 auto& returned=cache.Upload(desc,depth_cpu,renderer.RecordingList(),renderer.CompletedFence(),stencil_cpu);
                 live_owner=&returned;
                 require(returned.gpu_owned&&returned.buffer_alias_version&&returned.HasValidLogicalImage()&&
                     !color.gpu_owned&&conversions==3,"Color/depth aspect transfer lost its paired owner");
-                GuestImageReadback native_return(device,returned,renderer.RecordingList());
-                const auto copied=renderer.Flush();cache.Submitted(copied);color_native.Submitted(copied);native_return.Submitted(copied);
+                auto native_return=std::make_shared<GuestImageReadback>(device,returned,renderer.RecordingList());
+                renderer.RetainUntilFinish([native_return](u64){(void)native_return;});
+                const auto copied=renderer.Flush();cache.Submitted(copied);color_native->Submitted(copied);native_return->Submitted(copied);
                 renderer.Finish();
-                std::vector<std::byte> actual_color(size_t(color_native.Bytes()),std::byte{0xb6}),wanted_color=actual_color;
+                std::vector<std::byte> actual_color(size_t(color_native->Bytes()),std::byte{0xb6}),wanted_color=actual_color;
                 for(UINT layer=0;layer<desc.layers;++layer)for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x){
                     const auto value=depth_bits(gpu_phase,layer,0,x,y);
                     const auto at=((u64(layer)*desc.height+y)*desc.pitch+x)*layout.bytes_per_pixel;
                     memcpy(wanted_color.data()+at,&value,layout.bytes_per_pixel);
                 }
-                color_native.Resolve(renderer.CompletedFence(),actual_color);
+                color_native->Resolve(renderer.CompletedFence(),actual_color);
                 require(actual_color==wanted_color,"Intermediate native color aspect lost depth bits or compact padding");
                 auto actual_d=depth_cpu,actual_s=stencil_cpu;
-                native_return.Resolve(renderer.CompletedFence(),actual_d,actual_s);
+                native_return->Resolve(renderer.CompletedFence(),actual_d,actual_s);
                 require(actual_d==physical(false,gpu_phase)&&actual_s==aspect_stencil_bytes,
                     "Aspect-changing depth transfer copied stale S or lost native depth words");
                 require(!memcmp(backing.physical,original_depth_cpu.data(),original_depth_cpu.size())&&
