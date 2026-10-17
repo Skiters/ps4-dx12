@@ -985,6 +985,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         (ResourceBindings& table) mutable {
         // This can restore protection/Finish. Complete it before selecting any
         // final views; actual original stage invalidation is not replayed here.
+        if(dma)dma->MaterializeResidentBacking(rasterizer);
         rasterizer.MarkShaderBufferWrites(buffer_requests);
         const auto current=rasterizer.RefreshPreparedShaderBuffers(buffer_requests,prepared_views);
         for(const auto& view:current){

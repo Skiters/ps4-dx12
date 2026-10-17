@@ -144,9 +144,9 @@ private:
     std::vector<std::function<void(u64)>> deferred_retirements_;
     std::vector<std::function<void(u64)>> submission_callbacks_;
     void Begin();
-    Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0);
+    Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0,bool physical_dma=false);
     void DropCached(VAddr address,u64 size,bool reconcile,const char* reason="overlap");
-    bool RematerializeBufferEnvelope(VAddr,u64);
+    bool RematerializeBufferEnvelope(VAddr,u64,bool physical_dma=false);
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);
     void ClearMappings(){for(auto& [_,mapping]:mappings_)RetireBuffer(mapping);mappings_.clear();dirty_mappings_.clear();cached_buffer_bytes_=0;
         std::lock_guard lock(memory_index_mutex_);indexed_buffers_.clear();}
@@ -220,11 +220,16 @@ public:
 private:
     void PrepareBufferContents(Mapping&,bool written,bool uav,bool fresh,
         std::span<const ShaderBufferRequest>,std::optional<std::span<const BufferWrite>>,Diagnostics::Scope&);
+    std::vector<ShaderBufferView> PrepareShaderBuffersImpl(std::span<const ShaderBufferRequest>,
+        std::optional<std::span<const BufferWrite>>,bool physical_dma);
 public:
     // Coalesce and pin guest buffers. Guarded GPU-owned versions remain resident;
     // CPU-visible fallbacks reconcile writes before taking their next snapshot.
     std::vector<ShaderBufferView> PrepareShaderBuffers(std::span<const ShaderBufferRequest>,
         std::optional<std::span<const BufferWrite>> known_writes=std::nullopt);
+    // Raw DMA reads B, including under an independently owned image. Only
+    // nonpublishing readonly resident UAV ranges are accepted by this path.
+    std::vector<ShaderBufferView> PreparePhysicalDmaBuffers(std::span<const ShaderBufferRequest>);
     void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     // Select only fully materialized backing; never reserve, resize or upload.
     std::optional<ShaderBufferView> PreparedDmaBuffer(VAddr,u64)const;

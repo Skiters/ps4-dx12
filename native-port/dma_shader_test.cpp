@@ -10,6 +10,7 @@
 #include "video_core/renderer_d3d12/guest_dma.h"
 #include "video_core/renderer_d3d12/dma_fault_compactor.h"
 #include "late_image_dma_fixture.h"
+#include "physical_dma_backing_fixture.h"
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
 #include <cstdio>
@@ -210,6 +211,7 @@ int wmain(int argc,wchar_t** argv){try{
     AmdGpu::Buffer sharp{};sharp.base_address=output_base;sharp.num_records=1024;
     memcpy(metadata.flattened_ud_buf.data()+4,&sharp,sizeof(sharp));
     RunLateImageDmaFixture(device.Get(),pipeline,guest_base,output_base+4096,flat,output,fallback);
+    RunPhysicalDmaBackingFixture(device.Get());
     {
         // Materialization after AppendRequests must reach the very first
         // command, including a complete 4KiB tail inside a partial 64KiB page.

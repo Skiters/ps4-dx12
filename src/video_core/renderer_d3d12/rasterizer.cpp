@@ -253,7 +253,7 @@ void Rasterizer::ScopedMarkerInsertColor(const std::string_view& text,u32 color,
 void Rasterizer::ScopedMarkerInsert(const std::string_view& text,bool guest){
     ScopedMarkerInsertColor(text,0,guest);
 }
-Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_budget){
+Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_budget,bool physical_dma){
     if(preparing_buffer_envelope_)
         throw std::logic_error("Cannot materialize buffers from a growth witness callback");
     if(gds){if(address>gds_.size()||size>gds_.size()-address)throw std::out_of_range("GDS range");address+=reinterpret_cast<VAddr>(gds_.data());}
@@ -288,7 +288,8 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
             throw std::runtime_error("GPU-only B requires preserving residency under buffer allocation pressure");
         ResolveGpuBuffers(0,UINT64_MAX);Finish();for(auto& [_,m]:mappings_)TraceMapping(m,"budget");ClearMappings();
     }
-    CheckBacking(address,size,false);
+    if(physical_dma)ValidateGpuBacking(address,size,false);
+    else CheckBacking(address,size,false);
     // Publish before GPU allocation/upload; concurrent CPU invalidation must
     // take the serialized path as soon as a GPU view is being materialized.
     {std::lock_guard lock(memory_index_mutex_);indexed_buffers_[address]=address+size;}
@@ -305,7 +306,13 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
         RemoveBufferIndex(address);throw;
     }
     cached_buffer_bytes_+=size;
-    try{Upload(*stored,0,size,reinterpret_cast<void*>(address));}
+    try{
+        if(physical_dma){
+            std::vector<std::byte> physical(static_cast<size_t>(size));
+            if(!ReadDmaBacking(address,physical))throw std::runtime_error("DMA materialization lost physical backing");
+            Upload(*stored,0,size,physical.data());
+        }else Upload(*stored,0,size,reinterpret_cast<void*>(address));
+    }
     catch(...){stored->initial_upload_failed=true;throw;}
     return *stored;
 }
@@ -828,7 +835,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     proof_published=true;
 }
-bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
+bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physical_dma){
     const auto end=address+size;
     auto first=FirstOverlapping(address);
     if(first==mappings_.end()||first->first>=end)return false;
@@ -845,7 +852,7 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
         return false;
     }
     ValidateGpuBacking(address,size,false);
-    PrepareGpuBacking(address,size,false);
+    if(!physical_dma)PrepareGpuBacking(address,size,false);
     // Retain the existing reconciliation boundary for actual guest writes.
     // Finish does not commit GPU-only formatted B. Those bytes must be copied,
     // independently of the old CPU snapshot, before removing their mappings.
@@ -855,6 +862,7 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
     std::vector<Mapping*> sources;
     std::vector<std::byte> backing(static_cast<size_t>(size));
     if(!ReadDmaBacking(address,backing)){
+        if(physical_dma)throw std::runtime_error("DMA buffer growth lost physical backing");
         for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<end;++it)
             if(it->second.gpu_cpu_diverged)
                 throw std::runtime_error("GPU-only buffer growth lost readable physical backing");
@@ -967,6 +975,15 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
 }
 std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::span<const ShaderBufferRequest> requests,
     std::optional<std::span<const BufferWrite>> known_writes) {
+    return PrepareShaderBuffersImpl(requests,known_writes,false);
+}
+std::vector<Rasterizer::ShaderBufferView> Rasterizer::PreparePhysicalDmaBuffers(std::span<const ShaderBufferRequest> requests){
+    for(const auto& request:requests)if(request.written||!request.unordered_access||!request.resident||request.publish_dma_residency)
+        throw std::invalid_argument("Physical DMA preparation requires nonpublishing readonly resident ranges");
+    return PrepareShaderBuffersImpl(requests,std::span<const BufferWrite>{},true);
+}
+std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(std::span<const ShaderBufferRequest> requests,
+    std::optional<std::span<const BufferWrite>> known_writes,bool physical_dma) {
     std::lock_guard streaming_lock(execution_mutex_);
     if(preparing_buffer_envelope_)
         throw std::logic_error("Cannot prepare resource bindings during buffer guard transfer");
@@ -1137,7 +1154,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         const bool protected_resident=cached!=mappings_.begin()&&(--cached)->second.size>=request.address-cached->first&&
             request.size<=cached->second.size-(request.address-cached->first)&&
             (cached->second.gpu_owned||cached->second.cpu_watched);
-        if(!protected_resident)PrepareGpuBacking(request.address,request.size,request.written);
+        if(!physical_dma&&!protected_resident)PrepareGpuBacking(request.address,request.size,request.written);
     }
     // Bound retained constants/descriptors while allowing a useful packet of
     // read-only passes to reach the GPU together instead of waiting per draw.
@@ -1213,10 +1230,10 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         auto found=mappings_.upper_bound(first);bool cached=false;
         if(found!=mappings_.begin()){--found;cached=first-found->first<=found->second.size&&last-first<=found->second.size-(first-found->first);}
         if(rebuild.contains(first)){
-            if(RematerializeBufferEnvelope(first,last-first))cached=true;
+            if(RematerializeBufferEnvelope(first,last-first,physical_dma))cached=true;
             else{DropCached(first,last-first,true,"envelope");cached=false;}
         }
-        auto& mapping=Find(first,last-first,false,cache_budget);if(!cached)created.push_back(mapping.base);
+        auto& mapping=Find(first,last-first,false,cache_budget,physical_dma);if(!cached)created.push_back(mapping.base);
         active_mappings.insert(mapping.base);
     }
     for(const auto base:active_mappings) {
@@ -1224,17 +1241,18 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
         bool active=false,written=false,uav=false;for(const auto& r:requests)if(r.address>=base&&r.address+r.size<=base+mapping.size){active=true;written|=r.written;uav|=r.unordered_access;}
         if(!active)continue;
         const bool fresh=std::find(created.begin(),created.end(),base)!=created.end();
-        PrepareBufferContents(mapping,written,uav,fresh,requests,known_writes,diagnostic);
+        if(!physical_dma)PrepareBufferContents(mapping,written,uav,fresh,requests,known_writes,diagnostic);
     }
     diagnostic.Stage("emit-buffer-views");
     std::vector<ShaderBufferView> views;views.reserve(requests.size());
     for(const auto& request:requests) {
-        auto& mapping=Find(request.address,request.size,false,cache_budget);
+        auto& mapping=Find(request.address,request.size,false,cache_budget,physical_dma);
         views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation,mapping.backing_version});
     }
     // DEFAULT storage alone is not residency: private streams and envelopes
     // reserve physical memory without executing an original EnsureResident.
-    DmaMemory().ObserveResidentSharps(requests);
+    if(physical_dma)SynchronizePreparedDmaBuffers(requests,views);
+    else DmaMemory().ObserveResidentSharps(requests);
     return views;
 }
 std::optional<Rasterizer::ShaderBufferView> Rasterizer::PreparedDmaBuffer(VAddr address,u64 size)const{

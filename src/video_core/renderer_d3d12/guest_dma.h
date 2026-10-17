@@ -35,6 +35,9 @@ public:
     void AppendRequests(Rasterizer&,std::vector<Rasterizer::ShaderBufferRequest>&,
         std::span<const Rasterizer::ShaderBufferRequest> resident_sharps={});
     bool HasReadOverlap(VAddr,u64)const;
+    // Complete currently published/faulted legal pages before final native
+    // descriptors. Contents come from B, never an image-to-CPU reconciliation.
+    void MaterializeResidentBacking(Rasterizer&);
     // Publish late resident pages without recreating any selected guest buffer.
     void BindResident(Rasterizer&,ResourceBindings&,
         std::span<const Rasterizer::ShaderBufferRequest>,std::span<const Rasterizer::ShaderBufferView>,

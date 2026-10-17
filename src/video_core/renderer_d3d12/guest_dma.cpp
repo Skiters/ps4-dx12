@@ -169,6 +169,26 @@ void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,const std::set<u64>& page
         throw std::out_of_range("Native DMA page-table descriptor extent overflow");
     required_entries_=UINT(std::max<u64>(Dma::TableEntries,required));
 }
+void GuestDmaMemory::MaterializeResidentBacking(Rasterizer& rasterizer){
+    ConsumeFaults(rasterizer);
+    auto planned=pages_;planned.insert(fault_pages_.begin(),fault_pages_.end());
+    PlanRanges(rasterizer,planned);
+    std::vector<Rasterizer::ShaderBufferRequest> missing;
+    for(const auto& range:ranges_){
+        if(rasterizer.PreparedDmaBuffer(range.address,range.size))continue;
+        for(u64 offset=0;offset<range.size;offset+=Dma::SubpageSize){
+            const auto address=range.address+offset;
+            if(rasterizer.PreparedDmaBuffer(address,Dma::SubpageSize))continue;
+            if(!missing.empty()&&missing.back().address+missing.back().size==address&&
+               missing.back().size<=Dma::BankSize-Dma::SubpageSize)missing.back().size+=Dma::SubpageSize;
+            else{missing.push_back({address,Dma::SubpageSize,false,true,true});missing.back().publish_dma_residency=false;}
+        }
+    }
+    // Existing initialized B receives its one post-stage CPU synchronization
+    // in BindResident. Do not rescan/upload the entire resident set here.
+    if(!missing.empty())rasterizer.PreparePhysicalDmaBuffers(missing);
+    PublishPreparedFaults(rasterizer);
+}
 void GuestDmaMemory::BindResident(Rasterizer& rasterizer,ResourceBindings& bindings,
     std::span<const Rasterizer::ShaderBufferRequest> planned_requests,
     std::span<const Rasterizer::ShaderBufferView> planned_views,
