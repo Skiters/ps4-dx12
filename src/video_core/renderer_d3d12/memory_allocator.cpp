@@ -200,6 +200,9 @@ Resource PlacedTextureAllocator::Allocate(const D3D12_RESOURCE_DESC& description
             resource.castable_formats=std::make_shared<const std::vector<DXGI_FORMAT>>(formats.begin(),formats.end());
             Check(DX12_API_CALL(cast_device_->CreatePlacedResource2(selected->heap.Get(),selected_offset,&extended,
                 Resource::EnhancedLayout(initial),clear,UINT32(formats.size()),formats.data(),IID_PPV_ARGS(&resource.handle))));
+            // This API creates an enhanced layout, even before the first
+            // transition. COPY_DEST cannot enter legacy tracking directly.
+            resource.enhanced_barriers=true;
         }
     }catch(...){resource.allocation.reset();throw;}
     return resource;

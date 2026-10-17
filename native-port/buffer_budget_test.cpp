@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "texture_heap_pressure_fixture.h"
+#include "texture_initial_layout_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -17,6 +18,10 @@ int main(int argc,char** argv){try{
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware device");
+    if(argc>1&&std::string_view(argv[1])=="texture-initial-layout"){
+        if(!RunTextureInitialLayoutFixture(device.Get())){puts("SKIP: native format casting unavailable");return 77;}
+        puts("PASS: cast-list COPY_DEST and COMMON creation, enhanced transitions and actual texture word readback");return 0;
+    }
     if(texture_heaps){RunTextureHeapPressureFixture(device.Get());return 0;}
     {
         constexpr u64 page=65536;

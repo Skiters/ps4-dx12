@@ -5,13 +5,14 @@
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "video_core/amdgpu/pm4_cmds.h"
 #include <bit>
+#include <cmath>
 #include <cstring>
 
 namespace NativeDX12 {
 template<class Initialize>
 void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& plain_vertex,const std::vector<u32>& vertex_words,bool ordered,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize,bool cmask=false){
+    const Initialize& initialize,bool cmask=false,u32 cmask_format=10){
     alignas(256) std::array<u32,128> pixel{},writer{},probe{},ordered_vertex{},ordered_pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x43534453504c0001ULL);
@@ -97,10 +98,10 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             // and a disjoint clipped guest draw may change those words.
             regs.depth_control={};regs.depth_render_control={};
             db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Invalid;
-            cb={};cb.base_address=u32((base+8192)>>8);cb.info.format=10;cb.info.number_type=0;
+            cb={};cb.base_address=u32((base+8192)>>8);cb.info.format=cmask_format;cb.info.number_type=cmask_format==6?7:0;
             cb.attrib.tile_mode_index=AmdGpu::TileMode(5);cb.pitch.tile_max=3;cb.slice.tile_max=15;
             cb.info.fast_clear=1;cb.cmask_base_address=u32((base+36864)>>8);cb.cmask_slice.tile_max=15;
-            cb.clear_word0=0xff00ff00;gpu.last_cb_extent[0]={32,32};
+            cb.clear_word0=cmask_format==6?0x3c0u<<11:0xff00ff00u;gpu.last_cb_extent[0]={32,32};
             regs.screen_scissor.bottom_right_x=regs.window_scissor.bottom_right_x=32;
             regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=32;
             regs.generic_scissor.top_left_x=1;regs.generic_scissor.top_left_y=2;
@@ -122,15 +123,16 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             for(u32 y=0;y<32;y+=8)for(u32 x=0;x<32;x+=8)points.emplace_back(x+4,y+4);
             alignas(256) std::array<u32,1024> code{};std::vector<u32> words;
             for(u32 i=0;i<points.size();++i){const auto [x,y]=points[i];
-                words.insert(words.end(),{0x7e0002ff,x,0x7e0202ff,y,0xf0000100,0x00000400,0xbf8c0000,
-                    0xe0700000u+i*4,0x80020400});}
+                words.insert(words.end(),{0x7e0002ff,x,0x7e0202ff,y,cmask_format==6?0xf0000700u:0xf0000100u,0x00000400,0xbf8c0000});
+                for(u32 c=0;c<(cmask_format==6?3u:1u);++c)
+                    words.insert(words.end(),{0xe0700000u+i*16+c*4,0x80020400u+(c<<8)});}
             words.push_back(0xbf810000);
             if(words.size()>=512)throw std::runtime_error("CMASK probe overlaps shader metadata");
             std::copy(words.begin(),words.end(),code.begin());AmdGpu::BinaryInfo binary{};
             binary.signature=binary.signature_ref;binary.length=u32(words.size()*4);binary.shader_hash=0x434d41534b505201ULL;
             memcpy(code.data()+512,&binary,sizeof(binary));
             AmdGpu::Image image{};image.base_address=(base+8192)>>8;image.type=u64(AmdGpu::ImageType::Color2D);
-            image.width=image.height=image.pitch=31;image.data_format=4;image.num_format=4;image.tiling_index=5;
+            image.width=image.height=image.pitch=31;image.data_format=cmask_format==6?6:4;image.num_format=cmask_format==6?7:4;image.tiling_index=5;
             image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
             AmdGpu::Buffer observation{};observation.base_address=base+57344;observation.stride=4;observation.num_records=1024;
             observation.data_format=4;observation.num_format=4;observation.dst_sel_x=4;observation.dst_sel_y=5;
@@ -142,13 +144,25 @@ void RunCachedDepthStorageGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpo
             auto expected=physical;
             for(u32 i=0;i<points.size();++i){const auto [x,y]=points[i];
                 const bool draw=x>=1&&x<4&&y>=2&&y<5,clear=x>=8&&x<16&&y<8;
-                const u32 word=draw?0xff0000ffu:clear?0xff00ff00u:std::bit_cast<u32>(0.875f);
-                memcpy(expected.data()+57344+i*4,&word,4);
+                if(cmask_format==6){
+                    // Independent unsigned mini-float arithmetic; no production
+                    // decoder or retile helper participates in this oracle.
+                    const auto uf=[](u32 word,u32 mantissa){const auto exponent=word>>mantissa;
+                        const auto m=word&((1u<<mantissa)-1);return exponent?
+                            std::ldexp(float((1u<<mantissa)|m),int(exponent)-15-int(mantissa)):
+                            std::ldexp(float(m),-14-int(mantissa));};
+                    const u32 old=std::bit_cast<u32>(0.875f);
+                    const float values[]{draw?1.f:0.f,clear?1.f:0.f,0.f};
+                    for(u32 c=0;c<3;++c){const auto f=draw||clear?values[c]:
+                        uf(c==0?old&0x7ff:c==1?(old>>11)&0x7ff:old>>22,c==2?5:6);
+                        const auto bits=std::bit_cast<u32>(f);memcpy(expected.data()+57344+i*16+c*4,&bits,4);}
+                }else{const u32 word=draw?0xff0000ffu:clear?0xff00ff00u:std::bit_cast<u32>(0.875f);
+                    memcpy(expected.data()+57344+i*16,&word,4);}
             }
             dispatch();rasterizer.ReadMemory(observation.base_address,4096);rasterizer.Finish();
             if(memcmp(backing,expected.data(),65536)){
-                for(u32 i=0;i<points.size();++i){u32 actual{},want{};memcpy(&actual,backing+57344+i*4,4);
-                    memcpy(&want,expected.data()+57344+i*4,4);if(actual!=want)fprintf(stderr,
+                for(u32 i=0;i<points.size();++i){u32 actual{},want{};memcpy(&actual,backing+57344+i*16,4);
+                    memcpy(&want,expected.data()+57344+i*16,4);if(actual!=want)fprintf(stderr,
                     "CMASK probe(%u,%u) actual=%08x expected=%08x\n",points[i].first,points[i].second,actual,want);}
                 for(size_t i=0;i<expected.size();++i)if(backing[i]!=expected[i]){fprintf(stderr,
                     "Native CMASK mismatch byte=%zu actual=%02x expected=%02x S=%u HTILE=%u Dirty=%u\n",i,

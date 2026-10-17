@@ -546,7 +546,8 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--cached-depth-rt")==0){RunDirtyCachedDepthFixture(device.Get(),false,true);return 0;}
     if(argc==5&&strcmp(argv[1],"--cached-depth-color")==0){
         const UINT format=std::stoul(argv[2]),number=std::stoul(argv[3]);const bool writable=std::string_view(argv[4])=="uav";
-        if((format!=3&&format!=5&&format!=9&&format!=10)||(number!=0&&number!=4)||
+        if((format!=3&&format!=5&&format!=6&&format!=9&&format!=10)||
+           (format==6?number!=7:number!=0&&number!=4)||
            (!writable&&std::string_view(argv[4])!="rt"))throw std::invalid_argument("Invalid depth/color fixture domain");
         RunDirtyCachedDepthFixture(device.Get(),false,!writable,0,writable,format,number);return 0;
     }

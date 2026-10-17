@@ -34,6 +34,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             // Exact UNORM endpoints avoid imposing a cross-vendor tie-rounding
             // rule on newly authored draw commands; copied words stay arbitrary.
             switch(color_format){case 3:return clear?0:255;case 5:return clear?0:65535;
+            case 6:return clear?0:0x3c0; // UF11 R=1, G/B=0, no alpha lane.
             case 9:return 0xc0000000u|(clear?0:1023);case 10:return 0xff000000u|(clear?0:255);}
             throw std::runtime_error("Missing independent color write oracle");
         };
@@ -53,7 +54,15 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         require(backing.guest&&backing.physical,"Dirty recreation aliases failed");memset(backing.physical,0x17,size_t(capacity));
         const u64 base=reinterpret_cast<u64>(backing.guest);source.address=target.address=base;
         source.stencil_address=growth&&!color_source?base+dc:0;target.stencil_address=(color_target||writable_target)?0:base+dc;
-        const auto bits=[&](UINT phase,UINT m,UINT l,UINT x,UINT y){return format==2?
+        const auto bits=[&](UINT phase,UINT m,UINT l,UINT x,UINT y){
+            if(color_format==6){
+                // Simultaneously legal finite D32 and exact finite UF11/UF10
+                // channels; arbitrary copy words stay independent of the codec.
+                const u32 r=((phase%13+1)<<6)|((x+phase*3)&63);
+                const u32 g=(((l+m+phase)%13+1)<<6)|((y+phase*7)&63);
+                return 0x3f000000u|r|(g<<11);
+            }
+            return format==2?
             1u+(phase*997u+m*79u+l*373u+x*11u+y*13u)%65530u:
             std::bit_cast<u32>(float(phase*2048u+m*512u+l*256u+y*7u+x+1u)/65536.f);};
         const auto sbits=[](UINT phase,UINT m,UINT l,UINT x,UINT y){return (phase*79u+m*11u+l*17u+y*7u+x*3u)%256u;};
@@ -254,7 +263,16 @@ uint word=f32tof16(f);
 uint word=asuint(f);
 #endif
 output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
-            if(color_format){
+            if(color_format==6){
+                shader=R"(Texture2DArray<float4> input:register(t0);RWByteAddressBuffer output:register(u0);
+cbuffer Shape:register(b0){uint width,height,layers,base;};
+[numthreads(8,8,1)]void main(uint3 p:SV_DispatchThreadID){if(p.x>=width||p.y>=height||p.z>=layers)return;
+float3 c=input.Load(int4(p,0)).xyz;
+// Every tested UF11/10 input is exactly representable as F16; no assumed
+// rounding of arbitrary F32, NaN payload or denormal is part of this oracle.
+uint word=(f32tof16(c.x)>>4)|((f32tof16(c.y)>>4)<<11)|((f32tof16(c.z)>>5)<<22);
+output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
+            }else if(color_format){
                 // Independent typed-channel packing, separate from guest retile.
                 const auto convert=uint_color?"uint4 c=input.Load(int4(p,0));\n":
                     color_format==5?"uint4 c=(uint4)round(input.Load(int4(p,0))*65535.0);\n":

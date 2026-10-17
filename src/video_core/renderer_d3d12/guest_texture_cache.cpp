@@ -1369,6 +1369,7 @@ bool IsDirectDepthWordClass(const GuestTextureDesc& d,const GuestTextureLayout& 
        (l.bytes_per_pixel!=2&&l.bytes_per_pixel!=4))return false;
     switch(d.data_format){
     case 2:case 3:case 4:case 5:case 10:return true;
+    case 6:return d.number_format==7;
     case 9:return d.number_format==0||d.number_format==4;
     default:return false;
     }
