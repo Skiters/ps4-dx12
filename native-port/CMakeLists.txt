@@ -285,6 +285,8 @@ add_test(NAME native_color_to_ms_depth_srgb COMMAND native-independent-version-t
 set_tests_properties(native_color_to_ms_depth_srgb PROPERTIES TIMEOUT 120)
 add_test(NAME native_color_to_ms_depth_wide COMMAND native-independent-version-transfer-test --color-ms-depth-wide)
 set_tests_properties(native_color_to_ms_depth_wide PROPERTIES TIMEOUT 120)
+add_test(NAME native_color_to_ms_depth_overlap_class COMMAND native-independent-version-transfer-test --color-ms-depth-overlap-class)
+set_tests_properties(native_color_to_ms_depth_overlap_class PROPERTIES TIMEOUT 120)
 add_test(NAME native_msaa_depth_initialization COMMAND native-independent-version-transfer-test --msaa-depth-init)
 set_tests_properties(native_msaa_depth_initialization PROPERTIES TIMEOUT 120)
 add_test(NAME native_independent_msaa_image_version_transfer COMMAND native-independent-version-transfer-test --msaa)

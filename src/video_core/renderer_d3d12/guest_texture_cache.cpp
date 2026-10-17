@@ -1369,9 +1369,21 @@ bool MatchesReferenceDepthImage(GuestTextureDesc source,const GuestTextureLayout
     source.stencil_address=view.stencil_address=0;
     return MatchesReferenceColorImage(source,source_layout,view,view_layout);
 }
+bool MatchesReferenceOverlapClass(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
+    const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
+    // Pinned ResolveOverlap checks ImageInfo::BlockDim() and num_bits*samples
+    // BEFORE ResolveDepthOverlap. A recycled address with another physical
+    // block geometry is a separate I initialized from B, not a blit source.
+    return source_layout.block_extent&&target_layout.block_extent&&
+        source.pitch/source_layout.block_extent==target.pitch/target_layout.block_extent&&
+        source.height/source_layout.block_extent==target.height/target_layout.block_extent&&
+        uint64_t(source_layout.bytes_per_pixel)*source.samples==
+            uint64_t(target_layout.bytes_per_pixel)*target.samples;
+}
 bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
-    if(source.address==target.address&&GuestMultisample::CanReinterpretColorAsMsDepth(source,source_layout,target,target_layout))return true;
+    if(source.address==target.address&&MatchesReferenceOverlapClass(source,source_layout,target,target_layout)&&
+       GuestMultisample::CanReinterpretColorAsMsDepth(source,source_layout,target,target_layout))return true;
     if(MatchesReferenceDepthImage(source,source_layout,target,target_layout))return true;
     // Original resource growth refreshes the target first, then copies the
     // source mip/layer domain. Byte prefixes are NOT physical mip prefixes
@@ -1972,6 +1984,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
+            if(existing->desc.address==d.address&&(existing->desc.depth_target||d.depth_target)&&
+               !MatchesReferenceOverlapClass(existing->desc,existing->layout,d,layout))continue;
             const bool private_block_view=MatchesReadonlyBlockMipPrefix(existing->desc,existing->layout,d,layout);
             const bool partial_block=!MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&
                 MatchesReferencePartialBlockExpansion(existing->desc,existing->layout,d,layout);

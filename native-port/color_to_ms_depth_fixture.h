@@ -8,12 +8,13 @@
 #include <cmath>
 
 namespace NativeDX12 {
-inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false){
+inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false,UINT pool_geometry=0){
     const auto require=[](bool ok,const char* message){if(!ok)throw std::runtime_error(message);};
     unsigned cases{};
     const auto counts=wide?std::array<UINT,2>{8,16}:std::array<UINT,2>{2,4};
     for(UINT color_kind=srgb?2:0;color_kind<(srgb?3u:wide?1u:2u);++color_kind)for(UINT format:{2u,4u})
     for(bool stencil:{false,true})for(UINT samples:counts){
+        if(pool_geometry&&(color_kind!=0||format!=4||samples!=4))continue;
         if(wide){D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{stencil?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
                 format==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
             Check(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality)));
@@ -24,7 +25,7 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         // The upstream helper creates its own mip/layer-zero view. Guest
         // binding selectors/swizzles must not leak into this copy operation.
         source.first_mip=1;source.first_layer=1;source.view_layers=1;source.swizzle={7,6,5,4};
-        GuestTextureDesc target;target.width=7;target.height=5;target.pitch=8;
+        GuestTextureDesc target;target.width=7;target.height=pool_geometry==2?5:11;target.pitch=pool_geometry==1?8:16;
         target.layers=target.view_layers=2;target.tile_mode=color_kind==1?0:8;
         target.samples=samples;target.depth_target=true;target.data_format=format;target.number_format=format==2?0:7;
         target.stencil_address=stencil?0x80000:0;
@@ -42,7 +43,9 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         require(backing.guest&&backing.physical,"Channel transfer physical aliases failed");
         const auto base=reinterpret_cast<u64>(backing.guest);source.address=target.address=base;
         target.stencil_address=stencil?base+capacity:0;memset(backing.physical,0x17,size_t(total));
-        printf("CASE: color=%u -> D%u S=%u samples=%u, scaled 13x11 -> 7x5\n",source.data_format,format==2?16:32,stencil,samples);fflush(stdout);
+        const bool cache_overlap=source.pitch==target.pitch&&source.height==target.height&&
+            uint64_t(sl.bytes_per_pixel)*source.samples==uint64_t(dl.bytes_per_pixel)*samples;
+        printf("CASE: color=%u -> D%u S=%u samples=%u, scaled 13x11 -> %ux%u pitch=%u cache-overlap=%u\n",source.data_format,format==2?16:32,stencil,samples,target.width,target.height,target.pitch,cache_overlap);fflush(stdout);
         const auto component=[&](UINT x,UINT y,UINT c,UINT layer,UINT mip){return wide?
             float(c+1+layer*5+mip*7)/16.f:float(1+(x*3+y*7+c*53+layer*31+mip*17)%251)/256.f;};
         const auto byte=[](UINT x,UINT y,UINT c,UINT layer,UINT mip){return 1+(x*3+y*7+c*53+layer*31+mip*17)%251;};
@@ -117,14 +120,42 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         cache.SetIndependentVersionTransfer({},acquire,retire);
         cache.SetIndependentImageTransfer([&](auto& e,const auto& d,const auto& l){return cache.CaptureIndependentImageVersion(e,d,l,
             renderer.RecordingList(),renderer.CompletedFence(),capture);});
-        require(cache.FindIndependentUploadSource(target,dl)==&image,"Channel source lookup fell back to stale B");
+        require(cache.FindIndependentUploadSource(target,dl)==(cache_overlap?&image:nullptr),"Channel cache admitted a different physical block class or lost compatible I");
         struct Gate {ComPtr<ID3D12Fence> fence;~Gate(){if(fence)fence->Signal(1);}} gate;
         Check(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate.fence)));renderer.WaitExternalFence(gate.fence.Get(),1);
         std::vector<std::byte> cpu_d(size_t(dl.guest_bytes),std::byte{0x17}),cpu_s(size_t(st.guest_bytes),std::byte{0x17});
-        auto& converted=cache.Upload(target,cpu_d,renderer.RecordingList(),renderer.CompletedFence(),cpu_s,false,nullptr,
-            false,false,GuestTextureCache::UploadPurpose::Preparation);live=&converted;
+        GuestTextureCache::Entry* converted_ptr{};std::shared_ptr<GuestImageReadback> pool_seed;
+        if(cache_overlap){
+            converted_ptr=&cache.Upload(target,cpu_d,renderer.RecordingList(),renderer.CompletedFence(),cpu_s,false,nullptr,
+                false,false,GuestTextureCache::UploadPurpose::Preparation);
+        }else{
+            // A same-address allocation of another block size must preserve
+            // the preceding I and initialize the new one from its own B seed.
+            // It must not invoke the original cache-overlap blit callback.
+            rejected=false;try{cache.CaptureIndependentImageVersion(image,target,dl,renderer.RecordingList(),renderer.CompletedFence(),capture);}
+            catch(const std::invalid_argument&){rejected=true;}
+            require(rejected&&!captures&&image.gpu_owned,"Different block class reached cache image capture");
+            auto& fresh=cache.Upload(target,depth,renderer.RecordingList(),renderer.CompletedFence(),sbytes,false,nullptr,
+                false,false,GuestTextureCache::UploadPurpose::Preparation);
+            require(image.gpu_owned&&image.HasValidLogicalImage()&&!fresh.logical_gpu_modified&&
+                !captures&&fresh.pending_buffer_residency.empty()&&fresh.color_depth_leases.empty(),
+                "Pool collision inherited/copied/retired old I or fabricated residency");
+            pool_seed=std::make_shared<GuestImageReadback>(device,fresh,renderer.RecordingList());
+            renderer.RetainUntilFinish([pool_seed](u64){(void)pool_seed;});
+            // Independently exercise the public production blit helper even
+            // where the cache must not choose it implicitly. This explicit
+            // command has a broader resource contract than ResolveOverlap.
+            GuestMultisample transfer(device);
+            auto lease=transfer.PrepareColorAsMsDepth(image.texture,fresh.texture,source,sl,target,dl);
+            fresh.color_depth_leases.push_back(lease);image.pending=fresh.pending=true;
+            lease->Record(renderer.RecordingList(),image.texture,fresh.texture);
+            fresh.NoteLogicalImageWrite();fresh.pending_buffer_residency=image.pending_buffer_residency;
+            require(acquire(fresh),"Explicit primitive target could not acquire ownership");retire(image);
+            converted_ptr=&fresh;
+        }
+        auto& converted=*converted_ptr;live=&converted;
         require(converted.gpu_owned&&converted.buffer_alias_version&&converted.HasValidLogicalImage()&&!image.gpu_owned&&
-            captures==1+unsigned(stencil)&&!publications&&converted.pending_buffer_residency==receipt&&converted.color_depth_leases.size()==1,
+            captures==(cache_overlap?1+unsigned(stencil):0)&&!publications&&converted.pending_buffer_residency==receipt&&converted.color_depth_leases.size()==1,
             "Channel transfer lost owner, deferred provenance or production draw lease");
         cache.PublishBufferResidency(converted);cache.PublishBufferResidency(converted);
         require(publications==1&&published==receipt,"Channel transfer published invented seed residency or lost ancestor receipt");
@@ -174,10 +205,12 @@ O.Store(at+4,0);
         renderer.RetainUntilFinish([inputs](u64){(void)inputs;});u64 offset{};
         for(Resource* input:{&old,&b_depth,&b_stencil})if(input->handle){input->Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
             list->CopyBufferRegion(inputs.handle.Get(),offset,input->handle.Get(),0,input->handle->GetDesc().Width);offset+=input->handle->GetDesc().Width;}
-        const auto fence=renderer.Flush();cache.Submitted(fence);native->Submitted(fence);cache.Collect(renderer.CompletedFence());
+        const auto fence=renderer.Flush();cache.Submitted(fence);native->Submitted(fence);if(pool_seed)pool_seed->Submitted(fence);cache.Collect(renderer.CompletedFence());
         require(renderer.CompletedFence()<fence&&converted.color_depth_leases.size()==1&&image.pending==false&&image.fence==fence,
             "Color draw lease or source allocation retired before real GPU completion");
         Check(gate.fence->Signal(1));renderer.Finish();
+        if(pool_seed){auto actual_d=depth,actual_s=sbytes;pool_seed->Resolve(renderer.CompletedFence(),actual_d,actual_s);
+            require(actual_d==depth&&actual_s==sbytes,"Different block class was not initialized from its own B contents");}
         // Standard native sample locations, in sixteenths. The pinned shader
         // uses sample-frequency UVs and source textureSize, not target coords.
         const UINT xy2[2][2]{{12,12},{4,4}},xy4[4][2]{{6,2},{14,6},{2,10},{10,14}};
@@ -264,7 +297,7 @@ O.Store(at+4,0);
         cache.Collect(renderer.CompletedFence());require(converted.color_depth_leases.empty(),"Completed color draw lease was not released");
         renderer.ValidateDebugMessages();++cases;
     }
-    require(wide?cases>0:cases==(srgb?8u:16u),"Color-channel cases missing");
+    require(pool_geometry?cases==2:wide?cases>0:cases==(srgb?8u:16u),"Color-channel cases missing");
     printf("PASS: %u typed color-to-MS-depth cases; channels/defaults/sRGB, sample UVs, mip/layer-zero selection, unchanged S/B/padding, deferred receipts, CPU guards and real fence leases\n",cases);
 }
 } // namespace NativeDX12

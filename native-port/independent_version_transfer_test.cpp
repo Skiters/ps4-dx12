@@ -541,6 +541,8 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--color-ms-depth")==0){RunColorToMsDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-srgb")==0){RunColorToMsDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-wide")==0){RunColorToMsDepthFixture(device.Get(),false,true);return 0;}
+    if(argc==2&&strcmp(argv[1],"--color-ms-depth-overlap-class")==0){
+        RunColorToMsDepthFixture(device.Get(),false,false,1);RunColorToMsDepthFixture(device.Get(),false,false,2);return 0;}
     if(argc==2&&strcmp(argv[1],"--msaa")==0){
         for(const UINT samples:{2u,4u,8u})for(const UINT number_format:{4u,5u,7u})for(const bool writable:{false,true})
             RunMultisample(device.Get(),samples,number_format,writable);
