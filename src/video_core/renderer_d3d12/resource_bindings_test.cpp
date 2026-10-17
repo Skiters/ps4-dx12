@@ -44,16 +44,23 @@ int wmain(int argc,wchar_t** argv){try{
     void* mapped=nullptr;D3D12_RANGE empty{};Check(DX12_API_CALL(runtime.handle->Map(0,&empty,&mapped)));
     memset(mapped,0,256);static_cast<UINT*>(mapped)[0]=count/64;static_cast<UINT*>(mapped)[1]=1;static_cast<UINT*>(mapped)[2]=1;
     DX12_API_CALL(runtime.handle->Unmap(0,nullptr));
-    for(const auto& b:layout.Bindings()) {
+    const auto fill_descriptors=[&](ResourceBindings& table){for(const auto& b:layout.Bindings()) {
         printf("binding type=%u reg=%u space=%u count=%u\n",unsigned(b.type),b.reg,b.space,b.count);
         if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&b.reg==0&&b.space==0&&b.count==1) {
             D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_TYPELESS;
             view.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;view.Buffer.NumElements=count;view.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
-            bindings.Uav(0,0,output.handle.Get(),view);
+            table.Uav(0,0,output.handle.Get(),view);
         } else if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&b.reg==0&&b.space==31&&b.count==1) {
-            bindings.Cbv(0,31,runtime.handle.Get(),0,256);
+            table.Cbv(0,31,runtime.handle.Get(),0,256);
         } else throw std::runtime_error("Unexpected compute fixture binding");
-    }
+    }};
+    fill_descriptors(bindings);
+    unsigned preparations{};
+    bindings.BeforeBind([&](ResourceBindings& table){
+        ++preparations;bool rejected=false;try{table.Prepare();}catch(const std::logic_error&){rejected=true;}
+        Require(rejected);
+    });
+    bindings.Prepare();bindings.Prepare();Require(preparations==1);
     pipeline.Bind(list.Get(),bindings);DX12_API_CALL(list->Dispatch(count/64,1,1));
     output.UavBarrier(list.Get());output.Transition(list.Get(),D3D12_RESOURCE_STATE_COPY_SOURCE);
     DX12_API_CALL(list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,count*4));Check(DX12_API_CALL(list->Close()));Timeline timeline(device.Get());timeline.Wait(timeline.Submit(queue.Get(),list.Get()));
@@ -72,6 +79,11 @@ int wmain(int argc,wchar_t** argv){try{
     const auto after=pool.Stats();Require(after.created==before.created&&after.reused>=before.reused+512);
     bool rejected=false;try{bindings.Bind(list.Get(),true);}catch(const std::logic_error&){rejected=true;}
     Require(rejected);
+    ResourceBindings failed(device.Get(),layout,&pool);
+    failed.BeforeBind([&](ResourceBindings& table){fill_descriptors(table);throw std::runtime_error("Injected preparation failure");});
+    rejected=false;try{failed.Prepare();}catch(const std::runtime_error&){rejected=true;}Require(rejected);
+    rejected=false;try{failed.Bind(list.Get(),true);}catch(const std::logic_error&){rejected=true;}Require(rejected);
+    failed.RecycleRetiredHeaps();
     puts("PASS: GLSL -> SPIR-V -> Mesa signed DXIL -> native D3D12 compute PSO/reflected descriptor tables -> Dispatch -> 1024 exact readback values");return 0;
 }catch(const std::exception&e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
 

@@ -63,15 +63,19 @@ class ResourceBindings {
     std::vector<std::shared_ptr<void>> allocation_leases_;
     bool sealed_{};
     bool recycled_{};
+    bool preparing_{},preparation_failed_{};
     DescriptorHeapPool* pool_{};
     std::function<void(ResourceBindings&)> before_bind_;
     D3D12_CPU_DESCRIPTOR_HANDLE Slot(D3D12_DESCRIPTOR_RANGE_TYPE,UINT,UINT,UINT);
     void TrackShaderTextureRange(ID3D12Resource*,ShaderTextureRange,SIZE_T);
 public:
     void Retain(ID3D12Resource*);
+    // Finish logical resource preparation before selecting IA/native pointers.
+    // Idempotent; a failed preparation can never be bound partially.
+    void Prepare();
     void RetainAllocation(std::shared_ptr<void> lease){if(lease)allocation_leases_.push_back(std::move(lease));}
     void BeforeBind(std::function<void(ResourceBindings&)> prepare){
-        if(sealed_||recycled_||before_bind_)throw std::logic_error("Invalid binding preparation");
+        if(sealed_||recycled_||before_bind_||preparing_||preparation_failed_)throw std::logic_error("Invalid binding preparation");
         before_bind_=std::move(prepare);
     }
 public:

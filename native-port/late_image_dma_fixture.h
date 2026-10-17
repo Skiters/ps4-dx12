@@ -44,8 +44,10 @@ inline void RunLateImageDmaFixture(ID3D12Device* device,const ShaderPipeline& pi
                 require(bytes==4,"Private CPU stream lost its original size");
                 memcpy(reinterpret_cast<void*>(private_base),reinterpret_cast<const void*>(source),size_t(bytes));
                 return private_base;
-            },{},true);
+            });
         require(prepared.images[0]&&prepared.stream_views[0],"Late image DMA lost its original bound resources");
+        rasterizer.DmaMemory().MaterializeResidentBacking(rasterizer);
+        prepared.buffers=rasterizer.RefreshPreparedShaderBuffers(requests,prepared.buffers);
         const auto full=rasterizer.PreparedDmaBuffer(page,Dma::PageSize);
         require(bool(full)==!partial&&bool(rasterizer.PreparedDmaBuffer(address,Dma::SubpageSize)),
             "Late image source lacks complete legal pre-view backing");

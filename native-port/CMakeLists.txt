@@ -525,6 +525,8 @@ add_test(NAME native_guest_resident_indices16 COMMAND dx12-guest-graphics-resour
 add_test(NAME native_guest_resident_indices32 COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices32)
 add_test(NAME native_guest_resident_indices_uav COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices-uav)
 add_test(NAME native_guest_resident_indices_uav_write COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices-uav-write)
+add_test(NAME native_guest_dma_indices_uav32 COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices-uav-write-dma)
+add_test(NAME native_guest_dma_indices_uav16 COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices-uav-write-dma-16)
 add_test(NAME native_guest_cross_stage_image_alias COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" cross-stage-alias)
 add_test(NAME native_guest_linear_color_attachment COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" linear-color)
 add_test(NAME native_guest_readonly_buffer_image_alias COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" readonly-alias)

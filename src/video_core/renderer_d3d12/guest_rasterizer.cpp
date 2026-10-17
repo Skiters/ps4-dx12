@@ -1322,6 +1322,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
         }
+        bindings.Prepare();
         if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
         static std::set<u64> captured_bound_draws,capture_producers;
@@ -1450,6 +1451,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             ExecuteGuestGraphicsResources(device_.Get(),*this,producer_pipeline,producer_stages,push,producer_runtime,
                 [&](ResourceBindings& bindings){
                     NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
+                    bindings.Prepare();
                     if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
                     if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
                     ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,viewport.viewports,

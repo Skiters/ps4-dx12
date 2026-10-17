@@ -108,8 +108,8 @@ void GuestDmaMemory::AppendRequests(Rasterizer& rasterizer,std::vector<Rasterize
     planned.insert(fault_pages_.begin(),fault_pages_.end());
     CollectResidentPages(planned,resident_sharps);
     PlanRanges(rasterizer,planned);
-    // This pass only plans residency. A raw DMA read must not download a
-    // distinct I into B before the ordered image-domain retention pass.
+    // This pass only plans residency. The guest adapter keeps these physical
+    // ranges separate from original shader slots; raw DMA never downloads I.
     requests.insert(requests.end(),ranges_.begin(),ranges_.end());
 }
 void GuestDmaMemory::PlanRanges(Rasterizer& rasterizer,const std::set<u64>& pages,

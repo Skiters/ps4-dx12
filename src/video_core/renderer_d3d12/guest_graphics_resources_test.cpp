@@ -337,9 +337,10 @@ int wmain(int argc,wchar_t** argv){try {
     const bool late_growth=argc==3&&std::wstring_view(argv[2]).starts_with(L"late-buffer");
     const bool late_private=late_growth&&std::wstring_view(argv[2])==L"late-buffer-private";
     const bool resident_indices=argc==3&&std::wstring_view(argv[2]).starts_with(L"indices");
-    const bool index16=resident_indices&&std::wstring_view(argv[2])==L"indices16";
+    const bool index16=resident_indices&&(std::wstring_view(argv[2])==L"indices16"||std::wstring_view(argv[2]).ends_with(L"-16"));
     const bool index_uav=resident_indices&&std::wstring_view(argv[2]).starts_with(L"indices-uav");
-    const bool index_uav_write=index_uav&&std::wstring_view(argv[2])==L"indices-uav-write";
+    const bool index_uav_write=index_uav&&std::wstring_view(argv[2]).starts_with(L"indices-uav-write");
+    const bool index_dma=resident_indices&&std::wstring_view(argv[2]).find(L"-dma")!=std::wstring_view::npos;
     const bool bounds=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bounds");
     const bool bounds_reject=bounds&&std::wstring_view(argv[2])==L"depth-bounds-reject";
     const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges&&!late_growth;
@@ -437,6 +438,7 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     for(UINT i=0;i<256;i+=4){memory[i]=std::byte{128};memory[i+1]=std::byte{64};memory[i+2]=memory[i+3]=std::byte{255};}
     Rasterizer rasterizer(device.Get());rasterizer.MapMemory(reinterpret_cast<VAddr>(memory),65536);GuestTextureCache textures(device.Get());
     Shader::Info pixel,vertex;pixel.sw_stage=Shader::SwStage::Fragment;vertex.sw_stage=Shader::SwStage::Vertex;
+    vertex.uses_dma=index_dma;
     pixel.flattened_ud_buf.resize(12);AmdGpu::Image image{};image.base_address=reinterpret_cast<VAddr>(memory)>>8;
     image.width=image.height=image.pitch=7;image.type=u64(AmdGpu::ImageType::Color2D);image.data_format=10;image.tiling_index=13;
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;memcpy(pixel.flattened_ud_buf.data(),&image,32);
@@ -603,7 +605,13 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
                 clear_depth||(htile&&textures.ConsumeMeta(0x1000,0)),0.75f,clear_stencil,7};
         }
         Rasterizer::IndexBinding indices;
+        bindings.Prepare();
         if(resident_indices)indices=rasterizer.PreparedIndexBuffer(index_address,index_bytes,index_format);
+        if(index_dma){
+            const auto arena=rasterizer.PreparedDmaBuffer(index_address,index_bytes);
+            if(!arena||!indices.resource||indices.resource->handle.Get()==arena->resource.Get())
+                throw std::runtime_error("DMA/IA selected an arena pointer instead of its final GPU index snapshot");
+        }
         rasterizer.ExecuteGraphics(pipeline,bindings,state,attachments,use_depth?&depth:nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},resident_indices?&indices:nullptr,false);
         if(attachments_only)combined_readback=std::make_unique<GuestImageReadback>(device.Get(),*target,rasterizer.RecordingList());
     },textures,0,index_requests);

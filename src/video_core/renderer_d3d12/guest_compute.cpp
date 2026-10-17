@@ -416,13 +416,19 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             (requests[i].written||!cpu_streams.back());
     }
     const auto streams_before_binding=[&](size_t index){return bool(cpu_streams.at(index));};
+    std::vector<Rasterizer::ShaderBufferRequest> dma_reads;
     if(dma){
+        // Completed faults become actual B residency before the stage effects,
+        // as in the original frame fault pass. Future sharp predictions below
+        // must not publish or materialize an original small CPU-only stream.
+        dma->MaterializeResidentBacking(rasterizer);
         std::vector<Rasterizer::ShaderBufferRequest> resident_sharps;
         for(size_t i=0;i<ordinary_count;++i)if(pending[i].original_bytes&&
             (requests[i].written||!streams_before_binding(i)))resident_sharps.push_back(requests[i]);
-        dma->AppendRequests(rasterizer,requests,resident_sharps);
+        // Raw ReadConst ranges are physical B, not original BindBuffers slots.
+        // They must not resolve an independently owned I in the shader batch.
+        dma->AppendRequests(rasterizer,dma_reads,resident_sharps);
     }
-    const auto dma_count=requests.size()-ordinary_count;
     for(const auto& buffer:read_buffers){
         if(buffer.written||buffer.unordered_access||!buffer.resident)
             throw std::invalid_argument("Graphics auxiliary buffer must be a resident read-only input");
@@ -431,6 +437,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // their shader envelope requires UAV access. Keep one coherent source.
         for(const auto& shader:requests)if(shader.unordered_access&&
             shader.address<input.address+input.size&&input.address<shader.address+shader.size)input.unordered_access=true;
+        for(const auto& range:dma_reads)if(range.address<input.address+input.size&&
+            input.address<range.address+range.size)input.unordered_access=true;
         requests.push_back(input);
     }
     const auto validate_writable_block_alias=[&](const ImagePending& image,const GuestTextureCache::Entry& parent){
@@ -480,21 +488,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             std::ranges::any_of(std::span(requests).first(ordinary_count),[&](const auto& buffer){
                 const auto index=size_t(&buffer-requests.data());return pending[index].formatted_read&&!streams_before_binding(index)&&
                     buffer.address<image->desc.address+image->layout.guest_bytes&&image->desc.address<buffer.address+buffer.size;});}));
-    bool opaque_dma=false;
-    if(dma&&textures)for(const auto& image:textures->Entries())if(image->gpu_owned&&
-        std::ranges::any_of(std::span(requests).subspan(ordinary_count,dma_count),[&](const auto& range){
-            return image->desc.address<range.address+range.size&&range.address<image->desc.address+image->layout.guest_bytes;})){
-        const auto owner=DescribeGuestImageOwnership(*image);
-        if(!image->HasValidLogicalImage()||!owner||!textures->CanRetainIndependentImage(owner->desc,owner->layout))
-            opaque_dma=true;
-    }
-    if(opaque_dma){
-        if(ordered_stages)throw std::runtime_error("Ordered opaque DMA image domains still require independent transfer adaptation");
-        // Preserve the pre-existing resolution behavior for domains whose
-        // independent depth/stencil/format transfer is not connected yet.
-        for(const auto& range:std::span(requests).subspan(ordinary_count,dma_count))
-            rasterizer.ReadMemory(range.address,range.size);
-    }else ordered_stages|=uses_dma&&textures;
+    // Keep original stage ordering for real shader resources. Raw DMA will
+    // materialize/synchronize physical B after those semantic effects, without
+    // requiring a format conversion or independent-image ownership transfer.
+    ordered_stages|=uses_dma&&textures;
     // The original binds buffers and refreshes sampled images before execution.
     // Two writers likewise keep separate cache domains, when the backend can
     // retain both versions without selecting an arbitrary physical winner.
@@ -911,7 +908,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto [copy,capacity]=temporary.Make(bytes,reinterpret_cast<const void*>(address));
                 if(capacity<bytes)throw std::logic_error("Ordered stage CPU stream is shorter than its original sharp");
                 return copy;
-            },dma?std::span(requests).subspan(ordinary_count,dma_count):std::span<const Rasterizer::ShaderBufferRequest>{},bool(dma));
+            });
         for(size_t i=0;i<ordinary_count;++i)pending[i].stream_view=stage_bindings->stream_views[i];
         for(size_t i=0;i<images.size();++i)images[i].ordered_entry=stage_bindings->images[i];
     }
@@ -978,7 +975,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Original arena bindings remain logical through BindTextures and
     // BeginRendering. Attachment uploads can grow a preserving B envelope or
     // Finish/reset constants. Pick native descriptors only at the final bind.
-    bindings.BeforeBind([&rasterizer,push,ordinary_count,dma_count,auxiliary_count=read_buffers.size(),
+    bindings.BeforeBind([&rasterizer,push,ordinary_count,
         pending,dma,dma_pending,prepared_views=views,
         runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
         buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end())]
@@ -995,12 +992,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             std::vector<Rasterizer::ShaderBufferView> shader_srvs;
             for(size_t i=0;i<ordinary_count;++i)if(!pending[i].uav)
                 shader_srvs.push_back(current[pending[i].stream_view.value_or(i)]);
-            for(size_t i=ordinary_count+dma_count;i<ordinary_count+dma_count+auxiliary_count;++i)
-                if(!buffer_requests[i].unordered_access)shader_srvs.push_back(current[i]);
-            // Keep BindResident's strict selected-resource guard. Its selected
-            // ranges now belong to the same final phase as every shader view.
-            dma->BindResident(rasterizer,table,std::span(buffer_requests).subspan(ordinary_count,dma_count),
-                std::span(current).subspan(ordinary_count,dma_count),shader_srvs);
+            // Only reflected shader SRVs conflict with raw UAV banks. IA is
+            // selected after this phase and uses its existing GPU snapshot
+            // when the current arena is a UAV. There are no earlier DMA views:
+            // all real shader generations were validated above, and BindResident
+            // selects/validates fully initialized DMA views without allocation.
+            dma->BindResident(rasterizer,table,{}, {},shader_srvs);
             for(const auto& target:dma_pending)dma->BindMetadata(table,target.reg,target.fault);
         }
         std::array<u64,Shader::NATIVE_BUFFER_BOUNDS_VECTORS*2> buffer_limits{};

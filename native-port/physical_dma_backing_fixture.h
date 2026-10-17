@@ -3,11 +3,13 @@
 #include "video_core/renderer_d3d12/guest_dma.h"
 #include "video_core/renderer_d3d12/guest_image_operations.h"
 #include "video_core/renderer_d3d12/guest_image_readback.h"
+#include "video_core/renderer_d3d12/guest_compute.h"
 #include "common/scope_exit.h"
 #include <cstring>
 
 namespace NativeDX12 {
-inline void RunPhysicalDmaBackingFixture(ID3D12Device* device){
+inline void RunPhysicalDmaBackingFixture(ID3D12Device* device,const ShaderPipeline& pipeline,
+    const Shader::Info& metadata,VAddr output_base,u32 fallback){
     namespace Dma=Shader::NativeDma;
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
     constexpr VAddr base=0x1400000000ULL;constexpr u64 bytes=Dma::PageSize;
@@ -20,18 +22,19 @@ inline void RunPhysicalDmaBackingFixture(ID3D12Device* device){
     struct PhysicalRasterizer:Rasterizer {
         std::byte* alias;bool image_owned{},reject_reads{};unsigned physical_reads{};
         PhysicalRasterizer(ID3D12Device* device,std::byte* p):Rasterizer(device),alias(p){}
-        void CheckGpuBacking(VAddr address,u64 size,bool)override{
-            if(address<base||address-base>bytes||size>bytes-(address-base))
-                throw std::out_of_range("Physical DMA fixture extent");
+        static bool OverlapsImage(VAddr address,u64 size){return address<base+bytes&&base<address+size;}
+        void CheckGpuBacking(VAddr address,u64 size,bool writing)override{
+            if(!OverlapsImage(address,size)){Rasterizer::CheckBacking(address,size,writing);return;}
+            if(address<base||address-base>bytes||size>bytes-(address-base))throw std::out_of_range("Physical DMA fixture extent");
         }
         void CheckBacking(VAddr address,u64 size,bool writing)override{
-            if(image_owned)throw std::runtime_error("Physical DMA used a CPU path under independent I");
+            if(image_owned&&OverlapsImage(address,size))throw std::runtime_error("Physical DMA used a CPU path under independent I");
             Rasterizer::CheckBacking(address,size,writing);
         }
-        void PrepareGpuBacking(VAddr,u64,bool)override{
-            if(image_owned)throw std::runtime_error("Physical DMA tried to resolve independent I into B");
+        void PrepareGpuBacking(VAddr address,u64 size,bool)override{
+            if(image_owned&&OverlapsImage(address,size))throw std::runtime_error("Physical DMA tried to resolve independent I into B");
         }
-        bool HasGpuImageOverlap(VAddr,u64)const override{return image_owned;}
+        bool HasGpuImageOverlap(VAddr address,u64 size)const override{return image_owned&&OverlapsImage(address,size);}
         bool ReadDmaBacking(VAddr address,std::span<std::byte> out)override{
             ++physical_reads;if(reject_reads||address<base||address-base>bytes||out.size()>bytes-(address-base))return false;
             memcpy(out.data(),alias+address-base,out.size());return true;
@@ -86,6 +89,19 @@ inline void RunPhysicalDmaBackingFixture(ID3D12Device* device){
         for(size_t i=0;i<bytes;++i)require(alias[i]==std::byte{0x31},"Physical DMA committed I/B1 into CPU B0");
         const auto reads=renderer.physical_reads;renderer.reject_reads=true;dma.MaterializeResidentBacking(renderer);
         require(renderer.physical_reads==reads,"Already initialized DMA backing was redundantly read/materialized");
+        // The actual guest resource path must keep an opaque independent I
+        // even in its initial DMA planning phase. No retention/format-conversion
+        // callbacks are supplied: raw B must not require those operations.
+        renderer.reject_reads=false;renderer.MapMemory(output_base,1024);
+        ExecuteGuestBufferCompute(device,renderer,pipeline,metadata,{},{{1,1,1}},&cache);
+        require(renderer.ReadMemory(output_base,1024),"Opaque DMA guest output is not CPU visible");
+        const auto* values=reinterpret_cast<const u32*>(output_base);
+        for(u32 lane=0;lane<64;++lane){const auto value=lane==0?0x41424344U:0U;
+            require(values[lane]==value&&values[lane+64]==(lane==0?value:fallback)&&
+                values[lane+128]==0&&values[lane+192]==0,"Opaque initial DMA guest shader read B/I or fault fallback mismatch");}
+        require(VirtualQuery(guest,&protection,sizeof(protection))&&protection.Protect==PAGE_NOACCESS&&
+            image.gpu_owned&&image.texture.handle==native,"Opaque initial DMA resolved or replaced I");
+        for(size_t i=0;i<bytes;++i)require(alias[i]==std::byte{0x31},"Opaque guest DMA committed I/B1 into physical B0");
         {
             PhysicalRasterizer rejected(device,alias);rejected.MapMemory(start,Dma::SubpageSize);rejected.image_owned=true;rejected.reject_reads=true;
             Rasterizer::ShaderBufferRequest request{start,Dma::SubpageSize,false,true,true};request.publish_dma_residency=false;

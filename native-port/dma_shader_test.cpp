@@ -27,7 +27,7 @@ namespace Shader::Gcn {
 bool ParseFetchShader(const Shader::Info&,FetchShaderData&){throw std::logic_error("Unexpected vertex fetch in DMA compute fixture");}
 }
 
-std::vector<u32> MakeShader(bool alias=false,bool scattered=false){
+std::vector<u32> MakeShader(bool alias=false,bool scattered=false,u32 base_high=16U,u32 read_word=Dma::PageSize/4-1){
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.native_dma_buffers=true;
     profile.sparse_page_shift=Dma::PageShift;profile.support_int64=true;
     Shader::RuntimeInfo runtime{};runtime.sw_stage=Shader::SwStage::Compute;
@@ -53,9 +53,9 @@ std::vector<u32> MakeShader(bool alias=false,bool scattered=false){
     auto low=c.OpShiftLeftLogical(c.U32[1],lane,c.ConstU32(Dma::PageShift+(scattered?1U:0U)));
     // Pages above 4 GiB, with the final lanes testing invalid address/alignment.
     low=c.OpSelect(c.U32[1],c.OpIEqual(c.U1[1],lane,c.ConstU32(63U)),c.OpIAdd(c.U32[1],low,c.ConstU32(1U)),low);
-    const auto high=c.OpSelect(c.U32[1],c.OpIEqual(c.U1[1],lane,c.ConstU32(62U)),c.ConstU32(256U),c.ConstU32(16U));
+    const auto high=c.OpSelect(c.U32[1],c.OpIEqual(c.U1[1],lane,c.ConstU32(62U)),c.ConstU32(256U),c.ConstU32(base_high));
     const auto base=c.OpCompositeConstruct(c.U32[2],low,high);
-    const auto offset=c.ConstU32(Dma::PageSize/4-1);
+    const auto offset=c.ConstU32(read_word);
     const auto dynamic=c.OpFunctionCall(c.U32[1],c.read_const_dynamic,base,offset);
     const auto immediate=c.OpFunctionCall(c.U32[1],c.read_const,base,offset,c.ConstU32(0U));
     const auto [output,pointer]=c.buffers[3].Alias(Context::PointerType::U32);
@@ -211,7 +211,10 @@ int wmain(int argc,wchar_t** argv){try{
     AmdGpu::Buffer sharp{};sharp.base_address=output_base;sharp.num_records=1024;
     memcpy(metadata.flattened_ud_buf.data()+4,&sharp,sizeof(sharp));
     RunLateImageDmaFixture(device.Get(),pipeline,guest_base,output_base+4096,flat,output,fallback);
-    RunPhysicalDmaBackingFixture(device.Get());
+    auto physical_dxil=Shader::Backend::DX12::ConvertSpirv(argv[1],MakeShader(false,false,20U,Dma::SubpageSize/4+1),options);
+    if(!physical_dxil.success)throw std::runtime_error(physical_dxil.diagnostics);
+    ShaderPipeline physical_pipeline(device.Get(),argv[2],physical_dxil.bytecode);
+    RunPhysicalDmaBackingFixture(device.Get(),physical_pipeline,metadata,output_base,fallback);
     {
         // Materialization after AppendRequests must reach the very first
         // command, including a complete 4KiB tail inside a partial 64KiB page.

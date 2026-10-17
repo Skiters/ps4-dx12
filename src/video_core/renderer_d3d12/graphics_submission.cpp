@@ -100,6 +100,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
     std::lock_guard lock(execution_mutex_);
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics submission has compute PSO");
     if(state.discard||!draw.count||!draw.instances)return;
+    bindings.Prepare();
     if(state.topology==D3D_PRIMITIVE_TOPOLOGY_UNDEFINED||colors.size()!=pipeline.TargetFormats().size()||
        viewports.empty()||viewports.size()>16||scissors.size()!=viewports.size()||vertices.size()>32)
         throw std::invalid_argument("Native draw topology/attachment/viewport/input count");

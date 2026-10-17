@@ -256,10 +256,17 @@ void ResourceBindings::Cbv(UINT reg,UINT space,ID3D12Resource* resource,UINT64 o
 void ResourceBindings::Sampler(UINT reg,UINT space,const D3D12_SAMPLER_DESC& desc,UINT index) {
     DX12_API_CALL(device_->CreateSampler(&desc,Slot(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,reg,space,index)));
 }
+void ResourceBindings::Prepare(){
+    if(recycled_||preparation_failed_||preparing_)throw std::logic_error("Invalid or failed native resource preparation");
+    if(!before_bind_)return;
+    auto prepare=std::move(before_bind_);before_bind_={};preparing_=true;
+    try{prepare(*this);preparing_=false;}
+    catch(...){preparing_=false;preparation_failed_=true;throw;}
+}
 void ResourceBindings::Bind(ID3D12GraphicsCommandList* list,bool compute) {
     if(recycled_)throw std::logic_error("Cannot bind retired descriptor heaps");
     if(!list)throw std::invalid_argument("Null command list");
-    if(before_bind_){auto prepare=std::move(before_bind_);before_bind_={};prepare(*this);}
+    Prepare();
     if(std::find(written_resources_.begin(),written_resources_.end(),false)!=written_resources_.end()||
         std::find(written_samplers_.begin(),written_samplers_.end(),false)!=written_samplers_.end())
         throw std::logic_error("Missing reflected shader resource descriptors");
