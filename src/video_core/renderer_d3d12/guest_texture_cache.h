@@ -356,8 +356,8 @@ public:
     }
     void SetIndependentImageTransfer(std::function<IndependentImageVersion(
         Entry&,const GuestTextureDesc&,const GuestTextureLayout&)> read){read_independent_image_=std::move(read);}
-    // Original depth/color overlap copies use private image inputs. Matching
-    // D/S aspects preserve S; CopyImageWithBuffer aspect changes do not copy S.
+    // Original overlap copies use private depth/color inputs. Both CopyImage
+    // and CopyImageWithBuffer exclude S; explicit CopyDepthStencil is separate.
     IndependentImageVersion CaptureIndependentImageVersion(Entry&,const GuestTextureDesc&,
         const GuestTextureLayout&,ID3D12GraphicsCommandList*,uint64_t completed,
         const std::function<Resource(uint64_t,uint64_t)>& capture_buffer);

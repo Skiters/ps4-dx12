@@ -402,7 +402,10 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
                 expected[at]=depth_bits(gpu_depth?gpu_phase:cpu_phase,layer,sample,x,y);
                 expected[at+1]=stencil_code(gpu_stencil?gpu_phase:cpu_phase,layer,sample,x,y);
                 expected[at+2]=expected[at];expected[at+3]=expected[at+1];
-                expected[at+4]=expected[at];expected[at+5]=expected[at+1];
+                expected[at+4]=expected[at];
+                // Pinned CopyImage excludes S, even with matching D/S aspects.
+                // The new native S keeps its explicit target GPU seed.
+                expected[at+5]=stencil_code(gpu_phase+11,layer,sample,x,y);
             }
             D3D12_RANGE range{0,SIZE_T(bytes)};Check(probe->readback.handle->Map(0,&range,&mapped));
             const bool valid=!memcmp(mapped,expected.data(),size_t(bytes));probe->readback.handle->Unmap(0,&empty);

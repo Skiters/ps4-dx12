@@ -2383,13 +2383,9 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
        !list||!capture_buffer||!CanUploadGpuSnapshot(target,physical,target.writable)||
        !MatchesReferenceDepthImage(image.desc,image.layout,target,physical))
         throw std::invalid_argument("Independent depth conversion has no exact live image source");
-    const bool copy_stencil=image.desc.depth_target&&target.depth_target&&
-        image.desc.stencil_address&&target.stencil_address;
     GuestTextureLayout stencil;
     if(target.stencil_address){
         stencil=LayoutGuestTexture(DescribeGuestStencil(target));
-        if(copy_stencil&&!MatchesGuestMipLayout(image.stencil_layout,stencil))
-            throw std::invalid_argument("Independent stencil conversion needs its physical layout mapping");
     }
     auto pin=PinBinding(image);
     auto depth_seed=capture_buffer(target.address,physical.guest_bytes);
@@ -2398,10 +2394,10 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     result.depth=RetileBufferVersion(image,depth_seed,list,completed);
     result.depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if(target.stencil_address){
-        // Pinned CopyImage preserves matching D/S aspects. Its buffer-mediated
-        // depth/color or aspect-changing path excludes S at BOTH endpoints.
-        // Keep the new image's explicit initialization seed in that case.
-        result.stencil=copy_stencil?CaptureDepthPlane(image,1,stencil_seed,list,completed):std::move(stencil_seed);
+        // BOTH pinned overlap paths, CopyImage and CopyImageWithBuffer, exclude
+        // S. Explicit CopyDepthStencil is a separate operation. Preserve the
+        // target's initialization seed instead of importing the old native S.
+        result.stencil=std::move(stencil_seed);
         result.stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
     return result;
