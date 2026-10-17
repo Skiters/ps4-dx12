@@ -6,17 +6,19 @@
 #include <bit>
 #include <cstring>
 namespace NativeDX12 {
-inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
+inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=false){
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(const bool modified:{false,true})for(const bool growth:{false,true}){
-        printf("CASE: dirty cached depth fmt=%u tile=%u GpuModified=%u growth=%u\n",format,tile,unsigned(modified),unsigned(growth));fflush(stdout);
+        printf("CASE: dirty cached %s fmt=%u tile=%u GpuModified=%u growth=%u\n",color_source?"color-to-depth":"depth",format,tile,unsigned(modified),unsigned(growth));fflush(stdout);
         GuestTextureDesc source;source.address=0x40000;source.stencil_address=0x80000;source.width=13;source.height=11;source.pitch=16;
         source.depth_target=true;source.data_format=format;source.number_format=format==2?0:7;source.tile_mode=tile;
         source.levels=1;source.layers=source.view_layers=growth?3:2;
         auto target=source;target.levels=growth?2:1;target.layers=growth?1:2;target.view_layers=1;
+        if(color_source){source.depth_target=false;source.render_target=true;source.number_format=4;}
         const auto old_layout=LayoutGuestTexture(source),layout=LayoutGuestTexture(target);
-        const auto old_s=LayoutGuestTexture(DescribeGuestStencil(source)),sl=LayoutGuestTexture(DescribeGuestStencil(target));
+        auto stencil_shape=target;stencil_shape.levels=source.levels;stencil_shape.layers=source.layers;stencil_shape.view_layers=source.layers;
+        const auto old_s=LayoutGuestTexture(DescribeGuestStencil(stencil_shape)),sl=LayoutGuestTexture(DescribeGuestStencil(target));
         const u64 dc=(std::max(old_layout.guest_bytes,layout.guest_bytes)+65535)&~u64(65535);
         const u64 sc=(std::max(old_s.guest_bytes,sl.guest_bytes)+65535)&~u64(65535),capacity=dc+2*sc;
         struct Backing {HANDLE section{};std::byte *guest{},*physical{};
@@ -27,13 +29,14 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         backing.physical=static_cast<std::byte*>(MapViewOfFile(backing.section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(capacity)));
         require(backing.guest&&backing.physical,"Dirty recreation aliases failed");memset(backing.physical,0x17,size_t(capacity));
         const u64 base=reinterpret_cast<u64>(backing.guest);source.address=target.address=base;
-        source.stencil_address=growth?base+dc:0;target.stencil_address=base+dc;
+        source.stencil_address=growth&&!color_source?base+dc:0;target.stencil_address=base+dc;
         const auto bits=[&](UINT phase,UINT m,UINT l,UINT x,UINT y){return format==2?
             1u+(phase*997u+m*79u+l*373u+x*11u+y*13u)%65530u:
             std::bit_cast<u32>(float(phase*2048u+m*512u+l*256u+y*7u+x+1u)/65536.f);};
         const auto sbits=[](UINT phase,UINT m,UINT l,UINT x,UINT y){return (phase*79u+m*11u+l*17u+y*7u+x*3u)%256u;};
         const auto data=[&](const auto& desc,const auto& physical,bool stencil,UINT phase,std::byte padding){
-            auto stencil_shape=desc;if(!stencil_shape.stencil_address)stencil_shape.stencil_address=base+dc;
+            auto stencil_shape=desc;stencil_shape.depth_target=true;stencil_shape.render_target=false;
+            if(!stencil_shape.stencil_address)stencil_shape.stencil_address=base+dc;
             std::vector<std::byte> out(size_t(physical.guest_bytes),padding);const auto interpreted=stencil?DescribeGuestStencil(stencil_shape):desc;
             for(UINT m=0;m<desc.levels;++m)for(UINT l=0;l<desc.layers;++l)
             for(UINT y=0;y<std::max(desc.height>>m,1u);++y)for(UINT x=0;x<std::max(desc.width>>m,1u);++x){
@@ -49,7 +52,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
             auto out=Buffer(device,n,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
             void* mapped{};D3D12_RANGE empty{};Check(up.handle->Map(0,&empty,&mapped));memset(mapped,0x6b,size_t(n));memcpy(mapped,bytes.data(),bytes.size());up.handle->Unmap(0,nullptr);
             renderer.RecordingList()->CopyBufferRegion(out.handle.Get(),0,up.handle.Get(),0,n);out.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-            renderer.RetainUntilFinish([up](u64){(void)up;});return out;};
+            renderer.RetainUntilFinish([up,out](u64){(void)up;(void)out;});return out;};
         auto old_gpu=gpu(old_d),old_s_gpu=gpu(old_stencil);
         auto& image=modified?cache.Upload(source,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,&old_gpu,false,false,
             GuestTextureCache::UploadPurpose::Preparation,source.stencil_address?&old_s_gpu:nullptr):
@@ -66,12 +69,12 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         cache.SetOwnershipAcquirer(acquire);cache.SetIndependentVersionTransfer({},acquire,retire);
         cache.SetOwnershipResolver([](auto&){throw std::runtime_error("Dirty cached native copy downloaded old I into B");});
         if(modified)require(cache.Own(image),"Rendered source ownership failed");else require(acquire(image),"CPU-initialized source watch failed");
-        require(image.depth_storage_current&&image.logical_gpu_modified==modified&&!image.logical_dirty,"Source initialized identity/history incorrect");
+        require(image.cached_native_current&&image.logical_gpu_modified==modified&&!image.logical_dirty,"Source initialized identity/history incorrect");
         const auto htile=base+capacity-4096;
-        cache.RegisterMeta(image,GuestTextureCache::MetaType::HTile,htile,0xf);
+        cache.RegisterMeta(image,color_source?GuestTextureCache::MetaType::CMask:GuestTextureCache::MetaType::HTile,htile,0xf);
         auto source_pin=cache.PinBinding(image);
         *reinterpret_cast<volatile unsigned char*>(backing.guest)=0x96;
-        require(faults==1&&!live&&!image.gpu_owned&&!image.buffer_alias_version&&image.logical_dirty&&image.depth_storage_current,
+        require(faults==1&&!live&&!image.gpu_owned&&!image.buffer_alias_version&&image.logical_dirty&&image.cached_native_current,
             "CPU dirty store revived source I or lost cached allocation identity");
         memcpy(backing.physical,current_d.data(),current_d.size());
         memcpy(backing.physical+(target.stencil_address-base),current_s.data(),current_s.size());
@@ -84,7 +87,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         require(storage==target&&cache.FindCachedDepthRecreationSource(storage,layout)==&image,
             "Dirty native source lost normalized recreation extent");
         require(!cache.FindCachedDepthRecreationSource(source,old_layout),"Same-resource dirty refresh incorrectly selected old native copy");
-        if(growth){auto rebased=source;rebased.stencil_address=base+dc+sc;
+        if(growth&&!color_source){auto rebased=source;rebased.stencil_address=base+dc+sc;
             require(!cache.FindCachedDepthRecreationSource(rebased,old_layout),
                 "A stencil address change alone triggered original aspect recreation");}
         auto seed_d=gpu(current_d),seed_s=gpu(current_s);unsigned reads{};
@@ -111,12 +114,12 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         rejected=false;
         try{cache.Upload(storage,current_d,renderer.RecordingList(),renderer.CompletedFence(),current_s,false,&invalid_gpu);}
             catch(const std::invalid_argument&){rejected=true;}
-        require(rejected&&!reads&&image.logical_dirty&&image.depth_storage_current,
+        require(rejected&&!reads&&image.logical_dirty&&image.cached_native_current,
             "Cached recreation bypassed GPU snapshot validation or consumed dirty source");
         rejected=false;
         try{cache.Upload(storage,{},renderer.RecordingList(),renderer.CompletedFence(),current_s);}
             catch(const std::invalid_argument&){rejected=true;}
-        require(rejected&&!reads&&image.logical_dirty&&image.depth_storage_current,
+        require(rejected&&!reads&&image.logical_dirty&&image.cached_native_current,
             "Cached recreation bypassed short CPU input validation or consumed dirty source");
         unsigned publications{};cache.SetBufferResidencyPublisher([&](auto){++publications;});
         cache.SetTransferSubmissionPublisher([&]{renderer.NotifyOnSubmission([&](u64 fence){cache.Submitted(fence);});});
@@ -125,7 +128,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         auto* recreated=cache.PrepareCachedDepthRecreation(storage,layout,renderer.RecordingList(),renderer.CompletedFence());
         require(recreated&&recreated!=&image&&recreated->gpu_owned&&!recreated->logical_dirty&&
             recreated->logical_gpu_modified==modified&&cache.HasCurrentDepthContents(*recreated)&&
-            !image.gpu_owned&&image.logical_dirty&&!image.depth_storage_current&&recreated->htile_initial_mask==0&&
+            !image.gpu_owned&&image.logical_dirty&&!image.cached_native_current&&recreated->htile_initial_mask==0&&
             reads==2&&!publications&&recreated->pending_buffer_residency.empty(),"Cached copy lost native validity/original history/HTILE or published seed residency");
         require(!cache.GetMetaInfo(htile),"Recreation retained the freed source metadata owner");
         cache.RegisterMeta(*recreated,GuestTextureCache::MetaType::HTile,htile,recreated->htile_initial_mask);
@@ -148,7 +151,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device){
         require(!cache.HasCurrentDepthContents(*recreated)&&!cache.RevalidateReadonly(*recreated),"Later B write revived prepared current I");
         auto& bound=cache.Upload(storage,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,&prewrite_d,false,false,
             GuestTextureCache::UploadPurpose::Preparation,&prewrite_s);
-        require(bound.texture.handle!=recreated->texture.handle&&bound.logical_dirty&&!bound.depth_storage_current,
+        require(bound.texture.handle!=recreated->texture.handle&&bound.logical_dirty&&!bound.cached_native_current,
             "Private prewrite snapshot replaced current cached-native identity");
         auto other=target;++other.levels;
         require(cache.FindCachedDepthRecreationSource(other,LayoutGuestTexture(other))==recreated,
@@ -219,6 +222,6 @@ output.Store(at+4,s);})";
         cache.Collect(renderer.CompletedFence());renderer.ValidateDebugMessages();++executed;
     }
     require(executed==16,"Dirty cached depth coverage missing");
-    printf("PASS: %u dirty cached D16/D32 cases; original GpuModified0/1, real CPU faults, old native D versus current B/new S, growth/aspect extent, typed pixels, post-transfer source, private prewrite after later GPU B writes, stale-I negatives, HTILE, exact capacity/padding and held-fence leases\n",executed);
+    printf("PASS: %u dirty cached %s cases; original GpuModified0/1, real CPU faults, old native D versus current B/new S, growth/aspect extent, typed pixels, post-transfer source, private prewrite after later GPU B writes, stale-I negatives, HTILE, exact capacity/padding and held-fence leases\n",executed,color_source?"color-to-D16/D32":"D16/D32");
 }
 } // namespace NativeDX12

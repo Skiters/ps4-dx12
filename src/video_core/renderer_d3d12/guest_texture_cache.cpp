@@ -1620,15 +1620,16 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
     if(ambiguous)throw std::runtime_error("Ambiguous clean independent image binding");
     return result;
 }
-void GuestTextureCache::RememberDepthViewStorage(Entry& entry,const GuestTextureDesc& requested){
-    if(!entry.desc.depth_target&&!requested.writable&&!requested.render_target)return;
+void GuestTextureCache::RememberNativeImageStorage(Entry& entry){
+    // Every refreshed native allocation has a cached class/identity, including
+    // CPU-initialized color. This witness survives dirtying, not replacement.
     auto [first,last]=address_index_.equal_range(entry.desc.address);
     for(auto indexed=first;indexed!=last;++indexed){auto& previous=*indexed->second;
-        if(previous.depth_storage_current&&previous.desc.width==entry.desc.width&&
+        if(previous.cached_native_current&&previous.desc.width==entry.desc.width&&
            MatchesReferenceOverlapClass(previous.desc,previous.layout,entry.desc,entry.layout))
-            previous.depth_storage_current=false;
+            previous.cached_native_current=false;
     }
-    entry.depth_storage_current=entry.desc.depth_target;
+    entry.cached_native_current=true;
 }
 GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestTextureDesc& requested,
     const GuestTextureLayout& layout)const{
@@ -1640,7 +1641,7 @@ GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestText
     // A different current render/storage class clears this geometry identity.
     Entry* parent{};auto [first,last]=address_index_.equal_range(requested.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
-        if(candidate->depth_storage_current&&CompatibleGuestDepthSubview(candidate->desc,candidate->layout,requested,layout)&&
+        if(candidate->cached_native_current&&CompatibleGuestDepthSubview(candidate->desc,candidate->layout,requested,layout)&&
            (!parent||std::pair(candidate->desc.levels,candidate->desc.layers)>
                      std::pair(parent->desc.levels,parent->desc.layers)))parent=candidate;
     }
@@ -1649,23 +1650,26 @@ GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestText
 bool GuestTextureCache::HasCurrentDepthContents(const Entry& image)const{
     const auto found=image_uids_.find(image.image_uid);
     return image.cache==this&&found!=image_uids_.end()&&found->second==&image&&
-        (image.HasValidLogicalImage()||image.depth_storage_current)&&image.texture.handle&&image.gpu_owned&&!image.logical_dirty&&
+        (image.HasValidLogicalImage()||image.cached_native_current)&&image.texture.handle&&image.gpu_owned&&!image.logical_dirty&&
         !image.HasUnprotectedCpuPages()&&IsGuestDepthPlaneStorage(image.desc,image.layout);
 }
 bool GuestTextureCache::IsCachedDepthRecreationSource(const Entry& image,const GuestTextureDesc& target,
     const GuestTextureLayout& layout)const{
     const auto found=image_uids_.find(image.image_uid);
     if(image.cache!=this||found==image_uids_.end()||found->second!=&image||
-       !image.depth_storage_current||!image.texture.handle||
+       !image.cached_native_current||!image.texture.handle||
        image.desc.samples!=1||target.samples!=1||
-       !IsGuestDepthPlaneStorage(image.desc,image.layout)||!IsGuestDepthPlaneStorage(target,layout)||
+       !IsGuestDepthPlaneStorage(target,layout)||
+       (!image.desc.depth_target&&(image.desc.stencil_address||image.layout.block_extent!=1||
+        image.layout.expanded_bytes_per_pixel||(image.desc.data_format!=2&&image.desc.data_format!=4)))||
+       (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
        std::pair(target.levels,target.layers)<std::pair(image.desc.levels,image.desc.layers))return false;
-    // ResolveDepthOverlap recreates on resource growth or changed S presence.
+    // ResolveDepthOverlap recreates on resource growth, color -> depth or changed S presence.
     // Same-resource CPU/B dirtying must instead refresh D from current B.
     const bool recreate=std::pair(target.levels,target.layers)>std::pair(image.desc.levels,image.desc.layers)||
-        bool(target.stencil_address)!=bool(image.desc.stencil_address);
+        !image.desc.depth_target||bool(target.stencil_address)!=bool(image.desc.stencil_address);
     // Differing-aspect CopyImageWithBuffer asserts a one-mip intersection.
-    if(bool(target.stencil_address)!=bool(image.desc.stencil_address)&&
+    if((target.depth_target!=image.desc.depth_target||bool(target.stencil_address)!=bool(image.desc.stencil_address))&&
        std::min(target.levels,image.desc.levels)!=1)return false;
     return recreate&&CanMapIndependentDepthImage(image.desc,image.layout,target,layout);
 }
@@ -1714,7 +1718,7 @@ GuestTextureCache::Entry* GuestTextureCache::PrepareCachedDepthRecreation(const 
     retire_independent_(*source);source->MarkLogicalDirty();
     ForgetRecreatedSourceMeta(*source);
     result.logical_gpu_modified=modified;result.logical_dirty=false;
-    RememberDepthViewStorage(result,target);
+    RememberNativeImageStorage(result);
     if(purpose==UploadPurpose::Binding)PublishBufferResidency(result);
     return &result;
 }
@@ -2056,7 +2060,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             entry.MarkLogicalDirty();
         }
         if(purpose==UploadPurpose::Binding)PublishBufferResidency(entry);
-        if(refresh_current)RememberDepthViewStorage(entry,d);
+        if(refresh_current)RememberNativeImageStorage(entry);
         return entry;
     };
     const bool preserve_expanded=d.samples>1&&(d.data_format==9||d.data_format==19)&&
@@ -2301,7 +2305,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     }
     Entry* entry=nullptr;if(!fresh_depth_recreation){auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
         if(!(guest_snapshot&&(indexed->second->gpu_owned||indexed->second->BindingPinned()||
-             (!current_buffer_snapshot&&indexed->second->depth_storage_current)))&&
+             (!current_buffer_snapshot&&indexed->second->cached_native_current)))&&
            (indexed->second->desc==d||CompatibleGuestAttachmentStorage(indexed->second->desc,d)||
             CompatibleGuestWritableStorage(indexed->second->desc,d))){entry=indexed->second;break;}}
     const bool immutable_view=!d.writable;
@@ -2710,7 +2714,7 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     const bool dependent=alias&&alias->image==&image&&IsLiveWritableBlockAlias(*alias);
     if(image.logical_dirty&&!dependent&&!cached)throw std::runtime_error("Independent image transfer requires a valid logical version");
     if(private_depth_snapshot){
-        if(alias||!image.desc.depth_target||(!cached&&(!image.gpu_owned||
+        if(alias||(!cached&&!image.desc.depth_target)||(!cached&&(!image.gpu_owned||
            (!image.HasValidLogicalImage()&&!HasCurrentDepthContents(image))))||
            plane>1||(plane&&!image.desc.stencil_address)||!CanUploadGpuSnapshot(image.desc,image.layout))
             throw std::invalid_argument("Unsupported native depth snapshot source/plane");

@@ -139,7 +139,7 @@ public:
         uint64_t image_uid{};
         // Allocation identity survives CPU/B dirtying; it never proves current
         // I contents or ownership. Private prewrite snapshots do not replace it.
-        bool depth_storage_current=false;
+        bool cached_native_current=false;
         // Physical prewarm can seed new I from B before its original image bind.
         // Retain the deferred EnsureResident effect with that exact I version.
         BufferResidency pending_buffer_residency;
@@ -232,7 +232,7 @@ public:
         std::shared_ptr<void> parent_pin,image_pin;
     };
 private:
-    void RememberDepthViewStorage(Entry&,const GuestTextureDesc&);
+    void RememberNativeImageStorage(Entry&);
     void ForgetRecreatedSourceMeta(Entry&);
     bool IsCachedDepthRecreationSource(const Entry&,const GuestTextureDesc&,const GuestTextureLayout&)const;
     enum class NativeReadPurpose { Independent, CachedDepthRecreation };
@@ -416,12 +416,12 @@ public:
     }
     bool Own(Entry& entry){
         entry.NoteLogicalImageWrite();
-        if(entry.gpu_owned){if(notify_write_)notify_write_(entry);RememberDepthViewStorage(entry,entry.desc);return true;}
+        if(entry.gpu_owned){if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;}
         if(!acquire_owned_||!acquire_owned_(entry))return false;
-        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberDepthViewStorage(entry,entry.desc);return true;}
+        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;}
     bool RevalidateReadonly(Entry& entry){
         if(!entry.HasValidLogicalImage()||!acquire_independent_||!acquire_independent_(entry))return false;
-        RememberDepthViewStorage(entry,entry.desc);return true;
+        RememberNativeImageStorage(entry);return true;
     }
     bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
         const auto [first,last]=address_index_.equal_range(desc.address);
