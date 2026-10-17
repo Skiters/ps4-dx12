@@ -9,11 +9,11 @@
 #include <string>
 
 namespace NativeDX12 {
-inline void RunIndependentDepthGrowthFixture(ID3D12Device* device){
+inline void RunIndependentDepthGrowthFixture(ID3D12Device* device,bool crossed=false){
     const auto require=[](bool ok,const char* message){if(!ok)throw std::runtime_error(message);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(UINT variant=0;variant<4;++variant){
-        const UINT samples=variant==3?4:1;
+        const UINT samples=!crossed&&variant==3?4:1;
         if(samples>1){D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS q{DXGI_FORMAT_D32_FLOAT_S8X24_UINT,samples,
             D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
             Check(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&q,sizeof(q)));
@@ -24,11 +24,16 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device){
         source.levels=(variant==1||variant==2)?2:1;
         source.layers=source.view_layers=(variant==0||variant>=2)?2:1;
         auto target=source;target.levels=variant==3?1:variant==1?2:3;target.layers=target.view_layers=variant==0?2:3;
-        printf("CASE: depth growth fmt=%u tile=%u samples=%u mip/layer=%u/%u -> %u/%u\n",
-            format,tile,samples,source.levels,source.layers,target.levels,target.layers);fflush(stdout);
+        if(crossed){
+            source.levels=(variant==1||variant==3)?2:1;
+            source.layers=source.view_layers=variant<2?3:4;
+            target.levels=variant==0?2:3;target.layers=target.view_layers=variant<2?1:2;
+        }
+        printf("CASE: depth %s fmt=%u tile=%u samples=%u mip/layer=%u/%u -> %u/%u\n",
+            crossed?"crossed-resources":"growth",format,tile,samples,source.levels,source.layers,target.levels,target.layers);fflush(stdout);
         const auto old_layout=LayoutGuestTexture(source),new_layout=LayoutGuestTexture(target);
         const auto old_s=LayoutGuestTexture(DescribeGuestStencil(source)),new_s=LayoutGuestTexture(DescribeGuestStencil(target));
-        const auto d_capacity=(new_layout.guest_bytes+65535)&~u64(65535),s_capacity=(new_s.guest_bytes+65535)&~u64(65535);
+        const auto d_capacity=(std::max(old_layout.guest_bytes,new_layout.guest_bytes)+65535)&~u64(65535),s_capacity=(std::max(old_s.guest_bytes,new_s.guest_bytes)+65535)&~u64(65535);
         struct Backing {HANDLE section{};std::byte* guest{};std::byte* physical{};
             ~Backing(){if(physical)UnmapViewOfFile(physical);if(guest)UnmapViewOfFile(guest);if(section)CloseHandle(section);}} backing;
         const auto backing_bytes=d_capacity+s_capacity;
@@ -57,7 +62,7 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device){
         const auto src_d=guest(source,old_layout,false,1,std::byte{0xa3}),src_s=guest(source,old_s,true,2,std::byte{0xb4});
         const auto dst_d=guest(target,new_layout,false,7,std::byte{0x83}),dst_s=guest(target,new_s,true,9,std::byte{0x91});
         auto expected_d=dst_d;
-        for(UINT m=0;m<source.levels;++m)for(UINT l=0;l<source.layers;++l)for(UINT s=0;s<samples;++s)
+        for(UINT m=0;m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)for(UINT s=0;s<samples;++s)
         for(UINT y=0;y<std::max(source.height>>m,1u);++y)for(UINT x=0;x<std::max(source.width>>m,1u);++x){
             const auto value=bits(1,m,l,s,x,y);
             memcpy(expected_d.data()+GuestPixelOffset(target,new_layout,m,l,x,y,s),&value,new_layout.bytes_per_pixel);
@@ -89,6 +94,25 @@ inline void RunIndependentDepthGrowthFixture(ID3D12Device* device){
             [&](u64 a,u64 n){return a>=base&&a-base<=backing_bytes&&n<=backing_bytes-(a-base);},
             [](u64,u64){return std::vector<std::pair<u64,u64>>{};});};
         require(acquire(image),"Growth source independent owner failed");
+        if(crossed){
+            // A reverse-shaped request with fewer mips/more layers must keep
+            // original lexicographic parent resources, not independently max
+            // both axes or invent a truncated implicit allocation.
+            const auto full=cache.ResolveDepthViewStorage(target);
+            require(full==target,"Crossed resource resolution changed requested lexicographic maximum");
+            if(source.levels>1){
+                auto reverse=source;reverse.levels=1;reverse.layers+=1;reverse.view_layers=1;
+                const auto retained=cache.ResolveDepthViewStorage(reverse);
+                require(retained.levels==source.levels&&retained.layers==source.layers&&retained.view_layers==1,
+                    "Reverse resource request lost lexicographic parent extent");
+                require(&cache.Upload(retained,std::span<const std::byte>(backing.physical,size_t(old_layout.guest_bytes)),
+                    renderer.RecordingList(),renderer.CompletedFence(),std::span<const std::byte>(backing.physical+d_capacity,size_t(old_s.guest_bytes)),
+                    false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation)==&image,
+                    "Reverse resource request recreated a retained parent");
+            }
+        }
+        auto source_native=std::make_shared<GuestImageReadback>(device,image,renderer.RecordingList());
+        renderer.RetainUntilFinish([source_native](u64){(void)source_native;});
         const GuestTextureCache::BufferResidency ancestor{{source.address,old_layout.guest_bytes}};
         // Pinned ResolveDepthOverlap calls the additional RefreshImage only
         // for single-sample growth. MSAA replacement must not invent that B
@@ -194,7 +218,7 @@ output.Store(at+4,s);})";
         }
         output.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(pixel_readback.handle.Get(),0,output.handle.Get(),0,pixel_bytes);
-        const auto fence=renderer.Flush();cache.Submitted(fence);native->Submitted(fence);cache.Collect(renderer.CompletedFence());
+        const auto fence=renderer.Flush();cache.Submitted(fence);native->Submitted(fence);source_native->Submitted(fence);cache.Collect(renderer.CompletedFence());
         require(renderer.CompletedFence()<fence&&!image.buffer_sync_resources.empty(),"Growth source leases retired before held GPU fence");
         Check(gate.fence->Signal(1));renderer.Finish();
         void* mapped{};D3D12_RANGE range{0,SIZE_T(readback_bytes)},empty{};Check(backing_readback.handle->Map(0,&range,&mapped));
@@ -204,6 +228,8 @@ output.Store(at+4,s);})";
         range={0,SIZE_T(pixel_bytes)};Check(pixel_readback.handle->Map(0,&range,&mapped));
         const bool pixels=!memcmp(mapped,expected_pixels.data(),pixel_bytes);pixel_readback.handle->Unmap(0,&empty);
         require(pixels,"Growth native mip/layer/sample pixel oracle failed");
+        auto source_actual_d=src_d,source_actual_s=src_s;source_native->Resolve(renderer.CompletedFence(),source_actual_d,source_actual_s);
+        require(source_actual_d==src_d&&source_actual_s==src_s,"Mapped transfer changed a source mip/layer/S outside the copied intersection");
         auto actual_d=dst_d,actual_s=dst_s;native->Resolve(renderer.CompletedFence(),actual_d,actual_s);
         require(actual_d==expected_d&&actual_s==dst_s,"Growth native guest readback lost target-only storage or copied old S");
         require(std::all_of(backing.physical,backing.physical+backing_bytes,[](auto b){return b==std::byte{0x17};}),"Growth published private I into physical B0");
@@ -213,6 +239,6 @@ output.Store(at+4,s);})";
         cache.Collect(renderer.CompletedFence());renderer.ValidateDebugMessages();++executed;
     }
     require(executed>=12,"Depth growth single-sample cases missing");
-    printf("PASS: %u depth mip/layer growth cases, independent typed native pixels, target-only B1/S/padding, input immutability, deferred receipts, real page guards and held-fence leases\n",executed);
+    printf("PASS: %u depth %s cases, independent typed native pixels, target-only B1/S/padding, input immutability, deferred receipts, real page guards and held-fence leases\n",executed,crossed?"crossed-resource":"mip/layer growth");
 }
 } // namespace NativeDX12

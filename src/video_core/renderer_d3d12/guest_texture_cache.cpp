@@ -1407,12 +1407,12 @@ bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextu
     if(source.address==target.address&&MatchesReferenceOverlapClass(source,source_layout,target,target_layout)&&
        GuestMultisample::CanReinterpretColorAsMsDepth(source,source_layout,target,target_layout))return true;
     if(MatchesReferenceDepthImage(source,source_layout,target,target_layout))return true;
-    // Original resource growth refreshes the target first, then copies the
-    // source mip/layer domain. Byte prefixes are NOT physical mip prefixes
-    // when the array layer count changes. The GPU retile below uses target
-    // offsets/strides with independent source-native footprints.
+    // Original CopyImage/CopyImageWithBuffer copy the mip/layer intersection
+    // after lexicographic resource recreation. More mips can mean fewer layers.
+    // Byte prefixes are NOT physical mip prefixes when layer counts differ:
+    // map source-native footprints to the target's own guest offsets/strides.
     if((!source.depth_target&&!target.depth_target)||source.samples!=target.samples||
-       target.levels<source.levels||target.layers<source.layers||
+       !source.levels||!source.layers||!target.levels||!target.layers||
        (source.data_format!=2&&source.data_format!=4)||
        (target.data_format!=2&&target.data_format!=4)||
        !MatchesGuestMipLayout(LayoutGuestTexture(target),target_layout))return false;
@@ -2632,8 +2632,10 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
         throw std::invalid_argument("Independent expanded image lost its exact packed backing");
     struct Linear {D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;UINT64 bytes;UINT mip,layer,native_bytes;Resource buffer;
         std::shared_ptr<GuestTiler::Lease> dispatch;std::shared_ptr<GuestMultisample::Lease> samples;};
-    std::vector<Linear> linear;linear.reserve(size_t(image.desc.levels)*image.desc.layers);
-    if(!inherited)for(UINT layer=0;layer<image.desc.layers;++layer)for(UINT mip=0;mip<image.desc.levels;++mip){
+    const UINT copy_mips=mapped_desc?std::min(image.desc.levels,mapped_desc->levels):image.desc.levels;
+    const UINT copy_layers=mapped_desc?std::min(image.desc.layers,mapped_desc->layers):image.desc.layers;
+    std::vector<Linear> linear;linear.reserve(size_t(copy_mips)*copy_layers);
+    if(!inherited)for(UINT layer=0;layer<copy_layers;++layer)for(UINT mip=0;mip<copy_mips;++mip){
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};UINT64 bytes{},row_bytes{};
         if(multisampled){
             footprint=GuestMultisample::Footprint(source_interpreted,source_physical);

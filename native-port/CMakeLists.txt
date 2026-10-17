@@ -286,6 +286,8 @@ add_test(NAME native_depth_recreation_extents COMMAND native-independent-version
 set_tests_properties(native_depth_recreation_extents PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_depth_subviews COMMAND native-independent-version-transfer-test --depth-subviews)
 set_tests_properties(native_independent_depth_subviews PROPERTIES TIMEOUT 180)
+add_test(NAME native_depth_crossed_resources COMMAND native-independent-version-transfer-test --depth-crossed-resources)
+set_tests_properties(native_depth_crossed_resources PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_depth_growth COMMAND native-independent-version-transfer-test --depth-growth)
 set_tests_properties(native_independent_depth_growth PROPERTIES TIMEOUT 180)
 add_test(NAME native_color_to_ms_depth COMMAND native-independent-version-transfer-test --color-ms-depth)
