@@ -835,7 +835,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     proof_published=true;
 }
-bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physical_dma){
+bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physical_dma,bool defer_owned){
     const auto end=address+size;
     auto first=FirstOverlapping(address);
     if(first==mappings_.end()||first->first>=end)return false;
@@ -853,10 +853,14 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
     }
     ValidateGpuBacking(address,size,false);
     if(!physical_dma)PrepareGpuBacking(address,size,false);
-    // Retain the existing reconciliation boundary for actual guest writes.
-    // Finish does not commit GPU-only formatted B. Those bytes must be copied,
-    // independently of the old CPU snapshot, before removing their mappings.
-    ResolveGpuBuffers(address,size);Finish();
+    // Pinned arena growth copies GPU-owned contents on the pending timeline;
+    // it does not make actual guest writes CPU-visible just to grow storage.
+    // Unprotected/failed sources retain the ordinary reconciliation boundary.
+    first=FirstOverlapping(address);
+    for(auto it=first;it!=mappings_.end()&&it->first<end;++it)
+        defer_owned&=it->second.gpu_owned&&!it->second.initial_upload_failed&&
+            it->second.cpu_snapshot.size()==it->second.size&&it->second.cpu_upload_ranges.empty();
+    if(!defer_owned){ResolveGpuBuffers(address,size);Finish();}
     first=FirstOverlapping(address);
     if(first==mappings_.end()||first->first>=end)return false;
     std::vector<Mapping*> sources;
@@ -871,8 +875,11 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
     first=FirstOverlapping(address);
     for(auto it=first;it!=mappings_.end()&&it->first<end;++it){
         auto& source=it->second;
-        if(source.base<address||source.size>end-source.base||source.gpu_owned||source.dirty)
+        if(source.base<address||source.size>end-source.base||
+           (!defer_owned&&(source.gpu_owned||source.dirty)))
             throw std::logic_error("Buffer envelope changed during backing reconciliation");
+        if(defer_owned&&(!source.gpu_owned||!source.cpu_upload_ranges.empty()))
+            return RematerializeBufferEnvelope(address,size,physical_dma,false);
         sources.push_back(&source);
     }
     if(sources.empty())return false;
@@ -901,6 +908,8 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
         const auto offset=source->base-address;
         memcpy(target.cpu_snapshot.data()+offset,source->cpu_snapshot.data(),size_t(source->size));
         target.gpu_cpu_diverged|=source->gpu_cpu_diverged;
+        if(defer_owned)for(const auto& [begin,stop]:source->dirty_ranges)
+            RememberSpan(target.dirty_ranges,offset+begin,offset+stop);
         guarded|=source->cpu_watched||source->cpu_watch_pending||source->cpu_partial_proof;
         if(source->cpu_watched)RememberSpan(proven,offset,offset+source->size);
         else if(source->cpu_partial_proof){
@@ -926,6 +935,13 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
     }
     if(cursor<size)RememberSpan(target.cpu_dirty_ranges,cursor,size);
     std::map<VAddr,VAddr> index;index.emplace(address,end);
+    target.dirty=!target.dirty_ranges.empty();
+    std::set<VAddr> dirty_index;if(target.dirty)dirty_index.insert(address);
+    std::vector<std::pair<VAddr,u64>> acquired;
+    acquired.reserve(sources.size()+1);
+    bool published=false;
+    const auto release_acquired=[&]{for(const auto& [base,bytes]:acquired)release_buffer_(base,bytes);acquired.clear();};
+    SCOPE_EXIT {if(!published)release_acquired();};
     preparing_buffer_contents_.reserve(preparing_buffer_contents_.size()+sources.size());
     // Allocate callback storage and index/map nodes before any new protection.
     // Old and new placed storage survive copies, exceptional exits and pooling.
@@ -944,8 +960,9 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
         cursor=source->base+source->size;
     }
     if(cursor<end)Upload(target,cursor-address,end-cursor,backing.data()+cursor-address);
-    // Borrow the preceding RO guards, adding only legal new gaps. Do not call
-    // RetireBuffer/release_buffer_ for sources: that would create an RW window.
+    // Borrow existing source guards without opening an RW window. Owned
+    // sources keep their guards; acquire only disjoint physical gaps. Prepare
+    // all storage/index nodes before callbacks can change OS protection.
     target.cpu_partial_proof=guarded;
     bool protected_all{};
     {
@@ -953,7 +970,28 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
         const auto depth=preparing_buffer_contents_.size();
         preparing_buffer_contents_.insert(preparing_buffer_contents_.end(),sources.begin(),sources.end());
         SCOPE_EXIT {preparing_buffer_contents_.resize(depth);preparing_buffer_envelope_=previous;};
-        protected_all=watch_buffer_&&watch_buffer_(address,size);
+        if(defer_owned){
+            bool owned=true;auto next=address;
+            const auto acquire=[&](VAddr begin,VAddr stop){
+                if(begin==stop||IsGdsRange(begin,stop-begin))return true;
+                if(!own_buffer_||!own_buffer_(begin,stop-begin))return false;
+                acquired.emplace_back(begin,stop-begin);return true;
+            };
+            for(auto* source:sources){
+                if(owned&&next<source->base)owned=acquire(next,source->base);
+                next=source->base+source->size;
+            }
+            if(owned&&next<end)owned=acquire(next,end);
+            // A backing callback can reconcile a preceding source. Never
+            // publish stale write ownership after such a reentrant operation.
+            for(auto* source:sources)owned&=source->gpu_owned&&source->cpu_upload_ranges.empty();
+            owned&=target.cpu_upload_ranges.empty();
+            target.gpu_owned=owned;
+        }else protected_all=watch_buffer_&&watch_buffer_(address,size);
+    }
+    if(defer_owned&&!target.gpu_owned){
+        release_acquired();
+        return RematerializeBufferEnvelope(address,size,physical_dma,false);
     }
     target.cpu_partial_proof|=protected_all;
     if(!target.cpu_partial_proof)target.cpu_dirty_ranges.clear();
@@ -965,11 +1003,14 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
         indexed_buffers_.insert(index.extract(address));
     }
     for(auto* source:sources)dirty_mappings_.erase(source->base);
+    if(target.dirty)dirty_mappings_.insert(dirty_index.extract(address));
     auto it=FirstOverlapping(address);
     while(it!=mappings_.end()&&it->first<end)it=mappings_.erase(it);
     auto inserted=mappings_.insert(replacement.extract(address));
+    published=true;
     cached_buffer_bytes_=cached_buffer_bytes_-replaced_bytes+size;
     Diagnostics::Count("buffer-envelope.gpu-preserved.bytes",copied_bytes);
+    if(defer_owned)Diagnostics::Count("buffer-envelope.owned-deferred.bytes",copied_bytes);
     churn_.Record(address,size,address,size,inserted.position->second.allocation_id,true,false,false,scheduler_.Completed());
     return true;
 }

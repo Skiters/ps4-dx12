@@ -148,7 +148,7 @@ private:
     void Begin();
     Mapping& Find(VAddr address,u64 size,bool gds,u64 batch_budget=0,bool physical_dma=false);
     void DropCached(VAddr address,u64 size,bool reconcile,const char* reason="overlap");
-    bool RematerializeBufferEnvelope(VAddr,u64,bool physical_dma=false);
+    bool RematerializeBufferEnvelope(VAddr,u64,bool physical_dma=false,bool defer_owned=true);
     void Upload(Mapping& range,u64 offset,u64 size,const void* data);
     void ClearMappings(){for(auto& [_,mapping]:mappings_)RetireBuffer(mapping);mappings_.clear();dirty_mappings_.clear();cached_buffer_bytes_=0;
         std::lock_guard lock(memory_index_mutex_);indexed_buffers_.clear();}

@@ -115,16 +115,33 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         const bool placed=bool(old_views.front().allocation);std::weak_ptr<void> old_allocation=old_views.front().allocation;
         renderer.FillPreparedShaderBuffer(old,4096,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         renderer.FillPreparedShaderBuffer(old+4096,4096,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        if(mode!=0&&store==2)renderer.PhysicalReader([&](VAddr address,std::span<std::byte> out){
+            if(address<base||address-base>bytes||out.size()>bytes-(address-base))return false;
+            memcpy(out.data(),physical+address-base,out.size());
+            // Owned growth no longer downgrades the old pages to RO. Inject
+            // the existing same-value-store control at the physical witness
+            // phase instead; its new CPU marker must reject deferred growth.
+            if(inject){inject=false;
+                reinterpret_cast<volatile std::byte*>(physical+old-base+4096)[17]=std::byte{0x31};
+                renderer.NotifyCpuWrite(old+4096+17,1);
+            }
+            return true;
+        });
         if(store==1){
             reinterpret_cast<volatile std::byte*>(physical+old-base+4096)[17]=std::byte{0x31};
             renderer.NotifyCpuWrite(old+4096+17,1);
         }
         const Rasterizer::ShaderBufferRequest extension{old+4096,8192,false,true,true};
+        const auto before_growth=renderer.SubmittedFence();
         const auto grown=renderer.PrepareShaderBuffers(std::span(&extension,1));
         require(grown.size()==1&&grown.front().size==8192&&grown.front().offset==4096&&
             grown.front().resource.Get()!=old_native,"Growth changed sharp bounds or failed to preserve the old tail");
-        require(renderer.CachedBufferBytes()==new_size&&growth_guards==1&&renderer.guard_releases==0,
+        const bool owned_growth=mode!=0&&store==0;
+        require(renderer.CachedBufferBytes()==new_size&&growth_guards==(owned_growth?0u:1u)&&renderer.guard_releases==0,
             "Growth double-counted B or opened a guard-release window");
+        if(owned_growth){MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(old),&state,sizeof(state));
+            require(state.Protect==PAGE_NOACCESS&&renderer.SubmittedFence()==before_growth&&commits==0,
+                "Owned envelope growth released protection, submitted or committed pending guest writes");}
         {
             const auto final=renderer.RefreshPreparedShaderBuffers(std::span(&source,1),old_views);
             require(final.front().resource.Get()==grown.front().resource.Get()&&final.front().offset==0&&
@@ -143,10 +160,73 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         }
         std::vector<std::byte> expected(size_t(bytes),std::byte{0x31});
         if(mode==1)for(size_t offset=4096;offset<8192;offset+=4){const u32 word=0x41424344;memcpy(expected.data()+offset,&word,4);}
+        if(owned_growth)require(renderer.ReadMemory(old,old_size),"Grown owned B did not become visible on explicit CPU read");
         require(!memcmp(physical,expected.data(),expected.size())&&commits==(mode==1?1u:0u)&&
             committed==(mode==1?4096u:0u),"Envelope growth committed formatted B as a new guest write");
         renderer.CollectRetirements();
         if(placed)require(old_allocation.expired(),"Old B growth lease survived completed retirement");
+        renderer.ValidateDebugMessages();
+    }
+    for(unsigned failure=0;failure<4;++failure){
+        // Join two protected, still-dirty B versions. New gaps acquire their
+        // own guards; rejection/exception must roll back only those gaps.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        bool injecting=false;unsigned rollbacks{};
+        renderer.SetBufferOwnership([&](VAddr address,u64 size){
+            if(injecting&&(failure==1||failure==2)&&address==base+8192){
+                if(failure==2)throw std::runtime_error("Injected owned growth gap failure");
+                return false;
+            }
+            if(injecting&&failure==3&&address==base+8192){
+                const u32 cpu_winner=0x61626364;
+                memcpy(physical+64,&cpu_winner,4);renderer.NotifyCpuWrite(base+64,4);
+            }
+            return renderer.TrackOpaque(address,size);
+        },[&](VAddr address,std::span<const std::byte> data){
+            ++commits;committed+=data.size();memcpy(physical+address-base,data.data(),data.size());return true;
+        },[&](VAddr address,u64 size){++rollbacks;renderer.Untrack(address,size);});
+        const Rasterizer::ShaderBufferRequest sources[]{{base+4096,4096,true,true,true},{base+12288,4096,true,true,true}};
+        const Rasterizer::BufferWrite writes[]{{base+4100,4},{base+12296,4}};
+        auto old=renderer.PrepareShaderBuffers(sources,std::span(writes));
+        renderer.FillPreparedShaderBuffer(base+4096,4096,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.FillPreparedShaderBuffer(base+12288,4096,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const auto before=renderer.SubmittedFence();injecting=true;
+        const Rasterizer::ShaderBufferRequest joined{base,20480,false,true,true};
+        bool rejected=false;
+        try{renderer.PrepareShaderBuffers(std::span(&joined,1));}
+        catch(const std::runtime_error&){rejected=true;}
+        require(rejected==(failure==2),"Owned growth did not propagate the injected gap exception");
+        if(failure==2){
+            MEMORY_BASIC_INFORMATION prefix{},owned{};
+            VirtualQuery(reinterpret_cast<void*>(base),&prefix,sizeof(prefix));
+            VirtualQuery(reinterpret_cast<void*>(base+4096),&owned,sizeof(owned));
+            require(rollbacks==1&&prefix.Protect==PAGE_READWRITE&&owned.Protect==PAGE_NOACCESS&&
+                renderer.CachedBufferBytes()==8192&&renderer.SubmittedFence()==before&&commits==0,
+                "Failed owned growth changed old ownership, submitted, or leaked a new gap guard");
+            const auto retained=renderer.RefreshPreparedShaderBuffers(sources,old);
+            require(retained[0].resource.Get()==old[0].resource.Get()&&retained[1].resource.Get()==old[1].resource.Get(),
+                "Failed owned growth replaced a preceding source generation");
+            injecting=false;renderer.PrepareShaderBuffers(std::span(&joined,1));
+        }
+        if(failure==0||failure==2){
+            require(renderer.SubmittedFence()==before&&commits==0,"Joining protected B drained its pending writes");
+            for(u64 offset=0;offset<20480;offset+=4096){MEMORY_BASIC_INFORMATION state{};
+                VirtualQuery(reinterpret_cast<void*>(base+offset),&state,sizeof(state));
+                require(state.Protect==PAGE_NOACCESS,"Joined B has an unprotected page");}
+        }else require(rollbacks==(failure==1?1u:3u)&&committed==8,
+            "Rejected gap/CPU winner failed to roll back new guards and reconcile only actual old writes");
+        old.clear();const auto result=read(renderer,base,20480);
+        for(size_t offset=0;offset<result.size();offset+=4){u32 word{};memcpy(&word,result.data()+offset,4);
+            const auto expected=failure==3&&offset==64?0x61626364U:offset>=4096&&offset<8192?0x41424344U:
+                offset>=12288&&offset<16384?0x51525354U:0x31313131U;
+            require(word==expected,"Joined protected B lost GPU contents or physical gap bytes");
+        }
+        require(renderer.ReadMemory(base,20480)&&committed==8&&commits==2,
+            "Joined B failed exact-write CPU visibility after success/retry/fallback");
+        for(size_t offset=0;offset<bytes;offset+=4){u32 word{};memcpy(&word,physical+offset,4);
+            require(word==(failure==3&&offset==64?0x61626364U:offset==4100?0x41424344U:offset==12296?0x51525354U:0x31313131U),
+                "Joined B committed formatted bytes, gaps or outside padding");}
         renderer.ValidateDebugMessages();
     }
     {
