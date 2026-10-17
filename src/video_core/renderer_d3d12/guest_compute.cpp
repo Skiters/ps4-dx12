@@ -975,68 +975,63 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     auto& bindings=*bindings_lease;
     if(stage_bindings)bindings.RetainAllocation(stage_bindings->pins);
     diagnostic.Stage("buffer-descriptors-and-constants");
-    std::array<u64,Shader::NATIVE_BUFFER_BOUNDS_VECTORS*2> buffer_limits{};
-    for(size_t i=0;i<ordinary_count;++i) {
-        const auto& target=pending[i];const auto& view=views[target.stream_view.value_or(i)];
-        // Raw SRV/UAV base is aligned to 16 bytes; PS4 sub-dword offsets go
-        // through the original compiler's PushData adjustment, never truncation.
-        const auto base=view.offset&~u64(15);const auto delta=view.offset-base;
-        if(view.size>Shader::NativeDma::MaxRawViewBytes-delta)
-            throw std::out_of_range("Native raw buffer descriptor element count overflow");
-        push.buf_offsets[target.push_index]=u8(delta+target.byte_adjust);
-        // The raw view includes prefix/suffix alignment bytes. Its exact
-        // original sharp limit is independent of that physical envelope.
-        // Preserve the existing 16-byte temporary behavior for null sharps.
-        if(target.byte_adjust>view.size)
-            throw std::out_of_range("Native buffer prefix exceeds prepared view");
-        const u64 exact_bytes=target.original_bytes?target.original_bytes:view.size-target.byte_adjust;
-        if(!exact_bytes||exact_bytes>view.size-target.byte_adjust)
-            throw std::out_of_range("Native buffer original sharp exceeds prepared view");
-        buffer_limits.at(target.push_index)=delta+target.byte_adjust+exact_bytes-1;
-        const auto elements=UINT((view.size+delta)/4);
-        if(target.uav) {
-            D3D12_UNORDERED_ACCESS_VIEW_DESC d{};d.Format=DXGI_FORMAT_R32_TYPELESS;
-            d.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;d.Buffer.FirstElement=base/4;
-            d.Buffer.NumElements=elements;d.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
-            // Arrays share the reflected range's base register and element index.
-            for(const auto& b:pipeline.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&b.space==0&&target.reg>=b.reg&&target.reg-b.reg<b.count)
-                bindings.Uav(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
-        }else {
-            D3D12_SHADER_RESOURCE_VIEW_DESC d{};d.Format=DXGI_FORMAT_R32_TYPELESS;
-            d.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;d.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            d.Buffer.FirstElement=base/4;d.Buffer.NumElements=elements;d.Buffer.Flags=D3D12_BUFFER_SRV_FLAG_RAW;
-            for(const auto& b:pipeline.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV&&b.space==0&&target.reg>=b.reg&&target.reg-b.reg<b.count)
-                bindings.Srv(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
-        }
-    }
-    // Image/attachment uploads below may Finish and reset the constant arena.
-    // Allocate only once their ownership resolution has ended, immediately
-    // before the command binds its descriptors and executes on the GPU.
-    std::function<void(ResourceBindings&)> dma_refresh;
-    if(dma){
-        const auto read_requests=std::span(requests).subspan(ordinary_count,dma_count);
-        const auto read_views=std::span(views).subspan(ordinary_count,dma_count);
-        std::vector<Rasterizer::ShaderBufferView> shader_srvs;
-        // Private CPU streams replace their original descriptors. An unused
-        // envelope is not a simultaneous shader SRV of a DMA UAV bank.
-        for(size_t i=0;i<ordinary_count;++i)if(!pending[i].uav)
-            shader_srvs.push_back(views[pending[i].stream_view.value_or(i)]);
-        for(size_t i=ordinary_count+dma_count;i<ordinary_count+dma_count+read_buffers.size();++i)
-            if(!requests[i].unordered_access)shader_srvs.push_back(views[i]);
-        dma_refresh=[&rasterizer,dma,dma_pending,shader_srvs=std::move(shader_srvs),
-            ranges=std::vector<Rasterizer::ShaderBufferRequest>(read_requests.begin(),read_requests.end()),
-            selected=std::vector<Rasterizer::ShaderBufferView>(read_views.begin(),read_views.end())](ResourceBindings& table){
-            dma->BindResident(rasterizer,table,ranges,selected,shader_srvs);
-            for(const auto& target:dma_pending)dma->BindMetadata(table,target.reg,target.fault);
-        };
-    }
-    bindings.BeforeBind([&rasterizer,push,buffer_limits,runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
-        buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end()),
-        dma_refresh=std::move(dma_refresh)](ResourceBindings& table){
-        if(dma_refresh)dma_refresh(table);
-        // Attachment uploads may Finish after buffer preparation. Mark actual
-        // shader writes at bind time so such retirement cannot clear this draw.
+    // Original arena bindings remain logical through BindTextures and
+    // BeginRendering. Attachment uploads can grow a preserving B envelope or
+    // Finish/reset constants. Pick native descriptors only at the final bind.
+    bindings.BeforeBind([&rasterizer,push,ordinary_count,dma_count,auxiliary_count=read_buffers.size(),
+        pending,dma,dma_pending,prepared_views=views,
+        runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
+        buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end())]
+        (ResourceBindings& table) mutable {
+        // This can restore protection/Finish. Complete it before selecting any
+        // final views; actual original stage invalidation is not replayed here.
         rasterizer.MarkShaderBufferWrites(buffer_requests);
+        const auto current=rasterizer.RefreshPreparedShaderBuffers(buffer_requests,prepared_views);
+        for(const auto& view:current){
+            table.RetainAllocation(view.allocation);table.RetainAllocation(view.lease);
+        }
+        if(dma){
+            std::vector<Rasterizer::ShaderBufferView> shader_srvs;
+            for(size_t i=0;i<ordinary_count;++i)if(!pending[i].uav)
+                shader_srvs.push_back(current[pending[i].stream_view.value_or(i)]);
+            for(size_t i=ordinary_count+dma_count;i<ordinary_count+dma_count+auxiliary_count;++i)
+                if(!buffer_requests[i].unordered_access)shader_srvs.push_back(current[i]);
+            // Keep BindResident's strict selected-resource guard. Its selected
+            // ranges now belong to the same final phase as every shader view.
+            dma->BindResident(rasterizer,table,std::span(buffer_requests).subspan(ordinary_count,dma_count),
+                std::span(current).subspan(ordinary_count,dma_count),shader_srvs);
+            for(const auto& target:dma_pending)dma->BindMetadata(table,target.reg,target.fault);
+        }
+        std::array<u64,Shader::NATIVE_BUFFER_BOUNDS_VECTORS*2> buffer_limits{};
+        for(size_t i=0;i<ordinary_count;++i){
+            const auto& target=pending[i];const auto& view=current[target.stream_view.value_or(i)];
+            const auto base=view.offset&~u64(15),delta=view.offset-base;
+            if(view.size>Shader::NativeDma::MaxRawViewBytes-delta)
+                throw std::out_of_range("Native raw buffer descriptor element count overflow");
+            push.buf_offsets[target.push_index]=u8(delta+target.byte_adjust);
+            if(target.byte_adjust>view.size)
+                throw std::out_of_range("Native buffer prefix exceeds prepared view");
+            const u64 exact_bytes=target.original_bytes?target.original_bytes:view.size-target.byte_adjust;
+            if(!exact_bytes||exact_bytes>view.size-target.byte_adjust)
+                throw std::out_of_range("Native buffer original sharp exceeds prepared view");
+            buffer_limits.at(target.push_index)=delta+target.byte_adjust+exact_bytes-1;
+            const auto elements=UINT((view.size+delta)/4);
+            if(target.uav){
+                D3D12_UNORDERED_ACCESS_VIEW_DESC d{};d.Format=DXGI_FORMAT_R32_TYPELESS;
+                d.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;d.Buffer.FirstElement=base/4;
+                d.Buffer.NumElements=elements;d.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
+                for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&
+                    b.space==0&&target.reg>=b.reg&&target.reg-b.reg<b.count)
+                    table.Uav(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
+            }else{
+                D3D12_SHADER_RESOURCE_VIEW_DESC d{};d.Format=DXGI_FORMAT_R32_TYPELESS;
+                d.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;d.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                d.Buffer.FirstElement=base/4;d.Buffer.NumElements=elements;d.Buffer.Flags=D3D12_BUFFER_SRV_FLAG_RAW;
+                for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV&&
+                    b.space==0&&target.reg>=b.reg&&target.reg-b.reg<b.count)
+                    table.Srv(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
+            }
+        }
         auto push_buffer=rasterizer.UploadConstants(std::as_bytes(std::span(&push,1)));
         auto runtime_buffer=rasterizer.UploadConstants(runtime);
         std::optional<UploadArena::Slice> limits_buffer;

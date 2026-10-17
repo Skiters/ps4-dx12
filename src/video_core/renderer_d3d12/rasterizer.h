@@ -34,6 +34,9 @@ public:
     MemoryReuseStats MemoryReuse()const {std::lock_guard lock(execution_mutex_);return memory_reuse_;}
     struct TemporaryBuffer {std::vector<u32> words;};
     struct BufferCopy {VAddr destination,source;u32 bytes;};
+    // A native allocation generation, distinct from mutable CPU/GPU contents.
+    // Only full GPU-preserving envelope copies inherit an older generation.
+    struct BufferBackingVersion {const VAddr base;const u64 size;ID3D12Resource* const resource;};
     std::shared_ptr<TemporaryBuffer> AcquireTemporaryBuffer(u64,const void* initial=nullptr);
 private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
@@ -47,7 +50,9 @@ private:
         bool gpu_cpu_diverged=false; // Readonly image/metadata synthesis changed the GPU arena only.
         std::map<u64,u64> cpu_upload_ranges; // Actual CPU stores require upload even for identical bytes.
         u64 cpu_upload_generation{};
-        bool initial_upload_failed=false;u64 allocation_id{},last_use{};};
+        bool initial_upload_failed=false;u64 allocation_id{},last_use{};
+        std::shared_ptr<const BufferBackingVersion> backing_version;
+        std::vector<std::weak_ptr<const BufferBackingVersion>> preserved_versions;};
     struct RetiredBuffer {Resource gpu;u64 fence;u64 allocation_id;};
     std::vector<RetiredBuffer> buffer_pool_;
     u64 pooled_buffer_bytes_{};
@@ -210,6 +215,7 @@ public:
         std::shared_ptr<UploadArena> lease;
         // Keep placed memory alive and prevent pool reuse until the last GPU view retires.
         std::shared_ptr<void> allocation;
+        std::shared_ptr<const BufferBackingVersion> backing_version;
     };
 private:
     void PrepareBufferContents(Mapping&,bool written,bool uav,bool fresh,
@@ -222,6 +228,10 @@ public:
     void SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     // Select only fully materialized backing; never reserve, resize or upload.
     std::optional<ShaderBufferView> PreparedDmaBuffer(VAddr,u64)const;
+    // Re-select after attachment preparation without allocating or replaying
+    // stage effects. Reject unrelated replacements, even at the same address.
+    std::vector<ShaderBufferView> RefreshPreparedShaderBuffers(
+        std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     Resource CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency=true);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);

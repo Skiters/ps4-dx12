@@ -295,6 +295,7 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     Mapping* stored{};
     try{
         Mapping range{address,size,AcquireBuffer((size+3)&~u64(3))};
+        range.backing_version=std::make_shared<const BufferBackingVersion>(address,size,range.gpu.handle.Get());
         range.allocation_id=acquired_allocation_id_;range.last_use=++use_clock_;
         stored=&mappings_.emplace(address,std::move(range)).first->second;
         churn_.Record(address,size,address,size,stored->allocation_id,true,false,false,scheduler_.Completed());
@@ -869,15 +870,24 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size){
     if(sources.empty())return false;
     std::map<VAddr,Mapping> replacement;
     auto& target=replacement.emplace(address,Mapping{address,size,AcquireBuffer((size+3)&~u64(3))}).first->second;
+    target.backing_version=std::make_shared<const BufferBackingVersion>(address,size,target.gpu.handle.Get());
     target.allocation_id=acquired_allocation_id_;target.last_use=++use_clock_;
     target.cpu_snapshot=backing;
     std::map<VAddr,VAddr> proven;
     bool guarded=false;u64 replaced_bytes{};
     auto retained=std::make_shared<std::vector<Resource>>();retained->reserve(sources.size()+1);
     retained->push_back(target.gpu);
+    std::set<const BufferBackingVersion*> inherited;
     for(const auto* source:sources){
         replaced_bytes+=source->size;retained->push_back(source->gpu);
         if(source->initial_upload_failed)continue;
+        if(!source->backing_version)throw std::logic_error("Buffer growth source lost its backing generation");
+        if(inherited.insert(source->backing_version.get()).second)
+            target.preserved_versions.push_back(source->backing_version);
+        // Weak ancestry expires with the last outstanding prepared view. It
+        // neither retains old GPU allocations nor grows forever across frames.
+        for(const auto& weak:source->preserved_versions)if(auto version=weak.lock();version&&inherited.insert(version.get()).second)
+            target.preserved_versions.push_back(version);
         if(source->cpu_snapshot.size()!=source->size)
             throw std::logic_error("Buffer growth source has no complete CPU snapshot");
         const auto offset=source->base-address;
@@ -1220,7 +1230,7 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffers(std::
     std::vector<ShaderBufferView> views;views.reserve(requests.size());
     for(const auto& request:requests) {
         auto& mapping=Find(request.address,request.size,false,cache_budget);
-        views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation});
+        views.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation,mapping.backing_version});
     }
     // DEFAULT storage alone is not residency: private streams and envelopes
     // reserve physical memory without executing an original EnsureResident.
@@ -1235,7 +1245,51 @@ std::optional<Rasterizer::ShaderBufferView> Rasterizer::PreparedDmaBuffer(VAddr 
     const auto& mapping=it->second;
     if(mapping.initial_upload_failed||!mapping.gpu.handle||address-mapping.base>mapping.size||
        size>mapping.size-(address-mapping.base))return {};
-    return ShaderBufferView{mapping.gpu.handle,address-mapping.base,size,{},mapping.gpu.allocation};
+    return ShaderBufferView{mapping.gpu.handle,address-mapping.base,size,{},mapping.gpu.allocation,mapping.backing_version};
+}
+std::vector<Rasterizer::ShaderBufferView> Rasterizer::RefreshPreparedShaderBuffers(
+    std::span<const ShaderBufferRequest> requests,std::span<const ShaderBufferView> selected){
+    std::lock_guard lock(execution_mutex_);
+    if(requests.size()!=selected.size())throw std::invalid_argument("Final buffer range/view count mismatch");
+    std::vector<ShaderBufferView> result;result.reserve(requests.size());
+    std::map<VAddr,bool> states;
+    for(size_t i=0;i<requests.size();++i){
+        const auto& request=requests[i];const auto& previous=selected[i];
+        (void)request.WriteRange();
+        if(!previous.resource||previous.size!=request.size||
+           previous.offset>previous.resource->GetDesc().Width||
+           previous.size>previous.resource->GetDesc().Width-previous.offset)
+            throw std::logic_error("Invalid preceding prepared buffer view");
+        if(previous.lease){
+            if(request.written||request.unordered_access)
+                throw std::logic_error("Immutable CPU stream cannot become writable");
+            result.push_back(previous);continue;
+        }
+        const auto& version=previous.backing_version;
+        if(!version||previous.resource.Get()!=version->resource||request.address<version->base||request.address-version->base!=previous.offset||
+           previous.offset>version->size||request.size>version->size-previous.offset)
+            throw std::logic_error("Prepared buffer view lost its original range generation");
+        auto it=mappings_.upper_bound(request.address);
+        if(it==mappings_.begin())throw std::logic_error("Final buffer backing was retired");--it;
+        const auto& mapping=it->second;
+        const bool preserved=mapping.backing_version==version||
+            std::ranges::any_of(mapping.preserved_versions,[&](const auto& weak){return weak.lock()==version;});
+        if(!preserved||mapping.initial_upload_failed||request.address-mapping.base>mapping.size||
+           request.size>mapping.size-(request.address-mapping.base))
+            throw std::logic_error("Final buffer backing was replaced without GPU-preserving continuity");
+        result.push_back({mapping.gpu.handle,request.address-mapping.base,request.size,{},mapping.gpu.allocation,mapping.backing_version});
+        states[mapping.base]|=request.unordered_access;
+    }
+    // Finish/retile/capture can leave an otherwise valid arena in COPY_SOURCE.
+    // Preserve already prepared IA/indirect read bits on shared read-only B.
+    // A UAV/IA conflict must still use the existing separate index snapshot.
+    for(const auto& [base,uav]:states){auto& mapping=mappings_.at(base);
+        const auto state=uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+            (mapping.gpu.state&D3D12_RESOURCE_STATE_GENERIC_READ)|
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        mapping.gpu.Transition(RecordingList(),state);
+    }
+    return result;
 }
 void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferRequest> requests,
     std::span<const ShaderBufferView> views){

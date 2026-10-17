@@ -516,6 +516,8 @@ foreach(_graphics_contract IN ITEMS minmax minmax-srgb rasterizer-discard cull-b
     set_tests_properties(native_graphics_${_graphics_contract} PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 60)
 endforeach()
 add_test(NAME native_guest_graphics_resources COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}")
+add_test(NAME native_guest_late_buffer_growth COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" late-buffer)
+add_test(NAME native_guest_late_private_buffer COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" late-buffer-private)
 add_test(NAME native_guest_depth_stencil_shader_planes COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" plane-feedback)
 add_test(NAME native_guest_depth_stencil_view_ranges COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" depth-view-ranges)
 add_test(NAME native_guest_shared_color_layers COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" shared-layers)

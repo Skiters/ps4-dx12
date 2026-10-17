@@ -31,6 +31,32 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         D3D12_RANGE all{0,SIZE_T(size)};Check(rb.handle->Map(0,&all,&mapped));memcpy(result.data(),mapped,result.size());
         D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);return result;
     };
+    {
+        // Upload-arena CPU streams are immutable snapshots, not generations
+        // of the mutable DEFAULT mapping subsequently created at this address.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);renderer.EnableBufferStreaming(true);
+        const Rasterizer::ShaderBufferRequest stream{base+4096,64,false,false,false};
+        auto selected=renderer.PrepareShaderBuffers(std::span(&stream,1));
+        require(bool(selected.front().lease),"Immutable final-view fixture did not acquire a CPU stream lease");
+        const Rasterizer::ShaderBufferRequest resident{base,8192,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&resident,1));
+        renderer.FillPreparedShaderBuffer(stream.address,stream.size,0x51525354,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const auto final=renderer.RefreshPreparedShaderBuffers(std::span(&stream,1),selected);
+        require(final.front().resource.Get()==selected.front().resource.Get()&&final.front().offset==selected.front().offset&&
+            final.front().lease==selected.front().lease,"Final binding substituted mutable B for an immutable CPU stream");
+        auto rb=Buffer(device,stream.size,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        renderer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,final.front().resource.Get(),final.front().offset,stream.size);
+        renderer.Finish();void* mapped{};D3D12_RANGE all{0,SIZE_T(stream.size)};Check(rb.handle->Map(0,&all,&mapped));
+        bool unchanged=true;for(size_t i=0;i<stream.size;++i)unchanged&=static_cast<const std::byte*>(mapped)[i]==std::byte{0x31};
+        D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);
+        require(unchanged&&commits==0,"Final CPU stream contents were replaced or committed");
+        auto writer=stream;writer.written=writer.unordered_access=true;bool rejected=false;
+        try{renderer.RefreshPreparedShaderBuffers(std::span(&writer,1),selected);}
+        catch(const std::logic_error&){rejected=true;}
+        require(rejected,"Immutable CPU stream was accepted for a guest write");
+        renderer.ValidateDebugMessages();
+    }
     // mode0: RO B1; mode1: one real GPU-written page and one formatted page;
     // mode2: owned reservation with no actual writes. Store0/1/2: no store,
     // actual same-value store before growth, or during the new guard callback.
@@ -71,6 +97,15 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
             grown.front().resource.Get()!=old_native,"Growth changed sharp bounds or failed to preserve the old tail");
         require(renderer.CachedBufferBytes()==new_size&&growth_guards==1&&renderer.guard_releases==0,
             "Growth double-counted B or opened a guard-release window");
+        {
+            const auto final=renderer.RefreshPreparedShaderBuffers(std::span(&source,1),old_views);
+            require(final.front().resource.Get()==grown.front().resource.Get()&&final.front().offset==0&&
+                final.front().size==old_size,"Final binding did not follow its GPU-preserving envelope generation");
+            auto wrong=old_views.front();++wrong.offset;bool rejected=false;
+            try{renderer.RefreshPreparedShaderBuffers(std::span(&source,1),std::span(&wrong,1));}
+            catch(const std::logic_error&){rejected=true;}
+            require(rejected,"Final binding accepted a changed original sharp offset");
+        }
         old_views.clear();
         if(placed)require(!old_allocation.expired(),"Old placed B storage died before its copy fence");
         const auto result=read(renderer,old,new_size);
@@ -84,6 +119,35 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
             committed==(mode==1?4096u:0u),"Envelope growth committed formatted B as a new guest write");
         renderer.CollectRetirements();
         if(placed)require(old_allocation.expired(),"Old B growth lease survived completed retirement");
+        renderer.ValidateDebugMessages();
+    }
+    {
+        // Follow an original view across two successive generations, but never
+        // accept a retired/recreated mapping merely because its address matches.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        Rasterizer::ShaderBufferRequest source{base+4096,4096,false,true,true};source.publish_dma_residency=false;
+        auto selected=renderer.PrepareShaderBuffers(std::span(&source,1));
+        renderer.FillPreparedShaderBuffer(source.address,source.size,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const Rasterizer::ShaderBufferRequest left{base,12288,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&left,1));
+        const Rasterizer::ShaderBufferRequest right{base+8192,8192,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&right,1));
+        auto final=renderer.RefreshPreparedShaderBuffers(std::span(&source,1),selected);
+        require(final.front().resource.Get()!=selected.front().resource.Get()&&final.front().offset==4096,
+            "Two-step growth lost the preceding generation or rebased offset");
+        auto wrong=selected.front();wrong.resource=final.front().resource;bool rejected=false;
+        try{renderer.RefreshPreparedShaderBuffers(std::span(&source,1),std::span(&wrong,1));}
+        catch(const std::logic_error&){rejected=true;}
+        require(rejected,"Final binding accepted a substituted native resource");
+        const auto contents=read(renderer,source.address,source.size);
+        for(size_t offset=0;offset<contents.size();offset+=4){u32 word{};memcpy(&word,contents.data()+offset,4);
+            require(word==0x41424344,"Final generation changed old GPU-only B1");}
+        renderer.UnmapMemory(base,bytes);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);
+        renderer.PrepareShaderBuffers(std::span(&source,1));rejected=false;
+        try{renderer.RefreshPreparedShaderBuffers(std::span(&source,1),selected);}
+        catch(const std::logic_error&){rejected=true;}
+        require(rejected&&commits==0&&committed==0,"Final binding accepted unrelated recreated B or committed formatted bytes");
         renderer.ValidateDebugMessages();
     }
     {

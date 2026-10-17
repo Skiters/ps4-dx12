@@ -334,13 +334,15 @@ int wmain(int argc,wchar_t** argv){try {
     const bool attachments_only=argc==3&&std::wstring_view(argv[2])==L"attachments";
     const bool readonly_alias=argc==3&&std::wstring_view(argv[2])==L"readonly-alias";
     const bool linear_color=argc==3&&std::wstring_view(argv[2])==L"linear-color";
+    const bool late_growth=argc==3&&std::wstring_view(argv[2]).starts_with(L"late-buffer");
+    const bool late_private=late_growth&&std::wstring_view(argv[2])==L"late-buffer-private";
     const bool resident_indices=argc==3&&std::wstring_view(argv[2]).starts_with(L"indices");
     const bool index16=resident_indices&&std::wstring_view(argv[2])==L"indices16";
     const bool index_uav=resident_indices&&std::wstring_view(argv[2]).starts_with(L"indices-uav");
     const bool index_uav_write=index_uav&&std::wstring_view(argv[2])==L"indices-uav-write";
     const bool bounds=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bounds");
     const bool bounds_reject=bounds&&std::wstring_view(argv[2])==L"depth-bounds-reject";
-    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges;
+    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges&&!late_growth;
     const bool stale_stencil=argc==3&&std::wstring_view(argv[2])==L"depth-stale-stencil";
     const bool bias=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bias");
     const bool fractional_bias=bias&&std::wstring_view(argv[2])==L"depth-bias-fractional";
@@ -383,6 +385,13 @@ result.tint=asfloat(tint_data.Load4(0));return result;}
         vertex_source.replace(vertex_source.find(declaration),declaration.size(),"RWByteAddressBuffer tint_data:register(u2);");
         if(index_uav_write){const std::string load="result.tint=asfloat(tint_data.Load4(0));";
             vertex_source.replace(vertex_source.find(load),load.size(),load+"tint_data.Store(48,0x12345678);");}
+    }
+    if(late_growth){
+        const std::string push="cbuffer Push:register(b0,space30){float4 transform;};";
+        vertex_source.replace(vertex_source.find(push),push.size(),
+            "cbuffer Push:register(b0,space30){float4 transform;uint4 packed_offsets;};");
+        const std::string load="tint_data.Load4(0)";
+        vertex_source.replace(vertex_source.find(load),load.size(),"tint_data.Load4(packed_offsets.x&255)");
     }
     auto vs=Shader::Backend::DX12::CompileDxil(argv[1],vertex_source,Shader::Backend::DX12::Stage::Vertex);
     auto ps=Shader::Backend::DX12::CompileDxil(argv[1],cross_stage_alias?R"(
@@ -454,6 +463,15 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         const auto first=index_address&~VAddr(3),last=(index_address+index_bytes+3)&~VAddr(3);
         index_requests.push_back({first,last-first,false,false,true});
         rasterizer.EnableBufferStreaming(true);
+    }
+    const auto late_address=reinterpret_cast<VAddr>(memory+16388);
+    const u64 late_bytes=late_private?64:20000;
+    if(late_growth){
+        memcpy(reinterpret_cast<void*>(late_address),tint,16);
+        auto& source=vertex.buffers[0];source.buffer_type=Shader::BufferType::Guest;
+        source.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Buffer>::Summary::SingleLoad;source.sharp_fetch.offsets[0]=0;
+        AmdGpu::Buffer sharp{};sharp.base_address=late_address;sharp.num_records=UINT(late_bytes);
+        memcpy(vertex.flattened_ud_buf.data(),&sharp,sizeof(sharp));
     }
     if(readonly_alias){
         // Vertex raw reads and fragment sampled reads address the same guest
@@ -555,6 +573,22 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         rasterizer.Finish();
         std::array<std::byte,256> unrelated{};
         rasterizer.UploadConstants(unrelated);rasterizer.UploadConstants(unrelated);
+        if(late_growth){
+            const auto previous=rasterizer.PreparedDmaBuffer(late_address,late_bytes);
+            if(!previous)throw std::runtime_error("Late graphics fixture lost its original B view");
+            rasterizer.FillPreparedShaderBuffer(late_address,4,0x3e800000,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            // An attachment-side capture grows/rebases the native allocation.
+            // A later B-only GPU change must reach the resident shader view,
+            // while a clean private CPU stream retains its earlier B0 snapshot.
+            auto attachment_source=rasterizer.CaptureShaderBuffer(late_address-8,late_bytes+12,false);
+            const auto current=rasterizer.PreparedDmaBuffer(late_address,late_bytes);
+            const auto expected_offset=late_address-((late_address-8)&~VAddr(15));
+            if(!current||current->resource.Get()==previous->resource.Get()||current->offset!=expected_offset)
+                throw std::runtime_error("Late graphics fixture did not replace/rebase B backing: old_base="+
+                    std::to_string(previous->backing_version->base)+" old_bytes="+std::to_string(previous->backing_version->size)+
+                    " old_offset="+std::to_string(previous->offset)+" new_offset="+std::to_string(current?current->offset:UINT64_MAX));
+            rasterizer.FillPreparedShaderBuffer(late_address,4,0x3f400000,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
         target=&textures.Upload(color_desc,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
         const Rasterizer::ColorAttachment attachments[]{{&target->texture,target->Rtv()}};
         Rasterizer::DepthAttachment depth{};
@@ -597,7 +631,8 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     if(linear_color)for(UINT y=0;y<8;++y)for(UINT byte=32;byte<64;++byte)
         if(color_memory[y*64+byte]!=std::byte{0xee})throw std::runtime_error("Linear attachment row padding overwritten");
     uint8_t pixels[256]{};memcpy(pixels,linear.data(),256);
-    const std::array<uint8_t,4> expected=readonly_alias?std::array<uint8_t,4>{64,255,16,255}:std::array<uint8_t,4>{64,64,64,255};
+    const std::array<uint8_t,4> expected=readonly_alias?std::array<uint8_t,4>{64,255,16,255}:
+        late_growth&&!late_private?std::array<uint8_t,4>{96,64,64,255}:std::array<uint8_t,4>{64,64,64,255};
     for(size_t i=0;i<sizeof(pixels);++i)if(abs(int(pixels[i])-(bounds_reject?0xee:expected[i%4]))>1)throw std::runtime_error("Native multi-stage guest graphics resource result mismatch");
     if(cross_stage_alias){
         const auto source_desc=DescribeGuestTexture(image);
