@@ -280,15 +280,23 @@ u64 Rasterizer::AdmitBufferCache(std::span<const std::pair<VAddr,VAddr>> active,
         }
         if(required>budget){Diagnostics::Count("buffer-cache.mandatory-admitted.bytes",required-budget);budget=required;}
         if(fits())break;
-        auto chosen=mappings_.end();
-        for(auto it=mappings_.begin();it!=mappings_.end();++it)if(!PreserveBufferBacking(it->second)&&!overlaps(it->second)&&
-            (chosen==mappings_.end()||(memory_perf_.enabled&&it->second.last_use<chosen->second.last_use)))chosen=it;
-        if(chosen==mappings_.end())throw std::logic_error("Active buffer admission footprint changed during preparation");
-        const auto base=chosen->first,size=chosen->second.size;
-        ResolveGpuBuffers(base,size);Finish();chosen=mappings_.find(base);
-        if(chosen==mappings_.end()||PreserveBufferBacking(chosen->second)||overlaps(chosen->second))continue;
-        TraceMapping(chosen->second,"budget");cached_buffer_bytes_-=chosen->second.size;
-        dirty_mappings_.erase(base);RemoveBufferIndex(base);RetireBuffer(chosen->second);mappings_.erase(chosen);
+        std::vector<VAddr> candidates;
+        for(const auto& [base,mapping]:mappings_)if(!PreserveBufferBacking(mapping)&&!overlaps(mapping))candidates.push_back(base);
+        if(candidates.empty())throw std::logic_error("Active buffer admission footprint changed during preparation");
+        if(memory_perf_.enabled)std::sort(candidates.begin(),candidates.end(),[&](VAddr a,VAddr b){
+            return mappings_.at(a).last_use<mappings_.at(b).last_use;});
+        // Elect once per pressure pass instead of rescanning the entire cache
+        // for each victim. Callbacks may acquire a binding, so recheck both
+        // before and after reconciliation; changed graphs get another pass.
+        for(const auto base:candidates){
+            if(fits())break;
+            auto chosen=mappings_.find(base);
+            if(chosen==mappings_.end()||PreserveBufferBacking(chosen->second)||overlaps(chosen->second))continue;
+            ResolveGpuBuffers(base,chosen->second.size);Finish();chosen=mappings_.find(base);
+            if(chosen==mappings_.end()||PreserveBufferBacking(chosen->second)||overlaps(chosen->second))continue;
+            TraceMapping(chosen->second,"budget");cached_buffer_bytes_-=chosen->second.size;
+            dirty_mappings_.erase(base);RemoveBufferIndex(base);RetireBuffer(chosen->second);mappings_.erase(chosen);
+        }
     }
     return budget;
 }
