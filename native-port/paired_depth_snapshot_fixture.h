@@ -115,6 +115,11 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
             }
             auto captured_depth=cache.CaptureDepthPlane(image,0,depth_gpu,renderer.RecordingList(),renderer.CompletedFence());
             auto captured_stencil=cache.CaptureDepthPlane(image,1,stencil_gpu,renderer.RecordingList(),renderer.CompletedFence());
+            for(const auto* copy:{&captured_depth,&captured_stencil}){
+                const auto native=copy->handle->GetDesc();
+                require(native.Width==device->GetResourceAllocationInfo(0,1,&native).SizeInBytes,
+                    "Private plane width hides its actual native allocation from residency");
+            }
             auto restored_desc=desc;restored_desc.address+=0x100000;restored_desc.stencil_address+=0x100000;
             auto& restored=cache.Upload(restored_desc,{},renderer.RecordingList(),renderer.CompletedFence(),{},true,
                 &captured_depth,false,false,GuestTextureCache::UploadPurpose::Binding,&captured_stencil);
@@ -129,7 +134,9 @@ inline void RunPairedDepthSnapshotFixture(ID3D12Device* device) {
             probe->upload=Buffer(device,bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
             probe->readback=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             const auto depth_capacity=depth_gpu.handle->GetDesc().Width,stencil_capacity=stencil_gpu.handle->GetDesc().Width;
-            probe->source_readback=Buffer(device,depth_capacity+stencil_capacity+layout.guest_bytes+stencil_layout.guest_bytes,
+            require(captured_depth.handle->GetDesc().Width==depth_capacity&&captured_stencil.handle->GetDesc().Width==stencil_capacity,
+                "Private plane capacity differs from its complete seed envelope");
+            probe->source_readback=Buffer(device,2*(depth_capacity+stencil_capacity),
                 D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             void* mapped{};D3D12_RANGE empty{};Check(probe->upload.handle->Map(0,&empty,&mapped));
             memset(mapped,0xa7,size_t(bytes));probe->upload.handle->Unmap(0,nullptr);
@@ -216,9 +223,9 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             captured_depth.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
             captured_stencil.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
             list->CopyBufferRegion(probe->source_readback.handle.Get(),depth_capacity+stencil_capacity,
-                captured_depth.handle.Get(),0,layout.guest_bytes);
-            list->CopyBufferRegion(probe->source_readback.handle.Get(),depth_capacity+stencil_capacity+layout.guest_bytes,
-                captured_stencil.handle.Get(),0,stencil_layout.guest_bytes);
+                captured_depth.handle.Get(),0,depth_capacity);
+            list->CopyBufferRegion(probe->source_readback.handle.Get(),2*depth_capacity+stencil_capacity,
+                captured_stencil.handle.Get(),0,stencil_capacity);
             captured_depth.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             captured_stencil.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             const auto fence=renderer.Flush();cache.Submitted(fence);
@@ -240,6 +247,8 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             if(!valid)throw std::runtime_error("Paired depth GPU result mismatch: format="+std::to_string(data_format)+
                 " tile="+std::to_string(tile)+" samples="+std::to_string(samples)+" mode="+std::to_string(mode));
             auto expected_depth_capture=depth_gpu_bytes,expected_stencil_capture=stencil_gpu_bytes;
+            expected_depth_capture.resize(size_t(depth_capacity),std::byte{0x79});
+            expected_stencil_capture.resize(size_t(stencil_capacity),std::byte{0x79});
             for(UINT layer=0;layer<desc.layers;++layer)for(UINT sample=0;sample<samples;++sample)
             for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x){
                 const auto d_at=GuestPixelOffset(desc,layout,0,layer,x,y,sample);
@@ -249,7 +258,7 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
                 memcpy(expected_depth_capture.data()+d_at,&d_value,layout.bytes_per_pixel);
                 expected_stencil_capture[size_t(s_at)]=s_value;
             }
-            range={0,SIZE_T(depth_capacity+stencil_capacity+layout.guest_bytes+stencil_layout.guest_bytes)};
+            range={0,SIZE_T(2*(depth_capacity+stencil_capacity))};
             Check(probe->source_readback.handle->Map(0,&range,&mapped));
             const auto* source_bytes=static_cast<const std::byte*>(mapped);bool sources_valid=true;
             for(u64 at=0;at<depth_capacity;++at)sources_valid&=source_bytes[at]==
@@ -257,7 +266,7 @@ cbuffer Shape : register(b0) { uint width; uint height; uint samples; uint layer
             for(u64 at=0;at<stencil_capacity;++at)sources_valid&=source_bytes[depth_capacity+at]==
                 (at<stencil_gpu_bytes.size()?stencil_gpu_bytes[size_t(at)]:std::byte{0x79});
             const bool copies_valid=!memcmp(source_bytes+depth_capacity+stencil_capacity,expected_depth_capture.data(),expected_depth_capture.size())&&
-                !memcmp(source_bytes+depth_capacity+stencil_capacity+layout.guest_bytes,expected_stencil_capture.data(),expected_stencil_capture.size());
+                !memcmp(source_bytes+2*depth_capacity+stencil_capacity,expected_stencil_capture.data(),expected_stencil_capture.size());
             probe->source_readback.handle->Unmap(0,&empty);
             require(sources_valid&&depth_cpu==original_depth_cpu&&stencil_cpu==original_stencil_cpu,
                 "Paired upload changed CPU/GPU plane inputs or source padding");

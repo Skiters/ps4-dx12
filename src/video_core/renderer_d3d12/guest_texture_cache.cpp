@@ -2413,13 +2413,20 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
             throw std::runtime_error("Invalid formatted image transfer allocation requirements");
         return allocation.SizeInBytes;
     };
-    auto reservation=allocation_bytes(physical.guest_bytes,true)+
+    // Private image inputs are retained by a later entry's input pool, whose
+    // residency account uses native buffer width. Expose the actual committed
+    // buffer granularity rather than hiding a 64-KiB allocation behind a tiny
+    // logical stencil extent. Guest tiling still uses physical.guest_bytes.
+    const auto output_bytes=private_depth_snapshot?
+        (physical.guest_bytes+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
+            ~u64(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1):physical.guest_bytes;
+    auto reservation=allocation_bytes(output_bytes,true)+
         (inherited?0:allocation_bytes(mask_bytes,true))+allocation_bytes(initial.handle->GetDesc().Width,false);
     for(const auto& slice:linear)reservation+=allocation_bytes((slice.bytes+3)&~u64(3),multisampled);
     ReserveMemory(reservation,completed,&image);
     if(!image.tiler)image.tiler=std::make_shared<GuestTiler>(device_.Get());
     if(multisampled&&!image.multisample)image.multisample=std::make_shared<GuestMultisample>(device_.Get());
-    auto output=GuestTiler::Scratch(device_.Get(),physical.guest_bytes);
+    auto output=GuestTiler::Scratch(device_.Get(),output_bytes);
     auto mask=inherited?image.expanded_written_mask:GuestTiler::Scratch(device_.Get(),mask_bytes);
     auto merge=inherited?image.tiler->PrepareMaskedMerge(image.expanded_guest_backing,output,mask,image.layout.guest_bytes):
         std::shared_ptr<GuestTiler::Lease>{};
@@ -2448,7 +2455,8 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     if(image.texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)image.texture.UavBarrier(list);
     if(!multisampled)image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
     initial.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
-    DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,initial.handle.Get(),0,physical.guest_bytes));
+    const auto seed_bytes=private_depth_snapshot?std::min(output_bytes,initial.handle->GetDesc().Width):physical.guest_bytes;
+    DX12_API_CALL(list->CopyBufferRegion(output.handle.Get(),0,initial.handle.Get(),0,seed_bytes));
     if(inherited)merge->Record(list,image.expanded_guest_backing,output,image.expanded_written_mask);
     for(auto& slice:linear){
         // MSAA textures cannot be copied into a placed buffer footprint. Load
