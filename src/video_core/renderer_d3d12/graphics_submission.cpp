@@ -234,7 +234,10 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         for(const auto& [resource,input_state]:inputs){
             const auto shader_read=bindings.References(resource->handle.Get())?
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_COMMON;
-            dependencies.Transition(*resource,D3D12_RESOURCE_STATES(input_state|shader_read));
+            // Preserve existing read bits, including the mandatory GENERIC_READ
+            // state of upload-heap CPU index streams and null index buffers.
+            const auto read_state=resource->state&D3D12_RESOURCE_STATE_GENERIC_READ;
+            dependencies.Transition(*resource,D3D12_RESOURCE_STATES(read_state|input_state|shader_read));
         }
         dependencies.Flush(list);pipeline.Bind(list,bindings);
         DX12_API_CALL(list->RSSetViewports(UINT(viewports.size()),viewports.data()));DX12_API_CALL(list->RSSetScissorRects(UINT(scissors.size()),scissors.data()));

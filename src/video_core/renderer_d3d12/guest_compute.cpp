@@ -432,14 +432,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     for(const auto& buffer:read_buffers){
         if(buffer.written||buffer.unordered_access||!buffer.resident)
             throw std::invalid_argument("Graphics auxiliary buffer must be a resident read-only input");
-        auto input=buffer;
-        // Auxiliary IA reads are snapshotted to a separate GPU buffer when
-        // their shader envelope requires UAV access. Keep one coherent source.
-        for(const auto& shader:requests)if(shader.unordered_access&&
-            shader.address<input.address+input.size&&input.address<shader.address+shader.size)input.unordered_access=true;
-        for(const auto& range:dma_reads)if(range.address<input.address+input.size&&
-            input.address<range.address+range.size)input.unordered_access=true;
-        requests.push_back(input);
+        (void)buffer.WriteRange();
     }
     const auto validate_writable_block_alias=[&](const ImagePending& image,const GuestTextureCache::Entry& parent){
         // All UINT views of this parent bind one shared transient resource.
@@ -977,12 +970,27 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Finish/reset constants. Pick native descriptors only at the final bind.
     bindings.BeforeBind([&rasterizer,push,ordinary_count,
         pending,dma,dma_pending,prepared_views=views,
+        auxiliary=std::vector<Rasterizer::ShaderBufferRequest>(read_buffers.begin(),read_buffers.end()),
         runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
         buffer_requests=std::vector<Rasterizer::ShaderBufferRequest>(requests.begin(),requests.end())]
         (ResourceBindings& table) mutable {
         // This can restore protection/Finish. Complete it before selecting any
         // final views; actual original stage invalidation is not replayed here.
+        rasterizer.MarkShaderBufferWrites(buffer_requests);
+        std::vector<Rasterizer::ShaderBufferRequest> resident_auxiliary;
+        for(auto request:auxiliary){const auto source=request.WriteRange();
+            if(source.size<=16384&&!rasterizer.IsGpuBufferModified(source.address,source.size))continue;
+            request.unordered_access=true;request.publish_dma_residency=false;
+            resident_auxiliary.push_back(request);
+        }
+        if(!resident_auxiliary.empty()){
+            rasterizer.PreparePhysicalDmaBuffers(resident_auxiliary);
+            for(auto request:resident_auxiliary){request.publish_dma_residency=true;
+                rasterizer.DmaMemory().ObserveResidentSharps(std::span(&request,1));}
+        }
         if(dma)dma->MaterializeResidentBacking(rasterizer);
+        // Physical growth can retire a preceding write reservation. Restore
+        // the current command's exact writes before final native selection.
         rasterizer.MarkShaderBufferWrites(buffer_requests);
         const auto current=rasterizer.RefreshPreparedShaderBuffers(buffer_requests,prepared_views);
         for(const auto& view:current){

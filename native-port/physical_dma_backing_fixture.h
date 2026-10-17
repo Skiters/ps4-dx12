@@ -71,14 +71,22 @@ inline void RunPhysicalDmaBackingFixture(ID3D12Device* device,const ShaderPipeli
         require(!partial||!renderer.PreparedDmaBuffer(start+Dma::SubpageSize,Dma::SubpageSize),
             "Physical DMA exposed a logically inaccessible subpage");
         auto snapshot=renderer.CapturePreparedShaderBuffer(start,Dma::SubpageSize);
-        auto rb=Buffer(device,Dma::SubpageSize,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const auto residency=dma.ResidentIntersections(start,Dma::SubpageSize);
+        auto index=renderer.ObtainIndexBuffer(start+4,4,DXGI_FORMAT_R32_UINT);
+        require(index.resource&&index.resource->handle.Get()!=current.front().resource.Get()&&
+            dma.ResidentIntersections(start,Dma::SubpageSize)==residency,
+            "Protected private index stream replaced B or changed existing semantic residency");
+        auto rb=Buffer(device,Dma::SubpageSize+4,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         snapshot.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,snapshot.handle.Get(),0,Dma::SubpageSize);
+        renderer.RecordingList()->CopyBufferRegion(rb.handle.Get(),Dma::SubpageSize,index.resource->handle.Get(),index.offset,4);
         GuestImageReadback image_readback(device,image,renderer.RecordingList());
         const auto fence=renderer.Flush();cache.Submitted(fence);image_readback.Submitted(fence);renderer.Finish();
-        void* mapped{};D3D12_RANGE all{0,Dma::SubpageSize};Check(rb.handle->Map(0,&all,&mapped));
+        void* mapped{};D3D12_RANGE all{0,Dma::SubpageSize+4};Check(rb.handle->Map(0,&all,&mapped));
         bool valid=true;for(size_t offset=0;offset<Dma::SubpageSize;offset+=4){u32 word{};
             memcpy(&word,static_cast<const std::byte*>(mapped)+offset,4);valid&=word==(offset==4?0x41424344U:0x31313131U);}
+        u32 index_word{};memcpy(&index_word,static_cast<const std::byte*>(mapped)+Dma::SubpageSize,4);
+        valid&=index_word==0x31313131U;
         D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);require(valid,"Physical DMA replaced B1 or initialized tails from I");
         image_readback.Resolve(renderer.CompletedFence(),seed);
         for(size_t offset=0;offset<layout.logical_bytes;offset+=4){u32 word{};memcpy(&word,seed.data()+offset,4);

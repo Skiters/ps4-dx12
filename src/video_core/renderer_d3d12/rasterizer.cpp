@@ -1466,6 +1466,34 @@ void Rasterizer::FillPreparedShaderBuffer(VAddr address,u64 bytes,u32 value,D3D1
     // Preserve its existing dirty/CPU-visible ownership, including clean reads.
     mapping.gpu.UavBarrier(list);mapping.gpu.Transition(list,final_state);
 }
+Rasterizer::IndexBinding Rasterizer::ObtainIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format){
+    std::lock_guard lock(execution_mutex_);
+    const UINT element=format==DXGI_FORMAT_R16_UINT?2:format==DXGI_FORMAT_R32_UINT?4:0;
+    if(!element||!bytes||address%element||bytes%element||!IsMapped(address,bytes))
+        throw std::invalid_argument("Invalid original guest index range");
+    if(bytes>16384||IsGpuBufferModified(address,bytes)){
+        auto result=PreparedIndexBuffer(address,bytes,format);
+        const ShaderBufferRequest resident{address,bytes,false,true,true};
+        DmaMemory().ObserveResidentSharps(std::span(&resident,1));return result;
+    }
+    // CopySparseMemory reads physical B0. Neither formatted B1 nor an owned I
+    // may become the source of the original clean small index stream.
+    constexpr u64 capacity=65536;const auto reserved=(u64(bytes)+255)&~u64(255);
+    std::shared_ptr<UploadArena> page;
+    for(auto& slot:index_stream_pages_){
+        if(slot.arena.use_count()==1){slot.arena->Reset(scheduler_.Completed());slot.used=0;}
+        if(slot.used<=capacity-reserved){slot.used+=reserved;page=slot.arena;break;}
+    }
+    if(!page){
+        page=std::make_shared<UploadArena>(device_.Get(),capacity);
+        if(index_stream_pages_.size()<256)index_stream_pages_.push_back({page,reserved});
+    }
+    const auto slice=page->Allocate(reserved);
+    if(!ReadDmaBacking(address,std::span(static_cast<std::byte*>(slice.cpu),bytes)))
+        throw std::runtime_error("Private index stream lost physical backing");
+    Diagnostics::Count("index-buffer.private-cpu-stream");Diagnostics::Count("index-buffer.private-cpu-stream.bytes",bytes);
+    return {&page->Backing(),slice.offset,bytes,format,page};
+}
 Rasterizer::IndexBinding Rasterizer::PreparedIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format){
     std::lock_guard lock(execution_mutex_);
     const UINT element=format==DXGI_FORMAT_R16_UINT?2:format==DXGI_FORMAT_R32_UINT?4:0;

@@ -42,6 +42,8 @@ private:
     std::vector<std::shared_ptr<TemporaryBuffer>> temporary_pool_;
     std::vector<std::shared_ptr<Resource>> index_copy_pool_;
     u64 index_copy_pool_bytes_{};
+    struct IndexStreamPage {std::shared_ptr<UploadArena> arena;u64 used{};};
+    std::vector<IndexStreamPage> index_stream_pages_;
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
         std::vector<std::byte> cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
         bool cpu_watch_pending=false; // Protected while comparing; not yet a CPU/GPU equality proof.
@@ -338,6 +340,9 @@ public:
     // The index envelope participates in the same prepared batch as shaders.
     // Never materialize or replace another buffer after descriptors are built.
     IndexBinding PreparedIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format);
+    // Original ObtainBuffer index policy: clean reads <=16KiB take a private
+    // physical CPU snapshot; other reads use the already prepared B arena.
+    IndexBinding ObtainIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format);
     struct DrawArguments {UINT count{},instances=1,first{},first_instance{};INT base_vertex{};};
     void ExecuteGraphics(const ShaderPipeline&,ResourceBindings&,const GuestGraphicsState&,
         std::span<const ColorAttachment>,const DepthAttachment*,std::span<const D3D12_VIEWPORT>,

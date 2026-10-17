@@ -1163,8 +1163,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         resident_index_address=address;resident_index_bytes=bytes;
         resident_index_format=element==2?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
         if(bytes){const auto first=address&~VAddr(3),last=(address+bytes+3)&~VAddr(3);
-            index_requests.push_back({first,last-first,false,false,true});
-            index_requests.back().publish_dma_residency=bytes>16384||IsGpuBufferModified(address,bytes);
+            index_requests.push_back({first,last-first,false,false,true,u8(address-first),bytes});
+            // Source selection happens after shader/attachment binding effects.
+            index_requests.back().publish_dma_residency=false;
         }else{
             resident_index_address=0;
             index_storage=Buffer(device_.Get(),4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -1323,7 +1324,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
         }
         bindings.Prepare();
-        if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+        if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
         static std::set<u64> captured_bound_draws,capture_producers;
         static bool capture_root_added{};
@@ -1452,7 +1453,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 [&](ResourceBindings& bindings){
                     NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
                     bindings.Prepare();
-                    if(resident_index_address)index_view=PreparedIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
                     if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
                     ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,viewport.viewports,
                         viewport.scissors,r.blend_constants,instance,{},index_view.resource?&index_view:nullptr,false);

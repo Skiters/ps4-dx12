@@ -1,6 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_compute.h"
+#include "guest_dma.h"
 #include "guest_graphics_state.h"
 #include "guest_texture_cache.h"
 #include "guest_image_readback.h"
@@ -337,6 +338,7 @@ int wmain(int argc,wchar_t** argv){try {
     const bool late_growth=argc==3&&std::wstring_view(argv[2]).starts_with(L"late-buffer");
     const bool late_private=late_growth&&std::wstring_view(argv[2])==L"late-buffer-private";
     const bool resident_indices=argc==3&&std::wstring_view(argv[2]).starts_with(L"indices");
+    const bool private_indices=resident_indices&&std::wstring_view(argv[2]).starts_with(L"indices-private");
     const bool index16=resident_indices&&(std::wstring_view(argv[2])==L"indices16"||std::wstring_view(argv[2]).ends_with(L"-16"));
     const bool index_uav=resident_indices&&std::wstring_view(argv[2]).starts_with(L"indices-uav");
     const bool index_uav_write=index_uav&&std::wstring_view(argv[2]).starts_with(L"indices-uav-write");
@@ -453,17 +455,24 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     std::vector<Rasterizer::ShaderBufferRequest> index_requests;
     if(resident_indices){
         memcpy(memory+16384,tint,16);
+        if(!private_indices){
         auto& source=vertex.buffers[0];source.buffer_type=Shader::BufferType::Guest;
         source.is_written=index_uav_write;
         source.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Buffer>::Summary::SingleLoad;source.sharp_fetch.offsets[0]=0;
         AmdGpu::Buffer sharp{};sharp.base_address=reinterpret_cast<VAddr>(memory+16384);sharp.num_records=64;
         memcpy(vertex.flattened_ud_buf.data(),&sharp,sizeof(sharp));
+        }
         index_address=reinterpret_cast<VAddr>(memory+16384+(index16?18:20));
         const u16 indices16[]{0,1,2};const u32 indices32[]{0,1,2};index_bytes=index16?sizeof(indices16):sizeof(indices32);
         memcpy(reinterpret_cast<void*>(index_address),index16?static_cast<const void*>(indices16):static_cast<const void*>(indices32),index_bytes);
         index_format=index16?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
         const auto first=index_address&~VAddr(3),last=(index_address+index_bytes+3)&~VAddr(3);
-        index_requests.push_back({first,last-first,false,false,true});
+        index_requests.push_back({first,last-first,false,false,true,u8(index_address-first),index_bytes});
+        index_requests.back().publish_dma_residency=false;
+        if(private_indices){
+            auto seed=index_requests.back();seed.unordered_access=true;
+            rasterizer.PrepareShaderBuffers(std::span(&seed,1));
+        }
         rasterizer.EnableBufferStreaming(true);
     }
     const auto late_address=reinterpret_cast<VAddr>(memory+16388);
@@ -575,6 +584,12 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         rasterizer.Finish();
         std::array<std::byte,256> unrelated{};
         rasterizer.UploadConstants(unrelated);rasterizer.UploadConstants(unrelated);
+        if(private_indices){
+            const auto first=index_address&~VAddr(3),last=(index_address+index_bytes+3)&~VAddr(3);
+            // A formatted GPU-only index version would make the triangle
+            // degenerate. The original clean CPU stream still reads0,1,2.
+            rasterizer.FillPreparedShaderBuffer(first,last-first,2,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
         if(late_growth){
             const auto previous=rasterizer.PreparedDmaBuffer(late_address,late_bytes);
             if(!previous)throw std::runtime_error("Late graphics fixture lost its original B view");
@@ -606,7 +621,14 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
         }
         Rasterizer::IndexBinding indices;
         bindings.Prepare();
-        if(resident_indices)indices=rasterizer.PreparedIndexBuffer(index_address,index_bytes,index_format);
+        if(resident_indices)indices=private_indices?rasterizer.ObtainIndexBuffer(index_address,index_bytes,index_format):
+            rasterizer.PreparedIndexBuffer(index_address,index_bytes,index_format);
+        if(private_indices){
+            const auto arena=rasterizer.PreparedDmaBuffer(index_address,index_bytes);
+            if(!arena||!indices.resource||indices.resource->handle.Get()==arena->resource.Get()||
+               !rasterizer.DmaMemory().ResidentIntersections(index_address,index_bytes).empty())
+                throw std::runtime_error("Private CPU indices reused/published the formatted B arena");
+        }
         if(index_dma){
             const auto arena=rasterizer.PreparedDmaBuffer(index_address,index_bytes);
             if(!arena||!indices.resource||indices.resource->handle.Get()==arena->resource.Get())

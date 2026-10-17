@@ -497,6 +497,7 @@ public:
     }
     ~UploadArena() { if(data_) DX12_API_CALL(buffer_.handle->Unmap(0,nullptr)); }
     UploadArena(const UploadArena&)=delete;
+    Resource& Backing(){return buffer_;}
     Slice Allocate(uint64_t size,uint64_t alignment=256) {
         if(retirement_) throw std::logic_error("upload arena still submitted");
         if(!size || !alignment || (alignment&(alignment-1))) throw std::invalid_argument("invalid upload allocation");
