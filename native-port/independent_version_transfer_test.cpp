@@ -546,10 +546,14 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--cached-depth-rt")==0){RunDirtyCachedDepthFixture(device.Get(),false,true);return 0;}
     if(argc==5&&strcmp(argv[1],"--cached-depth-color")==0){
         const UINT format=std::stoul(argv[2]),number=std::stoul(argv[3]);const bool writable=std::string_view(argv[4])=="uav";
-        if((format!=3&&format!=5&&format!=6&&format!=9&&format!=10)||
-           (format==6?number!=7:number!=0&&number!=4)||
+        if((format!=3&&format!=5&&format!=6&&format!=9&&format!=10&&(format<16||format>19))||
+           (format==6?number!=7:format>=16?number!=0:number!=0&&number!=4)||
            (!writable&&std::string_view(argv[4])!="rt"))throw std::invalid_argument("Invalid depth/color fixture domain");
         RunDirtyCachedDepthFixture(device.Get(),false,!writable,0,writable,format,number);return 0;
+    }
+    if(argc==3&&strcmp(argv[1],"--cached-packed-color-depth")==0){
+        const UINT format=std::stoul(argv[2]);if(format<16||format>19)throw std::invalid_argument("Invalid packed depth source");
+        RunDirtyCachedDepthFixture(device.Get(),true,false,0,false,format,0);return 0;
     }
     if(argc==2&&strcmp(argv[1],"--planned-depth-native-change")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,1);return 0;}
     if(argc==2&&strcmp(argv[1],"--planned-depth-current-buffer")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,2);return 0;}

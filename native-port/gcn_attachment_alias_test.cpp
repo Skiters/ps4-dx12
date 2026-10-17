@@ -34,7 +34,9 @@ int main(int argc,char** argv){try{
     const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
     const bool formatted_cmask=mode=="formatted-cmask-owned";
     const bool cached_depth_cmask6=mode=="cached-depth-cmask6-owned";
-    const bool cached_depth_cmask=cached_depth_cmask6||mode=="cached-depth-cmask-owned";
+    const u32 cached_depth_cmask_packed=mode=="cached-depth-cmask16-owned"?16:mode=="cached-depth-cmask17-owned"?17:
+        mode=="cached-depth-cmask18-owned"?18:mode=="cached-depth-cmask19-owned"?19:0;
+    const bool cached_depth_cmask=cached_depth_cmask_packed||cached_depth_cmask6||mode=="cached-depth-cmask-owned";
     const bool cached_depth_storage_ordered=mode=="cached-depth-storage-ordered-owned";
     const bool cached_depth_storage=cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
@@ -102,7 +104,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(cached_depth_storage){
-        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask6?6:10);
+        RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10);
     }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
     }else if(formatted_cmask){
@@ -961,7 +963,8 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(cached_depth_cmask6?
+    puts(cached_depth_cmask_packed?
+        "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
         "PASS: eight actual GCN native depth/RGBA8/CMASK clear/draw cases, independent UINT word image probes over every logical CMASK tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_storage?
         "PASS: eight actual GCN cached-depth storage transfers (clean/dirty, single/ordered stage mode), formatted-before-image and raw B versus native I probes, optional source S/HTILE and full physical padding":planned_depth?

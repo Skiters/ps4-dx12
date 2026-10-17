@@ -43,10 +43,13 @@ Resource GuestTiler::Scratch(ID3D12Device* device,uint64_t size){
     Check(DX12_API_CALL(device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&desc,resource.state,nullptr,IID_PPV_ARGS(&resource.handle))));
     return resource;
 }
+GuestTiler::NativeFormat GuestTiler::DescribeNativeFormat(const GuestTextureDesc& d,const GuestTextureLayout& l){
+    return {d.data_format,d.number_format,l.bytes_per_pixel,l.HostBytesPerPixel(),l.expanded_bytes_per_pixel,d.depth_target};
+}
 std::shared_ptr<GuestTiler::Lease> GuestTiler::Prepare(
     Resource& input,Resource& output,Resource& mask,const GuestTextureDesc& d,const GuestTextureLayout& l,
     uint32_t mip,uint32_t first_slice,const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp,
-    uint32_t linear_bytes,bool retile,bool clear_targets){
+    uint32_t linear_bytes,bool retile,bool clear_targets,const NativeFormat* source_native_format){
     if(!input.handle||!output.handle||!mask.handle||mip>=d.levels)
         throw std::invalid_argument("Invalid native tiling dispatch");
     const auto& m=l.mips.at(mip);
@@ -70,14 +73,19 @@ std::shared_ptr<GuestTiler::Lease> GuestTiler::Prepare(
     if(m.macro&&address.pipe!=AmdGpu::PipeConfig::P2&&address.pipe!=AmdGpu::PipeConfig::P8_32x32_8x16&&
        address.pipe!=AmdGpu::PipeConfig::P8_32x32_16x16)
         throw std::invalid_argument("No pinned upstream tiling pipe implementation");
-    const bool depth16=d.depth_target&&l.bytes_per_pixel==2&&linear_bytes==4;
-    if(!depth16&&linear_bytes!=l.HostBytesPerPixel())throw std::invalid_argument("Unadapted native tiling format conversion");
-    const bool signed_packed10=d.data_format==9&&l.expanded_bytes_per_pixel==16;
-    const bool expanded_packed16=d.data_format>=16&&d.data_format<=19&&l.expanded_bytes_per_pixel==16;
-    const bool packed_number=d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5;
-    if(signed_packed10&&(linear_bytes!=16||!packed_number||(!retile&&d.number_format!=1&&d.number_format!=5)))
+    // A mapped retile reads SOURCE native words into TARGET guest geometry.
+    // Target packed format/RAW32 views must not select the source's codec.
+    const auto native=source_native_format?*source_native_format:DescribeNativeFormat(d,l);
+    if((source_native_format&&!retile)||native.guest_bytes!=l.bytes_per_pixel)
+        throw std::invalid_argument("Invalid mapped native tiling codec");
+    const bool depth16=native.depth&&native.guest_bytes==2&&linear_bytes==4;
+    if(!depth16&&linear_bytes!=native.host_bytes)throw std::invalid_argument("Unadapted native tiling format conversion");
+    const bool signed_packed10=native.data_format==9&&native.expanded_bytes==16;
+    const bool expanded_packed16=native.data_format>=16&&native.data_format<=19&&native.expanded_bytes==16;
+    const bool packed_number=native.number_format==0||native.number_format==1||native.number_format==4||native.number_format==5;
+    if(signed_packed10&&(linear_bytes!=16||!packed_number||(!retile&&native.number_format!=1&&native.number_format!=5)))
         throw std::invalid_argument("Invalid signed packed sampled tiling conversion");
-    if(expanded_packed16&&(linear_bytes!=16||d.number_format!=0||
+    if(expanded_packed16&&(linear_bytes!=16||native.number_format!=0||
        (!retile&&!HasExactPackedExpansion(d,l))))
         throw std::invalid_argument("Invalid expanded packed volume tiling conversion");
     std::array<uint32_t,30> constants{uint32_t(address.micro),m.thickness,uint32_t(address.array),uint32_t(address.pipe),
@@ -85,9 +93,9 @@ std::shared_ptr<GuestTiler::Lease> GuestTiler::Prepare(
         l.bytes_per_pixel,d.samples,m.pitch,m.height,uint32_t(m.offset),first_slice,uint32_t(m.macro),
         width,rows,fp.Footprint.RowPitch,uint32_t(fp.Offset),uint32_t(retile),d.bank_swizzle,
         linear_bytes,depth,uint32_t(depth16),uint32_t(d.tile_mode==8||d.tile_mode==31),uint32_t(l.guest_bytes),
-        d.number_format==7?0x3f800000u:1u,signed_packed10?9u|(d.number_format<<8):
-            expanded_packed16?0x10000u|d.data_format:
-            d.data_format>=16&&d.data_format<=19?d.data_format:0u};
+        native.number_format==7?0x3f800000u:1u,signed_packed10?9u|(native.number_format<<8):
+            expanded_packed16?0x10000u|native.data_format:
+            native.data_format>=16&&native.data_format<=19?native.data_format:0u};
     return BindBuffers(input,output,mask,constants,clear_targets);
 }
 std::shared_ptr<GuestTiler::Lease> GuestTiler::PrepareMaskedMerge(

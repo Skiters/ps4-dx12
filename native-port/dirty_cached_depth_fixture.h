@@ -11,7 +11,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(const bool modified:{false,true})for(const bool growth:{false,true}){
-        if(color_format&&format!=(color_format==3?2u:4u))continue;
+        if(color_format&&format!=((color_format==3||color_format>=16)?2u:4u))continue;
         if(late_change&&(color_source||color_target||growth))continue;
         printf("CASE: dirty cached %s fmt=%u tile=%u GpuModified=%u growth=%u\n",color_source?"color-to-depth":"depth",format,tile,unsigned(modified),unsigned(growth));fflush(stdout);
         GuestTextureDesc source;source.address=0x40000;source.stencil_address=0x80000;source.width=13;source.height=11;source.pitch=16;
@@ -19,6 +19,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         source.levels=1;source.layers=source.view_layers=growth?3:2;
         auto target=source;target.levels=growth?2:1;target.layers=growth?1:2;target.view_layers=1;
         if(color_source){source.depth_target=false;source.render_target=true;source.number_format=4;}
+        if(color_source&&color_format){source.data_format=color_format;source.number_format=color_number;}
         if(color_target||writable_target){
             // Original ColorBuffer requests one mip; RT expansion grows layers.
             source.layers=source.view_layers=growth?1:2;target.levels=1;target.layers=growth?3:2;
@@ -26,6 +27,8 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             if(color_format){target.data_format=color_format;target.number_format=color_number;}
         }
         const bool uint_color=color_format&&color_number==4;
+        const bool packed16=color_format>=16&&color_format<=19;
+        const bool raw_packed=packed16&&writable_target;
         const auto written_color_word=[&](bool clear)->u32{
             if(!color_format)return format==2?(clear?0x3400u:0x3800u):std::bit_cast<u32>(clear?0.25f:0.5f);
             if(uint_color){const u32 r=clear?3:17,g=clear?5:31,b=clear?7:47,a=clear?2:1;
@@ -35,6 +38,8 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             // rule on newly authored draw commands; copied words stay arbitrary.
             switch(color_format){case 3:return clear?0:255;case 5:return clear?0:65535;
             case 6:return clear?0:0x3c0; // UF11 R=1, G/B=0, no alpha lane.
+            case 16:return clear?0:0xf800;case 17:return clear?0x8000:0xfc00;
+            case 18:return clear?1:0xf801;case 19:return clear?15:255;
             case 9:return 0xc0000000u|(clear?0:1023);case 10:return 0xff000000u|(clear?0:255);}
             throw std::runtime_error("Missing independent color write oracle");
         };
@@ -221,10 +226,11 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             list->ClearRenderTargetView(handle,clear,1,&rectangle);converted.NoteLogicalImageWrite();
             }else{
                 // A real clipped compute writer, not a clear or CPU substitute.
-                const auto shader=std::string(uint_color?"RWTexture2DArray<uint4> output:register(u0);\n":"RWTexture2DArray<float4> output:register(u0);\n")+
+                const auto shader=std::string(raw_packed?"RWTexture2DArray<uint> output:register(u0);\n":uint_color?"RWTexture2DArray<uint4> output:register(u0);\n":"RWTexture2DArray<float4> output:register(u0);\n")+
                     "[numthreads(8,8,1)] void main(uint3 p:SV_DispatchThreadID){if(p.x<"+
                     std::to_string(target.width)+"&&p.y<"+std::to_string(target.height)+
-                    (uint_color?"){if(p.x>=8&&p.y<8)output[p]=uint4(3,5,7,2);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=uint4(17,31,47,1);}}":
+                    (raw_packed?"){if(p.x>=8&&p.y<8)output[p]="+std::to_string(written_color_word(true))+"u;else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]="+std::to_string(written_color_word(false))+"u;}}":
+                    uint_color?"){if(p.x>=8&&p.y<8)output[p]=uint4(3,5,7,2);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=uint4(17,31,47,1);}}":
                     color_format?"){if(p.x>=8&&p.y<8)output[p]=float4(0,0,0,1);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=float4(1,0,0,1);}}":
                     "){if(p.x>=8&&p.y<8)output[p]=float4(0.25,0,0,1);else if(p.x>=1&&p.x<4&&p.y>=2&&p.y<5)output[p]=float4(0.5,0,0,1);}}");
                 auto code=CompileMultisampleShader(shader.c_str(),"cs_5_1");
@@ -263,7 +269,18 @@ uint word=f32tof16(f);
 uint word=asuint(f);
 #endif
 output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
-            if(color_format==6){
+            if(packed16){
+                const auto declarations=raw_packed?"Texture2DArray<uint> input:register(t0);":"Texture2DArray<float4> input:register(t0);";
+                std::string pack;
+                if(raw_packed)pack="uint word=input.Load(int4(p,0))&65535u;";
+                else if(color_format==16)pack="uint3 c=(uint3)round(input.Load(int4(p,0)).xyz*float3(31,63,31));uint word=(c.x<<11)|(c.y<<5)|c.z;";
+                else if(color_format<=18){pack="uint4 c=(uint4)round(input.Load(int4(p,0))*float4(31,31,31,1));uint word=(c.w<<15)|(c.x<<10)|(c.y<<5)|c.z;";
+                    if(color_format==18)pack+="word=((word<<1)|(word>>15))&65535u;";}
+                else pack="uint4 c=(uint4)round(input.Load(int4(p,0))*15.0);uint word=(c.z<<12)|(c.y<<8)|(c.x<<4)|c.w;";
+                shader=std::string(declarations)+"RWByteAddressBuffer output:register(u0);cbuffer Shape:register(b0){uint width,height,layers,base;};"
+                    "[numthreads(8,8,1)]void main(uint3 p:SV_DispatchThreadID){if(p.x>=width||p.y>=height||p.z>=layers)return;"+
+                    pack+"output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);}";
+            }else if(color_format==6){
                 shader=R"(Texture2DArray<float4> input:register(t0);RWByteAddressBuffer output:register(u0);
 cbuffer Shape:register(b0){uint width,height,layers,base;};
 [numthreads(8,8,1)]void main(uint3 p:SV_DispatchThreadID){if(p.x>=width||p.y>=height||p.z>=layers)return;

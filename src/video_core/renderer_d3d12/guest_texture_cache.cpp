@@ -1370,6 +1370,7 @@ bool IsDirectDepthWordClass(const GuestTextureDesc& d,const GuestTextureLayout& 
     switch(d.data_format){
     case 2:case 3:case 4:case 5:case 10:return true;
     case 6:return d.number_format==7;
+    case 16:case 17:case 18:case 19:return d.number_format==0;
     case 9:return d.number_format==0||d.number_format==4;
     default:return false;
     }
@@ -2907,11 +2908,9 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     for(auto& slice:linear){
         slice.buffer=multisampled?GuestTiler::Scratch(device_.Get(),slice.bytes):
             Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
-        auto transfer_desc=interpreted;
-        if(mapped_desc&&image.desc.depth_target&&image.desc.data_format==2&&physical.bytes_per_pixel==2&&slice.native_bytes==4)
-            transfer_desc.depth_target=true; // Native D32/S8 -> original guest D16 words, even for a color view.
-        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,transfer_desc,physical,
-            slice.mip,slice.layer,slice.footprint,slice.native_bytes,true);
+        const auto source_format=GuestTiler::DescribeNativeFormat(source_interpreted,source_physical);
+        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,interpreted,physical,
+            slice.mip,slice.layer,slice.footprint,slice.native_bytes,true,false,&source_format);
         if(multisampled)slice.samples=image.multisample->Prepare(image.texture,slice.buffer,
             image.desc,image.layout,slice.layer,plane,false);
     }

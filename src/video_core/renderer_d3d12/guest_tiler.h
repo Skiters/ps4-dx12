@@ -12,6 +12,11 @@ class GuestTiler {
     ComPtr<ID3D12RootSignature> root_;
     ComPtr<ID3D12PipelineState> pipeline_;
 public:
+    struct NativeFormat {
+        uint32_t data_format,number_format,guest_bytes,host_bytes,expanded_bytes;
+        bool depth;
+    };
+    static NativeFormat DescribeNativeFormat(const GuestTextureDesc&,const GuestTextureLayout&);
     struct Lease {
         std::shared_ptr<Descriptors> visible,cpu;
         Resource input,output,mask;
@@ -31,7 +36,8 @@ public:
     std::shared_ptr<Lease> PrepareMaskedMerge(Resource& input,Resource& output,Resource& mask,uint64_t bytes);
     std::shared_ptr<Lease> Prepare(Resource& input,Resource& output,Resource& mask,
         const GuestTextureDesc&,const GuestTextureLayout&,uint32_t mip,uint32_t first_slice,
-        const D3D12_PLACED_SUBRESOURCE_FOOTPRINT&,uint32_t linear_bytes,bool retile,bool clear_targets=false);
+        const D3D12_PLACED_SUBRESOURCE_FOOTPRINT&,uint32_t linear_bytes,bool retile,bool clear_targets=false,
+        const NativeFormat* source_native_format=nullptr);
     std::shared_ptr<Lease> Record(ID3D12GraphicsCommandList*,Resource& input,Resource& output,
         Resource& mask,const GuestTextureDesc&,const GuestTextureLayout&,uint32_t mip,uint32_t first_slice,
         const D3D12_PLACED_SUBRESOURCE_FOOTPRINT&,uint32_t linear_bytes,bool retile,bool clear_targets=false);
