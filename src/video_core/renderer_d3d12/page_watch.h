@@ -6,6 +6,8 @@
 #include <map>
 #include <mutex>
 #include <vector>
+#include <span>
+#include <set>
 #include <cstdint>
 #include <algorithm>
 #include <stdexcept>
@@ -180,6 +182,118 @@ public:
         try{for(const auto& [begin,bytes]:gaps){if(!Track(begin,bytes,true)){
                 for(size_t i=0;i<added;++i)Untrack(gaps[i].first,gaps[i].second);return false;}++added;}}
         catch(...){for(size_t i=0;i<added;++i)Untrack(gaps[i].first,gaps[i].second);throw;}
+        return true;
+    }
+    // Acquire all physical image planes as one transaction. Existing stronger
+    // B owners stay NOACCESS. Only an explicitly transferred exclusive I may
+    // demote its own guards, and then every requested page must already exist.
+    // All planning, allocation and OS validation precede protection changes.
+    bool TrackImageReadOnly(std::span<const std::pair<uint64_t,uint64_t>> planes,
+        bool demote_exclusive=false,
+        std::span<const std::pair<uint64_t,uint64_t>> preserve_strong={}){
+        if(planes.empty())return false;
+        const auto valid=[](const auto& range){return range.first&&range.second&&
+            range.first%4096==0&&range.second%4096==0&&range.first<=UINT64_MAX-range.second;};
+        std::vector<std::pair<uint64_t,uint64_t>> requested(planes.begin(),planes.end());
+        for(const auto& range:requested)if(!valid(range))return false;
+        for(const auto& range:preserve_strong)if(!valid(range))return false;
+        std::sort(requested.begin(),requested.end());
+        size_t count{};
+        for(const auto& [begin,bytes]:requested){
+            if(count&&requested[count-1].first+requested[count-1].second>=begin){
+                auto& prior=requested[count-1];prior.second=std::max(prior.first+prior.second,begin+bytes)-prior.first;
+            }else requested[count++]={begin,bytes};
+        }
+        requested.resize(count);
+        const auto contains=[](const auto& spans,uint64_t address){return std::any_of(spans.begin(),spans.end(),
+            [address](const auto& range){return address>=range.first&&address-range.first<range.second;});};
+        std::lock_guard lock(mutex);
+        std::set<uint64_t> old_keys;
+        for(const auto& [begin,bytes]:requested){
+            auto it=ranges.upper_bound(begin);
+            if(it!=ranges.begin()&&std::prev(it)->second.end>begin)--it;
+            for(;it!=ranges.end()&&it->first<begin+bytes;++it)old_keys.insert(it->first);
+        }
+        std::map<uint64_t,Range> replacement;
+        struct Change {Protection* protection;DWORD desired;};
+        std::vector<Change> changes;
+        auto generation=next_generation;
+        for(const auto key:old_keys){
+            const auto& original=ranges.at(key);
+            std::vector<uint64_t> cuts{key,original.end};
+            const auto add_cuts=[&](const auto& spans){for(const auto& [begin,bytes]:spans){
+                if(begin>key&&begin<original.end)cuts.push_back(begin);
+                if(begin+bytes>key&&begin+bytes<original.end)cuts.push_back(begin+bytes);
+            }};
+            add_cuts(requested);add_cuts(preserve_strong);
+            std::sort(cuts.begin(),cuts.end());cuts.erase(std::unique(cuts.begin(),cuts.end()),cuts.end());
+            for(size_t i=1;i<cuts.size();++i){
+                const auto begin=cuts[i-1],end=cuts[i];
+                const bool selected=contains(requested,begin),strong=contains(preserve_strong,begin);
+                if(selected&&strong&&original.read_only)return false;
+                const bool read_only=original.read_only||(selected&&demote_exclusive&&!strong);
+                Range part{end,{},read_only,selected?++generation:original.generation};
+                for(const auto& p:original.protection){
+                    const auto a=std::max(begin,p.begin),b=std::min(end,p.begin+p.size);
+                    if(a<b)part.protection.push_back({a,b-a,p.original,p.watched});
+                }
+                auto [entry,inserted]=replacement.emplace(begin,std::move(part));
+                if(!inserted)throw std::logic_error("Overlapping image protection plan");
+                if(selected)for(auto& p:entry->second.protection)
+                    changes.push_back({&p,DWORD(read_only?PAGE_READONLY:PAGE_NOACCESS)});
+            }
+        }
+        const auto add_gap=[&](uint64_t begin,uint64_t end){
+            if(demote_exclusive||std::any_of(preserve_strong.begin(),preserve_strong.end(),
+                [begin,end](const auto& range){return begin<range.first+range.second&&range.first<end;}))return false;
+            Range part{end,{},true,++generation};
+            for(auto cursor=begin;cursor<end;){
+                MEMORY_BASIC_INFORMATION region{};
+                if(!VirtualQuery(reinterpret_cast<void*>(cursor),&region,sizeof(region))||
+                   region.State!=MEM_COMMIT||region.Protect!=PAGE_READWRITE)return false;
+                const auto next=std::min(end,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+                if(next<=cursor)return false;
+                part.protection.push_back({cursor,next-cursor,PAGE_READWRITE,PAGE_READWRITE});cursor=next;
+            }
+            auto [entry,inserted]=replacement.emplace(begin,std::move(part));
+            if(!inserted)throw std::logic_error("Overlapping image protection gap");
+            for(auto& p:entry->second.protection)changes.push_back({&p,PAGE_READONLY});
+            return true;
+        };
+        for(const auto& [begin,bytes]:requested){
+            auto cursor=begin;const auto end=begin+bytes;
+            auto it=ranges.upper_bound(begin);
+            if(it!=ranges.begin()&&std::prev(it)->second.end>begin)--it;
+            for(;it!=ranges.end()&&it->first<end;++it){
+                if(cursor<it->first&&!add_gap(cursor,it->first))return false;
+                cursor=std::max(cursor,std::min(end,it->second.end));
+            }
+            if(cursor<end&&!add_gap(cursor,end))return false;
+        }
+        for(const auto& change:changes){const auto& p=*change.protection;
+            for(auto cursor=p.begin;cursor<p.begin+p.size;){
+                MEMORY_BASIC_INFORMATION region{};
+                if(!VirtualQuery(reinterpret_cast<void*>(cursor),&region,sizeof(region))||
+                   region.State!=MEM_COMMIT||region.Protect!=p.watched)return false;
+                const auto next=std::min(p.begin+p.size,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+                if(next<=cursor)return false;cursor=next;
+            }
+        }
+        std::vector<const Change*> applied;applied.reserve(changes.size());
+        for(const auto& change:changes){const auto& p=*change.protection;DWORD previous{};
+            if(p.watched==change.desired)continue;
+            if(!VirtualProtect(reinterpret_cast<void*>(p.begin),p.size,change.desired,&previous)){
+                for(auto it=applied.rbegin();it!=applied.rend();++it){const auto& old=*(*it)->protection;DWORD ignored{};
+                    if(!VirtualProtect(reinterpret_cast<void*>(old.begin),old.size,old.watched,&ignored))
+                        throw std::runtime_error("Cannot roll back image plane protection transaction");
+                }
+                return false;
+            }
+            applied.push_back(&change);
+        }
+        for(const auto& change:changes)change.protection->watched=change.desired;
+        for(const auto key:old_keys)ranges.erase(key);
+        ranges.merge(replacement);next_generation=generation;
         return true;
     }
     // Transfer an existing exact watch without ever allowing a CPU store.

@@ -247,8 +247,19 @@ bool GuestRasterizer::OwnIndependentImage(GuestTextureCache::Entry& image){
     // Repeated image uses validate the physical owner, including a retained
     // read-only descriptor, without changing an overlapping buffer's guard.
     if(image.buffer_alias_version){image.SetGpuOwned(true);WatchBufferImageVersions(image.desc.address,image.layout.guest_bytes);return true;}
-    if(image.gpu_owned&&!page_watch_->ChangeMode(image.desc.address,image.layout.guest_bytes,true))
-        throw std::runtime_error("Cannot transfer independent image ownership to read-only protection");
+    if(!page_watch_)return false;
+    std::vector<std::pair<u64,u64>> planes,strong_buffers;
+    for(const auto& plane:image.ProtectionPlanes())if(plane.bytes){
+        const auto pages=GuestProtectionPages(plane.address,plane.bytes);
+        if(!pages||!has_backing_(plane.address,plane.bytes))return false;
+        planes.emplace_back(pages->address,pages->size);
+        const auto strong=GpuOwnedBufferProtectionRanges(plane.address,plane.bytes);
+        strong_buffers.insert(strong_buffers.end(),strong.begin(),strong.end());
+    }
+    if(!page_watch_->TrackImageReadOnly(planes,image.gpu_owned,strong_buffers)){
+        if(image.gpu_owned)throw std::runtime_error("Cannot transfer independent image plane ownership to read-only protection");
+        return false;
+    }
     // The image equality witness ends, but protection stays in place. CPU
     // buffer witnesses still describe their unchanged physical/GPU version.
     image.cpu_watched=false;

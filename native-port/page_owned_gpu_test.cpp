@@ -748,6 +748,11 @@ int main(int argc,char**){try{
         buffers.RecordingList()->CopyBufferRegion(target.handle.Get(),first[0].offset,upload.handle.Get(),0,buffer_bytes);
         target.Transition(buffers.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         buffers.Finish();Require(commits==0&&physical[0]==std::byte{0}&&watch.Contains(base));
+        const auto strong=buffers.GpuOwnedBufferProtectionRanges(base+4096,1);
+        Require(strong==std::vector<std::pair<VAddr,u64>>{{base,buffer_bytes}});
+        Require(watch.TrackImageReadOnly(strong,true,strong));
+        MEMORY_BASIC_INFORMATION protected_b{};
+        Require(VirtualQuery(memory,&protected_b,sizeof(protected_b))&&protected_b.Protect==PAGE_NOACCESS);
         const Rasterizer::ShaderBufferRequest readonly[]{{base,buffer_bytes,false,false}};
         auto next=buffers.PrepareShaderBuffers(readonly);Require(next[0].resource.Get()==first[0].resource.Get()&&commits==0);
         auto output=Buffer(device.Get(),buffer_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -760,6 +765,7 @@ int main(int argc,char**){try{
         Require(commits==0&&physical[4096]==std::byte{0});
         Require(*reinterpret_cast<volatile unsigned char*>(memory+4096)==0x5a);
         Require(commits==1&&faults==1&&!watch.Contains(base));
+        Require(buffers.GpuOwnedBufferProtectionRanges(base+4096,1).empty());
         auto watched=buffers.PrepareShaderBuffers(readonly);buffers.Finish();Require(watch.Contains(base));
         Require(*reinterpret_cast<volatile unsigned char*>(memory)==0x5a&&faults==1);
         rearm_after_resolve=true;

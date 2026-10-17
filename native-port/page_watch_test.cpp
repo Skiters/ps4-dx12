@@ -204,6 +204,62 @@ int main(){try{
         }
         puts("PASS: two-plane shared/separate-page boundary proofs, all guards before reads, same-value stores, read/protection failure retention and stronger B guard");
     }
+    {
+        const auto base=reinterpret_cast<uint64_t>(guest);
+        PageWatch* active{};unsigned writes{};
+        PageWatch watch([&](uint64_t address,bool writing){
+            Require(writing);++writes;Require(active->UntrackReadOnly(address&~uint64_t(4095),4096,true));
+        });active=&watch;
+        const std::array separate{std::pair{base,uint64_t{4096}},std::pair{base+8192,uint64_t{4096}}};
+        const auto protection=[&](uint64_t address){MEMORY_BASIC_INFORMATION info{};
+            Require(VirtualQuery(reinterpret_cast<void*>(address),&info,sizeof(info)));return info.Protect;};
+        Require(watch.Track(base,4096)&&watch.Track(base+8192,4096));
+        // A broken second exclusive-plane proof must not demote the first.
+        DWORD previous{};Require(VirtualProtect(guest+8192,4096,PAGE_READONLY,&previous));
+        Require(!watch.TrackImageReadOnly(separate,true));
+        Require(protection(base)==PAGE_NOACCESS&&protection(base+8192)==PAGE_READONLY&&
+            watch.Contains(base)&&watch.Contains(base+8192));
+        Require(VirtualProtect(guest+8192,4096,PAGE_NOACCESS,&previous));
+        Require(watch.TrackImageReadOnly(separate,true));
+        Require(protection(base)==PAGE_READONLY&&protection(base+4096)==PAGE_READWRITE&&
+            protection(base+8192)==PAGE_READONLY);
+        *reinterpret_cast<volatile unsigned char*>(guest+7)=0x91;
+        Require(writes==1&&alias[7]==std::byte{0x91}&&!watch.Contains(base)&&watch.Contains(base+8192));
+        Require(watch.TrackImageReadOnly(separate));
+        Require(protection(base)==PAGE_READONLY&&protection(base+8192)==PAGE_READONLY);
+        watch.Untrack(base,12288);
+        // Acquisition over new writable pages also validates S before any
+        // changes. Untracked readonly pages are not a legitimate witness.
+        Require(VirtualProtect(guest+8192,4096,PAGE_READONLY,&previous));
+        Require(!watch.TrackImageReadOnly(separate));
+        Require(protection(base)==PAGE_READWRITE&&!watch.Contains(base));
+        Require(VirtualProtect(guest+8192,4096,PAGE_READWRITE,&previous));
+        Require(watch.TrackOwned(base,16384));
+        // D and S share a page, the union crosses a stronger B subrange, and
+        // the tail beyond both planes belongs to another exclusive owner.
+        const std::array shared{std::pair{base,uint64_t{12288}},std::pair{base+8192,uint64_t{4096}}};
+        const std::array strong{std::pair{base+4096,uint64_t{4096}}};
+        Require(watch.TrackImageReadOnly(shared,true,strong));
+        Require(protection(base)==PAGE_READONLY&&protection(base+4096)==PAGE_NOACCESS&&
+            protection(base+8192)==PAGE_READONLY&&protection(base+12288)==PAGE_NOACCESS);
+        Require(watch.UntrackReadOnly(base,16384,true));
+        Require(protection(base)==PAGE_READWRITE&&protection(base+4096)==PAGE_NOACCESS&&
+            protection(base+8192)==PAGE_READWRITE&&protection(base+12288)==PAGE_NOACCESS);
+        watch.Untrack(base,16384);
+        // A claimed stronger B guard in a gap is a broken ownership contract,
+        // including when that gap starts BEFORE B, not just at its first page.
+        Require(!watch.TrackImageReadOnly(shared,false,strong));
+        Require(protection(base)==PAGE_READWRITE&&!watch.Contains(base));
+        Require(watch.Track(base+4096,4096));
+        Require(watch.TrackImageReadOnly(shared,false,strong));
+        Require(protection(base)==PAGE_READONLY&&protection(base+4096)==PAGE_NOACCESS&&
+            protection(base+8192)==PAGE_READONLY&&protection(base+12288)==PAGE_READWRITE);
+        const auto stable=protection(base);
+        const std::array invalid{std::pair{base,uint64_t{4096}},std::pair{base+8192,uint64_t{1}}};
+        Require(!watch.TrackImageReadOnly(invalid)&&protection(base)==stable);
+        watch.Untrack(base,16384);
+        puts("PASS: transactional image-plane acquisition/demotion, second-plane rejection, shared union, stronger B and outside-owner preservation");
+    }
     UnmapViewOfFile(alias);UnmapViewOfFile(guest);CloseHandle(section);
     {
         auto* pages=static_cast<unsigned char*>(VirtualAlloc(nullptr,16384,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));Require(pages);

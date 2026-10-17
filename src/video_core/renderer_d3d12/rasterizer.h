@@ -255,6 +255,9 @@ public:
         std::span<const ShaderBufferRequest>,std::span<const ShaderBufferView>);
     Resource CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dma_residency=true);
     bool IsGpuBufferModified(VAddr address,u64 bytes)const;
+    // Actual strong CPU-access guards, distinct from GPU-modified pages or
+    // semantic residency. Images must preserve these when demoting ownership.
+    std::vector<std::pair<VAddr,u64>> GpuOwnedBufferProtectionRanges(VAddr,u64)const;
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
     void TransitionPreparedShaderBuffer(VAddr address,u64 bytes,D3D12_RESOURCE_STATES);
     void CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& source,D3D12_RESOURCE_STATES final_state,

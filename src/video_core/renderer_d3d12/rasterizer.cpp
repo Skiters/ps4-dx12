@@ -1527,6 +1527,22 @@ Resource Rasterizer::CaptureShaderBuffer(VAddr address,u64 bytes,bool publish_dm
     auto views=PrepareShaderBuffers(std::span(&request,1));
     return CapturePreparedShaderBuffer(address,bytes);
 }
+std::vector<std::pair<VAddr,u64>> Rasterizer::GpuOwnedBufferProtectionRanges(VAddr address,u64 bytes)const{
+    std::lock_guard lock(execution_mutex_);
+    const auto pages=GuestProtectionPages(address,bytes);
+    if(!pages)throw std::invalid_argument("Invalid GPU buffer protection query");
+    std::vector<std::pair<VAddr,u64>> result;
+    auto it=mappings_.upper_bound(pages->address);
+    if(it!=mappings_.begin()&&std::prev(it)->first+std::prev(it)->second.size>pages->address)--it;
+    for(;it!=mappings_.end()&&it->first<pages->address+pages->size;++it){
+        const auto& mapping=it->second;
+        if(!mapping.gpu_owned||IsGdsRange(mapping.base,mapping.size))continue;
+        const auto guarded=GuestProtectionPages(mapping.base,mapping.size);
+        if(!guarded)throw std::logic_error("Invalid GPU-owned buffer protection extent");
+        result.emplace_back(guarded->address,guarded->size);
+    }
+    return result;
+}
 bool Rasterizer::IsGpuBufferModified(VAddr address,u64 bytes)const{
     std::lock_guard lock(execution_mutex_);
     if(!bytes||address>UINT64_MAX-bytes)throw std::invalid_argument("Invalid GPU buffer modification query");
