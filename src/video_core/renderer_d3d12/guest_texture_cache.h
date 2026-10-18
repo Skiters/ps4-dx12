@@ -448,6 +448,11 @@ public:
         if(entry.gpu_owned){if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;}
         if(!acquire_owned_||!acquire_owned_(entry))return false;
         entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;}
+    bool OwnIndependentShaderImage(Entry& entry){
+        entry.NoteLogicalImageWrite();
+        if(!acquire_independent_||!acquire_independent_(entry))return false;
+        entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;
+    }
     bool RevalidateReadonly(Entry& entry){
         if(!entry.HasValidLogicalImage()||!acquire_independent_||!acquire_independent_(entry))return false;
         RememberNativeImageStorage(entry);return true;

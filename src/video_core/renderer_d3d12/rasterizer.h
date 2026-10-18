@@ -310,6 +310,9 @@ public:
     void ValidateHostMemory(VAddr,u64,bool writing=false);
     // Legality only: no CPU reconciliation, ownership change or commands.
     void ValidateGpuBacking(VAddr,u64,bool writing=false);
+    // Original clean small shader streams copy physical CPU backing, without
+    // publishing an independent native image or formatted buffer into it.
+    void ReadShaderStreamBacking(VAddr,std::span<std::byte>);
     virtual bool IsDmaReadable(VAddr,u64);
     bool HasDmaReadOverlap(VAddr,u64)const;
     GuestDmaMemory& DmaMemory();

@@ -122,6 +122,12 @@ bool Rasterizer::ReadDmaBacking(VAddr address,std::span<std::byte> bytes){
     catch(const std::runtime_error&){return false;}
     memcpy(bytes.data(),reinterpret_cast<const void*>(address),bytes.size());return true;
 }
+void Rasterizer::ReadShaderStreamBacking(VAddr address,std::span<std::byte> bytes){
+    std::lock_guard lock(execution_mutex_);
+    ValidateGpuBacking(address,bytes.size());
+    if(!ReadDmaBacking(address,bytes))throw std::runtime_error("Shader CPU stream lost physical backing");
+    Diagnostics::Count("buffer-stream.physical-bytes",bytes.size());
+}
 DescriptorHeapPool& Rasterizer::BindingHeapPool(){
     if(!binding_heap_pool_)binding_heap_pool_=std::make_unique<DescriptorHeapPool>(device_.Get());
     return *binding_heap_pool_;

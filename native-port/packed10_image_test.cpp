@@ -190,10 +190,13 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
         auto scalar=packed;scalar.data_format=4;scalar.number_format=4;scalar.native_packed10_raw=false;scalar.native_raw32=true;
         if(!CompatibleGuestWritableStorage(packed,scalar)||!CompatibleGuestWritableStorage(scalar,packed))
             throw std::runtime_error("Exact raw word storage was not compatible in both directions");
+        auto ordinary=scalar;ordinary.native_raw32=false;
+        if(!CompatibleGuestWritableStorage(packed,ordinary)||!CompatibleGuestWritableStorage(ordinary,packed))
+            throw std::runtime_error("Ordinary R32_UINT lost its exact word representation without a codec hint");
         for(u32 negative=0;negative<8;++negative){auto bad=scalar;
             switch(negative){case 0:bad.width++;break;case 1:bad.pitch+=32;break;
             case 2:bad.samples=4;break;case 3:bad.render_target=true;break;case 4:bad.depth_target=true;break;
-            case 5:bad.writable=false;break;case 6:bad.native_raw32=false;break;case 7:bad.data_format=16;break;}
+            case 5:bad.writable=false;break;case 6:bad.native_raw32=false;bad.number_format=7;break;case 7:bad.data_format=16;break;}
             if(CompatibleGuestWritableStorage(packed,bad)||CompatibleGuestWritableStorage(bad,packed))
                 throw std::runtime_error("Writable raw word admitted an incompatible geometry/access/codec");
         }

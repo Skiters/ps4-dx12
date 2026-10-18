@@ -115,6 +115,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         std::shared_ptr<const std::vector<std::byte>> guest_snapshot;
         std::shared_ptr<Resource> gpu_snapshot;bool buffer_writer_alias=false,current_buffer_snapshot=false;
         bool buffer_source_residency=false;
+        bool independent_cpu_stream=false;
         std::optional<size_t> ordered_transfer;std::optional<size_t> storage_group;
         GuestTextureCache::Entry* ordered_entry{};};
     std::vector<ImagePending> images;
@@ -446,6 +447,18 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             (requests[i].written||!cpu_streams.back());
     }
     const auto streams_before_binding=[&](size_t index){return bool(cpu_streams.at(index));};
+    // A clean CPU stream stays physical B even when a shader writes I. Its
+    // temporary is not a resident B writer, but eager image readback would
+    // still destroy the original separate backing after the dispatch.
+    if(textures)for(auto& image:images)if(!image.null_resource&&image.desc.writable){
+        for(size_t i=0;i<ordinary_count;++i)if(pending[i].guest_read&&streams_before_binding(i)&&
+            requests[i].address<storage_desc(image).address+storage_layout(image).guest_bytes&&
+            storage_desc(image).address<requests[i].address+requests[i].size){
+            if(!textures->CanRetainIndependentImage(storage_desc(image),storage_layout(image)))
+                throw std::runtime_error("Image writer beside a physical CPU stream needs independent ownership");
+            image.independent_cpu_stream=true;
+        }
+    }
     std::vector<Rasterizer::ShaderBufferRequest> dma_reads;
     if(dma){
         // Completed faults become actual B residency before the stage effects,
@@ -750,11 +763,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(const auto existing=stream_views.find(key);existing!=stream_views.end()){
                 pending[index].stream_view=existing->second;continue;
             }
-            if(!rasterizer.ReadMemory(source.address,source.size))
-                throw std::out_of_range("Ordered CPU stream has no readable guest backing");
-            rasterizer.ValidateHostMemory(source.address,source.size);
-            const auto [address,capacity]=temporary.Make(source.size,reinterpret_cast<const void*>(source.address));
+            // Pinned ObtainBuffer uses CopySparseMemory here. CPU ReadMemory
+            // would instead resolve an independently current I into physical B.
+            const auto [address,capacity]=temporary.Make(source.size);
             if(capacity<source.size)throw std::logic_error("Ordered CPU stream temporary is smaller than its sharp");
+            rasterizer.ReadShaderStreamBacking(source.address,std::span(reinterpret_cast<std::byte*>(address),size_t(source.size)));
             const auto view_index=requests.size();
             // Reflected guest readonly buffers use UAV descriptors. Stage CPU
             // bytes through the normal default-resource path, never an UPLOAD UAV.
@@ -928,10 +941,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.space==Shader::NATIVE_BUFFER_BOUNDS_SET;});
         stage_bindings=PrepareOrderedGuestStages(device,rasterizer,*textures,binding_stages,requests,
             ordered_buffers,ordered_images,exact_bounds,[&](VAddr address,u64 bytes){
-                if(!rasterizer.ReadMemory(address,bytes))throw std::out_of_range("Ordered stage CPU stream has no readable backing");
-                rasterizer.ValidateHostMemory(address,bytes);
-                const auto [copy,capacity]=temporary.Make(bytes,reinterpret_cast<const void*>(address));
+                const auto [copy,capacity]=temporary.Make(bytes);
                 if(capacity<bytes)throw std::logic_error("Ordered stage CPU stream is shorter than its original sharp");
+                rasterizer.ReadShaderStreamBacking(address,std::span(reinterpret_cast<std::byte*>(copy),size_t(bytes)));
                 return copy;
             });
         for(size_t i=0;i<ordinary_count;++i)pending[i].stream_view=stage_bindings->stream_views[i];
@@ -1083,7 +1095,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
         }
     });
-    std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers;
+    std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers,independent_stream_writers;
     const auto staged_image=[&](const GuestTextureCache::Entry* entry){return stage_bindings&&
         std::ranges::find(stage_bindings->images,entry)!=stage_bindings->images.end();};
     const auto needs_readback=[&](const GuestTextureCache::Entry* entry){return !entry->gpu_owned&&!staged_image(entry);};
@@ -1196,6 +1208,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             if(!image.null_resource&&image.desc.writable&&!block_alias_view&&
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
+            if(image.independent_cpu_stream&&!block_alias_view&&
+               std::ranges::find(independent_stream_writers,entry)==independent_stream_writers.end())
+                independent_stream_writers.push_back(entry);
             if(!image.null_resource){
                 if(image.buffer_source_residency){
                     const Rasterizer::ShaderBufferRequest resident{storage_desc(image).address,
@@ -1275,7 +1290,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(auto* entry:uploaded)if(!staged_image(entry)&&std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())
             if(std::ranges::none_of(alias_writers,[entry](const auto& alias){return alias.image==entry;}))
                 textures->RevalidateReadonly(*entry);
-        for(auto* entry:uploaded_writers)owned_images|=staged_image(entry)?entry->gpu_owned:textures->Own(*entry);
+        for(auto* entry:uploaded_writers){
+            if(staged_image(entry))owned_images|=entry->gpu_owned;
+            else if(std::ranges::find(independent_stream_writers,entry)!=independent_stream_writers.end()){
+                if(!textures->OwnIndependentShaderImage(*entry))
+                    throw std::runtime_error("Physical CPU stream/image writer could not retain independent ownership");
+                owned_images=true;
+            }else owned_images|=textures->Own(*entry);
+        }
         for(auto* entry:uploaded)if(!staged_image(entry)&&entry->buffer_alias_version&&!entry->gpu_owned)
             throw std::runtime_error("Independent buffer/image cache ownership was not acquired");
         // A later UINT view can privately retile this same BC parent after its
