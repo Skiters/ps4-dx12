@@ -1,5 +1,66 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current shared-exponent mutable word / physical buffer envelope checkpoint - 2026-10-18
+
+This FIRST section supersedes older current-state and next-task sections. Source **02a04f2ebc8630d83bcbc5864de137eae82483b2**, WIP **60bfc338de5960d513d3d60508dd9e0758c14b83**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad production work items remain. H=**C:/Users/skei/Documents/Codex/handoff/shared-exp-word-20261018** (metadata, GCN archives, manual kernel); B=**F:/PS4Dev/handoff/shared-exp-word-20261018** (native checks, old negatives, CDB). H/VERIFICATION_FINAL.json verifies all15 changed sources and exact executable/PDB/runtime identities. Main restoration source is this file.
+
+### A. Current project state
+
+Direct fixed-base single-sample mutable32 R9G9B9E5 reads/samples now share native storage with actual R32/packed writers. Existing R11, RG16 and original stage-order mechanisms remain. Only the narrow behavior below is accepted; complete renderer compatibility, graphics inter-stage data34, converted/shifted/MS aliases and final game behavior remain open. No new Bloodborne run or FPS measurement occurred. Previously saved user-crash diagnosis/fix935fb69 and pre-title cleanup4828eae remain distinct from headless regression negatives; their manifests/dumps and prior results remain in the earlier handoffs.
+
+### B. Implemented contracts -> production -> checks
+
+Pinned host_compatibility.cpp _32BIT mutable class -> NativeImageStorageAliases data34, resource_patching_pass.cpp raw32 read classification, guest_shader_frontend.cpp graphics context, GuestTextureDesc::UsesRaw32 and SPIR-V UnpackNativeSharedExponent. Exact mantissa *2^(exponent-24), alpha1; each texel decodes BEFORE filtering. Real guest R9 IMAGE_WRITE/atomic is not newly admitted or replaced with a fake operation. Physical SRV cast support does not imply a typed R9 UAV.
+
+Pinned ImageUsageFlags non-block storage usage -> GuestTextureCache::UploadVersion creates direct readonly mutable-word allocations with physical R32_UINT/UAV capability and real cast lists while leaving the original readonly description intact. Writable allocations include the R9 SRV cast. Entry::Srv/Uav check actual format lists/UAV permission. CanRetainReadonlyWordStorage and CanRevalidateReadonly preserve current unmodified I without inventing original GpuModified. SetBackingAccess retention and actual ordered binding use this capability; preparation still does not publish a future readonly I's ownership. Typed packed10/RGBA8 join the same physical word comparison domain; expanded/depth/geometry exclusions remain.
+
+Pinned SafeToDownload=GpuModified&&!Dirty -> guest_compute.cpp and guest_stage_bindings.cpp only transfer a genuinely written I into formatted B. Merely keeping readonly I current is not download permission. Original resource numeric class, UID and history remain unchanged.
+
+Pinned CopySparseMemory physical B -> Rasterizer::PrepareBufferContents now reads physical backing when a CPU snapshot/upload envelope overlaps GPU I. The original protected guest-VA memcpy caused a PageWatch CPU fault, ResolveImage and I-to-B reconciliation outside the shader's original sharp. The strengthened queued regression writes Seed to exclusive R32 I while physical B keeps Old. IDENTICAL final fixture on clean committed60bfc33 fails (B=92004100, expected89020080); fixed code preserves B and original R32 I. No assertion suppression, draw/dispatch skip, game/address/hash workaround or artificial FPS claim.
+
+Native cache namespace: native-dxil-cache-20261018-mutable-shared-exp-uav-v6. Allocator enhanced barriers, real GPU commands, existing ownership transfer, fences and allocation leases remain.
+
+### C. Current unfinished work
+
+The shared-exponent/physical-envelope unit is integrated and narrowly verified at 02a04f2. Port original per-adapter native sample fallback and its logical guest/native backing/view mapping, starting at GuestTextureCache::UploadVersion and GuestMultisample/Entry views. Use the saved same-LUID Vulkan query and pinned Image::Image / LiverpoolToVK::NumSamples; do not invent native4x RGB9E5 support or discard guest samples. Source and API capability evidence do not yet prove the original fallback's complete upload/bind/readback behavior. Broader converted/shifted/MS/large transfer and8 recorded renderer work items remain explicit; no129 re-audit needed.
+
+### D. Confirmed problems versus hypotheses
+
+Confirmed and fixed here: readonly retention incorrectly used a different-view sharing predicate; unmodified current I could be downloaded into formatted B; a protected-VA buffer-envelope CPU snapshot resolved exclusive I into B. CDB/GPU negative and positive evidence is archived. Old native abstract rejection of typed packed10 was beyond original _32BIT semantics: it became a positive logical-class check plus an ACTUAL typeless-packed-resource/missing-cast negative;8 geometry/access negatives, missing-list and missing-UAV negatives remain. Numeric/readback oracles were not adjusted to match production.
+
+Confirmed remaining: saved default packed_float8 / explicit data34 tile8 samples4 native RT rejection. Same-LUID pinned Vulkan query on RTX5080: format122 samples0xf, format123 samples1; AMD integrated both0xf. Original NumSamples halves unsupported counts to1. Native4x R9 is not proved required on NVIDIA, while native fallback plus unchanged logical guest mapping still needs implementation/acceptance. Further fallback image/shader behavior is unresolved, not a verified performance or game cause. FPS impact of today's fixes is unmeasured.
+
+### E. Measurements and exact scope
+
+GCN EXE **19ca20dfbd17c56c73795ec85fcda081eff78dd49f3626d893f4b720d4ddbd4a** passes162 actual queued cases:80 shared-exponent (ordinary readonly R9 donor / original written R32 donor, both descriptor orders, optional seed stores, bilinear decode-before-filter, zero/minimum/maximum, later standalone typed SRV),8 R11,8 RG16 FLOAT,20 readonly mutable32 and46 ordered-buffer regressions. Real image_load/store/S_BARRIER, independent colors/bit words and full65536 physical bytes/padding checked. R9 donor70 OwnIndependentImage calls/20 original UIDs, flags000; R32 donor20 OwnImage+90 OwnIndependentImage calls/20 original UIDs, flags100; BOTH zero ResolveImage. CDB exit0, original class/UID retained. Exact timestamps/durations/commands in identities; fixture wall time is not guest FPS.
+
+Final14 related native checks PASS105.270s: buffer envelope, view allocation lifetime, GPU chain, semantic residency/DMA cache, preserved versions/pending fence/scheduler, independent image transfer, mutable/word readonly GPU views, writable word class and packed/raw writers. The readonly view fixture now performs actual R32 UAV clear followed by typed GPU readback and asserts original description/UID/native allocation. Shader reload PASS5.658s:2 PSOs, changed GPU contents, replacement rollback/restore, metadata negatives, same-version persistent preload.
+
+Standalone tested HEAD/worktree patches and EXE identities are retained verbatim; their15 archived source paths match final committed sources after LF normalization. This is not a claim that independently rebuilt binaries inherited runtime acceptance.
+
+### F. Reproducible build / final tests
+
+Clean detached committed Release **H/artifacts-02a04f2**,18 files, source 02a04f2ebc8630d83bcbc5864de137eae82483b2;54 pinned dependencies,2283 compile inputs, ZERO primary checkout inputs; build.ninja and CMakeCache also have no primary-checkout paths. Incremental build18.334s. EXE **f3ba36c5375354da7c0e29f071236c1c1f7a225a7ec071aeb96e813af5a94af7**; PDB **b8f004fbe7c5df4395a536f8eb5056fc5de3e88cebaa25c0ed4fd8cf798a339b**. This exact rebuilt CORE runtime/game/FPS **NOT_RUN**. Full445 suite and extended final existing-XInput acceptance remain final; new inter-graphics-stage data34 context is connected/compiled, not GPU accepted. No tests/game/UI/XInput/profiler processes remain from these completed runs; no user process, original Vulkan or save was changed. Manual folder only; no application installation/selection.
+
+### G. Evidence / retained failures / build paths
+
+H/LOCATIONS.json lists storage split and latest/previous kernels. Final GCN archives: envelope-positive, envelope-final-*. B/native14-envelope-final, B/shader-reload-envelope-final, B/ownership-r9-envelope-final, B/ownership-envelope-fixed; exact old controls B/old-production-complete-negative (4828eae) and B/old-envelope-negative (60bfc33). Earlier first-shared-exponent failure, contents-only phases, metadata failures, native expected-rejection failure and initial include/compiler mistakes remain; they are superseded only within their recorded scope, not erased. H/start-state.json, staged/unstaged-start patches, frozen/final source snapshots and the WIP commit preserve recovery. Unknown .serena/ and CLAUDE.md are untouched.
+
+H/NEXT_MECHANISM.md identifies next symbols. Saved Vulkan query is **F:/PS4Dev/handoff/cached-r11-word-20261018/reference-format-query**; previous14 native/R11 proofs, old original C++/secondary cleanup dumps, working kernels and original reference paths remain under the earlier checkpoint. Existing HUD/live monitor/virtual XInput setup was not altered. Do not delete older builds/evidence or modify original saves. Lossless compression of owned immutable archives and closed outputs preserved byte hashes; free space is in FINAL_STATE.json. Check space before another large build/archive; redundant new MAP copies were omitted while PDBs were kept.
+
+### H. Next action
+
+In **F:/PS4Dev/work/shadps4-dx12-src**, run `git status --short; git rev-parse HEAD; git log -3 --oneline`, read H/NEXT_MECHANISM.md, then continue the specific native sample fallback contract in C++. Use existing native sample/backing code and saved adapter evidence. Preserve logical guest samples/geometry; determine the pinned original upload/view mapping before lowering native samples. Do not simply disable MSAA.
+
+### I. Do not repeat
+
+No broad129 audit, unchanged445 suite, fixed d019 game replay, previous fake first-chance PageWatch crash diagnosis, old missing-Elf fixture, unsupported typed R9 UAV attempt or arbitrary native4x R9 expectation. Do not accept contents-only results as class/ownership proof; initial R32 donor did resolve I and was not accepted until the different-I/B negative and corrected CDB trace. Do not equate build/link with GPU/game acceptance or transfer evidence to a rebuilt executable.
+
+### NEXT CODEX SESSION — START HERE
+
+Read the FIRST section of docs/codex-progress/SESSION_HANDOFF.md and H/VERIFICATION_FINAL.json; verify HEAD/upstream. Continue original native sample fallback plus guest/native backing/view mapping in GuestTextureCache::UploadVersion, GuestMultisample and Entry views, using the saved Vulkan/DX12 same-LUID measurements and pinned Image::Image / LiverpoolToVK::NumSamples. R9 word codecs/readonly retention and physical buffer-envelope bug are now fixed/narrowly verified; do not repeat129 audit, old crash replay or completed experiments. Preserve contents, original class/GpuModified, PageWatch, original binding order, barriers/fences and allocation lifetime. Build/test each finished mechanism with exact binary identities, clean-checkout Release/checkpoint/normal push and manual kernel folders. Keep full445 suite and existing-XInput game image/input/stability/completed guest FPS excluding FG versus saved Vulkan baseline for final acceptance. Goal remains ACTIVE / INCOMPLETE.
+
+
 ## Current R11 mutable-word / pre-title fatal cleanup checkpoint - 2026-10-18
 
 Latest production **4828eaebf4cd69c9343e82f0415d1817239dae3b** includes R11 port **510a6d7547a86ebe29081d3f921c8c2adac94845**, fix/mixed-cmask. Full port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. This FIRST section supersedes older current-state/next-task sections. H=**C:/Users/skei/Documents/Codex/handoff/cached-r11-word-20261018** (metadata, GCN archives, latest manual kernel); B=**F:/PS4Dev/handoff/cached-r11-word-20261018** (bulk native/negative/CDB archives). H/VERIFICATION_FINAL.json verifies exact hashes and scopes; H/LOCATIONS.json records storage split. Previous goal turn made verified production/checkpoint progress.
