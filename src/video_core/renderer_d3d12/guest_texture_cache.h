@@ -222,6 +222,10 @@ public:
         Resource expanded_guest_backing,expanded_written_mask;
         uint64_t expanded_backing_bytes{};
         std::vector<std::shared_ptr<GuestPackedTransfer>> format_transfers;
+        // Runtime::BackingImage identity is requested, not physical Count.
+        // Zero denotes the original desc.samples before the first transition.
+        UINT requested_backing_samples{};
+        UINT RequestedBackingSamples()const{return requested_backing_samples?requested_backing_samples:desc.samples;}
         uint64_t ResidentBytes()const;
         void RememberSnapshot(std::span<const std::byte>,std::span<const std::byte> stencil={});
         D3D12_SHADER_RESOURCE_VIEW_DESC Srv()const;

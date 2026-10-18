@@ -305,7 +305,8 @@ bool GuestTextureCache::ConvertPackedBacking(Entry& entry,const GuestTextureDesc
     entry.allocation_bytes=target_bytes+entry.format_retirement_bytes+retired_bytes;entry.format_retirement_bytes+=retired_bytes;
     entry.readback_reserve_bytes=readback_reserve;
     entry.upload_pool.clear();entry.tiler_input_pool.clear();entry.tiler_output_pool.clear();entry.readback_pool.reset();
-    entry.sample_backings.clear();entry.storage_samples=std::move(storage);entry.storage_linear=std::move(storage_linear);
+    entry.sample_backings.clear();entry.requested_backing_samples=0;
+    entry.storage_samples=std::move(storage);entry.storage_linear=std::move(storage_linear);
     // The replacement backing owns its new storage state, including when it
     // no longer needs sample planes. Do not restore the retired old domain.
     entry.storage_retired=false;

@@ -57,6 +57,7 @@ public:
                     Resource& linear,bool writeback)const;
     };
     explicit GuestMultisample(ID3D12Device* device):device_(device){}
+    static UINT SelectBackingSamples(ID3D12Device*,DXGI_FORMAT,UINT requested);
     static D3D12_PLACED_SUBRESOURCE_FOOTPRINT Footprint(const GuestTextureDesc&,
                                                      const GuestTextureLayout&);
     static uint64_t LinearBytes(const GuestTextureDesc&,const D3D12_PLACED_SUBRESOURCE_FOOTPRINT&);

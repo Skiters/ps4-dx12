@@ -363,6 +363,18 @@ void GuestMultisample::StorageLease::Record(ID3D12GraphicsCommandList* list,Reso
     }
     if(!writeback)for(auto& sample:storage)sample.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
+UINT GuestMultisample::SelectBackingSamples(ID3D12Device* device,DXGI_FORMAT format,UINT requested){
+    if(!device||format==DXGI_FORMAT_UNKNOWN||!std::has_single_bit(requested)||requested>16)
+        throw std::invalid_argument("Invalid native requested sample backing");
+    // Pinned LiverpoolToVK::NumSamples chooses a supported physical count;
+    // the owning image keeps the requested count as a separate identity.
+    for(UINT samples=requested;samples>1;samples/=2){
+        D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{format,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
+        Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality))));
+        if(quality.NumQualityLevels)return samples;
+    }
+    return 1;
+}
 std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
     Resource& source,Resource& destination,const GuestTextureDesc& d,
     const GuestTextureLayout& layout,UINT layer){

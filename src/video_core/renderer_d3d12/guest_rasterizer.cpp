@@ -1383,6 +1383,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 buffer.info.compression?buffer.FmaskAddress():0);
             textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
             OwnImage(entry);textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
+            if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
+                throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
             targets[i]=&entry;attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
         DepthAttachment depth{};

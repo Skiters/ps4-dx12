@@ -1210,25 +1210,38 @@ void GuestTextureCache::Entry::RememberSnapshot(std::span<const std::byte> bytes
 void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12GraphicsCommandList* list,bool copy){
     if(!list||!entry.texture.handle||!samples||(samples&(samples-1))||samples>16)
         throw std::invalid_argument("Invalid native image backing sample count");
+    auto pin=PinBinding(entry);
     const auto current=entry.texture.handle->GetDesc();
-    const auto old_samples=current.SampleDesc.Count;if(old_samples==samples)return;
+    const auto old_samples=entry.RequestedBackingSamples();
+    if(!std::has_single_bit(old_samples)||old_samples>16||
+       !std::has_single_bit(current.SampleDesc.Count)||current.SampleDesc.Count>old_samples||
+       (old_samples==entry.desc.samples&&current.SampleDesc.Count!=entry.desc.samples))
+        throw std::invalid_argument("Invalid native requested/physical backing identity");
+    if(old_samples==samples)return;
     if(entry.desc.depth_target||entry.desc.levels!=1||entry.desc.volume_depth||entry.desc.one_dimensional)
         throw std::invalid_argument("Sample backing conversion requires a single-mip 2D color image");
-    auto& destination=entry.sample_backings[samples];
-    entry.sample_backings.try_emplace(old_samples);
+    if(current.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||current.MipLevels!=1||
+       current.Width!=entry.desc.width||current.Height!=entry.desc.height||current.DepthOrArraySize!=entry.desc.layers)
+        throw std::invalid_argument("Native sample backing geometry differs from its owner");
+    // Stage map nodes and resources before recording. Failed allocation, format
+    // admission or a resumed-context failure cannot publish a new identity.
+    auto backings=entry.sample_backings;
+    auto& destination=backings[samples];backings.try_emplace(old_samples);
+    uint64_t added_bytes{};
     if(!destination.handle){
-        auto description=current;description.SampleDesc={samples,0};description.Alignment=0;
-        description.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-        if(samples>1)description.Flags&=~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         D3D12_FEATURE_DATA_FORMAT_SUPPORT support{entry.layout.format};
         Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
         if(!(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET))
             throw std::runtime_error("Native sample backing format lacks render-target support");
-        if(samples>1){
-            D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{entry.layout.format,samples,D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE,0};
-            Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,&quality,sizeof(quality))));
-            if(!quality.NumQualityLevels)throw std::runtime_error("Native sample backing count is unsupported by the adapter");
-        }
+        const auto physical=GuestMultisample::SelectBackingSamples(device_.Get(),entry.layout.format,samples);
+        // Alternate backings may use the pinned native fallback. The original
+        // guest sample payload still needs an exact resource for upload/SRV/
+        // storage/readback; never admit count loss at that boundary.
+        if(physical!=samples&&(samples==entry.desc.samples||physical<std::min(samples,entry.desc.samples)))
+            throw std::runtime_error("Native fallback cannot represent the original guest sample payload");
+        auto description=current;description.SampleDesc={physical,0};description.Alignment=0;
+        description.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        if(physical>1)description.Flags&=~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         const auto formats=ResourceCasts(entry.texture);
         const auto allocation=texture_allocator_.AllocationInfo(description,formats);
         if(!allocation.SizeInBytes||allocation.SizeInBytes==UINT64_MAX||
@@ -1236,21 +1249,33 @@ void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12Graphi
             throw std::runtime_error("Invalid native sample backing allocation size");
         ReserveMemory(allocation.SizeInBytes,collected_fence_,&entry);
         destination=AllocateTexture(&entry,description,D3D12_RESOURCE_STATE_COMMON,nullptr,formats);
-        entry.allocation_bytes+=allocation.SizeInBytes;
+        added_bytes=allocation.SizeInBytes;
     }
+    const auto target=destination.handle->GetDesc();
+    if(target.Dimension!=current.Dimension||target.Width!=current.Width||target.Height!=current.Height||
+       target.MipLevels!=1||target.DepthOrArraySize!=current.DepthOrArraySize||target.Format!=current.Format||
+       !std::has_single_bit(target.SampleDesc.Count)||target.SampleDesc.Count>samples||
+       (samples==entry.desc.samples&&target.SampleDesc.Count!=entry.desc.samples))
+        throw std::invalid_argument("Cached native sample backing differs from its requested identity");
+    std::vector<std::shared_ptr<GuestMultisample::CopyLease>> prepared;
     if(copy){
         if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
         entry.multisample=multisample_;
-        std::vector<std::shared_ptr<GuestMultisample::CopyLease>> prepared;
         prepared.reserve(entry.desc.layers);
         for(UINT layer=0;layer<entry.desc.layers;++layer)
             prepared.push_back(multisample_->PrepareCopy(entry.texture,destination,entry.desc,entry.layout,layer));
+        entry.sample_copy_leases.reserve(entry.sample_copy_leases.size()+prepared.size());
+        // Reservation may have waited/submitted the caller's old list. All
+        // descriptors and resources survive; record only on its current list.
+        list=recording_list_?recording_list_():list;
+        if(!list)throw std::runtime_error("Native sample backing copy has no current recording list");
         entry.sample_copy_leases.insert(entry.sample_copy_leases.end(),prepared.begin(),prepared.end());
         entry.pending=true;
         for(const auto& lease:prepared)lease->Record(list,entry.texture,destination);
     }
-    entry.sample_backings[old_samples]=std::move(entry.texture);
-    entry.texture=std::move(destination);entry.last_use=++use_sequence_;
+    backings[old_samples]=std::move(entry.texture);entry.texture=std::move(destination);
+    entry.sample_backings.swap(backings);entry.requested_backing_samples=samples;
+    entry.allocation_bytes+=added_bytes;entry.last_use=++use_sequence_;
 }
 void GuestTextureCache::EnsureMultisampleStorage(Entry& entry){
     EnsureMultisampleStorage(entry,entry.desc);
@@ -2740,14 +2765,20 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             r.Format=DXGI_FORMAT_R32_UINT;
             r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
-        if(d.render_target||(d.samples>1&&!d.depth_target)) {
+        const bool sample_backing_capable=!d.depth_target&&d.levels==1&&
+            !d.one_dimensional&&!d.volume_depth&&layout.block_extent==1;
+        if(d.render_target||(d.samples>1&&!d.depth_target)||sample_backing_capable) {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{layout.format};
             Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
-            if(!(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET))throw std::runtime_error("Native guest color format lacks render-target support");
+            if(!(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET)&&(d.render_target||d.samples>1))
+                throw std::runtime_error("Native guest color format lacks render-target support");
             if(d.samples>1&&(d.data_format==6||d.data_format==34)&&
                !(support.Support1&D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD))
                 throw std::runtime_error("Native packed-float format lacks typed multisample loads");
-            r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            // Pinned color images retain attachment usage independently of
+            // their first readonly/storage T#. A future MSAA->1x blit must be
+            // able to restore THIS original allocation, without recreating I.
+            if(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET)r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         }
         if(d.samples>1){
             const auto typed=d.depth_target?(d.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
