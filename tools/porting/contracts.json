@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -139,7 +139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -221,7 +221,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -315,7 +315,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -443,7 +443,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -703,6 +703,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -1009,6 +1025,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -1047,7 +1067,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1160,7 +1180,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1420,6 +1440,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -1728,6 +1764,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -1766,7 +1806,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1855,7 +1895,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1924,7 +1964,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2002,7 +2042,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2096,7 +2136,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2195,7 +2235,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2263,7 +2303,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2342,7 +2382,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2419,7 +2459,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2487,7 +2527,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2548,7 +2588,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2602,7 +2642,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2639,7 +2679,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2680,7 +2720,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2741,7 +2781,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2792,7 +2832,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2869,7 +2909,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2939,7 +2979,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3009,7 +3049,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3067,7 +3107,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3145,7 +3185,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3222,7 +3262,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3289,7 +3329,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3352,7 +3392,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3398,7 +3438,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3446,7 +3486,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3521,7 +3561,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3605,7 +3645,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3688,7 +3728,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3756,7 +3796,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3825,7 +3865,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3887,7 +3927,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3942,7 +3982,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3996,7 +4036,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4052,7 +4092,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4099,7 +4139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4165,7 +4205,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4214,7 +4254,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4306,7 +4346,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4400,7 +4440,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4453,7 +4493,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4514,7 +4554,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4779,6 +4819,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -5121,6 +5177,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -5196,7 +5256,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5554,7 +5614,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5977,7 +6037,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6253,6 +6313,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -6599,6 +6675,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -6710,7 +6790,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6970,6 +7050,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -7284,6 +7380,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -7326,7 +7426,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7389,7 +7489,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7494,6 +7594,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -7553,6 +7669,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -7598,7 +7718,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7703,6 +7823,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -7762,6 +7898,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -7818,7 +7958,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7923,6 +8063,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -7982,6 +8138,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -8029,7 +8189,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8134,6 +8294,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -8193,6 +8369,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -8256,7 +8436,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8363,6 +8543,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -8423,6 +8619,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -8480,7 +8680,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8585,6 +8785,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -8644,6 +8860,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -8701,7 +8921,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8806,6 +9026,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -8865,6 +9101,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -8928,7 +9168,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9035,6 +9275,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -9094,6 +9350,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -9148,7 +9408,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9255,6 +9515,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -9314,6 +9590,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -9364,7 +9644,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9469,6 +9749,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -9528,6 +9824,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -9572,7 +9872,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9677,6 +9977,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -9736,6 +10052,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -9777,7 +10097,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9882,6 +10202,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -9941,6 +10277,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -9990,7 +10330,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10097,6 +10437,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -10156,6 +10512,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -10218,7 +10578,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10325,6 +10685,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -10384,6 +10760,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -10434,7 +10814,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10541,6 +10921,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -10601,6 +10997,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -10660,7 +11060,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10767,6 +11167,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -10826,6 +11242,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -10881,7 +11301,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11368,7 +11788,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11473,6 +11893,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
           "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
+        },
+        "physical_shader_stream_subcontract": {
+          "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+          "implementation_state": "connected_physical_stream_copy_and_independent_writer_ownership",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "ObtainBuffer clean small CopySparseMemory physical source; independent I/B contents and original binding order",
+          "native_symbols": [
+            "Rasterizer::ReadShaderStreamBacking",
+            "ExecuteGuestResources ordinary/ordered stream copy",
+            "CompatibleGuestWritableStorage ordinary R32_UINT comparison",
+            "GuestTextureCache::OwnIndependentShaderImage",
+            "AcquireGuestImageOwnership"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "9d6c5896b0dff311f793cd607b74f15f378f7fb7c75c4fed73af79b23474831c",
+          "scope": "8 actual cached GCN cases,8 cold/12 exclusive regressions,17 native tests including48 ordered adapter cases; identical current fixture fails previous696ae21 production. Actual ordered GCN fixture blocked on its own queue authoring. No whole CPU image-domain/full-group/game claim."
         }
       },
       "prepared_checks": [
@@ -11532,6 +11968,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "c23ba1e physical CPU streams and cached UINT/packed10: actual GCN8+8+12,17 native tests including48 ordered adapter combinations. Exact identities, same-fixture old-production negative and oracle primary-source proof at cached-writable-word-20261018/VERIFICATION_FINAL.json. ordered-formatted-owned blocked before GPU by out-of-queue fixture GetCsRegs; next repair, not passed."
         }
       ]
     },
@@ -11589,7 +12029,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12066,7 +12506,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12126,7 +12566,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12194,7 +12634,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12260,7 +12700,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12334,7 +12774,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12404,7 +12844,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12466,7 +12906,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12532,7 +12972,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12593,7 +13033,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12667,7 +13107,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12734,7 +13174,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12794,7 +13234,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12848,7 +13288,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12917,7 +13357,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12987,7 +13427,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13042,7 +13482,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13100,7 +13540,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13155,7 +13595,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13219,7 +13659,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -13299,7 +13739,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13353,7 +13793,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13416,7 +13856,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13476,7 +13916,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13531,7 +13971,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13583,7 +14023,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13643,7 +14083,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13706,7 +14146,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13772,7 +14212,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13828,7 +14268,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13883,7 +14323,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13942,7 +14382,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14018,7 +14458,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14075,7 +14515,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14132,7 +14572,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14191,7 +14631,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14255,7 +14695,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14318,7 +14758,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14388,7 +14828,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14448,7 +14888,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14510,7 +14950,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14578,7 +15018,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14645,7 +15085,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14702,7 +15142,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14772,7 +15212,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14837,7 +15277,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14903,7 +15343,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14958,7 +15398,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15017,7 +15457,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15077,7 +15517,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15144,7 +15584,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15215,7 +15655,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15286,7 +15726,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15350,7 +15790,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15415,7 +15855,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15488,7 +15928,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15549,7 +15989,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
+        "core_release_build_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15769,6 +16209,12 @@
         "state": "connected_and_narrow_gpu_pass",
         "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
         "remaining": "Ordinary cached R32 donor to mixed raw writable views, then remaining converted/multiview/shifted/MS/large domains. Cold shared-word pair is verified, not whole group."
+      },
+      "physical_stream_progress_20261018": {
+        "source_commit": "c23ba1e6ddff2d879860b8e19364711f966dd519",
+        "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\cached-writable-word-20261018\\VERIFICATION_FINAL.json",
+        "connected_and_narrow_verified": "Physical small shader streams and cached R32_UINT/raw9 independent writes",
+        "remaining": "Actual ordered GCN queue fixture and production ordering if exposed, cached R32 SINT/FLOAT donors, remaining converted/multiview/shifted/MS/large paths; whole CPU image-coherence policy not newly accepted."
       }
     },
     "depth-color-shared-storage": {
