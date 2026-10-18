@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -139,7 +139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -221,7 +221,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -315,7 +315,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -443,7 +443,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -686,6 +686,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -988,6 +1005,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -1026,7 +1047,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1139,7 +1160,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1382,6 +1403,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -1686,6 +1724,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -1724,7 +1766,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1813,7 +1855,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1882,7 +1924,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1960,7 +2002,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2054,7 +2096,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2153,7 +2195,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2221,7 +2263,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2300,7 +2342,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2377,7 +2419,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2445,7 +2487,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2506,7 +2548,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2560,7 +2602,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2597,7 +2639,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2638,7 +2680,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2699,7 +2741,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2750,7 +2792,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2827,7 +2869,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2897,7 +2939,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2967,7 +3009,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3025,7 +3067,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3103,7 +3145,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3180,7 +3222,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3247,7 +3289,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3310,7 +3352,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3356,7 +3398,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3404,7 +3446,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3479,7 +3521,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3563,7 +3605,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3646,7 +3688,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3714,7 +3756,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3783,7 +3825,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3845,7 +3887,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3900,7 +3942,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3954,7 +3996,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4010,7 +4052,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4057,7 +4099,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4123,7 +4165,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4172,7 +4214,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4264,7 +4306,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4358,7 +4400,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4411,7 +4453,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4472,7 +4514,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4720,6 +4762,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -5058,6 +5117,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -5133,7 +5196,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5491,7 +5554,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5914,7 +5977,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6173,6 +6236,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -6515,6 +6595,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -6626,7 +6710,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6869,6 +6953,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -7179,6 +7280,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -7221,7 +7326,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7284,7 +7389,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7372,6 +7477,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -7427,6 +7549,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -7472,7 +7598,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7560,6 +7686,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -7615,6 +7758,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -7671,7 +7818,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7759,6 +7906,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -7814,6 +7978,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -7861,7 +8029,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7949,6 +8117,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -8004,6 +8189,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -8067,7 +8256,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8157,6 +8346,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -8213,6 +8419,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -8270,7 +8480,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8358,6 +8568,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -8413,6 +8640,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -8470,7 +8701,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8558,6 +8789,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -8613,6 +8861,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -8676,7 +8928,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8766,6 +9018,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -8821,6 +9090,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -8875,7 +9148,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8965,6 +9238,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9020,6 +9310,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -9070,7 +9364,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9158,6 +9452,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9213,6 +9524,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -9257,7 +9572,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9345,6 +9660,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9400,6 +9732,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -9441,7 +9777,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9529,6 +9865,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9584,6 +9937,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -9633,7 +9990,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9723,6 +10080,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9778,6 +10152,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -9840,7 +10218,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9930,6 +10308,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -9985,6 +10380,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -10035,7 +10434,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10125,6 +10524,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -10181,6 +10597,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -10240,7 +10660,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10330,6 +10750,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -10385,6 +10822,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -10440,7 +10881,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10927,7 +11368,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11015,6 +11456,23 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
           "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
+        },
+        "writable_packed_word_subcontract": {
+          "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+          "implementation_state": "connected_common_raw4_9_10_storage_and_alias_classification",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible mutable image storage, original numeric codecs, shared write visibility/order and physical bytes",
+          "native_symbols": [
+            "NativeImageStorageAliases",
+            "ResourcePatchingPass uses_raw32/uses_raw_packed10/reads_written_image",
+            "GuestShaderFrontend::BuildGraphics pipeline hints",
+            "CompatibleGuestWritableStorage",
+            "Entry::Uav",
+            "ExecuteGuestResources"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "c2b04c67ba64a4daf86829b6af399ac8eb3b3c5b0285efcba1d22edacd0c4b03",
+          "scope": "15 GPU changed-store/barrier/readback modes plus2 contract/classification controls,8 real GCN write cases,28 GCN regressions,10 memory regressions. Older ordinary cached R32 transition/whole-group/full game not newly accepted."
         }
       },
       "prepared_checks": [
@@ -11070,6 +11528,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "readonly-snormword/sintword modes now8+8 loads,16 filtered/swizzle,32+32 MS4 cases;20 direct+12 exclusive regression. Actual identities/source equality ec559dd in VERIFICATION_FINAL.json. Previous signed diagnostic resolved; writable9/4 not yet GPU run. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "696ae21 writable9/4/10: native17 PASS59.83s; real GCN8+20+8; memory10 PASS46.57s. Exact identities/source equality at writable-word-20261018/VERIFICATION_FINAL.json. Prior writable9/4-not-run notes are historical; cached ordinary R32 transition remains next, not proven."
         }
       ]
     },
@@ -11127,7 +11589,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11604,7 +12066,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11664,7 +12126,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11732,7 +12194,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11798,7 +12260,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11872,7 +12334,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11942,7 +12404,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12004,7 +12466,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12070,7 +12532,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12131,7 +12593,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12205,7 +12667,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12272,7 +12734,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12332,7 +12794,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12386,7 +12848,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12455,7 +12917,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12525,7 +12987,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12580,7 +13042,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12638,7 +13100,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12693,7 +13155,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12757,7 +13219,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -12837,7 +13299,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12891,7 +13353,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12954,7 +13416,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13014,7 +13476,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13069,7 +13531,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13121,7 +13583,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13181,7 +13643,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13244,7 +13706,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13310,7 +13772,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13366,7 +13828,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13421,7 +13883,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13480,7 +13942,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13556,7 +14018,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13613,7 +14075,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13670,7 +14132,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13729,7 +14191,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13793,7 +14255,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13856,7 +14318,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13926,7 +14388,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13986,7 +14448,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14048,7 +14510,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14116,7 +14578,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14183,7 +14645,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14240,7 +14702,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14310,7 +14772,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14375,7 +14837,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14441,7 +14903,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14496,7 +14958,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14555,7 +15017,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14615,7 +15077,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14682,7 +15144,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14753,7 +15215,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14824,7 +15286,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14888,7 +15350,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14953,7 +15415,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15026,7 +15488,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15087,7 +15549,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "ec559ddffac172f9bd089b9fdf80e32249e5b4fe"
+        "core_release_build_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15301,6 +15763,12 @@
         "state": "source_guard_identified_behavior_not_run",
         "missing": "General common R32 raw writable9/4 view compatibility, precise real native allocation and original cache class/history/permission/ordering/lifetime; do not broaden blindly",
         "prepared_work": "C:\\Users\\skei\\Documents\\Codex\\handoff\\readonly-packed9-20261018\\NEXT_WRITABLE_WORD_ALIAS.md"
+      },
+      "writable_word_progress_20261018": {
+        "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
+        "state": "connected_and_narrow_gpu_pass",
+        "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\writable-word-20261018\\VERIFICATION_FINAL.json",
+        "remaining": "Ordinary cached R32 donor to mixed raw writable views, then remaining converted/multiview/shifted/MS/large domains. Cold shared-word pair is verified, not whole group."
       }
     },
     "depth-color-shared-storage": {
