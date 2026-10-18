@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -139,7 +139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -221,7 +221,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -315,7 +315,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -443,7 +443,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -647,6 +647,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -941,6 +960,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -979,7 +1002,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1092,7 +1115,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1296,6 +1319,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -1592,6 +1634,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -1630,7 +1676,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1719,7 +1765,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1788,7 +1834,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1866,7 +1912,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1960,7 +2006,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2059,7 +2105,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2127,7 +2173,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2206,7 +2252,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2283,7 +2329,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2351,7 +2397,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2412,7 +2458,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2466,7 +2512,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2503,7 +2549,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2544,7 +2590,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2605,7 +2651,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2656,7 +2702,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2733,7 +2779,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2803,7 +2849,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2873,7 +2919,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2931,7 +2977,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3009,7 +3055,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3086,7 +3132,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3153,7 +3199,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3216,7 +3262,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3262,7 +3308,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3310,7 +3356,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3385,7 +3431,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3469,7 +3515,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3552,7 +3598,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3620,7 +3666,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3689,7 +3735,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3751,7 +3797,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3806,7 +3852,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3860,7 +3906,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3916,7 +3962,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3963,7 +4009,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4029,7 +4075,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4078,7 +4124,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4170,7 +4216,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4264,7 +4310,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4317,7 +4363,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4378,7 +4424,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4587,6 +4633,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -4917,6 +4982,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -4992,7 +5061,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5350,7 +5419,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5773,7 +5842,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5993,6 +6062,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -6327,6 +6415,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -6438,7 +6530,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6642,6 +6734,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -6944,6 +7055,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -6986,7 +7101,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7049,7 +7164,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7098,6 +7213,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7145,6 +7279,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7190,7 +7328,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7239,6 +7377,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7286,6 +7443,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7342,7 +7503,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7391,6 +7552,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7438,6 +7618,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7485,7 +7669,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7534,6 +7718,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7581,6 +7784,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7644,7 +7851,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7695,6 +7902,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7743,6 +7969,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7800,7 +8030,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7849,6 +8079,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -7896,6 +8145,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -7953,7 +8206,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8002,6 +8255,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8049,6 +8321,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8112,7 +8388,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8163,6 +8439,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8210,6 +8505,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8264,7 +8563,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8315,6 +8614,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8362,6 +8680,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8412,7 +8734,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8461,6 +8783,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8508,6 +8849,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8552,7 +8897,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8601,6 +8946,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8648,6 +9012,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8689,7 +9057,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8738,6 +9106,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8785,6 +9172,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8834,7 +9225,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8885,6 +9276,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -8932,6 +9342,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -8994,7 +9408,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9045,6 +9459,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -9092,6 +9525,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -9142,7 +9579,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9193,6 +9630,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -9241,6 +9697,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -9300,7 +9760,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9351,6 +9811,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -9398,6 +9877,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -9453,7 +9936,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9940,7 +10423,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9989,6 +10472,25 @@
           "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
           "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
           "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+        },
+        "direct_mutable32_subcontract": {
+          "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+          "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+          "implementation_state": "connected_direct_readonly_supported_format_lists",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+          "native_symbols": [
+            "IsDirectReadonlyWordClass",
+            "ReadonlyWordCasts",
+            "CompatibleGuestReadonlyWordStorage",
+            "CompatibleGuestImageMipGeometry",
+            "MatchesGuestUploadStorage",
+            "Entry::Srv",
+            "ExecuteGuestResources preflight"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+          "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+          "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
         }
       },
       "prepared_checks": [
@@ -10036,6 +10538,10 @@
         {
           "kind": "narrow_gpu_regression_executed",
           "description": "native_readonly_word_views (4 cases) and native_readonly_word_numeric_views (8 cases); exact source7b6985f/native identity in WORD_VERIFICATION.json. Whole-group/final acceptance unchanged."
+        },
+        {
+          "kind": "narrow_gpu_regression_executed",
+          "description": "native_readonly_mutable32_views20 and native_readonly_word_numeric_views16; actual GCN readonly-mutable32-owned20 +exclusive12; related memory10. Saved SNORM signed-word mode is FAILED, SINT only prepared. Whole-group/final acceptance unchanged."
         }
       ]
     },
@@ -10093,7 +10599,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10570,7 +11076,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10630,7 +11136,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10698,7 +11204,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10764,7 +11270,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10838,7 +11344,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10908,7 +11414,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10970,7 +11476,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11036,7 +11542,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11097,7 +11603,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11171,7 +11677,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11238,7 +11744,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11298,7 +11804,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11352,7 +11858,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11421,7 +11927,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11491,7 +11997,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11546,7 +12052,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11604,7 +12110,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11659,7 +12165,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11723,7 +12229,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -11803,7 +12309,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11857,7 +12363,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11920,7 +12426,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11980,7 +12486,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12035,7 +12541,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12087,7 +12593,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12147,7 +12653,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12210,7 +12716,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12276,7 +12782,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12332,7 +12838,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12387,7 +12893,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12446,7 +12952,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12522,7 +13028,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12579,7 +13085,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12636,7 +13142,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12695,7 +13201,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12759,7 +13265,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12822,7 +13328,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12892,7 +13398,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12952,7 +13458,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13014,7 +13520,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13082,7 +13588,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13149,7 +13655,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13206,7 +13712,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13276,7 +13782,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13341,7 +13847,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13407,7 +13913,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13462,7 +13968,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13521,7 +14027,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13581,7 +14087,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13648,7 +14154,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13719,7 +14225,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13790,7 +14296,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13854,7 +14360,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13919,7 +14425,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13992,7 +14498,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14053,7 +14559,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "7b6985f03cbd459aa0a2faec05690ab5a97e0b02"
+        "core_release_build_commit": "87ca49036188617722fbb31ff72f1c4181627c27"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14087,7 +14593,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges / GuestTiler::NativeFormat / DescribeNativeFormat / RetileImageVersion source codec / GuestTextureCache::SetRecordingListProvider / UploadVersion current context and resumed pending receipt / CompatibleGuestShaderStorage readonly numeric family / MatchesGuestUploadStorage readonly reuse",
-      "missing_semantics": "Remaining converted classes exclude newly connected same-geometry direct readonly R32/RGBA8 with actual supported D3D12 format lists. Other _32BIT classes, writable/common-allocation and unsupported-casting routes remain. remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and representations outside exact nonexpanded direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
+      "missing_semantics": "Confirmed remaining readonly signed packed10/R32 common-I domain: manual readonly-snormword-owned reaches ExecuteGuestResources different-storage-layout guard; source I must remain original mutable32, not expanded/private B-derived replacement. Direct readonly4/5/6/9UNORM-UINT/10/34 with actual supported format lists are connected and narrowly GPU-verified. Unsupported casting, signed expanded views, writers and other physical classes remain. remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and representations outside exact nonexpanded direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
@@ -14214,6 +14720,32 @@
         "native_exe_sha256": "bbf3d30c3cafa31c6b64fe65580cae49dffad76cbddc941bdc16592af3b5998a",
         "gcn_regression_sha256": "2cb25c39a3c44de6dc702d7c23d46b6aa6403940ace2102dab7a260851b6974a",
         "scope": "4 direct4/10 readonly common native I cases with2 stages, full1MiB B and negative controls;8 same-data cases;12 GCN regression. Other formats/writers/device fallback and whole-group/game remain open."
+      },
+      "direct_mutable32_checkpoint": {
+        "production_source_commit": "8a8f3db43f062496e98cb7bc6b0b6ec27517e3d3",
+        "source_package": "87ca49036188617722fbb31ff72f1c4181627c27",
+        "implementation_state": "connected_direct_readonly_supported_format_lists",
+        "behavior_state": "narrow_gpu_pass",
+        "upstream_contract": "_32BIT compatible original mutable I, typed descriptor semantics and binding order",
+        "native_symbols": [
+          "IsDirectReadonlyWordClass",
+          "ReadonlyWordCasts",
+          "CompatibleGuestReadonlyWordStorage",
+          "CompatibleGuestImageMipGeometry",
+          "MatchesGuestUploadStorage",
+          "Entry::Srv",
+          "ExecuteGuestResources preflight"
+        ],
+        "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\VERIFICATION_FINAL.json",
+        "final_gcn_evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\FINAL_GCN_VERIFICATION.json",
+        "scope": "Native20/16 typed/cross classes and full1MiB B; actual GCN20+12 with whole65536 B; memory10. Not every pair/number/filter/writer or full group/game."
+      },
+      "remaining_diagnostic": {
+        "mode": "readonly-snormword-owned",
+        "identity": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\gcn-snormword-diagnostic\\identity.json",
+        "source_equal_commit": "87ca49036188617722fbb31ff72f1c4181627c27",
+        "result": "FAIL explicit ExecuteGuestResources different-storage-layout rejection; later terminal0xc0000005 context not captured. Original I0xc00805ff, B13579bdf, SNORM+1/-1/0/-1 must be retained. SINT prepared not_run. Not expected-success CTest.",
+        "continuation": "C:\\Users\\skei\\Documents\\Codex\\handoff\\mutable32-20261018\\NEXT_SIGNED_WORD.md"
       }
     },
     "depth-color-shared-storage": {
