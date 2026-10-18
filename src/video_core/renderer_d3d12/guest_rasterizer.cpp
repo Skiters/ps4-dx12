@@ -556,6 +556,21 @@ void GuestRasterizer::PrepareGpuBacking(VAddr address,u64 size,bool writing){
     ValidateIndependentImageWatches();
     GuestBufferAccess::PrepareGpuBacking(address,size,writing);
 }
+void GuestRasterizer::PreserveImagesForGpuBuffer(VAddr address,u64 size){
+    std::lock_guard lock(execution_mutex_);
+    ValidateIndependentImageWatches();
+    for(auto& image:textures_.Entries()){
+        if(!image->gpu_owned||image->buffer_alias_version||!ImageOverlap(address,size,*image))continue;
+        // Original raw buffer binding does not retire or dirty a valid I just
+        // because a later sharp overlaps its pages. Transfer this same entry's
+        // protection to independent I/B before acquiring the buffer guard;
+        // no guest bytes, metadata, original GpuModified or native allocation
+        // are changed. PageWatch preserves any stronger existing B owner.
+        if(image->HasValidLogicalImage()&&OwnIndependentImage(*image))continue;
+        // Unadapted physical domains keep their existing explicit resolver.
+        ResolveImage(*image);
+    }
+}
 void GuestRasterizer::NotifyGpuBufferWrite(VAddr address,u64 size){
     DiscardBufferImageVersions(address,size,true);
 }

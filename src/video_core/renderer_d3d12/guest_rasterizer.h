@@ -44,6 +44,7 @@ class GuestRasterizer : public GuestBufferAccess {
     void ReleaseBufferPageWatch(VAddr,u64) override;
     void CheckBacking(VAddr,u64,bool) override;
     void PrepareGpuBacking(VAddr,u64,bool) override;
+    void PreserveImagesForGpuBuffer(VAddr,u64) override;
     void ResolveImages(VAddr address,u64 size) override {ResolveMemory(address,size);}
     bool HasGpuImageOverlap(VAddr,u64)const override;
     bool ReadDmaBacking(VAddr address,std::span<std::byte> bytes)override{

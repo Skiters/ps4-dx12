@@ -12,6 +12,9 @@ protected:
     std::unique_ptr<PageWatch> page_watch_;
     std::function<bool(VAddr,u64)> has_backing_;
     virtual void ResolveImages(VAddr,u64) {}
+    // GPU buffer admission may retain a separate current native image instead
+    // of exposing it to physical CPU backing. CPU access still resolves images.
+    virtual void PreserveImagesForGpuBuffer(VAddr address,u64 size){ResolveImages(address,size);}
     virtual void ReleaseImageWatches(VAddr,u64) {}
     virtual void ReleaseBufferPageWatch(VAddr address,u64 size){
         // A borrowed read-only range may span more than this mapping. Split
@@ -45,7 +48,7 @@ protected:
     void PrepareGpuBacking(VAddr address,u64 size,bool writing) override {
         // Unsupported buffer/image aliases use physical backing conversion.
         // This does not release buffer watches or resolve resident buffers.
-        ResolveImages(address,size);
+        PreserveImagesForGpuBuffer(address,size);
         if(writing)ReleaseImageWatches(address,size);
     }
     void SetBufferBackingAccess(std::function<bool(VAddr,u64)> has,
@@ -58,7 +61,7 @@ protected:
         SetBufferOwnership([this](VAddr address,u64 size){
             if(address%4096||size%4096){Diagnostics::Count("buffer-own.unaligned");return false;}
             if(!has_backing_(address,size)){Diagnostics::Count("buffer-own.no-backing");return false;}
-            ReleaseImageWatches(address,size);ResolveImages(address,size);
+            ReleaseImageWatches(address,size);PreserveImagesForGpuBuffer(address,size);
             const bool tracked=page_watch_->TrackOwned(address,size);
             Diagnostics::Count(tracked?"buffer-own.accepted":"buffer-own.track-conflict");
             Diagnostics::Count(tracked?"buffer-own.accepted-bytes":"buffer-own.rejected-bytes",size);

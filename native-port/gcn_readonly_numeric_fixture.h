@@ -60,7 +60,7 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         return std::array<u32,4>{one,0,0,one};};
     for(const auto numbers:{std::array<u32,2>{0,4},std::array<u32,2>{1,5},std::array<u32,2>{9,4}})
     for(const bool reverse:{false,true})for(const bool formatted:{false,true})for(const bool modified:{false,true}){
-        if(exclusive_seed&&(numbers!=std::array<u32,2>{0,4}||reverse||formatted||!modified))continue;
+        if(exclusive_seed&&!modified)continue;
         printf("CASE: actual GCN readonly numeric pair=%u/%u reverse=%u formatted=%u GpuModified=%u\n",numbers[0],numbers[1],reverse,formatted,modified);fflush(stdout);
         rasterizer.Finish();rasterizer.UnmapMemory(base,AllocationBytes);rasterizer.MapMemory(base,AllocationBytes);
         rasterizer.NotifyHostMapping(base,AllocationBytes,true,true);memset(memory,0xa7,AllocationBytes);
@@ -134,7 +134,7 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
                 fprintf(stderr,"Readonly output[%u]=%08x expected=%08x\n",i,got,want);}
             throw std::runtime_error("Readonly numeric views lost typed I/B/order or full physical padding");}
     }
-    puts(exclusive_seed?"PASS: standalone exclusive I preserved across later interior B writer":
+    puts(exclusive_seed?"PASS:12 standalone exclusive I cases: numeric pairs, descriptor orders, raw/formatted interior B writer, full physical readback":
         "PASS:24 actual GCN readonly UNORM/UINT/SNORM/SINT/sRGB pairs, both descriptor orders, original GpuModified0/1, raw B versus eligible formatted I residency and complete65536 physical bytes");
 }
 } // namespace NativeDX12
