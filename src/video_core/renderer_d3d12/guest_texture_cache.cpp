@@ -1458,15 +1458,11 @@ uint64_t GuestTextureCache::ReleaseRetiredStorage(Entry& entry,uint64_t complete
        (entry.readback_pool&&entry.readback_pool.use_count()!=1))return 0;
     const auto before=entry.ResidentBytes();
     entry.upload_pool.clear();entry.tiler_input_pool.clear();entry.tiler_output_pool.clear();entry.readback_pool.reset();
-    for(auto it=entry.sample_backings.begin();it!=entry.sample_backings.end();){
-        const auto& backing=it->second;
-        if(backing.handle&&backing.allocation&&backing.allocation.use_count()==1){
-            const auto description=backing.handle->GetDesc();
-            const auto allocation=texture_allocator_.AllocationInfo(description,ResourceCasts(backing)).SizeInBytes;
-            if(allocation&&allocation<=entry.allocation_bytes){entry.allocation_bytes-=allocation;it=entry.sample_backings.erase(it);continue;}
-        }
-        ++it;
-    }
+    // Runtime::SetBackingSamples(copy_backing=false) can restore an inactive
+    // backing before a partial image copy. Its uncovered pixels are observable
+    // history, not scratch reconstructible from the active sample domain.
+    // Retain these allocations with their original image, as pinned Vulkan
+    // does; whole-image eviction still follows the normal ownership contract.
     RetireMultisampleStorage(entry,completed);
     return before-entry.ResidentBytes();
 }

@@ -8,6 +8,7 @@
 #include "msaa_depth_initialization_fixture.h"
 #include "independent_depth_fixture.h"
 #include "requested_sample_backing_fixture.h"
+#include "sample_backing_pressure_fixture.h"
 #include "paired_depth_snapshot_fixture.h"
 #include "independent_depth_growth_fixture.h"
 #include "depth_subview_fixture.h"
@@ -651,6 +652,7 @@ int main(int argc,char** argv){try{
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
+    if(argc==2&&strcmp(argv[1],"--sample-backing-pressure")==0){for(UINT samples:{1u,8u})RunSampleBackingPressure(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--readonly-mutable32-views")==0){RunReadonlyNumericViewsFixture(device.Get(),true,false,0);return 0;}
     if(argc==2&&strcmp(argv[1],"--readonly-word-numeric-views")==0){RunReadonlyNumericViewsFixture(device.Get(),false,true);return 0;}
     if(argc==2&&strcmp(argv[1],"--readonly-word-views")==0){RunReadonlyNumericViewsFixture(device.Get(),true);return 0;}

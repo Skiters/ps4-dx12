@@ -358,6 +358,8 @@ add_test(NAME native_independent_msaa_storage_pressure COMMAND native-independen
 set_tests_properties(native_independent_msaa_storage_pressure PROPERTIES TIMEOUT 180)
 add_test(NAME native_requested_sample_backings COMMAND native-independent-version-transfer-test --requested-sample-backings)
 set_tests_properties(native_requested_sample_backings PROPERTIES TIMEOUT 180)
+add_test(NAME native_sample_backing_pressure_history COMMAND native-independent-version-transfer-test --sample-backing-pressure)
+set_tests_properties(native_sample_backing_pressure_history PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_vector32_transfer COMMAND native-independent-version-transfer-test --msaa-vector32)
 set_tests_properties(native_independent_msaa_vector32_transfer PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_vector16_transfer COMMAND native-independent-version-transfer-test --msaa-vector16)
