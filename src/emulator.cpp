@@ -117,7 +117,12 @@ void Emulator::Shutdown() {
     if (play_time_thread.joinable()) {
         play_time_thread.join();
     }
-    UpdatePlayTime(Common::Singleton<Common::ElfInfo>::Instance()->GameSerial());
+    // Cleanup can be entered by an assertion before a title has initialized.
+    // UpdatePlayTime is already a no-op without a started play-time interval;
+    // avoid asking the still-uninitialized ElfInfo for its serial in that case.
+    if (start_time != std::chrono::steady_clock::time_point{}) {
+        UpdatePlayTime(Common::Singleton<Common::ElfInfo>::Instance()->GameSerial());
+    }
     if (controllers) {
         controllers->ResetLightbarColors();
         // need to give SDL time to do this before the runtime exits
