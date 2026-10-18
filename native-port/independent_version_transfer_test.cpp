@@ -3,6 +3,7 @@
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "video_core/renderer_d3d12/guest_image_operations.h"
 #include "video_core/renderer_d3d12/guest_image_ownership.h"
+#include "video_core/renderer_d3d12/guest_image_readback.h"
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "msaa_depth_initialization_fixture.h"
 #include "independent_depth_fixture.h"
@@ -537,6 +538,111 @@ void RunMultisample(ID3D12Device* device,UINT samples,UINT number_format,bool wr
         renderer.ValidateDebugMessages();printf("MSAA independent transfer data_format=%u view_data=%u samples=%u number_format=%u writable=%u pressure=%u raw=%u/%u clear=%u layers=2 exact\n",data_format,sampled.data_format,samples,number_format,unsigned(writable),unsigned(pressure),unsigned(raw_source),unsigned(raw_destination),unsigned(clear!=nullptr));
     }catch(...){renderer.Finish();throw;}
 }
+void RunReadonlyMultisampleWordStorage(ID3D12Device* device,UINT samples){
+    const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
+    Rasterizer renderer(device);GuestTextureCache cache(device);PlacedTextureAllocator allocator(device);
+    GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=8;
+    desc.layers=desc.view_layers=2;desc.tile_mode=13;desc.samples=samples;
+    desc.data_format=34;desc.number_format=7;desc.native_raw32=true;
+    const auto layout=LayoutGuestTexture(desc);
+    std::vector<std::byte> physical(layout.guest_bytes,std::byte{0xa7}),expected;
+    for(UINT layer=0;layer<desc.layers;++layer)for(UINT sample=0;sample<samples;++sample)
+    for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x){
+        const u32 word=0x13570000u|(layer<<12)|(sample<<8)|(y<<4)|x;
+        memcpy(physical.data()+GuestPixelOffset(desc,layout,0,layer,x,y,sample),&word,4);
+    }
+    expected=physical;
+    Resource gpu,upload,readback;
+    try{
+        gpu=Buffer(device,physical.size(),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        upload=Buffer(device,physical.size(),D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        readback=Buffer(device,physical.size(),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* cpu{};Check(upload.handle->Map(0,nullptr,&cpu));memcpy(cpu,physical.data(),physical.size());upload.handle->Unmap(0,nullptr);
+        renderer.RecordingList()->CopyBufferRegion(gpu.handle.Get(),0,upload.handle.Get(),0,physical.size());
+        cache.SetIndependentImageRetention([](const auto& d,const auto&){return d.data_format==4&&d.writable;});
+        cache.SetOwnershipAcquirer([&](auto& image){const auto owner=DescribeGuestImageOwnership(image);
+            if(!owner||!CanRetainGuestImageOwnership(cache,*owner))return false;
+            image.buffer_alias_version=true;image.SetGpuOwned(true);return true;});
+        auto& source=cache.Upload(desc,physical,renderer.RecordingList(),renderer.CompletedFence());
+        const auto uid=source.image_uid;auto* native=source.texture.handle.Get();
+        const auto original_bytes=source.allocation_bytes;
+        auto writer=desc;writer.data_format=4;writer.number_format=4;writer.native_raw32=false;writer.writable=true;
+        auto readonly=writer;readonly.writable=false;
+        bool denied=false;try{cache.EnsureMultisampleStorage(source,readonly);}catch(const std::invalid_argument&){denied=true;}
+        require(denied&&source.storage_samples.empty()&&!source.storage_linear.handle,
+            "Readonly MSAA view invented storage writer authority");
+        auto transfer=cache.PrepareMultisampleStorage(source,writer);
+        require(source.desc==desc&&source.image_uid==uid&&source.texture.handle.Get()==native&&
+            !source.logical_gpu_modified,"Storage preparation changed original readonly class/history");
+        denied=false;try{(void)source.Uav(writer,0);}catch(const std::invalid_argument&){denied=true;}
+        require(denied,"MSAA base resource acquired an impossible UAV permission");
+        { // Genuine native permission/cast/range negatives, not descriptor-only rejection.
+            auto bad_view=writer;bad_view.samples=samples==2?4:2;
+            denied=false;try{(void)source.StorageUav(bad_view,0);}catch(const std::invalid_argument&){denied=true;}
+            require(denied,"MSAA storage admitted a different logical sample count");
+            denied=false;try{(void)source.StorageUav(writer,samples);}catch(const std::invalid_argument&){denied=true;}
+            require(denied,"MSAA storage admitted an out-of-range plane");
+            GuestTextureCache::Entry invalid;invalid.desc=source.desc;invalid.layout=source.layout;
+            invalid.texture=source.texture;invalid.storage_samples=source.storage_samples;
+            auto shape=invalid.storage_samples[0].handle->GetDesc();shape.Flags=D3D12_RESOURCE_FLAG_NONE;
+            invalid.storage_samples[0]=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON);
+            denied=false;try{(void)invalid.StorageUav(writer,0);}catch(const std::invalid_argument&){denied=true;}
+            require(denied,"MSAA storage plane invented actual UAV permission");
+            shape.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;shape.Format=DXGI_FORMAT_R16G16_UINT;
+            invalid.storage_samples[0]=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON);
+            denied=false;try{(void)invalid.StorageUav(writer,0);}catch(const std::invalid_argument&){denied=true;}
+            require(denied,"MSAA storage plane invented a missing native format cast");
+        }
+        transfer->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,false);
+        auto visible=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,samples*2,true);
+        auto cpu_views=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,samples*2,false);
+        renderer.RetainUntilFinish([visible,cpu_views](u64){(void)visible;(void)cpu_views;});
+        for(UINT sample=0;sample<samples;++sample)for(UINT layer=0;layer<2;++layer){
+            auto view=writer;view.first_layer=layer;view.view_layers=1;
+            const auto uav=source.StorageUav(view,sample);const UINT index=sample*2+layer;
+            auto& plane=source.storage_samples[sample];
+            device->CreateUnorderedAccessView(plane.handle.Get(),nullptr,&uav,visible->Cpu(index));
+            device->CreateUnorderedAccessView(plane.handle.Get(),nullptr,&uav,cpu_views->Cpu(index));
+            auto* list=renderer.RecordingList();plane.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            ID3D12DescriptorHeap* heaps[]{visible->Heap()};list->SetDescriptorHeaps(1,heaps);
+            const UINT values[]{0x24680000u|(layer<<12)|(sample<<8),0,0,0};
+            list->ClearUnorderedAccessViewUint(visible->Gpu(index),cpu_views->Cpu(index),plane.handle.Get(),values,0,nullptr);
+            plane.UavBarrier(list);
+            for(UINT y=0;y<desc.height;++y)for(UINT x=0;x<desc.width;++x)
+                memcpy(expected.data()+GuestPixelOffset(desc,layout,0,layer,x,y,sample),values,4);
+        }
+        transfer->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,true);
+        require(cache.Own(source),"Written readonly MSAA I lost independent ownership");
+        const auto with_storage=source.allocation_bytes;
+        require(!cache.RetireMultisampleStorage(source,renderer.CompletedFence()),"Pending readonly MSAA storage retired");
+        cache.Submitted(renderer.Flush());renderer.Finish();cache.Collect(renderer.CompletedFence());
+        require(!cache.RetireMultisampleStorage(source,source.fence-1),"Readonly MSAA storage ignored its fence");
+        require(!cache.RetireMultisampleStorage(source,renderer.CompletedFence()),"Live storage transfer lost its plane leases");
+        transfer.reset();
+        auto pin=cache.PinBinding(source);require(!cache.RetireMultisampleStorage(source,renderer.CompletedFence()),"Pinned readonly MSAA storage retired");pin.reset();
+        auto retained=source.storage_samples[0].allocation;
+        require(!cache.RetireMultisampleStorage(source,renderer.CompletedFence()),"Bound readonly MSAA plane allocation retired");retained.reset();
+        require(cache.RetireMultisampleStorage(source,renderer.CompletedFence())&&source.storage_retired&&
+            source.allocation_bytes==original_bytes,"Readonly MSAA storage failed exact retirement accounting");
+        transfer=cache.PrepareMultisampleStorage(source,writer);
+        require(source.desc==desc&&source.image_uid==uid&&source.texture.handle.Get()==native&&
+            source.allocation_bytes==with_storage&&!source.storage_retired,"Readonly MSAA restore changed class/UID/accounting");
+        transfer->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,false);
+        transfer->Record(renderer.RecordingList(),source.texture,source.storage_samples,source.storage_linear,true);
+        GuestImageReadback image_readback(device,source,renderer.RecordingList());
+        gpu.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,gpu.handle.Get(),0,physical.size());
+        const auto fence=renderer.Flush();cache.Submitted(fence);image_readback.Submitted(fence);renderer.Finish();cache.Collect(renderer.CompletedFence());
+        auto observed=physical;image_readback.Resolve(renderer.CompletedFence(),observed);
+        require(observed==expected,"Readonly MSAA restored GPU words/layers or full guest padding differ");
+        Check(readback.handle->Map(0,nullptr,&cpu));const bool unchanged=!memcmp(cpu,physical.data(),physical.size());D3D12_RANGE none{};readback.handle->Unmap(0,&none);
+        require(unchanged,"Readonly MSAA storage changed independent GPU B");
+        require(source.desc==desc&&source.image_uid==uid&&source.texture.handle.Get()==native&&source.logical_gpu_modified&&
+            source.gpu_owned&&source.buffer_alias_version,"Readonly MSAA write lost original I identity/history/ownership");
+        renderer.ValidateDebugMessages();
+        printf("PASS: readonly R9 MSAA%u,R32 writer planes,2 layers,real permission/cast negatives,pressure retirement/restore,distinct GPU I/B and padding\n",samples);
+    }catch(...){try{renderer.Finish();}catch(...){}throw;}
+}
 int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_D3D12_VALIDATION","1");
     const bool packed19_rt=(argc==2&&std::string_view(argv[1])=="--packed19-msaa-attachment")||
@@ -589,6 +695,7 @@ int main(int argc,char** argv){try{
         RunMultisample(device.Get(),2,4,false,true);
         RunMultisample(device.Get(),4,5,true,true);
         RunMultisample(device.Get(),8,7,true,true);
+        for(UINT samples:{2u,4u,8u})RunReadonlyMultisampleWordStorage(device.Get(),samples);
         puts("PASS: independent MSAA scratch retirement, lazy restore, fences, pins, leases and exact domains");return 0;
     }
     if(argc==2&&strcmp(argv[1],"--msaa-vector32")==0){

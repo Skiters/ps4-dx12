@@ -1236,7 +1236,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 textures->SetBackingSamples(*entry,image.desc.samples,rasterizer.RecordingList());
                 if(image.sample_storage&&image.desc.samples>1){
                     if(std::ranges::none_of(storage_transfers,[entry](const auto& transfer){return transfer.first==entry;}))
-                        storage_transfers.emplace_back(entry,textures->PrepareMultisampleStorage(*entry));
+                        storage_transfers.emplace_back(entry,textures->PrepareMultisampleStorage(*entry,image.desc));
                 }else{
                 const auto state=image.desc.writable?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -1252,7 +1252,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     const auto mip=image.sample_storage?0:image.mip+i;
                     auto writable_view=image.desc;
                     if(block_alias_view)writable_view.levels=entry->desc.levels;
-                    auto view=entry->Uav(writable_view,mip);
+                    auto view=image.sample_storage&&image.desc.samples>1?
+                        entry->StorageUav(writable_view,i):entry->Uav(writable_view,mip);
                     if(image.array&&image.desc.layers==1){
                         if(image.desc.one_dimensional){view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE1DARRAY;view.Texture1DArray={mip,0,1};}
                         else{view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={mip,0,1,0};}

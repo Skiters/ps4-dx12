@@ -104,6 +104,13 @@ std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool su
     if(!supported||!IsDirectReadonlyWordClass(d))return {};
     return formats;
 }
+bool IsReadonlyMultisampleWordClass(const GuestTextureDesc& d){
+    return !d.writable&&!d.render_target&&!d.depth_target&&!d.stencil_address&&
+        !d.one_dimensional&&!d.volume_depth&&d.levels==1&&
+        (d.samples==2||d.samples==4||d.samples==8)&&
+        (d.UsesRaw32()||(d.data_format==4&&
+            (d.number_format==4||d.number_format==5||d.number_format==7)));
+}
 std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool supported,bool r11_uav){
     // Original _32BIT storage remains mutable after a write. Keep typed R16G16
     // UAVs and raw R32 codecs on one allocation, without changing the guest I.
@@ -131,11 +138,30 @@ bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTe
     if(native==format||entry.texture.AllowsCast(format))return true;
     return native==(view.UsesRaw32()?DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(view.data_format,format));
 }
+bool CanUseMultisampleStorageView(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
+    if(!entry.texture.handle||!view.writable||entry.desc.samples<2||entry.desc.samples>16||
+       !std::has_single_bit(entry.desc.samples)||view.samples!=entry.desc.samples||
+       entry.desc.levels!=1||view.levels!=1||entry.desc.depth_target||
+       (!entry.desc.writable&&!IsReadonlyMultisampleWordClass(entry.desc)))return false;
+    const auto native=entry.texture.handle->GetDesc();
+    if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
+       native.SampleDesc.Count!=entry.desc.samples||native.MipLevels!=1||
+       native.Width!=entry.desc.width||native.Height!=entry.desc.height||
+       native.DepthOrArraySize!=entry.desc.layers||
+       !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||
+       (native.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE))return false;
+    auto written_source=entry.desc;written_source.writable=true;
+    return ((entry.desc.writable&&entry.desc==view)||
+        CompatibleGuestWritableStorage(written_source,view))&&
+        MatchesGuestMipLayout(entry.layout,LayoutGuestTexture(view))&&CanBindNativeWordFormat(entry,view);
+}
 bool IsReadonlyRawR32Class(const GuestTextureDesc& d){
-    if(d.writable||d.render_target||d.depth_target||d.stencil_address||d.native_raw32||
+    if(d.writable||d.render_target||d.depth_target||d.stencil_address||
+       (d.native_raw32&&!(d.data_format==34&&d.samples>1))||
        !std::has_single_bit(d.samples)||d.samples>16||
        (d.samples>1&&(d.levels!=1||d.volume_depth||d.one_dimensional)))return false;
     if(d.data_format==4)return d.number_format==4||d.number_format==5||d.number_format==7;
+    if(d.data_format==34)return d.native_raw32&&d.number_format==7;
     return d.UsesRawPacked10()&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5);
 }
 bool CanBindReadonlyWordSrv(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
@@ -179,7 +205,7 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
         // PS4 RGB9E5 is sampled-only. Its independent snapshot keeps typed
         // sampling while raw R32 views move the original shared-exponent word.
         // Ownership is described separately; this does not permit IMAGE_WRITE.
-        return !d.writable&&!d.render_target&&d.number_format==7&&
+        return (!d.writable||d.UsesRaw32())&&!d.render_target&&d.number_format==7&&
             layout.format==(d.UsesRaw32()?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R9G9B9E5_SHAREDEXP)&&
             layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
     }
@@ -427,7 +453,8 @@ bool GuestTextureCache::CanBindReadonlyWordView(const Entry& image,const GuestTe
 bool GuestTextureCache::CanRetainReadonlyWordStorage(const GuestTextureDesc& desc)const{
     // Sharing tests deliberately exclude an identical descriptor. Retention
     // asks whether this original image can have a real mutable-word backing.
-    return !ReadonlyWordCasts(desc,texture_allocator_.SupportsFormatCasting()).empty();
+    return IsReadonlyMultisampleWordClass(desc)||
+        !ReadonlyWordCasts(desc,texture_allocator_.SupportsFormatCasting()).empty();
 }
 bool GuestTextureCache::HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
     const auto [first,last]=address_index_.equal_range(desc.address);
@@ -449,6 +476,7 @@ bool CompatibleGuestReadonlyWordStorage(GuestTextureDesc source,GuestTextureDesc
     if((source.data_format==view.data_format&&source.native_packed10_raw==view.native_packed10_raw)||
        (!raw_family&&(!IsDirectReadonlyWordClass(source)||!IsDirectReadonlyWordClass(view))))return false;
     source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.native_raw32=view.native_raw32=false;
     source.native_packed10_raw=view.native_packed10_raw=false;
     source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
@@ -1101,6 +1129,26 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
         throw std::invalid_argument("Native texture resource does not allow UAV views");
     Entry view;view.desc=writable_view;view.layout=LayoutGuestTexture(writable_view);return view.Uav(mip);
 }
+D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::StorageUav(const GuestTextureDesc& writable_view,uint32_t sample)const{
+    if(!CanUseMultisampleStorageView(*this,writable_view)||sample>=storage_samples.size()||
+       storage_samples.size()!=desc.samples||writable_view.first_layer>=writable_view.layers||
+       !writable_view.view_layers||writable_view.view_layers>writable_view.layers-writable_view.first_layer)
+        throw std::invalid_argument("Incompatible native multisample storage writer view/sample");
+    const auto& storage=storage_samples[sample];
+    if(!storage.handle)throw std::invalid_argument("Native MSAA storage plane has no resource");
+    const auto native=storage.handle->GetDesc();
+    if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.SampleDesc.Count!=1||
+       native.MipLevels!=1||native.Width!=desc.width||native.Height!=desc.height||
+       native.DepthOrArraySize!=desc.layers||!(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+        throw std::invalid_argument("Native MSAA storage plane lacks its exact writable geometry");
+    // Build the UAV from the actual single-sample plane. The authoritative
+    // MSAA texture is not UAV-capable; its original readonly class stays put.
+    Entry plane;plane.desc=writable_view;plane.desc.samples=1;
+    plane.layout=LayoutGuestTexture(plane.desc);plane.texture=storage;
+    if(!CanBindNativeWordFormat(plane,plane.desc))
+        throw std::invalid_argument("Native MSAA storage plane lacks the requested format cast");
+    return plane.Uav(0);
+}
 D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(uint32_t mip)const {
     if(!desc.render_target||mip<desc.first_mip||mip>=desc.levels)throw std::out_of_range("Invalid guest texture RTV mip/access");
     D3D12_RENDER_TARGET_VIEW_DESC view{};view.Format=layout.format;
@@ -1205,17 +1253,22 @@ void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12Graphi
     entry.texture=std::move(destination);entry.last_use=++use_sequence_;
 }
 void GuestTextureCache::EnsureMultisampleStorage(Entry& entry){
-    if(!entry.desc.writable||entry.desc.samples<2||!entry.texture.handle)
-        throw std::invalid_argument("Native MSAA shader storage has no writable image");
+    EnsureMultisampleStorage(entry,entry.desc);
+}
+void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTextureDesc& writable_view){
+    if(!CanUseMultisampleStorageView(entry,writable_view))
+        throw std::invalid_argument("Native MSAA shader storage has no compatible writer view");
+    const auto owner=image_uids_.find(entry.image_uid);
+    if(entry.cache!=this||owner==image_uids_.end()||owner->second!=&entry)
+        throw std::invalid_argument("MSAA storage has no owning cache");
     if(entry.storage_samples.size()==entry.desc.samples&&entry.storage_linear.handle){
         entry.storage_retired=false;return;
     }
-    if(!entry.storage_retired||!entry.storage_samples.empty()||entry.storage_linear.handle||
+    const bool initial_readonly=IsReadonlyMultisampleWordClass(entry.desc)&&
+        !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
+    if((!entry.storage_retired&&!initial_readonly)||!entry.storage_samples.empty()||entry.storage_linear.handle||
        !CanTransferIndependentMultisample(entry.desc,entry.layout))
         throw std::invalid_argument("Native MSAA shader storage is not reconstructible");
-    const auto owner=image_uids_.find(entry.image_uid);
-    if(entry.cache!=this||owner==image_uids_.end()||owner->second!=&entry)
-        throw std::invalid_argument("Retired MSAA storage has no owning cache");
     auto description=entry.texture.handle->GetDesc();
     if(description.SampleDesc.Count!=entry.desc.samples)
         throw std::invalid_argument("Retired MSAA storage needs matching native sample backing");
@@ -1246,7 +1299,7 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry){
     Diagnostics::Count("image-msaa.storage-restored.bytes",bytes);
 }
 bool GuestTextureCache::RetireMultisampleStorage(Entry& entry,uint64_t completed){
-    if(!entry.gpu_owned||!entry.buffer_alias_version||!entry.desc.writable||
+    if(!entry.gpu_owned||!entry.buffer_alias_version||(!entry.desc.writable&&!IsReadonlyMultisampleWordClass(entry.desc))||
        !CanTransferIndependentMultisample(entry.desc,entry.layout)||entry.BindingPinned()||
        entry.pending||entry.fence>completed||entry.storage_samples.size()!=entry.desc.samples||
        !entry.storage_linear.handle||!entry.texture.handle||
@@ -1275,7 +1328,10 @@ bool GuestTextureCache::RetireMultisampleStorage(Entry& entry,uint64_t completed
     Diagnostics::Count("image-msaa.storage-retired.bytes",bytes);return true;
 }
 std::shared_ptr<GuestMultisample::StorageLease> GuestTextureCache::PrepareMultisampleStorage(Entry& entry){
-    EnsureMultisampleStorage(entry);
+    return PrepareMultisampleStorage(entry,entry.desc);
+}
+std::shared_ptr<GuestMultisample::StorageLease> GuestTextureCache::PrepareMultisampleStorage(Entry& entry,const GuestTextureDesc& writable_view){
+    EnsureMultisampleStorage(entry,writable_view);
     if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
     auto lease=multisample_->PrepareStorage(entry.texture,entry.storage_samples,entry.storage_linear,entry.desc,entry.layout);
     entry.storage_leases.push_back(lease);entry.pending=true;return lease;
@@ -1755,6 +1811,7 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
         ((entry.desc.writable||!desc.writable||
+          CanUseMultisampleStorageView(entry,desc)||
           (IsDirectReadonlyWordClass(entry.desc)&&entry.texture.handle&&
            (entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)&&
            CanBindNativeWordFormat(entry,desc)))&&CompatibleGuestShaderStorage(entry.desc,desc))||

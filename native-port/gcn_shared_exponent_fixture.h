@@ -7,8 +7,9 @@ namespace NativeDX12 {
 // view. The GPU-modified seed must retain this original class, not recreate it
 // from B. Expected colors/words are authored independently of production IR.
 inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
-    std::byte* memory,std::byte* backing,u64 base,bool filtered=false,bool extremes=false,bool word_donor=false){
+    std::byte* memory,std::byte* backing,u64 base,bool filtered=false,bool extremes=false,bool word_donor=false,u32 samples=1){
     constexpr u32 Bytes=65536,ImageOffset=16384,OutputOffset=57344;
+    const u32 active_sample=samples-1;
     const u32 Old=extremes?0:128u|(256u<<9)|(64u<<18)|(17u<<27); // 1,2,0.5
     const u32 Seed=extremes?1:256u|(32u<<9)|(128u<<18)|(18u<<27); // 4,0.5,2
     const u32 Final=extremes?0xffffffff:1u|(2u<<9)|(4u<<18)|(24u<<27); // 1,2,4
@@ -30,12 +31,14 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
         r.ReadMemory(base,Bytes);r.Finish();r.UnmapMemory(base,Bytes);r.MapMemory(base,Bytes);
         r.NotifyHostMapping(base,Bytes,true,true);memset(memory,0xa7,Bytes);
         AmdGpu::Image reader{};reader.base_address=(base+ImageOffset)>>8;
-        reader.type=u64(AmdGpu::ImageType::Color2D);reader.width=reader.height=reader.pitch=31;
+        reader.type=u64(samples>1?AmdGpu::ImageType::Color2DMsaa:AmdGpu::ImageType::Color2D);
+        if(samples>1)reader.last_level=std::countr_zero(samples);
+        reader.width=reader.height=reader.pitch=31;
         reader.data_format=34;reader.num_format=7;reader.tiling_index=5;
         reader.dst_sel_x=4;reader.dst_sel_y=5;reader.dst_sel_z=6;reader.dst_sel_w=7;
         const auto desc=DescribeGuestTexture(reader);const auto layout=LayoutGuestTexture(desc);
-        for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)
-            memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y),&Old,4);
+        for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)for(u32 sample=0;sample<samples;++sample)
+            memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y,sample),&Old,4);
         if(filtered){
             // Four different per-texel exponents. At (.75,1.25), weights are
             // 3/16,1/16,9/16,3/16; averaging packed words cannot produce this.
@@ -50,10 +53,17 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
         AmdGpu::Buffer output{};output.base_address=base+OutputOffset;output.stride=4;output.num_records=1024;
         output.data_format=4;output.num_format=4;output.dst_sel_x=4;output.dst_sel_y=5;output.dst_sel_z=6;output.dst_sel_w=7;
         auto input=output;input.base_address=base;input.num_records=Bytes/4;
-        const auto dispatch=[&](const std::vector<u32>& words,u64 hash){
-            if(words.size()>192)throw std::runtime_error("Shared exponent shader overlaps metadata");
-            code.words.fill(0);std::copy(words.begin(),words.end(),code.words.begin());
-            AmdGpu::BinaryInfo binary{};binary.signature=binary.signature_ref;binary.length=u32(words.size()*4);binary.shader_hash=hash;
+        const auto dispatch=[&](const std::vector<u32>& words,u64 hash,int sample_index=-1){
+            auto program=words;
+            if(samples>1){const auto sample=sample_index<0?active_sample:u32(sample_index);
+                for(size_t i=0;i<program.size();++i)if(program[i]==0xf0000f00||program[i]==0xf0200f00){
+                    program.insert(program.begin()+i,{0x7e0402ff,sample});i+=3;
+                }
+                hash+=u64(samples)*0x100000000ull+u64(sample)*0x10000000000ull;
+            }
+            if(program.size()>192)throw std::runtime_error("Shared exponent shader overlaps metadata");
+            code.words.fill(0);std::copy(program.begin(),program.end(),code.words.begin());
+            AmdGpu::BinaryInfo binary{};binary.signature=binary.signature_ref;binary.length=u32(program.size()*4);binary.shader_hash=hash;
             memcpy(code.words.data()+192,&binary,sizeof(binary));
             AmdGpu::ComputeProgram compute{};compute.address=reinterpret_cast<u64>(code.words.data())>>8;
             compute.num_thread_x.full=compute.num_thread_y.full=compute.num_thread_z.full=1;
@@ -131,18 +141,36 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
         dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xbf8c0000,
             0xe0700070,0x80010400,0xe0700074,0x80010500,0xe0700078,0x80010600,0xe070007c,0x80010700,0xbf810000},0x52474239504f5354);
         memcpy(expected.data()+OutputOffset+112,final_color.data(),16);
+        if(samples>1)for(u32 sample=0;sample<samples;++sample){
+            const u32 at=256+sample*16;
+            dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xbf8c0000,
+                0xe0700000|at,0x80010400,0xe0700000|(at+4),0x80010500,
+                0xe0700000|(at+8),0x80010600,0xe0700000|(at+12),0x80010700,0xbf810000},0x5247423953414d50,sample);
+            memcpy(expected.data()+OutputOffset+at,(sample==active_sample?final_color:old_color).data(),16);
+        }
+        if(samples>1){
+            auto raw_reader=reader;raw_reader.data_format=4;raw_reader.num_format=4;table[0]=raw_reader;
+            for(u32 sample=0;sample<samples;++sample){
+                const u32 at=512+sample*16,value=sample==active_sample?Final:Old;
+                dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xbf8c0000,
+                    0xe0700000|at,0x80010400,0xe0700000|(at+4),0x80010500,
+                    0xe0700000|(at+8),0x80010600,0xe0700000|(at+12),0x80010700,0xbf810000},0x5247423952415730,sample);
+                const std::array<u32,4> raw{value,0,0,value}; // Pinned R32 alpha selects red.
+                memcpy(expected.data()+OutputOffset+at,raw.data(),16);
+            }
+        }
         r.ReadMemory(output.base_address,output.GetSize());r.Finish();r.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),Bytes)){
             for(u32 c=0;c<9;++c){u32 got{},want{};memcpy(&got,backing+OutputOffset+c*4,4);memcpy(&want,expected.data()+OutputOffset+c*4,4);
                 fprintf(stderr,"RGB9 output[%u]=%08x expected=%08x\n",c,got,want);}
-            fprintf(stderr,"RGB9 writer=%u/%u reverse=%u modified=%u\n",writer_class[0],writer_class[1],reverse,modified);
+            fprintf(stderr,"RGB9 writer=%u/%u reverse=%u modified=%u samples=%u active=%u\n",writer_class[0],writer_class[1],reverse,modified,samples,active_sample);
             throw std::runtime_error("Shared exponent GCN lost original I/B, decoded contents, barrier or padding");
         }
         ++cases;
     }
-    printf("PASS:%u actual GCN %s donor, R32/packed writers, before/after %s, later typed SRV, separate B and full65536 bytes\n",cases,
+    printf("PASS:%u actual GCN %s donor, R32/packed writers, before/after %s, later SRV/all%u samples, separate B and full65536 bytes\n",cases,
         word_donor?"original written R32":"ordinary readonly RGB9E5",
-        filtered?"bilinear decoded colors":extremes?"zero/minimum/maximum colors":"decoded colors");
+        filtered?"bilinear decoded colors":extremes?"zero/minimum/maximum colors":"decoded colors",samples);
 }
 // Actual readonly multisample T# loads, including CPU dirty refresh and forced
 // channels on identical guest code/hash. Each sample has an independent word.

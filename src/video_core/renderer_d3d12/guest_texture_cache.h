@@ -228,6 +228,7 @@ public:
         D3D12_SHADER_RESOURCE_VIEW_DESC Srv(const GuestTextureDesc& sampled_view)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(uint32_t mip)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(const GuestTextureDesc& view,uint32_t mip)const;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC StorageUav(const GuestTextureDesc& view,uint32_t sample)const;
         D3D12_RENDER_TARGET_VIEW_DESC Rtv(uint32_t mip=0)const;
         D3D12_RENDER_TARGET_VIEW_DESC Rtv(const GuestTextureDesc&,uint32_t mip=0)const;
         D3D12_DEPTH_STENCIL_VIEW_DESC Dsv(bool read_only_depth=false,bool read_only_stencil=false)const;
@@ -336,8 +337,10 @@ public:
     void RemoveMeta(uint64_t address,uint64_t size);
     void SetBackingSamples(Entry&,UINT samples,ID3D12GraphicsCommandList*,bool copy=true);
     void EnsureMultisampleStorage(Entry&);
+    void EnsureMultisampleStorage(Entry&,const GuestTextureDesc& writable_view);
     bool RetireMultisampleStorage(Entry&,uint64_t completed_fence);
     std::shared_ptr<GuestMultisample::StorageLease> PrepareMultisampleStorage(Entry&);
+    std::shared_ptr<GuestMultisample::StorageLease> PrepareMultisampleStorage(Entry&,const GuestTextureDesc& writable_view);
     // current_buffer_snapshot is restricted to a proven current-B capture after
     // logical invalidation. Private feedback snapshots cannot validate history.
     Entry& Upload(const GuestTextureDesc&,std::span<const std::byte> guest_bytes,
@@ -466,7 +469,7 @@ public:
         RememberNativeImageStorage(entry);return true;
     }
     bool CanShareReadonlyWordStorage(const GuestTextureDesc& a,const GuestTextureDesc& b)const{
-        const bool r32_family=(a.data_format==4||a.UsesRawPacked10())&&(b.data_format==4||b.UsesRawPacked10());
+        const bool r32_family=(a.data_format==4||a.UsesRaw32())&&(b.data_format==4||b.UsesRaw32());
         return (texture_allocator_.SupportsFormatCasting()||r32_family)&&CompatibleGuestReadonlyWordStorage(a,b);
     }
     bool CanRetainReadonlyWordStorage(const GuestTextureDesc&)const;
