@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -128,6 +128,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_continuation_20261018": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "final_verification": {
@@ -158,7 +174,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -193,6 +209,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_subcontract": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "prepared_checks": [
@@ -259,7 +291,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -353,7 +385,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -481,7 +513,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1185,7 +1217,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1298,7 +1330,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2004,7 +2036,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2093,7 +2125,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2162,7 +2194,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2240,7 +2272,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2334,7 +2366,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2433,7 +2465,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2501,7 +2533,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2580,7 +2612,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2657,7 +2689,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2725,7 +2757,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2786,7 +2818,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2840,7 +2872,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2877,7 +2909,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2918,7 +2950,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2979,7 +3011,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3030,7 +3062,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3107,7 +3139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3177,7 +3209,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3247,7 +3279,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -3305,7 +3337,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3383,7 +3415,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3460,7 +3492,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3527,7 +3559,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3590,7 +3622,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3642,7 +3674,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3690,7 +3722,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3737,7 +3769,7 @@
         "writable_storage": "Original multisample image reads/writes lower to a descriptor array of one ordinary UAV texture per guest sample, preserving array layers. Sample selection uses the guest sample count; atomics retain original sample-zero semantics. Prepared leases copy MSAA samples into those textures before guest execution and return every sample afterwards on the same direct queue. Per-sample footprints are 512-byte aligned.",
         "depth_stencil_continuation_20261016": "0682d65 initializes only the fully replaced selected MSAA DS plane through the retained one-layer DSV after DEPTH_WRITE and before upload draw; full actual Width/Height and MipLevels1 required. Other planes/layers/partial outside pixels, guest metadata and leases remain. 9b5b356 classifies X32_TYPELESS_G8X24_UINT as uint4 for actual production plane1 readback, preserving G-to-X mapping and R8_UINT output. One focused native_msaa_depth_initialization mode authors fresh placed D16/D32, independent per-sample oracle, three-layer DS both orders, partial controls and production stencil extraction/padding with mandatory severe validation; uncompiled/unrun. Generic partial fresh-target lifecycle, depth exceptional bits and broader sample/alias/feedback/runtime/reproducible-source acceptance remain open. Evidence F:/PS4Dev/handoff/msaa-depth-init-20261016.",
         "historical_review_notes": "Simultaneous attachment/storage aliases; FMASK/DCC and Neo/mixed-code CMASK; adapter-dependent unsupported sample counts and typed formats; out-of-range source sample behavior and all final sample contents, padding, lifetime and failure acceptance. No execution verification has run.",
-        "open_contracts": "Readonly raw-R9/R32/packed2/4/8 sampling and actual writer-plane alias ownership of ORIGINAL readonly I are connected/narrowly GPU verified at15b1c88/bcc4bac. Remaining original generic per-adapter unsupported-count fallback with exact requested/native backing/view/sample-index/PSO/transfer semantics, including requested16. Native typed R9/4x capability remains unsupported on saved NVIDIA query; raw word acceptance is distinct from typed-native or whole-group acceptance.",
+        "open_contracts": "Readonly raw-R9/R32/packed2/4/8 and writer-plane ownership are connected/narrowly verified at15b1c88/bcc4bac. Alternate requested16/native8 identity and return to retained exact original1/8 are connected/narrowly GPU verified at8f2338e. Remaining: original guest16 payload upload/storage/SRV/sample-index/readback, common physical PSO/color/depth fallback mapping, inactive copy=false backing contents under pressure. Do not infer generic fallback or whole-group acceptance.",
         "latest_native19_msaa_evidence": {
           "source_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a",
           "upstream": "Pinned SurfaceFormat Format4_4_4_4/B4_UNORM preserves4-bit RGBA per sample; same original-capable AMD sample counts2/4/8",
@@ -3772,6 +3804,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_continuation_20261018": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "final_verification": {
@@ -3786,7 +3834,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3827,6 +3875,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_subcontract": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "prepared_checks": [
@@ -3906,7 +3970,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3989,7 +4053,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4057,7 +4121,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4126,7 +4190,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4188,7 +4252,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4243,7 +4307,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4297,7 +4361,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4353,7 +4417,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4400,7 +4464,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4466,7 +4530,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4515,7 +4579,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4619,7 +4683,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4713,7 +4777,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4778,7 +4842,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4839,7 +4903,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5603,7 +5667,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5961,7 +6025,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6375,6 +6439,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_continuation_20261018": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "final_verification": {
@@ -6403,7 +6483,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6794,6 +6874,22 @@
           "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\msaa-word-writer-20261018\\VERIFICATION_FINAL.json",
           "gcn_exe_sha256": "a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32",
           "scope": "60 R9 MSAA writer cases plus338 related GCN regressions; native15 including actual2-layer plane clears/negatives/retirement/restore; same60 originalUIDs/class/raw-readonly and0 ResolveImage. No generic count fallback, graphics-stage R9 acceptance or rebuilt-core/game acceptance."
+        },
+        "requested_native_sample_backing_subcontract": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
         }
       },
       "prepared_checks": [
@@ -7255,7 +7351,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -7971,7 +8067,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8034,7 +8130,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8325,7 +8421,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8627,7 +8723,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8920,7 +9016,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9229,7 +9325,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9535,7 +9631,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9856,7 +9952,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10183,7 +10279,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10485,7 +10581,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10783,7 +10879,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11073,7 +11169,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11360,7 +11456,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11655,7 +11751,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11983,7 +12079,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12281,7 +12377,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12624,7 +12720,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12927,7 +13023,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -13414,7 +13510,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13717,7 +13813,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -14194,7 +14290,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14254,7 +14350,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -14322,7 +14418,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -14388,7 +14484,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -14462,7 +14558,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14532,7 +14628,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14594,7 +14690,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14660,7 +14756,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14721,7 +14817,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -14795,7 +14891,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14862,7 +14958,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14922,7 +15018,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -14976,7 +15072,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15045,7 +15141,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15115,7 +15211,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15170,7 +15266,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15228,7 +15324,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15283,7 +15379,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15347,7 +15443,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -15427,7 +15523,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15481,7 +15577,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15526,7 +15622,23 @@
         "verification_prepared": "All 24 compact real-GPU image cases additionally require the cache residency total to include a retained actual texture allocation and zero retired-source bytes after its copy fence/release. Existing shared source-copy/cache-destruction and sample-backing GPU fixtures compile against the unified admission path. No execution.",
         "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open.",
         "historical_review_notes": "Adapter budget changes, allocator committed heap versus logical allocation totals, partial failure/pinned and pending source contention, sample transitions/format clear pressure fallback and peak GPU/CPU memory, sustained original/native performance and full runtime acceptance remain open. No semantic closure.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate.",
+        "requested_native_sample_backing_continuation_20261018": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -15544,14 +15656,30 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
         "date": "2026-10-16",
         "reason": "Whole-group/final behavior acceptance is not_run. Exact narrower executed subcontracts and their own binary identities are recorded separately. Compiler proof does not establish GPU contents, ownership, synchronization or game behavior.",
         "evidence": "docs/codex-progress/SESSION_HANDOFF.md; F:/PS4Dev/handoff/pressure-retirement-20261016",
-        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure."
+        "historical_scope_reason": "Current heap pressure/idle trim source and focused fixture are source-reviewed only. No configure/build/package/compiler/test/GPU/game/UI execution; historical acceptance retained separately; no group closure.",
+        "requested_native_sample_backing_subcontract": {
+          "source_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e",
+          "implementation_state": "connected",
+          "behavior_state": "narrow_gpu_pass",
+          "upstream_contract": "Requested BackingImage identity distinct from physical count; per-sample blit into retained original backing; explicit copy_backing and attachment usage",
+          "native_symbols": [
+            "Entry::RequestedBackingSamples",
+            "GuestMultisample::SelectBackingSamples",
+            "GuestTextureCache::SetBackingSamples",
+            "GuestTextureCache::Upload sample_backing_capable",
+            "PromoteWritableStorage backing reset"
+          ],
+          "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\requested-sample-backings-20261018\\VERIFICATION_FINAL.json",
+          "gcn_exe_sha256": "101294c55653576d87cb67d8a98483b3136a254728a21417cfe213cc1b902ba9",
+          "scope": "Alternate requested16/native8 of exact original1/8; both2-layer GPU words/padding/copy/no-copy/current-list/failure scenarios; native16,GCN398,reload; old/new minimal source controls. Initial guest16 payload/PSO mapping and copy=false inactive backing eviction remain open. Draw count guard compiled,branch not newly exercised. Exact rebuilt core runtime/game NOT_RUN."
+        }
       },
       "prepared_checks": [
         {
@@ -15604,7 +15732,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15659,7 +15787,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15711,7 +15839,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15771,7 +15899,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15853,7 +15981,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15938,7 +16066,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -15994,7 +16122,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16049,7 +16177,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16108,7 +16236,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16184,7 +16312,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16241,7 +16369,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16298,7 +16426,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16357,7 +16485,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16421,7 +16549,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16484,7 +16612,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16554,7 +16682,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16614,7 +16742,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16676,7 +16804,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16744,7 +16872,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16811,7 +16939,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16868,7 +16996,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -16938,7 +17066,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17003,7 +17131,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17069,7 +17197,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17124,7 +17252,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17183,7 +17311,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17243,7 +17371,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17310,7 +17438,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17381,7 +17509,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17452,7 +17580,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17516,7 +17644,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17581,7 +17709,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17654,7 +17782,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17715,7 +17843,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "bcc4bace8e85f31bc0aa921a80008496101d8f40"
+        "core_release_build_commit": "8f2338e1aa2a2fcaafe5386e01ee71e443f9363e"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -17749,7 +17877,7 @@
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
       "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges / GuestTiler::NativeFormat / DescribeNativeFormat / RetileImageVersion source codec / GuestTextureCache::SetRecordingListProvider / UploadVersion current context and resumed pending receipt / CompatibleGuestShaderStorage readonly numeric family / MatchesGuestUploadStorage readonly reuse",
-      "missing_semantics": "Shared writable raw9/4/10 and ordinary R32_UINT donors, physical shader streams and queued core46 ordering are connected and narrowly GPU verified at the referenced checkpoints. Ordinary R32 SINT/FLOAT donors are now connected/narrowly GPU verified at a89af96. Ordinary writable R16G16 numeric donors are connected/narrowly GPU verified with real cast/UAV proof at e9d12e1. Ordinary typed R11G11B10 data6 mutable views are now connected/narrowly GPU verified at510a6d7. Direct fixed-base single-sample R9G9B9E5 read/sample aliases, ordinary readonly word retention and physical buffer envelopes are connected/narrowly GPU verified at02a04f2. Remaining original per-adapter native sample fallback/guest mapping; converted/multiview/shifted/MS/large image aliases and remaining depth recreation geometries need exact contracts. Existing broad attachment/mixed-resource cases remain open; no closure by code/build presence. Readonly raw-R9 MSAA2/4/8 I with actual R32/packed writer planes and ordinary R32 SRV reuse is connected/narrowly GPU verified atbcc4bac with original metadata/independent B and retirement/lifetime proof; generic requested/native count fallback remains open.",
+      "missing_semantics": "Shared writable raw9/4/10 and ordinary R32_UINT donors, physical shader streams and queued core46 ordering are connected and narrowly GPU verified at the referenced checkpoints. Ordinary R32 SINT/FLOAT donors are now connected/narrowly GPU verified at a89af96. Ordinary writable R16G16 numeric donors are connected/narrowly GPU verified with real cast/UAV proof at e9d12e1. Ordinary typed R11G11B10 data6 mutable views are now connected/narrowly GPU verified at510a6d7. Direct fixed-base single-sample R9G9B9E5 read/sample aliases, ordinary readonly word retention and physical buffer envelopes are connected/narrowly GPU verified at02a04f2. Remaining original per-adapter native sample fallback/guest mapping; converted/multiview/shifted/MS/large image aliases and remaining depth recreation geometries need exact contracts. Existing broad attachment/mixed-resource cases remain open; no closure by code/build presence. Readonly raw-R9 MSAA2/4/8 I with actual R32/packed writer planes and ordinary R32 SRV reuse is connected/narrowly GPU verified atbcc4bac with original metadata/independent B and retirement/lifetime proof; generic requested/native count fallback remains open. At8f2338e alternate requested/native sample identities and exact original1/8 return copies are connected/narrowly GPU verified. Original16 payload/view/transfer, common physical PSO mapping and copy=false inactive eviction semantics remain open.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
