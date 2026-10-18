@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -98,7 +98,18 @@
         "readonly_history_continuation_20261016": "36b109c/01f916c/d55fb2d: sticky per-Entry modified/dirty history survives actual CPU overlap and exact original-base GPU invalidation, including unowned history-only entries; complete-layout compatible replacement witnesses are pinned. Successful normal/current-B readonly refresh revalidates only proved history; private snapshots remain dirty. Direct independent acquisition avoids fake Own/write notification. Actual original writable slots alone drive Own/readbacks. Clean independent I remains the source beside interior W for direct and existing packed conversion/fallback paths; incompatible views are never directly bound. Explicit pinned-compatible uncompressed8/16/32/64/96/128-bit color classes with complete physical identity also preserve source and sticky history via the existing independent transfer; BC/depth/stencil/attachment and arbitrary incompatible overlaps remain excluded. Dirty formatted/retile sources fail closed before transfer. 2f8522f authors four real-GCN controls (28 total in existing ordered mode), uncompiled/unrun; source review corrected the single-format seed raw32 assertion with preserved evidence. Never-modified/CPU/remap/private-snapshot, broader reinterpretation identity, pressure/device-loss and runtime acceptance remain open.",
         "heap_pressure_continuation_20261016": "c6e5429/50860ef: typed actual placed-heap budget failure triggers retired-storage reclamation, eligible LRU eviction or completed-source recovery; all allocation paths preserve active Entry and nested victim pins, verify identity/reacquire iterators after callbacks. Reduced/remaining budgets and MSAA heap alignment are honored; eager SetBudget releases only wholly unleased over-budget heaps and retry observes actual commitment progress. Device/format errors remain distinct. e00c72d authors one focused heap mode, uncompiled/unrun. Linear single-sample compact physical-prefix/no-B-merge semantics remain; tiled/dirty independent and unsupported MSAA eviction guards remain. Pinned generic linear-MSAA copy attempt is not valid all-sample extraction. Broader resource/alias/plane/device-loss/runtime/reproducible-source acceptance stays open.",
         "historical_review_notes": "Actual pressure/eviction/lifetime contents and validation remain unexecuted. Broader reinterpretation/backing replacement, cache shutdown, exception paths and peak memory require final acceptance. This supplies native binding lifetime protection; no completed full cache equivalence is claimed.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -128,7 +139,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -210,7 +221,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -304,7 +315,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -400,6 +411,17 @@
           "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
           "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
           "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        },
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
         }
       },
       "final_verification": {
@@ -421,7 +443,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -923,7 +945,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1003,6 +1025,17 @@
           "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
           "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
           "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        },
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
         }
       },
       "final_verification": {
@@ -1025,7 +1058,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1529,7 +1562,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1618,7 +1651,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1687,7 +1720,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1765,7 +1798,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1859,7 +1892,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1958,7 +1991,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2026,7 +2059,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2105,7 +2138,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2182,7 +2215,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2250,7 +2283,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2311,7 +2344,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2365,7 +2398,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2402,7 +2435,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2443,7 +2476,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2504,7 +2537,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2555,7 +2588,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2632,7 +2665,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2702,7 +2735,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2772,7 +2805,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2830,7 +2863,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2908,7 +2941,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2985,7 +3018,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3052,7 +3085,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3115,7 +3148,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3161,7 +3194,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3209,7 +3242,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3284,7 +3317,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3368,7 +3401,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3451,7 +3484,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3519,7 +3552,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3588,7 +3621,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3650,7 +3683,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3705,7 +3738,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3759,7 +3792,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3815,7 +3848,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3862,7 +3895,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3928,7 +3961,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3977,7 +4010,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4069,7 +4102,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4163,7 +4196,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4216,7 +4249,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4277,7 +4310,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4857,7 +4890,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5215,7 +5248,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5599,6 +5632,17 @@
           "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
           "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
           "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        },
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
         }
       },
       "final_verification": {
@@ -5627,7 +5671,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6219,6 +6263,17 @@
           "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
           "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
           "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        },
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
         }
       },
       "final_verification": {
@@ -6247,7 +6302,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6761,7 +6816,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6824,7 +6879,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6931,7 +6986,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7024,7 +7079,18 @@
         "ordering": "IMAGE_STORE with dmask R lowers absent vector channels to zero according to pinned frontend semantics, whereas the raw buffer store changes only its first DWORD. Typed native UAV availability is still checked before binding. Native resources and all copy/tiler descriptors are allocated and retained before recording; no 96-bit expansion or packed/normalized conversion is introduced. Prepared shader hash namespaces separate operation kind from descriptor shape, avoiding collision when cube layer counts expand the shape index.",
         "verification_prepared": "The actual GCN fixture prepares 180 basic and 144 divergent mip/layer/face cases over three data formats, three numeric views, one/two layers/mips and six-face cubes, with four warm patterns. RG32 rectangular chains and RGBA32 reduced dimensions fit the same complete allocation. Every channel is initialized independently from the warm bits; formatted CPU visibility expects absent image-store channels zero while raw-store visibility preserves prior channels. Separate first/selected subresource results, all untouched texels/faces, full 64-KiB bytes/padding, clean streaming threshold, CPU writes and exact-base GPU invalidation remain independent oracles. Compile/link only.",
         "historical_review_notes": "Final native/guest values, real shaders, actual typed device formats, fault/array/cube/fence ordering remain unverified. 96-bit expanded storage, normalized/packed/sub-DWORD formats, volumes/MSAA, broader/partial/concurrent aliases and linear pressure require adaptation. No semantic closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -7038,7 +7104,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7147,7 +7213,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7245,7 +7311,18 @@
         "verification_prepared": "The actual full-core GCN fixture adds thirty-six basic and twenty-four divergent RGB32 cases over three numeric views and four warm values, one/two array layers and a two-slice volume base mip, totaling 288 basic/240 divergent cases. Every logical RGB channel is initialized. Complete physical bytes/padding compare exact twelve-byte output rather than the native sixteen-byte stride, including separate first/selected slices, raw first-DWORD versus full image-store component results and real protected CPU visibility after formatted transfer. Larger RGB cube/mip fixture shapes remain outside the fixed allocation. Compiled/linked only.",
         "packed_float_rgb32_continuation_20261015": "6ded358: readonly2/4/8-sample one-mip2D/array RGB32 UINT/SINT/FLOAT uses existing UInt4 transfer and exact12-byte generic retile from actual typelessRGBA32 backing. Dedicated independent retention preserves readonly96-bit owner geometry; writable/RT13 MSAA stays excluded. Original format13 is ImageRead-only and _96BIT; hostRGBA32 is not evidence of guest13/14 compatibility. Nine authored readonly13 cases poison host alpha, check exactRGB/padding/private domains, alpha one, repeated retile and invalid usage/stride. No original-word snapshot needed for injectiveRGB expansion. Earlier single-sample behavior remains; legacy writable-image fixtures are not new proof of original image-write support. Adapter/originalRGB32 MSAA support and runtime acceptance remain unverified.",
         "historical_review_notes": "Actual native/guest conversion, numeric/UAV/view semantics, GPU/fault/fence execution and broader cube/mip acceptance remain unverified. MSAA, packed/normalized/sub-DWORD formats, partial/concurrent geometry and linear pressure require adaptation. No semantic closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -7261,7 +7338,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7358,7 +7435,18 @@
         "ordering": "Actual native writable format support and existing normalized shader/view lowering precede execution. Complete cached image version transfer remains distinct from raw buffer DWORD ownership. CPU stores use physical UNORM/SNORM encodings, invalidate the preceding image version and restore subsequent sampled visibility through the existing fault paths.",
         "verification_prepared": "The actual GCN fixture adds 56 basic/48 divergent normalized cases across two numeric views, four warm values and existing mip/layer/cube/volume shapes, totaling 344 basic/288 divergent cases. Warm values use independently quantized replicated bytes, including negative SNORM. Physical quarter/half/one bytes are 64/128/255 for UNORM and 32/64/127 for SNORM; the expected SNORM half export is 129. BUFFER_LOAD_FORMAT_X uses matching RGBA8 normalized sharp views. Full image/arena/CPU bytes, absent-channel zeroing, untouched subresources, complete 64-KiB padding, real faults and exact-base GPU invalidation remain independent expectations. Compiled/linked only.",
         "historical_review_notes": "Actual quantization/rounding, typed/raw native format capabilities, shader/GPU/CPU/fault/fence execution remain unverified. RGBA8 integer/SRGB, 16-bit normalized/float, packed/sub-DWORD, MSAA, partial/concurrent geometry and linear pressure require adaptation/acceptance. No semantic closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -7372,7 +7460,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7466,7 +7554,18 @@
         "ordering": "Native typed writable support and existing format lowering precede execution. Raw writes change the first DWORD while image dmask R stores clear absent channels; GPU formatted transfers and subsequent CPU visibility preserve that difference. CPU edits use actual half/normalized physical encodings rather than float32 bits and invalidate the image version through existing protected fault paths.",
         "verification_prepared": "The actual GCN fixture adds 168 basic/144 divergent cases across two data formats, three numeric views and four warm values over existing mip/layer/cube/volume shapes, totaling 512 basic/432 divergent cases. Warm half values are exact IEEE encodings for zero/one/positive-negative half; normalized values use independent sixteen-bit quantization including negative SNORM. Quarter/half/one are 3400/3800/3c00 FLOAT, 16384/32768/65535 UNORM and 8192/16384/32767 SNORM. Every channel, full physical/padding bytes, complete mip/layer/face/Z transfer, real protected CPU visibility, small streaming and exact-base GPU invalidation remain independent expectations. Compiled/linked only.",
         "historical_review_notes": "Actual half/normalized conversion, typed native capability, rounding, shaders/GPU/CPU/fault/fence execution remain unverified. Integer sixteen-bit/RGBA8 and SRGB, sub-DWORD/packed, MSAA, partial/concurrent geometry and linear pressure need adaptation/acceptance. No semantic closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -7480,7 +7579,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7572,7 +7671,18 @@
         "ordered_fixture_prepared_20261015": "Historical preparation extended:24 authored-only real-GCN cases (22 single-domain plus2 disjoint) in existing ordered-formatted-owned mode. New exact shortW physical-B-tail/GPU-I-tail oracle, actual longW tail store, same-page priorW with raw64KiB cached-envelope setup, repeated aliases, actual frontend bounds/order and whole64KiB padding. Original unwarmed22nd setup preserved and corrected before commit. No compilation/fixture execution; original untracked parent integration retained separately.",
         "ordered_state_continuation_20261016": "ccacee9/e877a3f/4f66433: positive DWORD exact-base short/full/long writers keep original WriteRange; conditional readonly full-image preparation for scheduled retile only. Source selection uses each reader original range, initial dirty state and strictly earlier original writer4KiB page facts; image/metadata sync gates agree. Unreflected Guest slots still prepare cache/invalidation/dirty effects, while actual descriptors require Layout. Multiple disjoint image domains deduplicate retile by Entry, with per-domain unique/same-base/UAV/ownership/format/capacity bounds and all captures before invalidation. Reader minimum16KiB-block proof avoids future-bind dependency; covering-writer path retains missing-block same-submit caveat. Already resident sparse blocks alias physically across arena handles.",
         "historical_review_notes": "Readonly independent-image revalidation after buffer invalidation loses sticky modified history (confirmed next task). Non-base/sub-DWORD simultaneous aliases, overlapping planned image geometries, image/metadata operands, cross-stage ordering and missing sparse-block history remain open. Compiler/GPU/reflection/bounds/PageWatch/fences/pressure/device-loss/performance acceptance deferred; no broad closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_readonly_numeric_context_evidence": {
+          "production_commits": [
+            "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+            "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+          ],
+          "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+          "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+          "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+          "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+          "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -7594,7 +7704,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7712,7 +7822,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7826,7 +7936,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7932,7 +8042,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8035,7 +8145,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8146,7 +8256,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8272,7 +8382,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8386,7 +8496,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8510,7 +8620,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8629,7 +8739,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9116,7 +9226,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9235,7 +9345,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9712,7 +9822,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9772,7 +9882,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9840,7 +9950,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9906,7 +10016,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9980,7 +10090,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10050,7 +10160,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10112,7 +10222,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10178,7 +10288,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10239,7 +10349,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10313,7 +10423,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10380,7 +10490,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10440,7 +10550,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10494,7 +10604,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10563,7 +10673,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10633,7 +10743,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10688,7 +10798,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10746,7 +10856,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10801,7 +10911,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10865,7 +10975,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10945,7 +11055,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10999,7 +11109,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11062,7 +11172,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11122,7 +11232,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11177,7 +11287,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11229,7 +11339,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11289,7 +11399,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11352,7 +11462,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11418,7 +11528,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11474,7 +11584,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11529,7 +11639,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11588,7 +11698,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11664,7 +11774,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11721,7 +11831,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11778,7 +11888,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11837,7 +11947,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11901,7 +12011,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11964,7 +12074,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12034,7 +12144,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12094,7 +12204,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12156,7 +12266,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12224,7 +12334,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12291,7 +12401,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12348,7 +12458,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12418,7 +12528,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12483,7 +12593,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12549,7 +12659,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12604,7 +12714,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12663,7 +12773,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12723,7 +12833,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12790,7 +12900,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12861,7 +12971,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12932,7 +13042,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12996,7 +13106,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13061,7 +13171,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13134,7 +13244,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13195,7 +13305,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "b5029e12430db8594cbb8d475e080c2d08b0ef5a"
+        "core_release_build_commit": "b19feb36b32da792d9d395fc7c563794c5f53348"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13228,8 +13338,8 @@
     },
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
-      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges / GuestTiler::NativeFormat / DescribeNativeFormat / RetileImageVersion source codec",
-      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and representations outside exact nonexpanded direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
+      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges / GuestTiler::NativeFormat / DescribeNativeFormat / RetileImageVersion source codec / GuestTextureCache::SetRecordingListProvider / UploadVersion current context and resumed pending receipt / CompatibleGuestShaderStorage readonly numeric family / MatchesGuestUploadStorage readonly reuse",
+      "missing_semantics": "Confirmed current diagnostic: standalone exclusive image I followed by an interior raw B writer must preserve old I as original exact-base invalidation does; current numeric SRVs decode B marker instead. Precise ownership/history loss transition still to localize. remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and representations outside exact nonexpanded direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
@@ -13309,6 +13419,23 @@
         "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
         "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
         "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+      },
+      "readonly_numeric_context_checkpoint": {
+        "production_commits": [
+          "21445a2e5fec4cefd4c90b914d41be04ac93239a",
+          "62c0d3ba3ffef8e473c8f906b728317dc08db6de"
+        ],
+        "source_package": "b19feb36b32da792d9d395fc7c563794c5f53348",
+        "implementation": "connected ordinary nonattachment readonly numeric views over exact existing typeless family,typed SRV,original I/UID/class/no added UAV permission; current scheduler context after CPU fault and resumed pending receipts preserve commands/fence leases",
+        "verification": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\VERIFICATION_FINAL.json",
+        "scope": "Native44 families/mips/layers at214,GCN24 numeric/history/raw/formatted +8CMASK at214,depth and7memory at214; separateGCN24+native-base at62. No whole-group/current-core acceptance.",
+        "remaining": "Standalone exclusiveI ->interior B writer ->readonly numeric images still reads B marker on currentb19 exact diagnostic. Observe actual transition before asserting root cause; joint independent seed does not close it."
+      },
+      "remaining_diagnostic": {
+        "mode": "readonly-numeric-exclusive-owned",
+        "identity": "F:\\PS4Dev\\handoff\\readonly-numeric-20261018\\exclusive-final-after-space\\identity.json",
+        "source_commit": "b19feb36b32da792d9d395fc7c563794c5f53348",
+        "result": "FAIL; original Iff0000ff expected, rawB13579bdf retained correctly but image views decode marker. Do not weaken oracle."
       }
     },
     "depth-color-shared-storage": {
