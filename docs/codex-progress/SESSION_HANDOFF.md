@@ -1,5 +1,65 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current inactive sample history pressure checkpoint - 2026-10-18
+
+This FIRST section supersedes older current-state/next-task sections. Production **fb738a62d96a1b0364422a2c0dc8a3be580b9d72**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/sample-backing-pressure-20261018**. H/VERIFICATION_FINAL.json preserves exact source/runtime/EXE/PDB identity; all4 committed paths match final native/GCN/reload source snapshots. Previous goal turn was progress (8f2338e/032e337), not a wait/blocker. Latest human authorization permits compilation/narrow native+GPU checks; full suite/extended game remain final.
+
+### A. Current state
+
+Inactive sample backing contents now survive memory pressure until the owning image can be correctly evicted. Exact requested/native backing identity, original class/UID/history and independent B/I remain. This fixes a concrete correctness gap after the previous sample transition work. It does not close generic MSAA/renderer parity or claim performance/game acceptance. Full port and8 broad work items remain active.
+
+### B. Upstream contract -> implementation -> checks
+
+Pinned Runtime::UploadImage/CopyImage/CopyImageWithBuffer/ResolveImage use SetBackingSamples(copy_backing=false) for the destination; CopyImage can overwrite only a source-sized region, leaving older destination pixels observable. Pinned FreeImage retains all backing_images until whole-image deferred deletion, and GC skips tiled SafeToDownload images. Exact paths/hashes/excerpts are in H/REFERENCE_PARTIAL_BACKING_CONTRACT.json.
+
+Native GuestTextureCache::ReleaseRetiredStorage previously erased inactive sample_backings when only its own allocation lease remained. The current active count cannot reconstruct a different backing's old uncovered pixels. fb738a6 retains that history as image residency; upload/readback pools, reconstructible per-sample UAV scratch and valid whole-image eviction retain their existing paths. No fictional budget success, skipped GPU operation, assertion suppression, changed oracle or game/address/hash workaround. Native cache namespacev7 unchanged: no shader IR/layout change.
+
+### C. Next unfinished mechanism / source-scope correction
+
+Continue real mixed color/depth backing behavior for supported1/2/4/8, keeping the independent T#16 boundary open. Pinned CB::NumSamples uses2-bit num_fragments_log2; DB uses2-bit z_info.num_samples. The normal graphics pipeline key is max(CB/DB counts), with capability-dependent normalization to depth count. AA coverage/exposed count can16 independently and feeds fragment runtime metadata. Prior handoffs conflated these with a normal16-sample attachment/PSO requirement; that was too broad for the pinned register path. T# last_level still encodes16 (and other raw values), so its actual valid shader-image payload/upload/SRV/readback contract remains UNACCEPTED. Do not close it by dropping samples or declaring all16 inputs invalid. No overall goal reduction or full MSAA closure.
+
+Next concrete action: add one actual GCN Draw fixture mode to gcn_attachment_alias_test.cpp for the real common-count path. Reuse formatted-cmask's known VS/constant-color Draw setup (lines roughly156-201) without CMASK; reuse readonly-depth register setup (roughly737-759). Warm the same original color I with depth disabled, then draw a different constant color with depth enabled and color/depth sample logs0/1/2/3 independently. Use color base+4096, depth base+8192 (verify extents fit existing64KiB allocation), tile5,8x8 logical extent, no stencil/HTILE, depth Always/write true with initial0.75 and drawn0.5. Verify full independent expected color/depth logical words and whole physical padding after real completion/ReadMemory, not just PSO creation. At least cover color1/depth4 and reverse4/1 before broadening the small matrix. Keep real UID/history and B/I rules; don't manufacture CPU reconciliation if the pinned contract doesn't provide it. Existing formatted/depth fixtures provide the valid queue/register conventions; do not repeat the fixed GetCsRegs-outside-ASC harness mistake.
+
+GuestGraphicsState::BuildGuestGraphicsState already normalizes counts; GuestRasterizer::Draw creates the PSO then SetBackingSamples for color; GuestImageReadback explicitly handles an active count differing from original desc near lines17-45. Use these exact symbols, no129 audit. If the queued draw exposes a real mismatch, fix production backing/view/PSO/synchronization and keep an independent negative/oracle. Then narrow related regressions and clean committed Release/manual folder/push. Keep original coverage semantics and the native physical-count rejection guard. No generic lowering of Upload's primary sample count until original T# semantics are established.
+
+The copy=false pressure defect is now fixed atfb738a6: inactive sample backing history remains resident with its image until valid whole-image eviction, matching pinned Runtime/GC. Do not restore per-backing eviction as scratch. A future lossless spill is optional optimization, not accepted by this fix; it must preserve uncovered texels across partial writes and all lifetime/accounting constraints.
+
+
+The broad queue remains color attachment feedback, formatted alias ordering, depth/color shared storage, signed packed10 attachment, polygon point fill, mixed blend constants, other-vendor clock and point capture stage domain. Converted/shifted/multiview/large aliases and other recorded gaps are not closed by this unit.
+
+### D. Confirmed failure and limits
+
+The identical NEW fixture header linked against clean committed8f2338e fails original1/alternate4 and original8/alternate1 with `Inactive sample backing retired despite observable copy=false contents`. H/old-control preserves EXE/PDB/rsp/runtime/release identity, exact source closure and per-case results/timestamps. The old failure checks premature retirement BEFORE the partial-copy oracle; do not claim observed old undefined GPU pixel values. New production proves retained history and actual post-partial-copy data. These headless expected failures are distinct from original d019 game int3, captured/fixed935fb69 (writable-B ownership after prewrite/Finish), with original context/dump/manifest at F:/PS4Dev/handoff/breakpoint-crash-d01969e-20261016T234433Z. Original individual rejected guest range remains unestablished; no replay or attribution to warnings/exit code.
+
+### E. Measurements / accepted scopes
+
+**native17 PASS147.598s** includes earlier buffer envelope/view lifetime/GPU chain, semantic residency/DMA/preserved/pending/scheduler, actual access/cast/packed/raw writers, independent image/MSAA pressure and requested backing transitions. New native_sample_backing_pressure_history runs2 cases: original1/alternate4 and original8/alternate1,2 layers, independent authored words per sample/pixel, active B different from inactive A, pending and completed pressure, exact allocation.use_count==1 (no hidden retention lease), honest zero-budget failure, same original allocation/class/UID/history, copy=false, real one-pixel shader copy changing every selected sample, all outside texels/full guest padding preserved and separate real GPU B readback unchanged. Native cache ownership callback is synthetic for isolated retention; combined real PageWatch+pressure/game acceptance is not newly claimed.
+
+**398 GCN PASS**, EXE **d393f5711e73f76b8dc08e0063802f27fbb10bed5a71d5d6658ce463a991f1ff**:60 R9 MSAA writer,112 readonly R9 MSAA,64 signed packed MSAA and162 prior R9/R32/R11/RG16/mutable/ordered regressions with real queued GPU readback and independent oracles. **Shader reload PASS5.715s**:two PSOs, changed contents, failed replacement rollback/canonical restore, metadata negatives and same-version persistent preload. No guest frame-time/FPS or cross-version cache-hit claim. All4 final source paths match archives after canonical LF normalization; tested HEAD+worktree patches remain verbatim, not rewritten as a different run identity.
+
+### F. Reproducible manual kernel
+
+**H/artifacts-fb738a6**,18 files;54 pinned dependencies/2283 compile inputs/ZERO primary checkout paths in compile DB/build.ninja/CMakeCache. Clean clone F:/PS4Dev/work/shadps4-dx12-clean-release-20261016 atfb738a6;18.718s build. EXE **74f0336d950be398312cfd3c0135f596c94f458ed8609233d81cc7740649638b**; PDB **a71db632df25aaa5b0e26d33c1aac6b725d8731b8c0f9ef1ece8de37648fc040**. H/RELEASE_PROOF_fb738a6.json/release-identity.json preserve the package. Exact rebuilt CORE runtime/game/FPS **NOT_RUN**; fixture acceptance is not transferred to that EXE. New focused CTest raises446->447. Full447 and extended existing-XInput game image/input/stability/completed guest FPS excluding FG against saved Vulkan baseline remain final. Manual folder only; no automatic app install/select.
+
+### G. Recovery and resources
+
+H/start-state.json, staged/unstaged-start and precommit patches/sources, PRECOMMIT_VERIFICATION.json, VERIFICATION_FINAL.json, reference contract and scope-correction JSON, native17-final, first-pressure-history, old-control, reg-* and shader-reload preserve recovery and exact identities. New fixture header and CMake integration are committed. Older kernels/results remain at old paths. Unknown .serena/ and CLAUDE.md remain untouched; original Vulkan, user saves/processes/controller/HUD/monitor unchanged.
+
+Low free space: only known owned CLOSED outputs/compiler objects and immutable archive binaries were losslessly compressed. H/CLOSED_OBJECT_COMPRESSION.json (900 objects), CLOSED_OUTPUT_COMPRESSION.json, CLOSED_ARCHIVE_COMPRESSION.json and IMMUTABLE_ARCHIVE_LZX.json (130 unlinked immutable files in five explicit handoffs) preserve SHA256 before/after and free-space records. No old data deleted or moved. Prefer small/deduplicated archives and observe free space before large work; do not clean unknown files.
+
+### H. Next command
+
+From **F:/PS4Dev/work/shadps4-dx12-src** run `git status --short; git rev-parse HEAD; git log -3 --oneline`; read H/NEXT_MECHANISM.md and SAMPLE_COUNT_SCOPE_CORRECTION.json, then implement the queued mixed color/depth scenario at the exact existing fixture boundary. No new overall audit needed.
+
+### I. Forbidden repetitions
+
+Do not erase inactive backings as scratch merely because fences/leases retired. Do not fake a successful budget reclaim or use active contents in place of old copy=false history. Do not equate16 AA coverage with16 stored CB/DB fragments/normal PSO, nor delete the separate unaccepted T#16 boundary. No silent guest sample drop, relaxed resource flags/casts, B/I reconciliation, rewritten oracle, acceptance transfer to new binaries,129 re-audit, repeated adapter query, fixed d019 replay, false PageWatch crash, unchanged full suite or automatic core installation/selection.
+
+### NEXT CODEX SESSION — START HERE
+
+Read the FIRST section of docs/codex-progress/SESSION_HANDOFF.md and C:/Users/skei/Documents/Codex/handoff/sample-backing-pressure-20261018/VERIFICATION_FINAL.json; verify HEAD/upstream and preserve unknown .serena/ and CLAUDE.md. Continue the full original-shadPS4 port from production fb738a62d96a1b0364422a2c0dc8a3be580b9d72. H/NEXT_MECHANISM.md gives the real mixed color/depth1/2/4/8 queued Draw scenario and exact symbols; add the narrow GPU/readback case, fix any proven production backing/view/PSO/ordering violation, then continue the existing functional queue. SAMPLE_COUNT_SCOPE_CORRECTION.json distinguishes stored CB/DB fragments from AA coverage/T#16; keep the unaccepted T#16 shader-image boundary open without inventing16 attachment requirements or dropping samples. Preserve inactive copy=false history, original class/UID/GpuModified, independent B/I, PageWatch, actual flags/casts, bind order, fences/leases and bounded honest residency. Use saved source/measurements; no129 re-audit, repeated capability query or fixed d019 replay. Build clean committed Release/manual kernel and normal push. Full447 suite and extended existing-XInput game/image/input/stability/completed guest FPS excluding FG against saved Vulkan baseline remain final. Keep the full goal ACTIVE until actually complete.
+
+
 ## Current requested/native sample backing checkpoint - 2026-10-18
 
 This FIRST section supersedes older current-state/next-task sections. Production **8f2338e1aa2a2fcaafe5386e01ee71e443f9363e**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/requested-sample-backings-20261018**. H/VERIFICATION_FINAL.json retains exact source/EXE/PDB/runtime identities; committed9 source files match archived final code. User permits compilation and narrow native/GPU fixtures; full suite/extended game remain final. Previous goal turn was progress (bcc4bac/90ae162 and GPU proofs), not a wait or blocker.
