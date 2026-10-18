@@ -112,6 +112,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         if(auto found=domains.find(image.storage.address);found!=domains.end()){
             const auto& domain=found->second;
             if(!CompatibleGuestShaderStorage(domain.desc,image.storage)&&
+               !textures.CanShareReadonlyWordStorage(domain.desc,image.storage)&&
                !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)&&
                !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout)))
                 throw std::runtime_error("Ordered stage converted image views require their domain transfer plan");

@@ -100,6 +100,8 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTexture
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view);
+// Original 32-bit mutable color class; actual sharing also needs resource casts.
+bool CompatibleGuestReadonlyWordStorage(GuestTextureDesc source,GuestTextureDesc view);
 // Uncompressed mip-major storage can share a complete physical mip prefix.
 bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc,const GuestTextureLayout&,
     GuestTextureDesc,const GuestTextureLayout&);
@@ -449,6 +451,9 @@ public:
     bool RevalidateReadonly(Entry& entry){
         if(!entry.HasValidLogicalImage()||!acquire_independent_||!acquire_independent_(entry))return false;
         RememberNativeImageStorage(entry);return true;
+    }
+    bool CanShareReadonlyWordStorage(const GuestTextureDesc& a,const GuestTextureDesc& b)const{
+        return texture_allocator_.SupportsFormatCasting()&&CompatibleGuestReadonlyWordStorage(a,b);
     }
     bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
         const auto [first,last]=address_index_.equal_range(desc.address);

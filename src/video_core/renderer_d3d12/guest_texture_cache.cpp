@@ -77,6 +77,16 @@ std::span<const DXGI_FORMAT> PackedFloatCasts(DXGI_FORMAT format,bool supported)
     if(format==DXGI_FORMAT_R9G9B9E5_SHAREDEXP)return rgb9;
     return {};
 }
+std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool supported){
+    // Pinned Vulkan _32BIT mutable class, restricted here to direct R32/RGBA8
+    // readonly color views. A single explicit format-list resource retains I.
+    static constexpr std::array formats{DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_SINT,
+        DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,DXGI_FORMAT_R8G8B8A8_UINT,
+        DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
+    if(!supported||d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1||
+       d.native_raw32||(d.data_format!=4&&d.data_format!=10))return {};
+    return formats;
+}
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
     return resource.castable_formats?std::span<const DXGI_FORMAT>(*resource.castable_formats):std::span<const DXGI_FORMAT>{};
 }
@@ -327,6 +337,17 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
     source.writable=view.writable=true;
     source.swizzle=view.swizzle={4,5,6,7};
     return CompatibleGuestWritableStorage(source,view);
+}
+bool CompatibleGuestReadonlyWordStorage(GuestTextureDesc source,GuestTextureDesc view){
+    if(source.data_format==view.data_format||
+       (source.data_format!=4&&source.data_format!=10)||(view.data_format!=4&&view.data_format!=10)||
+       source.writable||view.writable||source.render_target||view.render_target||source.depth_target||view.depth_target||
+       source.stencil_address||view.stencil_address||source.samples!=1||view.samples!=1||
+       source.native_raw32||view.native_raw32)return false;
+    source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
+    source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
+    return source==view;
 }
 bool CompatibleGuestImageMipGeometry(GuestTextureDesc a,const GuestTextureLayout& al,
     GuestTextureDesc b,const GuestTextureLayout& bl){
@@ -914,6 +935,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
         CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool shader_alias=!sampled_view.writable&&
         (CompatibleGuestShaderStorage(desc,sampled_view)||
+         (CompatibleGuestReadonlyWordStorage(desc,sampled_view)&&texture.AllowsCast(LayoutGuestTexture(sampled_view).format))||
          (desc.levels>=sampled_view.levels&&CompatibleGuestShaderMipPrefixes(desc,layout,
              sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
@@ -1611,6 +1633,7 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
         ((entry.desc.writable||!desc.writable)&&CompatibleGuestShaderStorage(entry.desc,desc))||
+        (CompatibleGuestReadonlyWordStorage(entry.desc,desc)&&entry.texture.AllowsCast(layout.format))||
         (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc))||
         CanBindReadonlyBcMipPrefix(entry,desc,layout))&&
         MatchesGuestMipLayout(entry.layout,layout);
@@ -2478,7 +2501,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(layout.expanded_bytes_per_pixel&&d.data_format>=35&&!bc_decoder_)bc_decoder_=std::make_unique<GuestBcDecoder>(converter_);
     if(gpu_detile&&!tiler_)tiler_=std::make_shared<GuestTiler>(device_.Get());
     if(d.samples>1&&!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
-    const auto cast_formats=PackedFloatCasts(layout.format,texture_allocator_.SupportsFormatCasting());
+    auto cast_formats=PackedFloatCasts(layout.format,texture_allocator_.SupportsFormatCasting());
+    const auto word_casts=ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
+    if(!word_casts.empty())cast_formats=word_casts;
     if(d.samples>1&&(d.data_format==6||d.data_format==34)&&cast_formats.empty())
         throw std::runtime_error("Native packed-float MSAA requires bit-preserving D3D12 format casting");
     bool new_resource=false;
@@ -2498,6 +2523,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(IsExpandedReadonlyBcRgba8(d,layout))r.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
         if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=GuestStorageFormat(d.data_format,layout.format);
         if(HasExactPackedExpansion(d,layout))r.Format=DXGI_FORMAT_R32G32B32A32_TYPELESS;
+        if(!word_casts.empty())r.Format=layout.format;
         if(d.depth_target) {
             if(d.writable||d.render_target||(d.samples>1&&d.levels!=1)||
                (layout.format!=DXGI_FORMAT_R32_FLOAT&&layout.format!=DXGI_FORMAT_R16_UNORM))
