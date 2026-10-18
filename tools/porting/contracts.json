@@ -46,7 +46,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -128,7 +128,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -183,7 +183,19 @@
         "outputs": "The depth/stencil snapshot is captured before shader resource preparation using the existing GPU/CPU prewrite paths. Separate actual plane-write checks include explicit clears and pending HTILE. Snapshot uploads consume their independent contents without resolving a current shader image owner acquired after capture. Bound/GPU-owned cache candidates cannot be overwritten by a snapshot upload. Shader image ownership therefore survives until actual writes and CPU visibility; a mixed attachment commits only its other written plane through the existing selected-plane readback path.",
         "verification_prepared": "Four additional full-core GCN modes, readonly-depth-image and mixed-depth-image with optional -owned, issue real vertex-stage R32 float image stores before Z32 depth tests. They use 32x32 aligned image/depth backing, 8x8 coverage, optional stencil increments, three warm CPU edits, consumed HTILE, exact store/attachment/color/padding oracles and rejection of competing depth writes/clears. Compile/link only; none executed.",
         "historical_review_notes": "GPU contents, ownership preservation, mixed feedback, pressure/lifetime and broader Z16/MSAA/stencil-UAV reinterpretations require final acceptance/review. Same-plane attachment/UAV writers and buffer/image simultaneous writers remain open. No live same-resource coherence or full original attachment equivalence is claimed.",
-        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback."
+        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -198,7 +210,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -266,7 +278,19 @@
         "metadata": "When HTILE is enabled, initialize its actual cache owner before capture, retain its pending mask and reject a pending depth clear before shader writes. Replacement registers the captured mask rather than reintroducing a first-use clear. The normal callback consumes the selected slice exactly once; any unexpected attachment writer remains a checked failure.",
         "verification_prepared": "The full-core GCN attachment fixture's readonly-depth-buffer and mixed-depth-buffer modes, plus -owned variants, prepare Z16/Z32, one/four samples, optional stencil, either plane's buffer writer, full/partial buffer descriptors, both read-only hints, three warm passes with CPU edits and consumed HTILE. Mixed cases additionally write depth or increment stencil while the other plane is buffer-written. Vertex stores precede attachment reads and write identical zero DWORDs. Independent expected bytes include color pass/fail results, attachment-plane results, exact shader stores and all remaining allocation/padding. Target-plane writes/clears and a fresh pending HTILE allocation overlapping the depth writer must reject before guest writes. Compile/link only; no execution.",
         "historical_review_notes": "Actual GPU contents, validation, metadata transition, partial-plane ownership and lifetime acceptance remain open. Simultaneous writers to the same plane, image-UAV/attachment aliases, guarded physical aliases and broader original format feedback remain open. Existing HTILE first-use behavior, mixed-plane shader feedback and device-specific early/late tests still need differential acceptance. Partial-plane commits currently record complete readback storage before selecting outputs; their pressure/bandwidth acceptance remains open. No full attachment or memory parity is claimed.",
-        "open_contracts": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback."
+        "open_contracts": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -280,7 +304,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -364,7 +388,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -385,7 +421,7 @@
           "color-attachment-feedback",
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -887,7 +923,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -955,7 +991,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -977,7 +1025,7 @@
           "formatted-alias-ordering",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -1481,7 +1529,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1570,7 +1618,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1639,7 +1687,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1717,7 +1765,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1811,7 +1859,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1910,7 +1958,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -1978,7 +2026,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2057,7 +2105,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2134,7 +2182,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2202,7 +2250,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2263,7 +2311,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2317,7 +2365,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2354,7 +2402,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2395,7 +2443,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2456,7 +2504,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2507,7 +2555,7 @@
         "remaining_production_changes": [
           "color-attachment-feedback"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2584,7 +2632,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2654,7 +2702,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2724,7 +2772,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -2782,7 +2830,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2860,7 +2908,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -2937,7 +2985,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3004,7 +3052,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3067,7 +3115,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3113,7 +3161,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3161,7 +3209,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3222,7 +3270,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3300,7 +3348,7 @@
           "polygon-point-fill",
           "mixed-blend-constants"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3383,7 +3431,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3451,7 +3499,7 @@
         "remaining_production_changes": [
           "other-vendor-clock"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3520,7 +3568,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3582,7 +3630,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3637,7 +3685,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3691,7 +3739,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3747,7 +3795,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3794,7 +3842,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3860,7 +3908,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3909,7 +3957,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -3957,7 +4005,19 @@
         ],
         "packed16_sampled_msaa_continuation_20261015": "Supersedes the earlier sampled packed16 exclusion in this continuation: readonly native16/17/18 UNORM guest/host2 use existing PACKED_MODE1/2 sample-load integer-code recovery, with original18 rotation still in guest_tiler. Readonly expanded19 UNORM guest2/host16 retains exact guest words+two-byte mask before expansion using raw R32 guest2/host4 capture. Every layer/sample and private physical padding remain separate. Native19 attachment, mutable expanded images, depth/stencil/16samples and complete pressure/alias acceptance remain open. Twelve --msaa-packed16-sampled cases check native word ordering/expanded values and repeated private retile against fresh padding, authored/uncompiled/unrun.",
         "historical_review_notes": "Twelve packed shader fixtures and sixteen physical backing/ownership fixtures are compiled only. Direct raw format 18 is included in backing fixtures with independent native-word expectations. Attachment feature support, blend/logic/clear/sample-count acceptance, direct conversion contents, protected CPU fault visibility and actual fence retirement remain unverified. Depth/color, volume and differing physical layouts still require the broader alias audit.",
-        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented."
+        "open_contracts": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.; Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented.",
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -3974,7 +4034,7 @@
           "color-attachment-feedback",
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4062,7 +4122,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4115,7 +4175,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -4176,7 +4236,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -4730,7 +4790,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -4744,7 +4816,7 @@
         "remaining_production_changes": [
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5073,7 +5145,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "partial_gpu_verified",
@@ -5090,7 +5174,7 @@
           "color-attachment-feedback",
           "depth-color-shared-storage"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -5462,7 +5546,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -5490,7 +5586,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6070,7 +6166,19 @@
           "414094c retains initialized cached color identity for original direct fixed-base1x color->depth recreation after CPU/B dirtying, preserving original flags, old native words versus target B/S/padding, metadata/UID/prewrite/fence and strict stale ordinary/private-I guards.16 new R16_UINT/R32_UINT render-target -> paired D16/D32 cases +four related fixtures pass at exact native 1525a209; all16 color targets have S. Full caller/game/fault-injection acceptance unrun; depth->writable/RT and other source/geometry/ordered/MS/size paths remain code gaps.",
           "94ace23 connects direct1x cached D16/D32->R16/R32 RT at actual target binding, original full resource extent, original flags/source metadata lifetime and guarded deferred native CMASK integration.16 real native copy/clipped RT draw/API-clear cases plus3 related fixtures pass at exact native 12221e6e. Full CMASK member/decoder and GuestRasterizer runtime unrun. Existing cached DEPTH Preparation still publishes semantic class/meta too early; private receipt/actual DSV producer commit remains a concrete implementation gap, not verified ordering parity. Writable/other RT formats/CMASK guards/geometry/ordered/MS/size remain open.",
           "Fixture package01a1f6c corrects RT growth to original ColorBuffer one-mip/layer semantics.16 final CB-layer GPU cases73.53s pass on DISTINCT nativeab7a2c33; initial4 checks/native12221e6e remain separate and initial8 extra-mip RT cases are native helper evidence, not CB caller applicability. Production remains94ace23; full CMASK member/runtime and private-depth bind publication remain open."
-        ]
+        ],
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -6098,7 +6206,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -6612,7 +6720,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6675,7 +6783,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6782,7 +6890,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6889,7 +6997,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -6998,7 +7106,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7112,7 +7220,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7223,7 +7331,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7331,7 +7439,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7445,7 +7553,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7563,7 +7671,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7677,7 +7785,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7783,7 +7891,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7886,7 +7994,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -7997,7 +8105,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8095,7 +8203,19 @@
         "packed_msaa_continuation_20261015": "Matching2/4/8-sample writable formats16..19 UNORM use existing R32 sample planes holding low guest halfwords. Predicate validates guest2/host4 layout and actual R32 backing; existing byte-masked retile drops host high16 without overwriting neighbors or padding. Twelve pressure/retile cases and twelve nonzero-clear cases are authored, not executed. Native sampled packed16 and expanded19 remain separate source follow-up, not implicitly admitted by equal bpp.",
         "packed16_sampled_msaa_continuation_20261015": "Supersedes the earlier sampled packed16 exclusion in this continuation: readonly native16/17/18 UNORM guest/host2 use existing PACKED_MODE1/2 sample-load integer-code recovery, with original18 rotation still in guest_tiler. Readonly expanded19 UNORM guest2/host16 retains exact guest words+two-byte mask before expansion using raw R32 guest2/host4 capture. Every layer/sample and private physical padding remain separate. Native19 attachment, mutable expanded images, depth/stencil/16samples and complete pressure/alias acceptance remain open. Twelve --msaa-packed16-sampled cases check native word ordering/expanded values and repeated private retile against fresh padding, authored/uncompiled/unrun.",
         "historical_review_notes": "Actual original/native component remapping, typed capabilities, quantization, conversion/retile/padding/neighbor contents and shader/GPU/CPU/fault/fence execution remain unverified. Packed16 volume/1D, packed-float/MSAA/partial/shifted/concurrent/pressure and full migration acceptance remain open. No semantic closure.",
-        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address."
+        "open_contracts": "Simultaneous buffer/image writers outside the connected single-image, DWORD-aligned common-UAV domain, differing physical layouts, and overlapping planned image geometries still need ownership/ordering adaptation. The formatted reader itself remains exact-base: pinned BufferCache::SynchronizeMemoryFromImage explicitly asserts device_addr == image.info.guest_address.",
+        "latest_source_native_packed_codec_evidence": {
+          "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+          "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+          "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+          "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+          "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+          "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+          "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+          "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+          "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+          "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -8111,7 +8231,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8225,7 +8345,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8349,7 +8469,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -8468,7 +8588,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -8955,7 +9075,7 @@
         "remaining_production_changes": [
           "formatted-alias-ordering"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9074,7 +9194,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9551,7 +9671,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9611,7 +9731,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9679,7 +9799,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9745,7 +9865,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -9819,7 +9939,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9889,7 +10009,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -9951,7 +10071,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10017,7 +10137,7 @@
         "remaining_production_changes": [
           "signed-packed10-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10078,7 +10198,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10152,7 +10272,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10219,7 +10339,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10279,7 +10399,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10333,7 +10453,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10402,7 +10522,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10472,7 +10592,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10527,7 +10647,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10585,7 +10705,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10640,7 +10760,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10704,7 +10824,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "partial_gpu_verified",
@@ -10784,7 +10904,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10838,7 +10958,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10901,7 +11021,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -10961,7 +11081,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11016,7 +11136,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11068,7 +11188,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11128,7 +11248,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11191,7 +11311,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11257,7 +11377,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11313,7 +11433,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11368,7 +11488,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11427,7 +11547,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11503,7 +11623,7 @@
           "polygon-point-fill",
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11560,7 +11680,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11617,7 +11737,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11676,7 +11796,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11740,7 +11860,7 @@
         "remaining_production_changes": [
           "polygon-point-fill"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11803,7 +11923,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11873,7 +11993,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11933,7 +12053,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -11995,7 +12115,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12063,7 +12183,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12130,7 +12250,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12187,7 +12307,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12257,7 +12377,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12322,7 +12442,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12388,7 +12508,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12443,7 +12563,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12502,7 +12622,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12562,7 +12682,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12629,7 +12749,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12700,7 +12820,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12771,7 +12891,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12835,7 +12955,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12900,7 +13020,7 @@
         "remaining_production_changes": [
           "point-capture-stage-domain"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -12959,7 +13079,7 @@
         "remaining_production_changes": [
           "packed19-msaa-attachment"
         ],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13015,7 +13135,7 @@
         "state": "connected",
         "source_package": "committed",
         "remaining_production_changes": [],
-        "core_release_build_commit": "fd8e5f6196c669ca91af300a8c9be85b2b270cce"
+        "core_release_build_commit": "edb2d6945639ea09a0db381bbee4902a90d153a1"
       },
       "behavior_verification": {
         "state": "not_run",
@@ -13048,8 +13168,8 @@
     },
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
-      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges",
-      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and non-direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
+      "native_symbol": "NativeDX12::Rasterizer::PrepareShaderBuffers / RematerializeBufferEnvelope / Find / GuestDmaMemory::BindResident / ExecuteGuestResources / GuestTextureCache::UploadVersion / PublishBufferResidency / Rasterizer::RefreshPreparedShaderBuffers / PreparePhysicalDmaBuffers / GuestDmaMemory::MaterializeResidentBacking / ResourceBindings::Prepare / Rasterizer::ObtainIndexBuffer / FillBuffer / Rasterizer::SnapshotShaderBufferRead / RefreshShaderReadSnapshot / Rasterizer::PreserveBufferBacking / AdmitBufferCache / AcquireBuffer / PlacedBufferAllocator::CreatePage / GuestTextureCache::UploadVersion paired inputs / GuestMultisample::Prepare / GuestMultisample::Lease::Record / GuestTextureCache::CaptureDepthPlane / RetileImageVersion private plane / GuestRasterizer::DrawInternal native I prewrite / GuestImageBoundaryPlane / ValidateGuestImageBoundaries / Entry::ProtectionPlanes / GuestRasterizer plane watch callbacks / PageWatch::TrackImageReadOnly / Rasterizer::GpuOwnedBufferProtectionRanges / GuestLinearImageReadback paired depth plane / IsGuestDepthPlaneStorage / DescribeGuestImageOwnership optional S / AcquireGuestImageOwnership / ReleaseGuestImageOwnership / CaptureIndependentImageVersion / SetIndependentImageTransfer / MatchesReferenceDepthImage / CanMapIndependentDepthImage / mapped RetileImageVersion / IndependentImageVersion::seed_residency / GuestTextureCache::CompatibleGuestDepthSubview / ResolveDepthViewStorage / FindDepthViewParent / Entry::cached_native_current / RememberNativeImageStorage / IsCachedDepthRecreationSource / PrepareCachedDepthRecreation / CaptureCachedDepthRecreationVersion / GuestTextureCache::PlanCachedImageBinding / BindPlannedImage / RecreateCachedDepthAtBind / Rasterizer::ValidatePreparedShaderBufferRange / GuestTextureCache::CachedImageBindingPlan / PlanCachedImageBinding / BindPlannedImage / FindImageRecreationBindingSource / PrepareOrderedGuestStages original-I witness / IsDirectDepthWordClass / SetIndependentOwnershipTransfer / OwnIndependentImage replaced Entry / PageWatch::TrackImageReadOnly transferred exclusive ranges / GuestTiler::NativeFormat / DescribeNativeFormat / RetileImageVersion source codec",
+      "missing_semantics": "remaining depth views with changed base geometry/numeric storage and remaining recreation cases (dirty cached source representations outside connected direct fixed-base single-sample depth/color-to-depth mapping and representations outside exact nonexpanded direct16/32 render-target/storage depth-to-color); spatial/tile/rebased or clipped mappings and packed growth; color-to-MS-depth source representations needing raw/expanded/BC interpretation rather than an available native typed float SRV; remaining ordered depth/MSAA alias gates and independent snapshots above current64-MiB guards; converted or BC word-view stage domains without a common native image allocation, shifted bases, different physical geometries and clipped transfers outside the connected reader-arena proof remain. Shader-buffer residency publishes in original bind order and formatted I-to-B copies affect only already resident pages. Image prewarm now retains version-specific deferred B-source effects; actual image binding consumes them, including inherited independent conversion requirements and prewrite GPU/CPU/depth/stencil sources. Clean small shader streams retain private full DWORD envelopes; host/domain reservations and private I conversions do not publish. Compatible batches preserve preceding GPU B and CPU snapshots/store markers. Fully materialized late DMA publication and invalid I pressure discard remain connected. Valid GPU-modified tiled I pressure retention follows pinned GC and is not another port gap. Formatted readers retain the pinned exact-base assertion. Narrow GPU subcontracts have executed evidence; final broad/game acceptance remains deferred. Capacity-only private depth plans and actual-current-source DB binding are now connected/narrowly GPU-verified; actual GCN shader bindings prove old native D is not prematurely published into preceding formatted B reads. Late source growth beyond the reserved envelope remains a concrete code gap. Recreated RT native_only CMASK guards for unsupported pending plan/format/ownership domains remain concrete code gaps; full member/decoder runtime coverage is separate. Direct fixed-base1x format2/4 depth-to-storage is now connected through original actual bind order; narrow native float16/32 and real R32float GCN clean/dirty/ordered tests pass at641f6b9. Direct classes3/5/9(UNORM/UINT)/10 are now connected at e1eedf9, with separate128-case native RT/UAV word proofs and full renderer RGBA8_UNORM CMASK clear/draw verification. Explicit old-exclusive-guard transfer fixes later independent retirement. Direct finite6 cached recreation and full native CMASK are connected/narrowly checked at fd8e5f6; permuted or expanded16..19 still need source-native codec adaptation before admission; other already connected numeric/component CMASK modes need checks rather than presumed missing code.",
       "evidence": "guest_dma.cpp: planned/actual/fault split and final initialized-coverage/identity guards; guest_texture_cache.cpp/.h: UploadPurpose, version receipts, inherited conversion provenance and binding consumption; guest_stage_bindings.cpp/guest_compute.cpp: ordered publication and masked retile; guest_rasterizer.cpp: nonpublishing block-expansion/depth snapshots and original image bind publication; rasterizer.cpp: remaining direct/split/pressure guards; 935fb69/db0812c/8fb9c79 and SESSION_HANDOFF authoritative crash/GPU checkpoint; narrow-regressions-8fb9c79.json;9791682/0d5b469, F:/PS4Dev/handoff/attachment-backing-20261017/NATIVE_VERIFICATION_0d5b469.json;fcb67e1/2d5e107/7a59dd2, F:/PS4Dev/handoff/initial-physical-dma-20261017/NATIVE_VERIFICATION_7a59dd2.json (scoped passes plus explicit large-copy failure);51ec097, F:/PS4Dev/handoff/dma-copy-pending-20261017/NATIVE_VERIFICATION.json (11 scoped passes; prior large DMA failure resolved);a39144a, F:/PS4Dev/handoff/disjoint-buffer-views-20261017/NATIVE_VERIFICATION.json;33a1e87/1ef3129/2e01aa6, F:/PS4Dev/handoff/preserved-buffer-budget-20261017/NATIVE_VERIFICATION_2e01aa6-final.json;9fdd733, F:/PS4Dev/handoff/readonly-dma-alias-20261017/NATIVE_VERIFICATION_9fdd733.json;36f1373, F:/PS4Dev/handoff/independent-depth-plane-20261017/NATIVE_VERIFICATION_36f1373.json;99cb1f4, F:/PS4Dev/handoff/paired-depth-snapshot-20261017/NATIVE_VERIFICATION_99cb1f4.json;f0d047a/a2acbc3, F:/PS4Dev/handoff/native-depth-capture-20261017/NATIVE_VERIFICATION_f0d047a.json and NATIVE_VERIFICATION_a2acbc3.json;e384ca5, F:/PS4Dev/handoff/paired-plane-watches-20261017/NATIVE_VERIFICATION_e384ca5.json;6f44e15, F:/PS4Dev/handoff/paired-ownership-acquisition-20261017/NATIVE_VERIFICATION_6f44e15.json;2be23d9, F:/PS4Dev/handoff/compact-paired-depth-download-20261017/NATIVE_VERIFICATION_2be23d9.json and upstream-contract.json;52add96, F:/PS4Dev/handoff/paired-independent-conversion-20261017/NATIVE_VERIFICATION_52add96.json and upstream-depth-copy-contract.json;a4a51e8/a7e7ea5, F:/PS4Dev/handoff/depth-growth-aspect-contract-20261017/NATIVE_VERIFICATION_a7e7ea5.json and UPSTREAM_ASPECT_CORRECTION.json",
       "groups": [
         4,
@@ -13117,7 +13237,19 @@
         "641f6b9: direct2/4 cached native depth->writable snapshot/ownership/lexicographic storage and actual shader bind; current-owned-I retention versus stale cached provenance; original PS-before-VS buffer/image ordering with no future metadata publication. Native16 UAV+8 late-native+paired24 exactfca02f5df87b3f6b6d8eaafdd7da17c78c998c388b3aea8d8f628e1ebe537c97; GCN8 PM4+8 ordered+4 prior caller exactb3da2b74779e0bcab9bb91a6e5e701c1b1548d119b3ee92faabb401c906c0de7; intentionally early-bind negative control, strict scope corrections/dump retained. Clean Release25.788s,54 pins/2283 inputs/zero primary source paths. H=F:/PS4Dev/handoff/depth-writable-20261018; full core/game not accepted.",
         "e1eedf9: direct3/5/9(UNORM/UINT)/10 old depth words to RT/UAV; explicit actual replaced-exclusive-I guard transfer with transactional cuts/strong-B preservation/missing-proof rejection.128 native cases16 tests641.63s exactbfcf069f; GCN8 CMASK +8 single +8 ordered +4 prior caller exact523e102e;9 related PageWatch/real GPU B/DMA/envelope/fence/lifetime checks. Clean committed Release22.9s/54 pins/2283 inputs/zero primary paths. H=F:/PS4Dev/handoff/depth-color-formats-20261018; fixture identities separate; full core/game not accepted.",
         "fd8e5f6: native packed float6 cached word class/admission and enhanced initial resource model for format-list CreatePlacedResource2. Exact16 native cases81.09s edda6b12; exact GCN8 CMASK6 +8 CMASK10 c83e458a; exact allocator COPY_DEST+COMMON and heaps4866df31 with failing old interop control. Clean Release18.313s/54 pins/2283 inputs/zero primary paths. H=F:/PS4Dev/handoff/native-packed6-20261018. Finite standard component domain only; previous128 native proof stays on e1eedf9, no core/game acceptance transfer."
-      ]
+      ],
+      "source_native_packed_codec_checkpoint": {
+        "source_package": "edb2d6945639ea09a0db381bbee4902a90d153a1",
+        "production_commit": "74519e5c884ede8cfaa631615e16469488d3b3c9",
+        "source_codec": "RetileImageVersion target geometry + GuestTiler::DescribeNativeFormat SOURCE native packing/stride/depth; direct nonexpanded16..19 admitted; original ownership/order/words/meta/S exclusion/fences retained",
+        "verification": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\VERIFICATION_FINAL.json",
+        "native": "80 source745 cached cases,8 sampled19 sourcee277,16 AMD19 sourceedb; paired depth and2 packed16 MSAA tests; separate exact binaries",
+        "gcn": "24 CMASK16/17/18 source745 +32 inverse-swizzled image_store16..19 and8 CMASK18 sourcee277 +8 AMD CMASK19 sourceedb;72 exact cases,independent fullphysical bytes",
+        "negative": "Two alternate TU legacy target-codec controls fail actual GPU byte oracles; primary production/source expectations unchanged",
+        "related_memory": "8 exact related tests11.97s PASS; source-exe identities in memory-related-current/identity.json",
+        "capabilities": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json",
+        "scope": "Connected narrowed production mechanism; no whole-group/core/game/NaN/rounding/comp_swap/feedback/MSAA attachment acceptance"
+      }
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
@@ -13148,13 +13280,15 @@
     "packed19-msaa-attachment": {
       "upstream_symbol": "Vulkan::SurfaceFormat / GraphicsPipeline",
       "native_symbol": "NativeDX12::LayoutGuestTexture / GuestTextureCache::UploadVersion",
-      "missing_semantics": "Packed format19 multisample render-target writes need exact native quantization/blending where B4G4R4A4 MSAA RTV is unavailable; sampled expansion is already implemented.",
-      "evidence": "src/video_core/renderer_d3d12/guest_texture_cache.cpp: packed19 attachment comment and native sample capability admission",
+      "missing_semantics": "Conditional only: if pinned original B4 MSAA attachment/blend is supported on the SAME adapter but native D3D12 B4 is unavailable, exact quantization/blend/order/lifetime fallback would be needed. Such cross-API capability mismatch is NOT established. Native19 RT path is connected; NVIDIA5080 supports neither API RT, AMD supports both and single-sample RT/CMASK passes. Existing sampled expansion/RAW32 MSAA paths are implemented and separately tested; native MSAA attachment acceptance remains prepared, not proved by single-sample copies.",
+      "evidence": "F:\\PS4Dev\\handoff\\packed16-codec-20261018\\APPLICABILITY_SCOPE_CORRECTION.json; native guest_texture_cache.cpp format/sample admission and original SurfaceFormat/Instance::GetSupportedFormat",
       "groups": [
         33,
         45,
         127
-      ]
+      ],
+      "implementation_state": "conditional_pending_same_adapter_applicability",
+      "next_required_evidence": "Narrow actual native19 multisample attachment/blend/retile on original-capable AMD with independent per-sample words. Do not implement invented fallback solely from unsupported NVIDIA or sampled-expansion tests."
     },
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
