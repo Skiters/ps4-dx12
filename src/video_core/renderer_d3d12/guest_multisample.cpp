@@ -2,6 +2,7 @@
 #include "guest_multisample.h"
 #include "guest_texture_cache.h"
 #include "guest_msaa_shaders.h"
+#include "video_core/amdgpu/pixel_format.h"
 #include <d3dcompiler.h>
 #include <string>
 #include <numeric>
@@ -124,6 +125,8 @@ std::shared_ptr<GuestMultisample::Lease> GuestMultisample::Prepare(Resource& tex
        texture_desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        buffer_desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||layout.block_extent!=1)
         throw std::invalid_argument("Invalid native guest MSAA transfer resources");
+    if(!upload&&!(buffer_desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+        throw std::invalid_argument("Native MSAA readback buffer does not allow UAV writes");
     const bool depth=d.depth_target,stencil=plane!=0;
     const auto interpreted=stencil?DescribeGuestStencil(d):d;
     const auto physical=stencil?LayoutGuestTexture(interpreted):layout;
@@ -393,7 +396,13 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
         throw std::invalid_argument("Invalid native sample backing copy resources");
     const auto format=!d.writable&&d.data_format>=16&&d.data_format<=19?layout.format:TransferFormat(d,layout);
     const bool source_msaa=src.SampleDesc.Count>1;
-    auto& program=copy_programs_[{format,dst.SampleDesc.Count,source_msaa}];
+    // Expanded RGB storage physically has A. Keep its format-defined one even
+    // for a robust zero fetch; raw UINT transfer views carry float-one bits.
+    const bool missing_alpha=layout.HostBytesPerPixel()==16&&
+        AmdGpu::NumComponents(AmdGpu::DataFormat(d.data_format))<4;
+    const UINT robust_alpha=!source_msaa||!missing_alpha?0:
+        std::string_view(ValueType(format))=="uint4"&&d.number_format!=4&&d.number_format!=5?0x3f800000u:1u;
+    auto& program=copy_programs_[{format,dst.SampleDesc.Count,source_msaa,robust_alpha}];
     if(!program){
         auto compiled=std::make_shared<Program>();
         D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,0};
@@ -403,8 +412,9 @@ std::shared_ptr<GuestMultisample::CopyLease> GuestMultisample::PrepareCopy(
         ComPtr<ID3DBlob> blob,errors;
         Check(DX12_API_CALL(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors)));
         Check(DX12_API_CALL(device_->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&compiled->root))));
+        const auto alpha_literal=std::to_string(robust_alpha);
         const D3D_SHADER_MACRO macros[]{{"VALUE_TYPE",ValueType(format)},
-            {"SOURCE_MSAA",source_msaa?"1":"0"},{nullptr,nullptr}};
+            {"SOURCE_MSAA",source_msaa?"1":"0"},{"ROBUST_ALPHA",alpha_literal.c_str()},{nullptr,nullptr}};
         const auto vs=Compile("float4 main(uint id:SV_VertexID):SV_Position{return float4(id==2?3:-1,id==1?3:-1,0,1);}","vs_5_1");
         const auto ps=Compile(GuestMsaaCopySource,"ps_5_1",macros);
         D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};state.pRootSignature=compiled->root.Get();

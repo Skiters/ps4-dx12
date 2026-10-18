@@ -22,7 +22,7 @@ class GuestMultisample {
     ComPtr<ID3D12Device> device_;
     using Key=std::tuple<DXGI_FORMAT,DXGI_FORMAT,UINT,bool,bool,bool>;
     std::map<Key,std::shared_ptr<Program>> programs_;
-    std::map<std::tuple<DXGI_FORMAT,UINT,bool>,std::shared_ptr<Program>> copy_programs_;
+    std::map<std::tuple<DXGI_FORMAT,UINT,bool,UINT>,std::shared_ptr<Program>> copy_programs_;
     std::map<std::tuple<DXGI_FORMAT,UINT,UINT>,std::shared_ptr<Program>> color_depth_programs_;
 public:
     struct Lease {
