@@ -30,7 +30,8 @@ struct SpirvConvertOptions {
     // original guest intermediate. Select per-viewport Y/Z flips at draw time.
     bool runtime_viewport_flips = false;
     // Guest stages may alias a read-only buffer with another stage's writable
-    // buffer. Use one native UAV access class for all storage-buffer views.
+    // buffer. Use one coherent native UAV access class for storage-buffer
+    // views, preserving writes observed through another guest sharp.
     bool native_storage_buffer_uavs = false;
     uint32_t compute_wave_size = 0; // Zero preserves the original intermediate.
     uint32_t native_shader_clock_backend=0;

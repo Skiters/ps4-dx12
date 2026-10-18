@@ -1827,15 +1827,25 @@ GuestTextureCache::Entry* GuestTextureCache::FindImageRecreationBindingSource(co
     return FindCachedDepthRecreationSource(target,layout);
 }
 std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> GuestTextureCache::PlanCachedImageBinding(
-    const GuestTextureDesc& target,const GuestTextureLayout& layout){
-    auto* source=FindImageRecreationBindingSource(target,layout);if(!source)return {};
+    const GuestTextureDesc& target,const GuestTextureLayout& layout,bool current_buffer_source){
+    auto* source=FindImageRecreationBindingSource(target,layout);
+    if(!source&&!current_buffer_source)return {};
+    // A CPU-watched current I remains authoritative after an interior B write.
+    // Absence of GPU ownership does not make that image dirty or select B.
+    if(!source){auto [first,last]=address_index_.equal_range(target.address);
+        for(auto it=first;it!=last;++it){const auto& cached=*it->second;
+            if(cached.cpu_watched&&cached.cached_native_current&&!cached.logical_dirty&&
+               MatchesGuestMipLayout(cached.layout,layout)&&
+               (CompatibleGuestShaderStorage(cached.desc,target)||CanBindReadonlyWordView(cached,target)))return {};
+        }
+    }
     if(!prepare_image_buffer_||!current_image_buffer_||!CanUploadGpuSnapshot(target,layout,target.writable))
         throw std::runtime_error("Cached image binding has no prepared current-B source");
     auto plan=std::shared_ptr<CachedImageBindingPlan>(new CachedImageBindingPlan);
-    plan->cache_=this;plan->storage_=target;plan->source_pin_=PinBinding(*source);
+    plan->cache_=this;plan->storage_=target;if(source)plan->source_pin_=PinBinding(*source);
     // Retain the ALREADY published I before raw B reservation can reconcile
     // an exclusive owner. This creates no future target class or metadata.
-    if(HasCurrentNativeContents(*source)&&source->HasValidLogicalImage()&&
+    if(source&&HasCurrentNativeContents(*source)&&source->HasValidLogicalImage()&&
        !source->buffer_alias_version&&!RevalidateReadonly(*source))
         throw std::runtime_error("Cannot retain original image before recreation capacity reservation");
     // Capacity only. No new image, native copy, I validity, metadata, ownership

@@ -411,7 +411,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         });
         if(!owned_prefix&&!textures->HasOwnedShaderStorage(desc)){
             if(find_block_parent(image.desc,image.layout)||
-               textures->FindImageRecreationBindingSource(desc,layout))
+               textures->FindImageRecreationBindingSource(desc,layout)||
+               (rasterizer.IsGpuBufferModified(desc.address,layout.guest_bytes)&&
+                GuestTextureCache::CanUploadGpuSnapshot(desc,layout,desc.writable)))
                 rasterizer.ValidateGpuBacking(desc.address,layout.guest_bytes,image.desc.writable);
             else rasterizer.ValidateHostMemory(desc.address,layout.guest_bytes,image.desc.writable);
         }
@@ -419,7 +421,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Retain only the already published original I before classifying streams
     // or collecting formatted readers. No future target is allocated/bound.
     if(textures)for(auto& group:shader_image_storage)
-        group.cached_plan=textures->PlanCachedImageBinding(group.desc,group.layout);
+        group.cached_plan=textures->PlanCachedImageBinding(group.desc,group.layout,
+            rasterizer.IsGpuBufferModified(group.desc.address,group.layout.guest_bytes)&&
+            GuestTextureCache::CanUploadGpuSnapshot(group.desc,group.layout,group.desc.writable));
     const auto classify_cpu_stream=[&](size_t index){
         if(!pending[index].guest_read||!pending[index].original_bytes||pending[index].original_bytes>16384)
             return false;

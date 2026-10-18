@@ -52,7 +52,8 @@ int main(int argc,char** argv){try{
     const u32 cached_depth_packed_storage=mode=="cached-depth-packed16-storage-owned"?16:mode=="cached-depth-packed17-storage-owned"?17:
         mode=="cached-depth-packed18-storage-owned"?18:mode=="cached-depth-packed19-storage-owned"?19:0;
     const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
-    const bool ordered_formatted=mode=="ordered-formatted-owned";
+    const bool ordered_formatted_core=mode=="ordered-formatted-core-owned";
+    const bool ordered_formatted=ordered_formatted_core||mode=="ordered-formatted-owned";
     const bool readonly_numeric_exclusive=mode=="readonly-numeric-exclusive-owned";
     const bool readonly_packed_ms=mode=="readonly-snormword-msaa-owned"||mode=="readonly-sintword-msaa-owned";
     const bool readonly_packed_sample=mode=="readonly-snormword-sample-owned";
@@ -132,7 +133,7 @@ int main(int argc,char** argv){try{
     }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
     }else if(ordered_formatted){
-        RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
+        RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base,!ordered_formatted_core,std::filesystem::path(argv[1]).wstring());
     }else if(formatted_cmask){
         initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
             0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x415454434d415301ULL);

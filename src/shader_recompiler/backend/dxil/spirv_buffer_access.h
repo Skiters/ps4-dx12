@@ -19,7 +19,7 @@ inline std::vector<uint32_t> NativeStorageBufferUavs(std::span<const uint32_t> w
     std::unordered_map<uint32_t,uint32_t> access_decorations;
     std::unordered_set<uint32_t> decoration_groups;
     std::vector<uint32_t> variable_order,group_order;
-    constexpr uint32_t restrict_access=1,aliased_access=2,readonly_access=4;
+    constexpr uint32_t restrict_access=1,aliased_access=2,readonly_access=4,coherent_access=8;
     size_t annotation_begin=words.size();
     for(size_t i=5;i<words.size();){
         const auto count=words[i]>>16,op=words[i]&65535;
@@ -35,7 +35,7 @@ inline std::vector<uint32_t> NativeStorageBufferUavs(std::span<const uint32_t> w
         if(op==71&&count==3){ // OpDecorate, including decoration group properties
             const auto decoration=words[i+2];
             const auto flag=decoration==19?restrict_access:decoration==20?aliased_access:
-                            decoration==24?readonly_access:0;
+                            decoration==24?readonly_access:decoration==23?coherent_access:0;
             if(flag)access_decorations[words[i+1]]|=flag;
         }
         // All annotation forms, including OpDecorateId and string decorations.
@@ -62,9 +62,11 @@ inline std::vector<uint32_t> NativeStorageBufferUavs(std::span<const uint32_t> w
     if(variables.empty())return {words.begin(),words.end()};
     if(annotation_begin==words.size())
         throw std::runtime_error("Native SSBO intermediate has no annotation section");
-    std::unordered_set<uint32_t> already_aliased;
-    for(const auto variable:variable_order)
+    std::unordered_set<uint32_t> already_aliased,already_coherent;
+    for(const auto variable:variable_order){
         if(access_decorations[variable]&aliased_access)already_aliased.insert(variable);
+        if(access_decorations[variable]&coherent_access)already_coherent.insert(variable);
+    }
     // Only OpDecorate may decorate a group. Keep arbitrary literal payloads,
     // including strings, but do not clone invalid OpDecorateId/String targets.
     std::unordered_map<uint32_t,std::vector<size_t>> group_annotations;
@@ -90,6 +92,7 @@ inline std::vector<uint32_t> NativeStorageBufferUavs(std::span<const uint32_t> w
                 if(flags&(restrict_access|readonly_access))
                     split_groups.insert(words[i+1]);
                 if(flags&aliased_access)already_aliased.insert(words[j]);
+                if(flags&coherent_access)already_coherent.insert(words[j]);
             }
         }else{
             for(size_t j=i+2;j+1<i+count;j+=2)
@@ -131,6 +134,12 @@ inline std::vector<uint32_t> NativeStorageBufferUavs(std::span<const uint32_t> w
             for(const auto variable:variable_order)
                 if(!already_aliased.contains(variable))
                     result.insert(result.end(),{(3u<<16)|71u,variable,20u}); // Aliased
+            for(const auto variable:variable_order)
+                if(!already_coherent.contains(variable))
+                    // Aliased permits common addresses; Coherent also keeps
+                    // native UAV views from caching another view's old word.
+                    // Guest buffers can alias despite distinct sharp IDs.
+                    result.insert(result.end(),{(3u<<16)|71u,variable,23u}); // Coherent
             result.insert(result.end(),clone_annotations.begin(),clone_annotations.end());
         }
         const bool variable_restriction=op==71&&count==3&&

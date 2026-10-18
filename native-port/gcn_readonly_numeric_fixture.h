@@ -8,16 +8,27 @@
 #include <bit>
 #include <cstring>
 #include <cstdio>
+#include <functional>
+#include <utility>
 
 namespace NativeDX12 {
 // Inspect original operands only inside the real Liverpool queue callback.
 class ReadonlyNumericProbeRasterizer final:public GuestRasterizer {
     AmdGpu::Liverpool& gpu_;GuestShaderFrontend inspector_;bool inspect_;
+    std::function<void()> next_dispatch_inspection_;
 public:
     ReadonlyNumericProbeRasterizer(ID3D12Device* d,AmdGpu::Liverpool& g,const Shader::Profile& p,
         const std::wstring& mesa,const std::wstring& dxc,bool inspect):
         GuestRasterizer(d,g,p,mesa,dxc),gpu_(g),inspector_(p),inspect_(inspect){}
+    // Test-only reflection must run with the actual queue's compute registers.
+    // Submit/WaitGpuIdle bracket publication and consumption of this callback.
+    void InspectNextDispatch(std::function<void()> inspect){
+        if(next_dispatch_inspection_)throw std::logic_error("Unconsumed GCN dispatch inspection");
+        next_dispatch_inspection_=std::move(inspect);
+    }
+    bool HasPendingDispatchInspection()const{return bool(next_dispatch_inspection_);}
     void DispatchDirect()override{
+        if(auto inspect=std::exchange(next_dispatch_inspection_,{}))inspect();
         if(inspect_){auto& stage=inspector_.BuildCompute(gpu_);
             for(const auto& buffer:stage.info.buffers){const auto sharp=buffer.GetSharp(stage.info);
                 printf("BUFFER address=%llx bytes=%llu formatted=%u written=%u gpu_modified=%u\n",u64(sharp.base_address),

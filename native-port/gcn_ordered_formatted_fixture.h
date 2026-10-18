@@ -8,6 +8,8 @@
 #include "gcn_bc_partial_expansion_fixture.h"
 #include "gcn_bc_writable_alias_fixture.h"
 #include "gcn_mixed_formatted_fixture.h"
+#include "gcn_readonly_numeric_fixture.h"
+#include "shader_recompiler/backend/dxil/spirv_converter.h"
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include <algorithm>
@@ -17,13 +19,15 @@
 #include <stdexcept>
 #include <string_view>
 #include <vector>
+#include <fstream>
 
 namespace NativeDX12 {
 
 // Authored, unrun real-GCN coverage. The tested dispatch has no image operands;
 // separate seed/probe dispatches establish and inspect the two resource domains.
-inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Liverpool& gpu,
-    const Shader::Profile& profile, std::byte* memory, std::byte* backing, u64 base) {
+inline void RunOrderedFormattedGcnFixture(ReadonlyNumericProbeRasterizer& rasterizer, AmdGpu::Liverpool& gpu,
+    const Shader::Profile& profile, std::byte* memory, std::byte* backing, u64 base,bool run_related=true,
+    const std::wstring& converter={}) {
     constexpr u64 AllocationBytes = 65536, ImageOffset = 16384, ObservationOffset = 57344;
     constexpr u32 BufferValue = 0x13579bdf, ImageValue = 0x2468ace0;
     constexpr u32 ImageNext = 0x6a5b4c3d, FinalValue = 0x4567a9cd;
@@ -31,11 +35,14 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
     constexpr u64 ShortBytes = 64, LongBytes = 20480;
     alignas(256) std::array<u32, 128> seed{}, before_probe{}, ordered{}, after_probe{};
     GuestShaderFrontend reflection(profile);
+    AmdGpu::ComputeProgram program{};
+    gpu.BindRasterizer(&rasterizer);
     struct Drain {
         GuestRasterizer& rasterizer;
+        AmdGpu::Liverpool& gpu;
         bool armed = true;
-        ~Drain() { if (armed) try { rasterizer.Finish(); } catch (...) {} }
-    } drain{rasterizer};
+        ~Drain() { if (armed) {gpu.WaitGpuIdle();try { rasterizer.Finish(); } catch (...) {}gpu.BindRasterizer(nullptr);} }
+    } drain{rasterizer,gpu};
     const auto initialize = [](auto& program, const std::vector<u32>& words, u64 hash, u32 metadata_word = 32) {
         if (words.size() > metadata_word || metadata_word * sizeof(u32) + sizeof(AmdGpu::BinaryInfo) > sizeof(program))
             throw std::runtime_error("Ordered GCN code overlaps binary metadata");
@@ -48,7 +55,6 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::memcpy(program.data() + metadata_word, &binary, sizeof(binary));
     };
     const auto bind = [&](const auto& code, u32 user_registers) -> AmdGpu::ComputeProgram& {
-        auto& program = gpu.GetCsRegs();
         program = {};
         program.address = reinterpret_cast<u64>(code.data()) >> 8;
         // Exactly one invocation: no inter-thread alias race enters the oracle.
@@ -58,6 +64,32 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         program.settings.num_vgprs = 3;
         program.settings.num_sgprs = 3;
         return program;
+    };
+    const auto dispatch=[&]{
+        constexpr u32 count=sizeof(program)/4;
+        std::vector<u32> packets{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::SetShReg,count,AmdGpu::PM4ShaderType::ShaderCompute}.raw,0x200};
+        const auto registers=std::bit_cast<std::array<u32,count>>(program);
+        packets.insert(packets.end(),registers.begin(),registers.end());
+        packets.insert(packets.end(),{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::DispatchDirect,3,AmdGpu::PM4ShaderType::ShaderCompute}.raw,1,1,1,1});
+        gpu.SubmitGfx(packets,{});gpu.WaitGpuIdle();
+        if(rasterizer.HasPendingDispatchInspection())throw std::runtime_error("GCN queue did not consume dispatch reflection");
+    };
+    std::vector<std::byte> observed;
+    const auto matches_observation=[&](const AmdGpu::Buffer& output,const std::vector<std::byte>& expected){
+        // Pinned ReadMemory downloads a512-KiB window, so a guest read of the
+        // observer can also clean B under test. Read back ONLY the GPU observer
+        // without changing the guest dirty/ownership state of either domain.
+        auto snapshot=rasterizer.CapturePreparedShaderBuffer(output.base_address,output.GetSize());
+        ComPtr<ID3D12Device> device;Check(snapshot.handle->GetDevice(IID_PPV_ARGS(&device)));
+        auto readback=Buffer(device.Get(),output.GetSize(),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        snapshot.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,output.GetSize());
+        rasterizer.Finish();rasterizer.ValidateDebugMessages();
+        observed.assign(backing,backing+AllocationBytes);void* data{};D3D12_RANGE all{0,size_t(output.GetSize())};
+        Check(readback.handle->Map(0,&all,&data));
+        memcpy(observed.data()+output.base_address-base,data,size_t(output.GetSize()));
+        D3D12_RANGE none{};readback.handle->Unmap(0,&none);
+        return observed==expected;
     };
     const auto initial = [](u32 x, u32 y) { return 0x10203040u ^ (y << 12) ^ x; };
     enum class Sequence { ReadWrite, WriteRead, RawWriteRead, ReadWriteRead,
@@ -181,7 +213,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         auto& seed_program = bind(seed, 12);
         std::memcpy(seed_program.user_data.data(), &target, sizeof(target));
         std::memcpy(seed_program.user_data.data() + 4, &image, sizeof(image));
-        rasterizer.DispatchDirect();
+        dispatch();
         if (!rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
             throw std::runtime_error("Ordered GCN seed did not retain the modified buffer domain");
 
@@ -198,15 +230,21 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::memcpy(probe_program.user_data.data(), &target, sizeof(target));
         std::memcpy(probe_program.user_data.data() + 4, &image, sizeof(image));
         std::memcpy(probe_program.user_data.data() + 12, &observation, sizeof(observation));
-        rasterizer.DispatchDirect();
-        rasterizer.ReadMemory(observation.base_address, 4096);
+        dispatch();
         rasterizer.Finish();
         expect_word(ObservationOffset, BufferValue);
         expect_word(ObservationOffset + 4, ImageValue);
         expect_word(ObservationOffset + 8, ImageNext);
-        if (std::memcmp(backing, expected.data(), AllocationBytes) ||
-            !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
+        if (!matches_observation(observation,expected) ||
+            !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes)){
+            fprintf(stderr,"ORDERED seed mismatch sequence=%u small=%u clean=%u writer_bytes=%u modified=%u\n",u32(sequence),small_image,clean,write_bytes,
+                unsigned(rasterizer.IsGpuBufferModified(target.base_address,layout.guest_bytes)));
+            for(u64 at=0;at<AllocationBytes;++at)if(observed[at]!=expected[at]){
+                fprintf(stderr,"seed byte=%llu got=%02x expected=%02x\n",at,std::to_integer<unsigned>(observed[at]),std::to_integer<unsigned>(expected[at]));break;}
+            for(u32 word=0;word<3;++word){u32 got{},wanted{};memcpy(&got,observed.data()+ObservationOffset+word*4,4);memcpy(&wanted,expected.data()+ObservationOffset+word*4,4);
+                fprintf(stderr,"seed output[%u]=%08x expected=%08x\n",word,got,wanted);}
             throw std::runtime_error("Ordered GCN precondition lost independent image, buffer or physical padding");
+        }
         if (clean || redirty_prefix) {
             // A real CPU read downloads B, while ResolveMemory deliberately
             // leaves the independent image version I intact. No CPU write or
@@ -215,7 +253,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             rasterizer.Finish();
             expect_word(ImageOffset + first, BufferValue);
             if (rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes) ||
-                std::memcmp(backing, expected.data(), AllocationBytes))
+                !matches_observation(observation,expected))
                 throw std::runtime_error("Ordered GCN CPU read did not establish the clean B domain");
         }
         if (binding_order) {
@@ -233,6 +271,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             auto& warm_program = bind(seed, 8);
             std::memcpy(warm_program.user_data.data(), &warm, sizeof(warm));
             std::memcpy(warm_program.user_data.data() + 4, &observation, sizeof(observation));
+            rasterizer.InspectNextDispatch([&]{
             const auto& warm_stage = reflection.BuildCompute(gpu);
             size_t warm_index{};
             if (!warm_stage.info.images.empty() || warm_stage.info.uses_dma)
@@ -248,14 +287,14 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             }
             if (warm_index != 2)
                 throw std::runtime_error("Binding-order warmup lost a real guest resource");
-            rasterizer.DispatchDirect();
-            rasterizer.ReadMemory(observation.base_address, 4096);
+            });
+            dispatch();
             rasterizer.Finish();
             u32 warm_value{};
             std::memcpy(&warm_value, expected.data(), sizeof(warm_value));
             expect_word(ObservationOffset + 12, warm_value);
             if (base % 4096 || rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes + 4) ||
-                std::memcmp(backing, expected.data(), AllocationBytes))
+                !matches_observation(observation,expected))
                 throw std::runtime_error("Binding-order warmup changed I/B preconditions or left old dirty bytes");
         }
         if (redirty_prefix) {
@@ -269,17 +308,16 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 0x4f52444d41520000ULL + identity);
             auto& marker_program = bind(seed, 4);
             std::memcpy(marker_program.user_data.data(), &marker, sizeof(marker));
-            rasterizer.DispatchDirect();
+            dispatch();
             if (!rasterizer.IsGpuBufferModified(target.base_address, ShortBytes))
                 throw std::runtime_error("Short-writer fixture did not establish the tiny prior dirty interval");
             auto& check_program = bind(before_probe, 16);
             std::memcpy(check_program.user_data.data(), &target, sizeof(target));
             std::memcpy(check_program.user_data.data() + 4, &image, sizeof(image));
             std::memcpy(check_program.user_data.data() + 12, &observation, sizeof(observation));
-            rasterizer.DispatchDirect();
-            rasterizer.ReadMemory(observation.base_address, 4096);
+            dispatch();
             rasterizer.Finish();
-            if (std::memcmp(backing, expected.data(), AllocationBytes) ||
+            if (!matches_observation(observation,expected) ||
                 !rasterizer.IsGpuBufferModified(target.base_address, ShortBytes))
                 throw std::runtime_error("Tiny prior writer lost independent I or published unexpected physical bytes");
         }
@@ -293,7 +331,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 0x4f52445441490000ULL + identity);
             auto& tail_program = bind(seed, 4);
             std::memcpy(tail_program.user_data.data(), &tail, sizeof(tail));
-            rasterizer.DispatchDirect();
+            dispatch();
             if (rasterizer.IsGpuBufferModified(target.base_address, ShortBytes) ||
                 !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
                 throw std::runtime_error("Short-prefix fixture did not isolate GPU modification to the tail page");
@@ -302,10 +340,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             std::memcpy(check_program.user_data.data(), &target, sizeof(target));
             std::memcpy(check_program.user_data.data() + 4, &image, sizeof(image));
             std::memcpy(check_program.user_data.data() + 12, &observation, sizeof(observation));
-            rasterizer.DispatchDirect();
-            rasterizer.ReadMemory(observation.base_address, 4096);
+            dispatch();
             rasterizer.Finish();
-            if (std::memcmp(backing, expected.data(), AllocationBytes) ||
+            if (!matches_observation(observation,expected) ||
                 rasterizer.IsGpuBufferModified(target.base_address, ShortBytes) ||
                 !rasterizer.IsGpuBufferModified(target.base_address, layout.guest_bytes))
                 throw std::runtime_error("Tail-only GPU write lost the image or polluted the clean prefix");
@@ -413,6 +450,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         }
         const bool check_short_bound = (short_views || writer_cases) && early_sharp.GetSize() == ShortBytes;
         if (short_views || writer_cases) {
+            if(sequence==Sequence::ShortWriterFullRead)words.insert(words.end(),{
+                0xe0000004,0x80000900|(read_group<<16),0xbf8c0000,
+                0xe0700028,0x80000900|(output_group<<16)});
             if (check_short_bound) words.insert(words.end(), {
                 // Offset64 is outside the unchanged short sharp, even though
                 // the common arena and retained image are larger. It reads0.
@@ -465,7 +505,18 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         std::memcpy(ordered_program.user_data.data() + read_group * 4, &early_sharp, sizeof(early_sharp));
         if (repeated) std::memcpy(ordered_program.user_data.data() + late_group * 4, &late_sharp, sizeof(late_sharp));
         std::memcpy(ordered_program.user_data.data() + output_group * 4, &command_output, sizeof(command_output));
+        rasterizer.InspectNextDispatch([&]{
         const auto& stage = reflection.BuildCompute(gpu);
+        if(const auto* dump=std::getenv("SHADPS4_FIXTURE_ORDERED_DUMP");dump&&sequence==Sequence::RawWriteRead&&small_image&&!clean){
+            const auto path=std::filesystem::path(dump);std::filesystem::create_directories(path);
+            std::ofstream(path/"ordered.spv",std::ios::binary).write(reinterpret_cast<const char*>(stage.spirv.data()),stage.spirv.size()*4);
+            Shader::Backend::DX12::SpirvConvertOptions options;options.stage=Shader::Backend::DX12::SpirvStage::Compute;
+            options.shader_model_minor=6;options.compute_wave_size=profile.native_compute_wave_size?profile.native_compute_wave_size:32;
+            options.native_storage_buffer_uavs=true;options.runtime_viewport_flips=true;options.native_shader_clock_backend=profile.native_shader_clock_backend;
+            const auto dxil=Shader::Backend::DX12::ConvertSpirv(converter,stage.spirv,options);
+            if(!dxil.success)throw std::runtime_error(dxil.diagnostics);
+            std::ofstream(path/"ordered.dxil",std::ios::binary).write(reinterpret_cast<const char*>(dxil.bytecode.data()),dxil.bytecode.size());
+        }
         if (!stage.info.images.empty() || stage.info.uses_dma)
             throw std::runtime_error("Ordered GCN command unexpectedly has image or DMA operands");
         std::vector<const Shader::BufferResource*> guest_buffers;
@@ -491,7 +542,8 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
                 buffer.used_types != (write_bytes == 1 ? Shader::IR::Type::U8 : Shader::IR::Type::U16))
                 throw std::runtime_error("Narrow writer unexpectedly acquired a wider native storage alias");
         }
-        rasterizer.DispatchDirect();
+        });
+        dispatch();
         if (binding_order && (!rasterizer.IsGpuBufferModified(target.base_address, 4) ||
             !rasterizer.IsGpuBufferModified(command_output.base_address, command_output.GetSize())))
             throw std::runtime_error("Binding-order dispatch retired before the GPU-only image-tail observation");
@@ -501,6 +553,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         if (binding_order) expect_word(command_output_offset, TailWrite);
         expect_word(command_output_offset + 16, early_loaded);
         expect_word(command_output_offset + 20, offset_writer ? (ImageFar >> write_shift) & write_mask : loaded);
+        if(sequence==Sequence::ShortWriterFullRead)expect_word(command_output_offset+40,ImageNext);
         if (narrow_writer) {
             expect_word(command_output_offset + 56, gpu_far_word);
             expect_word(command_output_offset + 60, 0);
@@ -548,7 +601,7 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         const u64 after_output_offset = after_output.base_address - base;
         std::memcpy(after_program.user_data.data(), &image, sizeof(image));
         std::memcpy(after_program.user_data.data() + 8, &after_output, sizeof(after_output));
-        rasterizer.DispatchDirect();
+        dispatch();
         if (offset_writer) {
             // A prior full dirty B interval publishes the retiled I bytes too.
             // With clean B, only the current DWORD writer becomes CPU-visible;
@@ -573,8 +626,14 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
         if (writer_cases) expect_word(after_output_offset + 52, image_tiled ? ImageFar : initial(0, 8));
         rasterizer.ReadMemory(base, AllocationBytes);
         rasterizer.Finish();
-        if (std::memcmp(backing, expected.data(), AllocationBytes))
+        if (std::memcmp(backing, expected.data(), AllocationBytes)){
+            fprintf(stderr,"ORDERED mismatch sequence=%u small=%u clean=%u writer_bytes=%u\n",u32(sequence),small_image,clean,write_bytes);
+            for(u64 at=0;at<AllocationBytes;++at)if(backing[at]!=expected[at]){
+                fprintf(stderr,"byte=%llu got=%02x expected=%02x\n",at,std::to_integer<unsigned>(backing[at]),std::to_integer<unsigned>(expected[at]));break;}
+            for(u32 word=0;word<16;++word){u32 got{},wanted{};memcpy(&got,backing+command_output_offset+word*4,4);memcpy(&wanted,expected.data()+command_output_offset+word*4,4);
+                fprintf(stderr,"output[%u]=%08x expected=%08x\n",word,got,wanted);}
             throw std::runtime_error("Ordered GCN observation, final buffer, image reload or physical/padding oracle mismatch");
+        }
         const char* sequence_name = sequence == Sequence::ReadWrite ? "R/W" :
             sequence == Sequence::WriteRead ? "W/R" :
             sequence == Sequence::RawWriteRead ? "rawR/W/formattedR" :
@@ -595,7 +654,9 @@ inline void RunOrderedFormattedGcnFixture(GuestRasterizer& rasterizer, AmdGpu::L
             static_cast<unsigned long long>(layout.guest_bytes));
     }
     rasterizer.Finish();
+    gpu.WaitGpuIdle();gpu.BindRasterizer(nullptr);
     drain.armed = false;
+    if(!run_related)return;
     RunOrderedDisjointGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunReadonlyRevalidationGcnFixture(rasterizer, gpu, profile, memory, backing, base);
     RunMixedFormattedGcnFixture(rasterizer, gpu, profile, memory, backing, base);

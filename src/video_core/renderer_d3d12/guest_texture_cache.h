@@ -358,7 +358,8 @@ public:
     }
     bool IsPlannedImageBind()const{return planned_image_bind_;}
     Entry* FindImageRecreationBindingSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
-    std::shared_ptr<const CachedImageBindingPlan> PlanCachedImageBinding(const GuestTextureDesc&,const GuestTextureLayout&);
+    std::shared_ptr<const CachedImageBindingPlan> PlanCachedImageBinding(const GuestTextureDesc&,const GuestTextureLayout&,
+        bool current_buffer_source=false);
     Entry& BindPlannedImage(const CachedImageBindingPlan&,ID3D12GraphicsCommandList*,uint64_t);
     bool HasCurrentNativeContents(const Entry&)const;
     bool HasCurrentDepthContents(const Entry&)const;
