@@ -1157,7 +1157,7 @@ void EmitContext::DefineImagesAndSamplers() {
         const bool signed_packed10 = data_format == 9 &&
             (nfmt == AmdGpu::NumberFormat::Snorm || nfmt == AmdGpu::NumberFormat::Sint);
         const u32 packed_format = profile.native_coherent_images &&
-            (image_desc.native_packed10_raw || (is_storage && (signed_packed10 || image_desc.native_raw32 ||
+            (image_desc.native_packed10_raw || image_desc.native_raw32 || (is_storage && (signed_packed10 ||
              (data_format >= 16 && data_format <= 19)))) ? data_format : 0U;
         const VectorIds& data_types = packed_format ? U32 : GetAttributeType(*this, nfmt);
         const Id sampled_type = data_types[1];

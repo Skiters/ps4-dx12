@@ -144,4 +144,88 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
         word_donor?"original written R32":"ordinary readonly RGB9E5",
         filtered?"bilinear decoded colors":extremes?"zero/minimum/maximum colors":"decoded colors");
 }
+// Actual readonly multisample T# loads, including CPU dirty refresh and forced
+// channels on identical guest code/hash. Each sample has an independent word.
+inline void RunSharedExponentMsaaGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
+    std::byte* memory,std::byte* backing,u64 base){
+    constexpr u32 Bytes=65536,ImageOffset=16384,OutputOffset=57344;
+    const std::array<u32,8> words{128u|(256u<<9)|(64u<<18)|(17u<<27),
+        256u|(32u<<9)|(128u<<18)|(18u<<27),1u,0xffffffffu,
+        256u|(128u<<9)|(64u<<18)|(19u<<27),32u|(64u<<9)|(128u<<18)|(17u<<27),1u<<9,1u<<18};
+    const std::array<std::array<u32,4>,8> colors{{
+        {0x3f800000,0x40000000,0x3f000000,0x3f800000},
+        {0x40800000,0x3f000000,0x40000000,0x3f800000},
+        {0x33800000,0,0,0x3f800000},
+        {0x477f8000,0x477f8000,0x477f8000,0x3f800000},
+        {0x41000000,0x40800000,0x40000000,0x3f800000},
+        {0x3e800000,0x3f000000,0x3f800000,0x3f800000},
+        {0,0x33800000,0,0x3f800000},{0,0,0x33800000,0x3f800000}}};
+    struct alignas(256) Code{std::array<u32,256> data{};} code;
+    alignas(256) AmdGpu::Image image;
+    gpu.BindRasterizer(&r);
+    struct Drain{GuestRasterizer& r;AmdGpu::Liverpool& g;
+        ~Drain(){g.WaitGpuIdle();try{r.Finish();}catch(...){}g.BindRasterizer(nullptr);}} drain{r,gpu};
+    unsigned cases{};
+    for(u32 samples:{2u,4u,8u})for(u32 tile:{5u,13u})for(bool forced:{false,true}){
+        r.ReadMemory(base,Bytes);r.Finish();r.UnmapMemory(base,Bytes);r.MapMemory(base,Bytes);
+        r.NotifyHostMapping(base,Bytes,true,true);memset(memory,0xa7,Bytes);
+        image={};image.base_address=(base+ImageOffset)>>8;
+        image.type=u64(AmdGpu::ImageType::Color2DMsaa);image.last_level=std::countr_zero(samples);
+        image.width=image.height=image.pitch=31;image.data_format=34;image.num_format=7;
+        image.tiling_index=tile;
+        image.dst_sel_x=forced?7:4;image.dst_sel_y=forced?0:5;
+        image.dst_sel_z=forced?1:6;image.dst_sel_w=forced?4:7;
+        const auto desc=DescribeGuestTexture(image);const auto layout=LayoutGuestTexture(desc);
+        if(desc.samples!=samples||layout.guest_bytes>OutputOffset-ImageOffset)
+            throw std::runtime_error("Shared exponent MSAA fixture geometry exceeds physical allocation");
+        AmdGpu::Buffer output{};output.base_address=base+OutputOffset;output.stride=4;output.num_records=1024;
+        output.data_format=4;output.num_format=4;output.dst_sel_x=4;output.dst_sel_y=5;output.dst_sel_z=6;output.dst_sel_w=7;
+        const auto dispatch=[&](std::vector<u32> shader,u64 hash,bool raw=false){
+            code.data.fill(0);std::copy(shader.begin(),shader.end(),code.data.begin());
+            AmdGpu::BinaryInfo binary{};binary.signature=binary.signature_ref;binary.length=u32(shader.size()*4);binary.shader_hash=hash;
+            memcpy(code.data.data()+192,&binary,sizeof(binary));
+            AmdGpu::ComputeProgram compute{};compute.address=reinterpret_cast<u64>(code.data.data())>>8;
+            compute.num_thread_x.full=compute.num_thread_y.full=compute.num_thread_z.full=1;
+            compute.dim_x=compute.dim_y=compute.dim_z=1;compute.settings.num_user_regs=12;
+            compute.settings.num_vgprs=5;compute.settings.num_sgprs=3;
+            const u64 pointer=reinterpret_cast<u64>(&image);memcpy(compute.user_data.data(),&pointer,8);
+            memcpy(compute.user_data.data()+4,&output,sizeof(output));
+            if(raw){auto input=output;input.base_address=base;input.num_records=Bytes/4;
+                memcpy(compute.user_data.data()+8,&input,sizeof(input));}
+            constexpr u32 count=sizeof(compute)/4;
+            std::vector<u32> packets{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::SetShReg,count,AmdGpu::PM4ShaderType::ShaderCompute}.raw,0x200};
+            const auto regs=std::bit_cast<std::array<u32,count>>(compute);packets.insert(packets.end(),regs.begin(),regs.end());
+            packets.insert(packets.end(),{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::DispatchDirect,3,AmdGpu::PM4ShaderType::ShaderCompute}.raw,1,1,1,1});
+            gpu.SubmitGfx(packets,{});gpu.WaitGpuIdle();
+        };
+        for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)for(u32 s=0;s<samples;++s)
+            memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y,s),&words[s],4);
+        std::vector<std::byte> expected(memory,memory+Bytes);
+        dispatch({0xe0300000,0x80020c00,0xbf8c0000,0xe07000a0,0x80010c00,0xbf810000},0x5247394d42554600,true);
+        const u32 fill=0xa7a7a7a7;memcpy(expected.data()+OutputOffset+160,&fill,4);
+        for(u32 generation=0;generation<2;++generation){
+            if(generation)for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)for(u32 s=0;s<samples;++s){
+                const auto value=words[(s+1)%8];const auto offset=ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y,s);
+                memcpy(memory+offset,&value,4);memcpy(expected.data()+offset,&value,4);
+            }
+            for(u32 sample=0;sample<samples;++sample){
+                dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0x7e0402ff,sample,
+                    0xf0000f00,0x00040400,0xbf8c0000,0xe0700000,0x80010400,
+                    0xe0700004,0x80010500,0xe0700008,0x80010600,0xe070000c,0x80010700,0xbf810000},0x5247394d4c4f4100ull+sample);
+                const auto& c=colors[(sample+generation)%8];
+                const auto selected=forced?std::array<u32,4>{c[3],0,0x3f800000,c[0]}:c;
+                memcpy(expected.data()+OutputOffset,selected.data(),16);
+                r.ReadMemory(output.base_address,output.GetSize());r.Finish();r.ValidateDebugMessages();
+                if(memcmp(backing,expected.data(),Bytes)){
+                    const auto* actual=reinterpret_cast<const u32*>(backing+OutputOffset);
+                    fprintf(stderr,"RGB9 MSAA samples=%u tile=%u forced=%u generation=%u sample=%u got=%08x/%08x/%08x/%08x expected=%08x/%08x/%08x/%08x\n",
+                        samples,tile,forced,generation,sample,actual[0],actual[1],actual[2],actual[3],selected[0],selected[1],selected[2],selected[3]);
+                    throw std::runtime_error("Shared exponent MSAA load lost sample, swizzle, CPU refresh or physical padding");
+                }
+                ++cases;
+            }
+        }
+    }
+    printf("PASS:%u actual queued RGB9E5 MSAA loads,2/4/8 distinct samples,2 tiles,forced swizzle,CPU dirty refresh and full65536 bytes\n",cases);
+}
 } // namespace NativeDX12

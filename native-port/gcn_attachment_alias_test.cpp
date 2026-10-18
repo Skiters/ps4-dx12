@@ -37,9 +37,10 @@ static ComPtr<ID3D12Device> HardwareDevice(DXGI_FORMAT required_format=DXGI_FORM
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and attachment mode");
     const bool shared_exponent_sample=std::string_view(argv[3])=="shared-exponent-sample-owned";
+    const bool shared_exponent_msaa=std::string_view(argv[3])=="shared-exponent-msaa-owned";
     const bool shared_exponent_extremes=std::string_view(argv[3])=="shared-exponent-extremes-owned";
     const bool shared_exponent_word=std::string_view(argv[3])=="shared-exponent-word-donor-owned";
-    const bool shared_exponent=shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
+    const bool shared_exponent=shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_color=std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool owned=mode.ends_with("-owned");
@@ -139,7 +140,8 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(shared_exponent){
-        RunSharedExponentGcnFixture(rasterizer,gpu,memory,backing,base,shared_exponent_sample,shared_exponent_extremes,shared_exponent_word);
+        if(shared_exponent_msaa)RunSharedExponentMsaaGcnFixture(rasterizer,gpu,memory,backing,base);
+        else RunSharedExponentGcnFixture(rasterizer,gpu,memory,backing,base,shared_exponent_sample,shared_exponent_extremes,shared_exponent_word);
     }else if(writable_word){
         RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_r11?6:cached_rg16?5:4,packed_word_writer);
     }else if(readonly_numeric){

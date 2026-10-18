@@ -43,7 +43,7 @@ struct GuestTextureDesc {
     bool UsesRawPacked10()const{return data_format==9&&!render_target&&!depth_target&&
         (native_packed10_raw||(writable&&(number_format==1||number_format==5)));}
     bool UsesRaw32()const{return UsesRawPacked10()||((data_format==4||data_format==10||data_format==34)&&
-        native_raw32&&writable&&!render_target&&!depth_target);}
+        native_raw32&&(writable||(data_format==34&&samples>1))&&!render_target&&!depth_target);}
     bool operator==(const GuestTextureDesc&)const=default;
 };
 struct GuestMipLayout {

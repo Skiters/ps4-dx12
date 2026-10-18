@@ -38,6 +38,9 @@ void Case(ID3D12Device* device,u32 format,u32 tile,UINT samples){
     GuestTextureDesc desc;desc.width=17;desc.height=9;desc.pitch=24;
     desc.layers=desc.view_layers=3;desc.levels=samples==1?3:1;desc.samples=samples;
     desc.data_format=format;desc.number_format=7;desc.tile_mode=tile;
+    // The native shader profile reads RGB9E5 MSAA through exact R32 words;
+    // no typed RGB9E5 MSAA SRV/RTV capability is assumed.
+    if(format==34&&samples>1)desc.native_raw32=true;
     const auto layout=LayoutGuestTexture(desc);Mapping memory(layout.guest_bytes);
     desc.address=reinterpret_cast<VAddr>(memory.guest);
     Rasterizer renderer(device);GuestTextureCache cache(device);
@@ -56,7 +59,8 @@ void Case(ID3D12Device* device,u32 format,u32 tile,UINT samples){
         if(generation==2)fill(1);
         auto& image=cache.Upload(desc,{memory.guest,size_t(layout.guest_bytes)},
             renderer.RecordingList(),renderer.CompletedFence());
-        Require(image.texture.AllowsCast(layout.format)&&image.texture.AllowsCast(DXGI_FORMAT_R32_UINT));
+        if(desc.UsesRaw32())Require(image.texture.handle->GetDesc().Format==DXGI_FORMAT_R32_TYPELESS&&layout.format==DXGI_FORMAT_R32_UINT);
+        else Require(image.texture.AllowsCast(layout.format)&&image.texture.AllowsCast(DXGI_FORMAT_R32_UINT));
         ReadExact(device,renderer,cache,image,expected);
         Require(std::equal(expected.begin(),expected.end(),memory.guest));
         auto& warm=cache.Upload(desc,{memory.guest,size_t(layout.guest_bytes)},
@@ -65,7 +69,8 @@ void Case(ID3D12Device* device,u32 format,u32 tile,UINT samples){
         if(samples>1){
             cache.SetBackingSamples(image,1,renderer.RecordingList());
             const auto single=image.texture;
-            Require(single.AllowsCast(DXGI_FORMAT_R32_UINT)&&single.handle->GetDesc().SampleDesc.Count==1);
+            Require((desc.UsesRaw32()?single.handle->GetDesc().Format==DXGI_FORMAT_R32_TYPELESS:
+                single.AllowsCast(DXGI_FORMAT_R32_UINT))&&single.handle->GetDesc().SampleDesc.Count==1);
             cache.SetBackingSamples(image,samples,renderer.RecordingList());
             auto broadcast=expected;
             for(UINT layer=0;layer<desc.layers;++layer)for(UINT sample=1;sample<samples;++sample)

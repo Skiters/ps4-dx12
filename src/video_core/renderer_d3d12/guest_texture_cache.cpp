@@ -180,7 +180,7 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
         // sampling while raw R32 views move the original shared-exponent word.
         // Ownership is described separately; this does not permit IMAGE_WRITE.
         return !d.writable&&!d.render_target&&d.number_format==7&&
-            layout.format==DXGI_FORMAT_R9G9B9E5_SHAREDEXP&&
+            layout.format==(d.UsesRaw32()?DXGI_FORMAT_R32_UINT:DXGI_FORMAT_R9G9B9E5_SHAREDEXP)&&
             layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
     }
     if(d.data_format==13){
@@ -1019,7 +1019,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
         throw std::invalid_argument("Native readonly word view requires its actual resource cast list");
     // Raw readonly packed10 is decoded and swizzled per texel in the shader.
     // The SRV must expose its unmodified R32 word even for forced guest channels.
-    auto swizzle=desc.UsesRawPacked10()?std::array<uint32_t,4>{4,5,6,7}:desc.swizzle;
+    auto swizzle=desc.UsesRawPacked10()||desc.UsesRaw32()?std::array<uint32_t,4>{4,5,6,7}:desc.swizzle;
     if(desc.data_format==13)for(auto& component:swizzle)if(component==7)component=1;
     D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=layout.format;view.Shader4ComponentMapping=Mapping(swizzle);
     const float minimum=std::min(float(desc.min_lod)/256.0f,float(desc.levels-1));
@@ -2641,7 +2641,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         writable_formats_.contains(DXGI_FORMAT_R11G11B10_FLOAT)):
         ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
     if(!word_casts.empty())cast_formats=word_casts;
-    if(d.samples>1&&(d.data_format==6||d.data_format==34)&&cast_formats.empty())
+    if(d.samples>1&&(d.data_format==6||d.data_format==34)&&!d.UsesRaw32()&&cast_formats.empty())
         throw std::runtime_error("Native packed-float MSAA requires bit-preserving D3D12 format casting");
     bool new_resource=false;
     if(!entry){

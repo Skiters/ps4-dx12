@@ -22,11 +22,11 @@ DXGI_FORMAT LinearFormat(DXGI_FORMAT format){
     return format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB?DXGI_FORMAT_R8G8B8A8_UNORM:format;
 }
 void ValidateRawRgba8Transfer(const GuestTextureDesc& d,const GuestTextureLayout& layout,DXGI_FORMAT backing){
-    if(d.data_format==10&&d.UsesRaw32()&&
+    if((d.data_format==10||d.data_format==34)&&d.UsesRaw32()&&
        (layout.format!=DXGI_FORMAT_R32_UINT||layout.bytes_per_pixel!=4||layout.HostBytesPerPixel()!=4||
         layout.expanded_bytes_per_pixel||
         (backing!=DXGI_FORMAT_R32_TYPELESS&&backing!=DXGI_FORMAT_R32_UINT)))
-        throw std::invalid_argument("Native raw RGBA8 MSAA needs R32 backing and layout");
+        throw std::invalid_argument("Native raw word MSAA needs R32 backing and layout");
 }
 void ValidateRawPackedTransfer(const GuestTextureDesc& d,const GuestTextureLayout& layout,DXGI_FORMAT backing){
     const bool packed10=d.data_format==9&&d.UsesRawPacked10();
@@ -39,7 +39,7 @@ void ValidateRawPackedTransfer(const GuestTextureDesc& d,const GuestTextureLayou
 }
 void ValidatePackedFloatTransfer(const Resource& texture,const GuestTextureDesc& d,
     const GuestTextureLayout& layout){
-    if(d.depth_target||(d.data_format!=6&&d.data_format!=34))return;
+    if(d.depth_target||(d.data_format!=6&&d.data_format!=34)||d.UsesRaw32())return;
     const auto format=d.data_format==6?DXGI_FORMAT_R11G11B10_FLOAT:DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
     if(d.number_format!=7||layout.format!=format||layout.bytes_per_pixel!=4||
        layout.HostBytesPerPixel()!=4||layout.expanded_bytes_per_pixel||

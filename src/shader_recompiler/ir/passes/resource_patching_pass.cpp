@@ -278,6 +278,14 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
 
     auto image = image_res.GetSharp(info);
     ASSERT(image.GetType() != AmdGpu::ImageType::Invalid);
+    // RGB9E5 has no native typed MSAA load/attachment on some adapters. Keep
+    // every guest sample in an R32 word image and decode the fetched texel.
+    // A real RGB9E5 IMAGE_WRITE still has raw32=false and is not admitted here.
+    if (profile.native_coherent_images && raw32 && u32(image.GetDataFmt()) == 34 &&
+        (image.GetType() == AmdGpu::ImageType::Color2DMsaa ||
+         image.GetType() == AmdGpu::ImageType::Color2DMsaaArray)) {
+        image_res.native_raw32 = true;
+    }
     image_res.native_msaa_storage = profile.native_coherent_images && is_written &&
         (image.GetType() == AmdGpu::ImageType::Color2DMsaa ||
          image.GetType() == AmdGpu::ImageType::Color2DMsaaArray);
@@ -1363,7 +1371,7 @@ void PatchImageArgs(IR::Inst& inst, Info& info, const Profile& profile) {
         // Convert fetched components first. A forced ZERO/ONE is a value in
         // the guest result domain and must not itself be normalized or biased.
         if (converted_storage) texel = ApplyReadNumberConversionVec4(ir, texel, conversion);
-        if (is_storage || image_res.native_packed10_raw) {
+        if (is_storage || image_res.native_packed10_raw || image_res.native_raw32) {
             // Raw readonly packed words and storage images require shader swizzle.
             texel = ApplySwizzle(ir, texel, image.DstSelect(),
                 profile.native_coherent_images && !converted_storage &&
