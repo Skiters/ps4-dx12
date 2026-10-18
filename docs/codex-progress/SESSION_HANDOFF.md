@@ -1,5 +1,58 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current readonly MSAA writable-plane checkpoint - 2026-10-18
+
+This FIRST section supersedes older current-state/next-task sections. Production **bcc4bace8e85f31bc0aa921a80008496101d8f40**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/msaa-word-writer-20261018**. H/VERIFICATION_FINAL.json preserves exact runtime/source/EXE/PDB identities and canonical committed-source matches. Latest user authorization permits compilation and narrow native/GPU fixtures; full suite/extended gameplay remain final.
+
+### A. Current project state
+
+Original readonly raw-R9 MSAA I now survives actual writable R32/packed aliases through genuine per-sample UAV planes; original desc/class/UID/native allocation and history stay intact. All2/4/8 sample contents and independent B are retained. Readonly MSAA sampling at15b1c88 and physical-envelope/R9 mutable fixes at02a04f2 remain regressions. No new Bloodborne/FPS acceptance. Full renderer parity remains unfinished.
+
+### B. Upstream contract -> production implementation -> verification
+
+Pinned e0a46675 mutable _32BIT image backing and independent image/buffer semantics -> GuestTextureCache::MatchesGuestUploadStorage/CanRetainReadonlyWordStorage retain the original readonly MSAA class; CanUseMultisampleStorageView validates the WRITER view and actual native geometry/count/cast. EnsureMultisampleStorage(entry,view) transactionally allocates lazy single-sample planes/linear backing under the owning cache; PrepareMultisampleStorage retains original I descriptors. Entry::StorageUav checks the ACTUAL plane's UAV flag, single-sample geometry, cast and view bounds. guest_compute binds those plane UAVs and uses existing StorageLease read/writeback/barriers; the MSAA base UAV guard remains. RetireMultisampleStorage admits readonly word owners while preserving pending/fence/pin/lease/allocation guards and accounting. CompatibleGuestReadonlyWordStorage also permits ordinary R32 MSAA SRV reuse without rewriting original metadata. Real typed R9 IMAGE_WRITE/atomics are not newly admitted. No shader IR/layout change in this unit; v7 cache namespace remains.
+
+Production commit **bcc4bac** changes3 production files and3 existing fixture sources; no missing CMake/include dependency. No assertion suppression, skipped draw/dispatch, fake success or game/address/hash workaround. Existing pressure CTest extended; total445 unchanged.
+
+### C. Current unfinished work
+
+Generic original unsupported-count fallback is the next unfinished MSAA mechanism. Use the SAVED REFERENCE_SAMPLE_CONTRACT.json at C:/Users/skei/Documents/Codex/handoff/native-sample-fallback-20261018 and same-LUID query at F:/PS4Dev/handoff/cached-r11-word-20261018/reference-format-query. Original Image::Image halves unsupported physical counts, BackingImage retains requested count, FindView/SetBackingSamples use requested identity, RefreshImage skips MSAA. Native GuestTextureCache allocation/SetBackingSamples, GuestMultisample transfer/StorageLease and shader/PSO sample mapping must preserve the actual upstream contract (including requested16 on the saved NVIDIA adapter). Do not just lower SampleDesc.Count or drop guest samples. First finish the exact requested/native backing, view, sample-index and transition mapping using these known symbols; then implement the necessary production separation. API masks alone do not establish semantics. No new129 audit or repeated capability query. Current readonly R9/R32/packed2/4/8 writer-plane mechanism is already connected and narrowly GPU verified; do not redo it without a new failure.
+
+Other recorded broad gaps remain: color attachment feedback, formatted alias ordering, depth/color shared storage, signed packed10 attachment, polygon point fill, mixed blend constants, other-vendor clock and point capture stage domain. Converted/multiview/shifted/large aliases and requested16 are not accepted by this narrow mechanism. Graphics-stage R9 MSAA paths are connected/compiled, not newly GPU/game accepted.
+
+### D. Proven failures and hypotheses
+
+Identical FINAL queued fixture linked against clean15b1c88 fails with `Image writer beside a physical CPU stream needs independent ownership`, followed by Liverpool unhandled-exception assertion. H/old-writer-negative saves EXE/PDB/rsp/runtime/release identity; H/old-writer-final-fixture saves exact source closure. New production passes. This is an expected headless regression control, distinct from the user's earlier d01969e game0x80000003.
+
+The original d019 game crash was already captured at **F:/PS4Dev/handoff/breakpoint-crash-d01969e-20261016T234433Z**: ExecuteGuestBufferCompute threw `Independent image version lost its writable buffer ownership before execution`, then Liverpool coroutine assertion int3.935fb69 restores writable-B ownership after prewrite/Finish;4828eae fixes early-fatal cleanup. Actual context/dump/manifest preserved; original individual rejected guest range remains unestablished. No cause inferred from exit code, old overlap warnings or missing files; no replay now. Generic native count fallback mapping remains unproven, not diagnosed by capability masks alone.
+
+### E. Measurements and GPU evidence
+
+**398 GCN cases**, EXE **a30f855a56b4318986637e57831e15d107ae6c467869b1c5ca04f799b35fbc32**:60 new writer cases (R32 UINT/SINT/FLOAT and packed SNORM/SINT x2 descriptor orders xGpuModified0/1 x2/4/8 samples),112 readonly R9 MSAA,64 signed packed MSAA aliases and162 R9/R32/R11/RG16/mutable/ordered regressions. Actual PM4 seed/load/store/S_BARRIER/after-load; all-sample ordinary R32 and decoded R9 probes prove one changed sample/untouched others, independent B and full65536 physical/padding oracle. Independent expected constants retained. CDB H/ownership-msaa-writer and OWNERSHIP_METADATA.json:740 OwnIndependentImage entries,60 original UIDs, class34/7, readonly/raw flags00/00/01, sample counts2/4/8,0 ResolveImage.
+
+**native15 PASS128.013s** covers buffer envelope/view lifetime/GPU chain, semantic residency/DMA/preserved/pending/scheduler, format/access/cast negatives, GPU packed/raw writers and independent image transfer/pressure. Extended pressure fixture: real per-sample/per-layer UAV clears, two layers, actual missing UAV/cast/sample/range negatives, preserved separate GPU B, exact accounting and I reconstruction; pending/fence-1/live-transfer/pin/allocation leases prevent retirement. Its synthetic cache ownership callback proves isolated-cache retention only; actual PageWatch ownership is exercised by the GCN fixture. **Shader reload PASS5.760s**:two native PSOs, changed contents, failed replacement rollback/canonical restore, metadata negatives and same-version persistent preload. No guest FPS/frame-time measurement and no new cross-version cache-hit acceptance.
+
+### F. Clean Release / exact binary limits
+
+**H/artifacts-bcc4bac**,18 manual files;54 pinned dependencies,2283 compile inputs,ZERO primary checkout paths in compile DB/build.ninja/CMakeCache. Clean clone F:/PS4Dev/work/shadps4-dx12-clean-release-20261016 atbcc4bac;22.718s build. EXE **48c2806f4551cf29f7d966c82a73b4fa7ac1f3d045aa33cd2f91a8de8b97f7bd**; PDB **2064693cd71c21265209e40cf52b57d5705e05eb17e5baa71aef04b01778caee**. H/RELEASE_PROOF_bcc4bac.json and release-identity.json retain complete identity. Exact rebuilt CORE runtime/game/FPS **NOT_RUN**. Fixture acceptance belongs only to archived fixture EXEs with tested HEAD+patch identities retained verbatim; canonical matching does not transfer runtime acceptance to the core. Full445 suite and extended existing-XInput game image/input/stability/completed guest FPS excluding FG versus saved Vulkan baseline remain final.
+
+### G. Recovery and preserved state
+
+H/start-state.json, staged/unstaged-start patches, precommit-staged/unstaged patches, precommit-sources, PRECOMMIT_VERIFICATION.json, VERIFICATION_FINAL.json, reg-* archives, native15-final, first-pressure, shader-reload, old-writer-negative and ownership-msaa-writer preserve source and diagnostic identities. Initial first-writer has its own EXE; accepted final fixture is writer-word-probes/reg-* with all-sample R32 probes. Prior working15b/02a cores and old evidence remain at prior handoffs. Unknown .serena/ and CLAUDE.md remain untouched. Manual core folder only; original Vulkan, saves, user processes, HUD/monitor/controller and app selection unchanged. New archives use C because F remains constrained; do not delete old results.
+
+### H. Next command
+
+From **F:/PS4Dev/work/shadps4-dx12-src** run `git status --short; git rev-parse HEAD; git log -3 --oneline`, then read H/NEXT_MECHANISM.md and the already saved reference sample contract. Continue production logical/native sample backing mapping with exact pinned semantics; do not restart the overall audit.
+
+### I. Forbidden repetitions
+
+No129 re-audit, repeated adapter masks, fixed d019 replay, first-chance PageWatch false crash or unchanged full suite. Do not mutate original readonly I to satisfy a writable guard, give the MSAA base a fictional UAV, reconcile independent I into B, silently halve guest samples, relax real native cast/flags or transfer acceptance to rebuilt binaries. No automatic core installation/selection.
+
+### NEXT CODEX SESSION — START HERE
+
+Read the FIRST section of docs/codex-progress/SESSION_HANDOFF.md and C:/Users/skei/Documents/Codex/handoff/msaa-word-writer-20261018/VERIFICATION_FINAL.json; verify current HEAD/upstream and preserve unknown .serena/ and CLAUDE.md. Continue the full original-shadPS4 port from production bcc4bace8e85f31bc0aa921a80008496101d8f40, using H/NEXT_MECHANISM.md for generic unsupported-count MSAA fallback and exact requested/native backing/view/shader/PSO mapping. Preserve every required sample/content, original readonly class/UID/history, independent B/I, PageWatch, actual resource permissions/casts, ordered publication, fences/leases and retirement. Use saved Vulkan/DX12 evidence; no129 re-audit, repeated adapter query or fixed d019 replay. Implement production C++, use focused real-GPU/readback regressions with independent oracles and negatives, clean committed Release/manual version folder and normal push. Full445 suite and extended existing-XInput game/image/input/stability/completed guest FPS excluding FG versus saved baseline remain final. Do not transfer fixture acceptance to rebuilt cores or mark the overall port complete.
+
+
 ## Current readonly R9 MSAA word-sampling checkpoint - 2026-10-18
 
 This FIRST section supersedes older current-state/next-task sections. Production **15b1c8829e00f35a1d750da98e39b9a7cf628322**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/native-sample-fallback-20261018** (metadata, GCN/native/old-negative archives, manual kernel); P=**F:/PS4Dev/handoff/native-sample-fallback-20261018/packed-float8** (transport8). H/VERIFICATION_FINAL.json retains exact EXE/PDB/runtime/source identities. Previous goal turn made verified production/checkpoint progress.
