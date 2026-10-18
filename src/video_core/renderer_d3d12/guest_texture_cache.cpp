@@ -2121,9 +2121,13 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     // this upload. A command-list pointer captured by the caller is then closed
     // (and the scheduler may select a different context). Keep those completed
     // operations in place and record remaining commands on the current context.
-    const auto recording=[this,list]{
+    Entry* recording_entry=nullptr;
+    const auto recording=[this,list,&recording_entry]{
         auto* current=recording_list_?recording_list_():list;
         if(!current)throw std::invalid_argument("Texture upload has no recording command list");
+        // A reentrant Finish also consumed the old pending receipt. The next
+        // commands and their pools belong to the resumed submission fence.
+        if(recording_entry)recording_entry->pending=true;
         return current;
     };
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
@@ -2254,6 +2258,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(reuse){
         // Page watchers prove that no CPU access can have changed these bytes.
         // Keep the original native image through subsequent draws/sampling.
+        recording_entry=reuse;
         reuse->last_use=++use_sequence_;reuse->pending=true;
         if(reuse->texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)reuse->texture.UavBarrier(recording());
         reuse->texture.Transition(recording(),d.writable&&d.samples==1?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
@@ -2355,6 +2360,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 converted.color_depth_leases.push_back(lease);
                 source->pending=converted.pending=true;
                 if(transfer_submission_)transfer_submission_();
+                recording_entry=&converted;
                 lease->Record(recording(),source->texture,converted.texture);
             }
             if(private_block_view){
@@ -2429,6 +2435,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 fflush(stderr);
             }
             existing->last_use=++use_sequence_;existing->pending=true;
+            recording_entry=existing;
             existing->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             return finish_refresh(*existing);
         }
@@ -2448,6 +2455,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             (entry->stencil_snapshot.size()==stencil_layout.guest_bytes&&
              std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin()))))){
         entry->last_use=++use_sequence_;entry->pending=true;
+        recording_entry=entry;
         entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         return finish_refresh(*entry);
     }
@@ -2575,6 +2583,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}
     // No failure after backing mutation may leave an old valid-I witness.
     entry->MarkLogicalDirty();
+    recording_entry=entry;
     SetBackingSamples(*entry,d.samples,recording(),false);
     if(preserve_expanded){
         // An immutable GPU snapshot owns exact packed bits independently of the
