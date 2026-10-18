@@ -1,5 +1,54 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current robust sample copy and mixed attachment checkpoint - 2026-10-18
+
+This FIRST section is authoritative over historical current/next sections. Production **aa503d01ffde04363465eff368edb3865e022ec3**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 records and8 broad gaps remain. H=**D:/Codex-Handoff/ps4-dx12/mixed-samples-20261018**. H/VERIFICATION_FINAL.json preserves immutable run identities and confirms committed sources match final fixture snapshots after canonical line endings. User permits compilation and narrow native/GPU regressions; full suite and extended game remain final.
+
+### A. Current state
+
+Mixed color/depth1/2/4/8 queued draws now have real per-sample contents/depth/padding acceptance, not merely PSO creation. Host sample blits explicitly preserve pinned robust2 out-of-source component defaults, including RGB32 physical alpha. No new Bloodborne/image/input/FPS acceptance; original T#16 payload/view/transfer and broad remaining cases stay open. Existing buffer-envelope, semantic residency, independent B/I, DMA and inactive-history fixes remain preserved.
+
+### B. Contract -> implementation -> check
+
+Pinned vk_instance requires/enables robustImageAccess2; vk_runtime BlitHelper uses destination sample index. Excess source samples require zero existing components and format defaults for absent channels; 1x source broadcasts. D3D ld2dms leaves excessive sampleIndex undefined. GuestMultisample::PrepareCopy and guest_msaa_copy.hlsl now query actual source samples and return explicit defaults outside the source. RGB32 expanded physical RGBA uses alpha1 for integer and float-one raw bits for raw float. ROBUST_ALPHA is included in CopyKey/PSO specialization, so RGB/RGBA and numeric classes sharing a physical format cannot reuse an incompatible program. Valid samples/order/state/lifetime remain intact. Guest sampled MS fetch UMod is a separate original contract and unchanged. Prepare rejects readback into a buffer without actual ALLOW_UAV before GPU/descriptor mutation; upload remains allowed.
+
+Commit aa503d0 includes production C++/HLSL, two new fixture headers and native CMake integration. Existing Guest-Tiling.cmake tracks host HLSL and generates guarded shader text in all3 build trees. No guest IR/cache namespace change; native cache v7 retained.
+
+### C. Remaining work
+
+Next existing gap: signed-packed10-attachment, specifically SNORM number1 (SINT number5 already connected). H/NEXT_MECHANISM.md identifies pinned SurfaceFormat/GetSupportedFormat/GraphicsPipeline -> LayoutGuestTexture/BuildGuestGraphicsState/GuestRasterizer. Establish original fallback/export contract then implement exact applicable per-fragment quantization/masks/blend/logic/MSAA/alias behavior. Do not merely remove the explicit guard or assume expanded float is exact. Remaining broad queue: color attachment feedback, formatted alias ordering, depth/color shared storage, signed packed10 attachment, polygon point fill, mixed blend constants, other-vendor clock, point capture stage domain. No129 re-audit.
+
+### D. Confirmed failures, corrections and limits
+
+Same functional robust fixture against committed fb738a6 fails RGB32 UINT sample2: physical alpha0 vs independently required1. H/old-control-build preserves exact EXE/PDB/rsp/runtime/source identity; this is actual GPU content failure. Final12 cases cover RGB/RGBA x UINT/SINT/FLOAT x both cache construction orders,2 layers, all valid sample bits and physical missing-alpha readback before guest RGB stripping, plus real no-UAV rejection. H/FIXTURE_CORRECTIONS.json records PRE-GPU depth-slice geometry fix, correction of old mixed red-tail expectation from pinned robust2 contract, and a fixture missing-UAV device-validation failure. No expectations masked, old logs retained.
+
+Original d019 game int3 was captured/localized and fixed935fb69 (writable-B ownership after prewrite/Finish); original rejected individual guest range remains unknown. Evidence F:/PS4Dev/handoff/breakpoint-crash-d01969e-20261016T234433Z. No repeated game or assertion/exit-code/warning-only diagnosis.
+
+### E. Measurements and verification
+
+**414 GCN cases PASS**, exact EXE8126f3c025f07e729f7c239963a671fb48f5fef8d77f177ca57f7085dee14ec0. Includes16 new mixed color/depth combinations, warm blue, red Less and cached blue LessEqual, independent per-sample depth/color and whole64KiB guest padding; other398 are related existing regressions. **18 native fixtures PASS160.812s**, including buffer envelope/view/lifetime/GPU chain, semantic residency/preserved versions/DMA/pending fence, scheduler, independent MSAA pressure/requested/history and12 robust-copy content cases plus permission negative. **Shader reload PASS5.952s** with two PSOs, changed contents, failed replacement rollback/canonical restore, metadata negatives and same-version preload. H/PRECOMMIT_VERIFICATION.json retains original HEAD+patch identities verbatim; committing does not rewrite run identity. No full-suite, cross-version cache-hit, gameplay or FPS claim.
+
+### F. Reproducible manual kernel
+
+**H/artifacts-aa503d0**,18 files, clean detached checkout ataa503d01ffde04363465eff368edb3865e022ec3;54 pinned dependencies,2283 compile inputs and zero primary-source paths in compile DB/build.ninja/CMakeCache. Incremental Release build21.937s. EXE **7e8fca7a1bd828c19629fdd9299155aead41bc13fb285792532905e5b1c1f5a0**; PDB **0cf8895b7dae53a59e7a934f0f91878ebd17f4ea99026aaf8f5d90766fe5cc1c**. H/RELEASE_PROOF_aa503d0.json/release-identity.json preserve package identity. Exact rebuilt core runtime/game/FPS **NOT_RUN**; fixture checks are separate executables. Registry448 prepared tests (447->448); full448 and extended existing-XInput/image/input/stability/completed guest FPS excluding FG against saved Vulkan baseline remain final. Folder selection only, no automatic app install/select.
+
+### G. Recovery and resource preservation
+
+H includes start-state/patches, precommit source closure, PRECOMMIT_VERIFICATION/VERIFICATION_FINAL, original contract/spec excerpts, all failed and passing logs, old control and exact binary identities. Five CLOSED owned C handoffs (shared-exp-word, native-sample-fallback, msaa-word-writer, requested-sample-backings, sample-backing-pressure dated20261018) now physically reside under D:/Codex-Handoff/ps4-dx12/preserved-c-archives. All original C logical paths are NTFS junctions to byte-verified files; hardlinks retained. H/ARCHIVE_RELOCATION.json and per-folder proofs preserve before/after hashes. Redundant copies removed only after full through-junction verification; no old results lost. C freed~6.3GB; F remains~0.5GB, new bulk archives onD. No original Vulkan/saves/user process/HUD/controller changes. Unknown .serena/ and CLAUDE.md untouched.
+
+### H. Exact continuation
+
+From F:/PS4Dev/work/shadps4-dx12-src run `git status --short; git rev-parse HEAD; git log -3 --oneline`, then H/NEXT_MECHANISM.md. Continue specific signed SNORM attachment source contract and production path. Do not repeat already bounded guest-MS sample lookup audit or newly accepted mixed1/2/4/8 cases without a relevant change.
+
+### I. Forbidden repetitions
+
+No per-inactive-backing eviction that loses copy=false history, silent sample drop, invented16 stored CB/DB sample requirement, replacement of guest UMod by host robust-zero, acceptance transfer to rebuilt cores, changed expected data just to match implementation, fake budget success, suppressed assertions, skipped draw/dispatch, game/address/hash workaround,129 re-audit, repeated adapter queries/fixed d019 replay, unchanged full suite, automatic installation/selection or destructive cleanup of unknown work.
+
+### NEXT CODEX SESSION — START HERE
+
+Read FIRST docs/codex-progress/SESSION_HANDOFF.md and D:/Codex-Handoff/ps4-dx12/mixed-samples-20261018/VERIFICATION_FINAL.json; verify actual HEAD/upstream. Continue full original-shadPS4 native DX12 port from aa503d0, preserving unknown work. H/NEXT_MECHANISM.md gives next existing signed-packed10 SNORM attachment gap and exact symbols; establish pinned fallback/export/blend contract, implement production path, narrow real GPU/readback/negative checks, clean committed Release/manual kernel and ordinary push. SINT attachment and guest-MS UMod already connected; mixed1/2/4/8 and host robust defaults are narrowly verified, do not re-audit129 or replay fixed d019. Preserve independent B/I, PageWatch, ownership/class/UID/history, flags/casts, fences/leases and honest residency. Use saved measurements/identities; full448 suite and extended existing-XInput game image/input/stability/completed guest FPS excluding FG against saved Vulkan baseline remain final. Keep whole goal incomplete until all agreed port work and acceptance finish.
+
+
 ## Current inactive sample history pressure checkpoint - 2026-10-18
 
 This FIRST section supersedes older current-state/next-task sections. Production **fb738a62d96a1b0364422a2c0dc8a3be580b9d72**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/sample-backing-pressure-20261018**. H/VERIFICATION_FINAL.json preserves exact source/runtime/EXE/PDB identity; all4 committed paths match final native/GCN/reload source snapshots. Previous goal turn was progress (8f2338e/032e337), not a wait/blocker. Latest human authorization permits compilation/narrow native+GPU checks; full suite/extended game remain final.
