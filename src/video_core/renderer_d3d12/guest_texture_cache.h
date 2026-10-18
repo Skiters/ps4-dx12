@@ -316,6 +316,7 @@ private:
     std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain_independent_image_;
     std::function<void()> retire_pending_;
     std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
+    std::function<ID3D12GraphicsCommandList*()> recording_list_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
 public:
     explicit GuestTextureCache(ID3D12Device* device,std::wstring converter={});
@@ -458,6 +459,9 @@ public:
              CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
         return false;}
     void SetPendingRetirement(std::function<void()> retirement){retire_pending_=std::move(retirement);}
+    // CPU backing reads/watch callbacks can submit and retire the caller's list.
+    // Resolve the current context again at each subsequent upload recording step.
+    void SetRecordingListProvider(std::function<ID3D12GraphicsCommandList*()> current){recording_list_=std::move(current);}
     void SetCopySubmission(std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
         submit_copy_=std::move(submit);}
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){

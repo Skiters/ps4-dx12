@@ -12,6 +12,7 @@
 #include "dirty_cached_depth_fixture.h"
 #include "required_format_device.h"
 #include "packed19_msaa_attachment_fixture.h"
+#include "readonly_numeric_views_fixture.h"
 #include "color_to_ms_depth_fixture.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
@@ -542,6 +543,7 @@ int main(int argc,char** argv){try{
         (argc==5&&std::string_view(argv[1])=="--cached-depth-color"&&std::string_view(argv[2])=="19"&&std::string_view(argv[4])=="rt")||
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
+    if(argc==2&&strcmp(argv[1],"--readonly-numeric-views")==0){RunReadonlyNumericViewsFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--packed19-msaa-attachment")==0){RunPacked19MsaaAttachmentFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--msaa-depth-init")==0){RunMsaaDepthInitializationFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth")==0){RunIndependentDepthFixture(device.Get());return 0;}

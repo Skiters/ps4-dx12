@@ -301,6 +301,7 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     return source==view;
 }
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view) {
+    const bool depth_storage=source.depth_target||view.depth_target;
     if(source.depth_target||view.depth_target){
         // A sampled view can use the same exact single depth plane. This does
         // not make the depth allocation UAV-capable or admit a color writer.
@@ -313,9 +314,16 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
         view.number_format==1||view.number_format==5))||(source.data_format>=16&&source.data_format<=19))&&
        source.writable!=view.writable)
         return false;
-    // A writable member causes the group to allocate typeless UAV-capable
-    // storage. A purely sampled group still uses its original typed resource.
-    if(!source.writable&&!view.writable&&source.number_format!=view.number_format)return false;
+    // Ordinary color allocations already use their DXGI typeless family even
+    // without a guest writer. Original mutable-format readonly views therefore
+    // share those bits, rather than creating a converted snapshot. Expanded
+    // signed packed10 and depth retain their distinct representation/aspects.
+    if(!source.writable&&!view.writable&&source.number_format!=view.number_format){
+        const bool expanded_packed=source.data_format==9&&(source.number_format==1||
+            source.number_format==5||view.number_format==1||view.number_format==5);
+        if(depth_storage||expanded_packed||source.data_format!=view.data_format||
+           GuestStorageFormat(source.data_format,DXGI_FORMAT_UNKNOWN)==DXGI_FORMAT_UNKNOWN)return false;
+    }
     source.writable=view.writable=true;
     source.swizzle=view.swizzle={4,5,6,7};
     return CompatibleGuestWritableStorage(source,view);
@@ -1602,7 +1610,7 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     if(CompatibleGuestDepthSubview(entry.desc,entry.layout,desc,layout))return true;
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
-        (entry.desc.writable&&CompatibleGuestShaderStorage(entry.desc,desc))||
+        ((entry.desc.writable||!desc.writable)&&CompatibleGuestShaderStorage(entry.desc,desc))||
         (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc))||
         CanBindReadonlyBcMipPrefix(entry,desc,layout))&&
         MatchesGuestMipLayout(entry.layout,layout);
@@ -2109,6 +2117,15 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     std::span<const std::byte> stencil_bytes,bool guest_snapshot,const Resource* gpu_snapshot,
     bool writable_snapshot,bool current_buffer_snapshot,const WritableBlockAlias* dependency,UploadPurpose purpose,
     const Resource* stencil_gpu_snapshot,bool fresh_depth_recreation){
+    // A protected guest memcpy or a cache callback may Finish while preparing
+    // this upload. A command-list pointer captured by the caller is then closed
+    // (and the scheduler may select a different context). Keep those completed
+    // operations in place and record remaining commands on the current context.
+    const auto recording=[this,list]{
+        auto* current=recording_list_?recording_list_():list;
+        if(!current)throw std::invalid_argument("Texture upload has no recording command list");
+        return current;
+    };
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Upload,"layout-and-cache-lookup");
     diagnostic.Detail("address=%llx size=%ux%u levels=%u layers=%u tile=%u bytes=%zu",
         (unsigned long long)d.address,d.width,d.height,d.levels,d.layers,d.tile_mode,bytes.size());
@@ -2209,7 +2226,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(!guest_snapshot)if(auto* source=FindCachedDepthRecreationSource(d,layout)){
         if(purpose!=UploadPurpose::Binding)
             throw std::logic_error("Cached native prewarm must use a private binding plan");
-        return RecreateCachedDepthAtBind(*source,d,layout,list,completed);
+        return RecreateCachedDepthAtBind(*source,d,layout,recording(),completed);
     }
     auto address_entries=[&](){return address_index_.equal_range(d.address);};
     auto [owned_first,owned_last]=address_entries();
@@ -2238,8 +2255,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         // Page watchers prove that no CPU access can have changed these bytes.
         // Keep the original native image through subsequent draws/sampling.
         reuse->last_use=++use_sequence_;reuse->pending=true;
-        if(reuse->texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)reuse->texture.UavBarrier(list);
-        reuse->texture.Transition(list,d.writable&&d.samples==1?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+        if(reuse->texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)reuse->texture.UavBarrier(recording());
+        reuse->texture.Transition(recording(),d.writable&&d.samples==1?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         return finish_refresh(*reuse);
     }
@@ -2251,7 +2268,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(!guest_snapshot&&(!independent_source||&existing==independent_source)&&
            existing.gpu_owned&&!existing.logical_dirty&&CompatibleGuestPackedStorage(existing.desc,d)){
             existing.MarkLogicalDirty();
-            if(ConvertPackedBacking(existing,d,layout,list))return finish_refresh(existing);
+            if(ConvertPackedBacking(existing,d,layout,recording()))return finish_refresh(existing);
             // A rejected conversion has not mutated its original resource.
             existing.logical_dirty=false;
         }
@@ -2324,7 +2341,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // retain the old allocation/descriptors through normal cache fences.
             // First attach the complete dependency chain, then publish only at
             // the actual bind. Recursive upload cannot consume it prematurely.
-            auto& converted=UploadVersion(d,{},list,completed,{},true,&snapshot,d.writable,false,nullptr,
+            auto& converted=UploadVersion(d,{},recording(),completed,{},true,&snapshot,d.writable,false,nullptr,
                 UploadPurpose::Preparation,stencil_snapshot.handle?&stencil_snapshot:nullptr,d.depth_target);
             converted.pending_buffer_residency=std::move(residency);
             if(color_ms_depth){
@@ -2338,7 +2355,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 converted.color_depth_leases.push_back(lease);
                 source->pending=converted.pending=true;
                 if(transfer_submission_)transfer_submission_();
-                lease->Record(list,source->texture,converted.texture);
+                lease->Record(recording(),source->texture,converted.texture);
             }
             if(private_block_view){
                 // Do not publish a second mutable owner or retire the BC parent:
@@ -2412,7 +2429,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 fflush(stderr);
             }
             existing->last_use=++use_sequence_;existing->pending=true;
-            existing->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            existing->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             return finish_refresh(*existing);
         }
     }
@@ -2431,7 +2448,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             (entry->stencil_snapshot.size()==stencil_layout.guest_bytes&&
              std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin()))))){
         entry->last_use=++use_sequence_;entry->pending=true;
-        entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         return finish_refresh(*entry);
     }
     if(entry&&(entry->pending||entry->fence>completed)) {
@@ -2558,7 +2575,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}
     // No failure after backing mutation may leave an old valid-I witness.
     entry->MarkLogicalDirty();
-    SetBackingSamples(*entry,d.samples,list,false);
+    SetBackingSamples(*entry,d.samples,recording(),false);
     if(preserve_expanded){
         // An immutable GPU snapshot owns exact packed bits independently of the
         // expanded texture. Allocate the complete retained pair before replacing
@@ -2573,7 +2590,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     entry->pending_buffer_residency.clear();
     const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target&&!gpu_detile;
     entry->pending=true;
-    if(!copy_upload)entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+    if(!copy_upload)entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_COPY_DEST);
     auto resource_desc=DX12_API_CALL(entry->texture.handle->GetDesc());
     struct PendingTextureCopy {D3D12_TEXTURE_COPY_LOCATION destination,source;};
     std::vector<PendingTextureCopy> copy_batch;
@@ -2653,17 +2670,17 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 auto transfer=multisample_->Prepare(entry->texture,linear,d,layout,layer,plane,true);
                 entry->multisample_leases.push_back(transfer);
                 if(exact_detile){
-                    exact_detile->Record(list,entry->tiler_input_pool.at(plane),linear,linear);
-                    exact_retile->Record(list,linear,entry->expanded_guest_backing,entry->expanded_written_mask);
+                    exact_detile->Record(recording(),entry->tiler_input_pool.at(plane),linear,linear);
+                    exact_retile->Record(recording(),linear,entry->expanded_guest_backing,entry->expanded_written_mask);
                 }
-                tiling->Record(list,entry->tiler_input_pool.at(plane),linear,linear);
-                transfer->Record(list,entry->texture,linear);continue;
+                tiling->Record(recording(),entry->tiler_input_pool.at(plane),linear,linear);
+                transfer->Record(recording(),entry->texture,linear);continue;
             }
-            tiling->Record(list,entry->tiler_input_pool.at(plane),linear,linear);
-            linear.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            tiling->Record(recording(),entry->tiler_input_pool.at(plane),linear,linear);
+            linear.Transition(recording(),D3D12_RESOURCE_STATE_COPY_SOURCE);
             D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=linear.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;src.PlacedFootprint=fp;
             D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=entry->texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dst.SubresourceIndex=sub;
-            DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
+            DX12_API_CALL(recording()->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
         }
     }else{
     size_t upload_index{};
@@ -2700,7 +2717,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         }DX12_API_CALL(upload.handle->Unmap(0,nullptr));
         D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=upload.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;src.PlacedFootprint=fp;D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=entry->texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dst.SubresourceIndex=sub;
         if(copy_upload)copy_batch.push_back({dst,src});
-        else DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
+        else DX12_API_CALL(recording()->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
         entry->uploads.push_back(std::move(upload));}
     }
     if(!copy_batch.empty())submit_copy_([copies=std::move(copy_batch)](ID3D12GraphicsCommandList* copy_list){
@@ -2718,24 +2735,24 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry->native_plane_sources.push_back({retained_stencil,retained_stencil_pin});
         stencil_parent->pending=entry->pending=true;if(transfer_submission_)transfer_submission_();
         const auto old_state=retained_stencil.state;
-        retained_stencil.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
-        entry->texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        retained_stencil.Transition(recording(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_COPY_DEST);
         const UINT plane_base=UINT(d.levels)*d.layers;
         for(UINT sub=0;sub<plane_base;++sub){
             D3D12_TEXTURE_COPY_LOCATION source{};source.pResource=retained_stencil.handle.Get();
             source.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;source.SubresourceIndex=plane_base+sub;
             D3D12_TEXTURE_COPY_LOCATION destination{};destination.pResource=entry->texture.handle.Get();
             destination.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;destination.SubresourceIndex=plane_base+sub;
-            DX12_API_CALL(list->CopyTextureRegion(&destination,0,0,0,&source,nullptr));
+            DX12_API_CALL(recording()->CopyTextureRegion(&destination,0,0,0,&source,nullptr));
         }
         // Resource is a retained value copy. Restore the old Entry's tracked
         // state so later bound-view refreshes cannot emit a stale barrier.
-        retained_stencil.Transition(list,old_state);
+        retained_stencil.Transition(recording(),old_state);
     }
     diagnostic.Stage("cpu-coherence-snapshot");
     if(immutable_view&&!gpu_snapshot_any&&!retained_stencil.handle)entry->RememberSnapshot(bytes,stencil_bytes);
     if(immutable_view&&!guest_snapshot&&!d.render_target&&!d.depth_target&&!d.stencil_address&&watch_immutable_)watch_immutable_(*entry);
-    entry->texture.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
+    entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
 }
 void GuestTextureCache::Submitted(uint64_t fence){if(!fence)throw std::invalid_argument("zero texture fence");for(auto& e:entries_)if(e->pending){e->pending=false;e->fence=fence;}}
 void GuestTextureCache::Used(Entry& entry,uint64_t fence){if(!fence||entry.pending||fence<entry.fence)throw std::invalid_argument("invalid texture use fence");entry.fence=fence;}

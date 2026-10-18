@@ -5,6 +5,7 @@
 #include "core/emulator_settings.h"
 #include "common/elf_info.h"
 #include "gcn_ordered_formatted_fixture.h"
+#include "gcn_readonly_numeric_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -49,13 +50,14 @@ int main(int argc,char** argv){try{
         mode=="cached-depth-packed18-storage-owned"?18:mode=="cached-depth-packed19-storage-owned"?19:0;
     const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
+    const bool readonly_numeric=mode=="readonly-numeric-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool mixed_planes=mode=="mixed-depth-buffer"||mode=="mixed-depth-buffer-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -64,6 +66,8 @@ int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
     auto device=HardwareDevice(cached_depth_cmask_packed==19?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
+    if(readonly_numeric&&GetEnvironmentVariableW(L"SHADPS4_FIXTURE_BREAK_ON_GPU_ERROR",nullptr,0))
+        Check(messages->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR,TRUE));
     struct Allocation{HANDLE section{};std::byte* guest{};std::byte* backing{};
         ~Allocation(){if(guest)UnmapViewOfFile(guest);if(backing)UnmapViewOfFile(backing);if(section)CloseHandle(section);}} allocation;
     allocation.section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,65536,nullptr);
@@ -100,8 +104,8 @@ int main(int argc,char** argv){try{
     profile.native_coherent_images=true;profile.max_viewport_width=profile.max_viewport_height=16384;
     profile.native_buffer_bounds=true;
     profile.support_int8=profile.support_int16=true;
-    GuestRasterizer rasterizer(device.Get(),gpu,profile,std::filesystem::path(argv[1]).wstring(),
-        std::filesystem::path(argv[2]).wstring());
+    ReadonlyNumericProbeRasterizer rasterizer(device.Get(),gpu,profile,std::filesystem::path(argv[1]).wstring(),
+        std::filesystem::path(argv[2]).wstring(),readonly_numeric);
     rasterizer.SetBackingAccess([base,owned](VAddr address,u64 bytes){
         return owned&&address>=base&&address-base<=65536&&bytes<=65536-(address-base);
     },
@@ -113,7 +117,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(cached_depth_storage){
+    if(readonly_numeric){
+        RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base);
+    }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
     }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base);
@@ -973,7 +979,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(cached_depth_packed_storage?
+    puts(readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
