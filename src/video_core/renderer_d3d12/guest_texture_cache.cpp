@@ -141,11 +141,14 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
         if(d.number_format!=0||layout.bytes_per_pixel!=2)return false;
         const bool raw=d.writable&&!d.render_target&&
             layout.format==DXGI_FORMAT_R32_UINT&&layout.HostBytesPerPixel()==4;
-        // Native 565/1555 sample loads recover their small UNORM integer codes
-        // through the existing PACKED_MODE1/2 transfer. Original18's rotation
-        // remains in the guest tiler. Native19 attachment support is separate.
-        const bool native=!d.writable&&d.data_format<=18&&layout.HostBytesPerPixel()==2&&
-            layout.format==(d.data_format==16?DXGI_FORMAT_B5G6R5_UNORM:DXGI_FORMAT_B5G5R5A1_UNORM);
+        // Native packed sample loads recover each small UNORM integer code
+        // through PACKED_MODE1/2/3. Original18's rotation and19's guest nibble
+        // order remain in the tiler. Actual RTV/sample support is checked when
+        // allocating/preparing the native attachment; unavailable B4 must not
+        // authorize a float approximation or silently change the guest usage.
+        const auto native_format=d.data_format==16?DXGI_FORMAT_B5G6R5_UNORM:
+            d.data_format==19?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_B5G5R5A1_UNORM;
+        const bool native=!d.writable&&layout.HostBytesPerPixel()==2&&layout.format==native_format;
         return raw||native;
     }
     // These typeless 8/16/32-bit families have exact UINT buffer, MSAA SRV and
@@ -645,9 +648,9 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
     const auto [format,bpp]=Format(d.data_format,d.writable&&d.number_format==9?0:d.number_format);
     GuestTextureLayout layout;layout.format=format;layout.bytes_per_pixel=bpp;
     if(signed_packed10&&!d.writable&&!d.render_target)layout.expanded_bytes_per_pixel=16;
-    // B4G4R4A4 does not provide portable MSAA render-target support. Sampled
-    // images use the existing exact GPU packed expansion; attachment writes
-    // still require their own guest quantization/blending implementation.
+    // Sampled B4 MSAA uses exact packed expansion on adapters without native
+    // B4 attachment support. Render targets retain native4-bit quantization
+    // and blending, subject to the actual format/sample capability checks.
     if(d.data_format>=16&&d.data_format<=19&&
        (d.volume_depth||d.one_dimensional||(d.data_format==19&&d.samples>1&&!d.render_target))&&
        !d.writable&&d.number_format==0){

@@ -35,7 +35,7 @@ TEXTURE_TYPE main(float4 position : SV_Position, uint sample : SV_SampleIndex) :
     return float4(float((word >> 10) & 31) / 31, float((word >> 5) & 31) / 31, float(word & 31) / 31, float(word >> 15));
 #elif PACKED_MODE == 3
     uint word = value.x;
-    return float4(float((word >> 8) & 15) / 15, float((word >> 4) & 15) / 15, float(word & 15) / 15, float(word >> 12));
+    return float4(float((word >> 8) & 15) / 15, float((word >> 4) & 15) / 15, float(word & 15) / 15, float(word >> 12) / 15);
 #else
     return value;
 #endif
