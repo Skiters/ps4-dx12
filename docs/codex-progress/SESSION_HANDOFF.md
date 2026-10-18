@@ -1,5 +1,60 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current readonly R9 MSAA word-sampling checkpoint - 2026-10-18
+
+This FIRST section supersedes older current-state/next-task sections. Production **15b1c8829e00f35a1d750da98e39b9a7cf628322**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad work items remain. H=**C:/Users/skei/Documents/Codex/handoff/native-sample-fallback-20261018** (metadata, GCN/native/old-negative archives, manual kernel); P=**F:/PS4Dev/handoff/native-sample-fallback-20261018/packed-float8** (transport8). H/VERIFICATION_FINAL.json retains exact EXE/PDB/runtime/source identities. Previous goal turn made verified production/checkpoint progress.
+
+### A. Current project state
+
+Readonly R9G9B9E5 MSAA shader loads now preserve every requested2/4/8 sample through an R32 word resource; there is no typed R9 MSAA RTV/SRV assumption. Ordinary1x mutable R9/R32 and physical buffer-envelope fixes from02a04f2 remain as regressions. Readonly MSAA -> writable alias ownership, generic unsupported-count fallback, other recorded renderer gaps and final gameplay remain unfinished. No new Bloodborne run/FPS measurement; the exact previously diagnosed d019 user crash and early cleanup fixes remain separate from the expected headless old-production negative here.
+
+### B. Contract -> implementation -> proof
+
+Original _32BIT mutable storage and shared-exponent decoding -> resource_patching_pass.cpp selects native_raw32 for READ/query of an MSAA R9 T#; real R9 IMAGE_WRITE/atomics do not gain this read representation. spirv_emit_context.cpp and specialization.h choose UINT texels/packed34 decoding for raw readonly resources, record forced channel selection and apply shader swizzle after per-sample float decode. GuestTextureDesc::UsesRaw32 admits readonly data34 ONLY with explicit native flag and samples>1. GuestTextureCache allocates native R32 typeless MSAA with UINT views and validates actual R32 sample support. GuestMultisample validates the raw layout and moves exact words; logical format, readonly access, requested sample count and guest tiling/addresses remain intact. No assertion suppression, fake success, skipped draw/dispatch, game/address/hash workaround or guest sample loss.
+
+The raw representation uses the existing per-sample transport and real native MSAA resources. It removes the typed-R9 format capability gate for these READs without reducing sample count. Generic per-adapter count halving is NOT implemented by this change. Native cache namespace **native-dxil-cache-20261018-msaa-shared-exp-word-v7** prevents old representation reuse.
+
+### C. Unfinished production work
+
+Preserve an ORIGINAL readonly raw-R9 MSAA I when an actual R32 MSAA writer view arrives. Adapt MatchesGuestUploadStorage, PrepareMultisampleStorage/EnsureMultisampleStorage and Entry::Uav/guest_compute per-plane bindings to validate the writer VIEW and the actual single-sample UAV plane, without setting entry.desc.writable. Retain original class/UID/GpuModified, independent B and pressure/lifetime behavior. Generic original unsupported-count halving/backing/view mapping remains a separate open contract. The current MSAA sampling unit is integrated/narrowly checked, not complete MSAA renderer parity. Graphics-stage R9 MSAA rendering is compiled/connected through shared frontend paths but not GPU accepted. No group is closed from code or build alone.
+
+### D. Evidence and unresolved source mapping
+
+H/REFERENCE_SAMPLE_CONTRACT.json saves pinned e0a46675 absolute paths/hashes/excerpts: Image::Image physically halves unsupported samples; BackingImage retains REQUESTED num_samples; FindView and Runtime::SetBackingSamples use requested backing identity. TextureCache::RefreshImage explicitly skips guest MSAA. Thus adapter sample masks do not establish a complete logical/native upload/view/shader mapping. Use the saved same-LUID query at F:/PS4Dev/handoff/cached-r11-word-20261018/reference-format-query (NVIDIA format122 mask0xf, format123 mask1; AMD both0xf). Do not invent native typed R9/4x capability or silently drop samples. Actual fallback behavior remains unverified; intended mapping needs completion in production.
+
+The IDENTICAL final112-case GCN fixture against clean committed02a04f2 fails with the explicit 'Native guest color format lacks render-target support' exception; H/old-msaa-negative contains exact EXE/PDB/runtimes/release identity and output. This is an expected headless capability regression control, not a new diagnosis of the user's old game breakpoint.
+
+### E. Measurements and accepted scopes
+
+GCN EXE **f8a539891f7c4c5223283d78a10407d81453cd994330aa6bcc0d5b3361c36e7a** passes274 queued cases:112 NEW R9 MSAA loads (2/4/8 independently distinguishable sample words, tiles5/13, ordinary/forced channels on identical guest code/hash, changed CPU backing, minimum/maximum shared exponent and full65536 physical/padding oracle) plus162 prior R9/R32/R11/RG16/mutable32/ordered-buffer regressions. Independently authored expected words/colors remain unchanged by observed output. Debug layer errors are checked; real GPU readback proves contents.
+
+P/packed-float8 PASS28.785s: data6/34, tiles8/13, samples1/4, mips/layers, changed backing, active single/multisample swaps/broadcast, all original bit patterns and padding. The fixture now explicitly selects the production raw32 representation for R9 MSAA; its actual resource assertion uses the R32 typeless family rather than a cross-family cast list. Numeric/bit/readback oracles are unchanged. This is NOT proof of an unmodified typed R9 MSAA resource path. Its archived unrelated GCN header is the earlier32-case version; required7 production paths plus packed_float_test.cpp match final code, not the uncompiled extra header. Final GCN/native/reload snapshots match all10 changed sources after LF normalization.
+
+Native14 PASS105.480s: buffer envelope/view lifetime/GPU chain, independent image versions, semantic residency/DMA, preserved versions/pending fence/scheduler, actual format/access/cast negatives and packed/raw GPU writers. Shader reload PASS6.197s:2 native PSOs, changed GPU contents, failed-replacement rollback/canonical restore, metadata negatives, same-version persistent preload. No cross-version cache-hit acceptance and no guest FPS claim. Initial32-case success belongs to its own EXE; final112/274 acceptance belongs to the exact EXE above.
+
+### F. Reproducible kernel / deferred checks
+
+Clean committed Release **H/artifacts-15b1c88**,18 manual files;54 pinned dependencies,2283 compile inputs, ZERO primary checkout paths in compile commands/build.ninja/CMakeCache. Build22.657s. EXE **910a15112274a53713dd8de306b4acb4b82c2937dbf9b10cb4403e751d17079c**; PDB **31cc3750176d1006b69c9eda2b8a4aeb97d2788d21eb3de9816cc6fdeae94f01**. This exact rebuilt CORE runtime/game/FPS **NOT_RUN**. Standalone tested HEAD plus archived worktree patches are retained verbatim; source matches are not automatic runtime acceptance of a rebuilt binary. Full445 suite and extended existing-XInput game image/input/stability/completed guest FPS excluding FG versus saved Vulkan baseline remain final. No automatic app installation/selection; original Vulkan, user saves, HUD/monitor/controller setup and user processes were untouched.
+
+### G. Recovery and storage
+
+H/start-state.json classifies previous turn as progress; staged/unstaged-start/precommit patches, PRECOMMIT_VERIFICATION.json, VERIFICATION_FINAL.json and LOCATIONS.json preserve recovery and scopes. Unknown .serena/ and CLAUDE.md remain untouched. H/native14-final, H/shader-reload, H/reg-*, H/old-msaa-negative and P preserve runtime identities/logs. Previous working kernels and prior CDB ownership/envelope/crash evidence remain under the earlier handoffs. No old result/build was deleted.
+
+Low free space was resolved by LOSSLESS compression of139 owned immutable archive files and34 CLOSED build outputs, SHA256 checked before/after. Source/old results remain at the same paths; hot build outputs used ordinary NTFS compression, immutable archives LZX. Exact free-space records are in H/ARCHIVE_COMPRESSION_LZX.json, CLOSED_BUILD_COMPRESSION.json and FINAL_STATE.json. Prefer C for new bulk archives until F has headroom. Do not clean/remove unknown files or old evidence.
+
+### H. Next command / implementation boundary
+
+From **F:/PS4Dev/work/shadps4-dx12-src** run `git status --short; git rev-parse HEAD; git log -3 --oneline`, then read H/NEXT_MECHANISM.md. Start the actual readonly MSAA writer-view/plane integration described there, not another capability audit. Keep the generic NumSamples fallback on the queue with exact logical/native sample mapping still open.
+
+### I. Forbidden repetitions
+
+No129 re-audit, repeated same adapter query, unchanged full suite, fixed d019 game replay or fake first-chance PageWatch crash. Do not equate capability-query/build success with GPU contents or gameplay. Do not use typed R9 MSAA failure to justify dropping guest samples. Do not mutate original readonly I merely to satisfy EnsureMultisampleStorage's writable-entry guard; validate the actual writer view and plane resource. No acceptance transfer to newly linked EXEs.
+
+### NEXT CODEX SESSION — START HERE
+
+Read the FIRST section of docs/codex-progress/SESSION_HANDOFF.md and H/VERIFICATION_FINAL.json; verify HEAD/upstream. Continue readonly R9 MSAA to actual R32 writer alias ownership using H/NEXT_MECHANISM.md. R9 readonly2/4/8 sample loads are connected and narrowly GPU verified at15b1c88; ordinary1x R9/envelope fixes remain verified. Preserve original readonly desc/class/UID/GpuModified, all guest sample bits, independent B, PageWatch, bind order, actual UAV plane permission, barriers/fences, leases and pressure retirement. Use saved reference source/API evidence; do not repeat129 audit, capability queries or fixed crash/game replay. Implement production C++, use one queued before/store/barrier/after regression with distinct I/B and independent full-padding oracle, then related native checks, clean committed Release/manual version folder and normal push. Generic unsupported-count sample fallback remains open; full445 suite and final existing-XInput game/FPS excluding FG versus saved baseline remain final. Do not mark the overall port complete.
+
+
 ## Current shared-exponent mutable word / physical buffer envelope checkpoint - 2026-10-18
 
 This FIRST section supersedes older current-state and next-task sections. Source **02a04f2ebc8630d83bcbc5864de137eae82483b2**, WIP **60bfc338de5960d513d3d60508dd9e0758c14b83**, branch fix/mixed-cmask. Full original-shadPS4 port **ACTIVE / INCOMPLETE**;129 independent implementation/behavior records and8 broad production work items remain. H=**C:/Users/skei/Documents/Codex/handoff/shared-exp-word-20261018** (metadata, GCN archives, manual kernel); B=**F:/PS4Dev/handoff/shared-exp-word-20261018** (native checks, old negatives, CDB). H/VERIFICATION_FINAL.json verifies all15 changed sources and exact executable/PDB/runtime identities. Main restoration source is this file.
