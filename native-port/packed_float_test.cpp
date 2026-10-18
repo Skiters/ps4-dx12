@@ -5,6 +5,7 @@
 #include <d3d12sdklayers.h>
 #include <source_location>
 #include <cstdio>
+#include <string_view>
 using namespace NativeDX12;
 namespace {
 void Require(bool value,std::source_location where=std::source_location::current()){
@@ -81,12 +82,24 @@ void Case(ID3D12Device* device,u32 format,u32 tile,UINT samples){
     }
 }
 }
-int main(){try{
+int main(int argc,char** argv){try{
+    const bool r11_only=argc==2&&std::string_view(argv[1])=="r11";
+    const bool r9_ms=argc==2&&std::string_view(argv[1])=="r9-ms";
+    if(argc!=1&&!r11_only&&!r9_ms)throw std::invalid_argument("Expected no arguments, r11 or r9-ms");
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     auto device=CreateHardwareDevice();ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
     PlacedTextureAllocator allocator(device.Get());Require(allocator.SupportsFormatCasting());
-    for(const auto format:{6u,34u})for(const auto tile:{8u,13u})for(const auto samples:{1u,4u})
+    for(const auto format:{6u,34u}){
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{format==6?DXGI_FORMAT_R11G11B10_FLOAT:DXGI_FORMAT_R9G9B9E5_SHAREDEXP};
+        Check(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support)));
+        printf("FORMAT data=%u support1=%08x support2=%08x\n",format,unsigned(support.Support1),unsigned(support.Support2));
+    }
+    for(const auto format:{6u,34u})for(const auto tile:{8u,13u})for(const auto samples:{1u,4u}){
+        if(r11_only&&format!=6)continue;
+        if(r9_ms&&(format!=34||tile!=8||samples!=4))continue;
+        printf("CASE data=%u tile=%u samples=%u\n",format,tile,samples);fflush(stdout);
         Case(device.Get(),format,tile,samples);
+    }
     for(UINT64 i=0;i<messages->GetNumStoredMessagesAllowedByRetrievalFilter();++i){
         SIZE_T bytes{};messages->GetMessage(i,nullptr,&bytes);std::vector<std::byte> storage(bytes);
         auto* message=reinterpret_cast<D3D12_MESSAGE*>(storage.data());Check(messages->GetMessage(i,message,&bytes));

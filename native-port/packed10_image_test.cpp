@@ -202,6 +202,9 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
             if(!CompatibleGuestWritableStorage(packed,rg16)||!CompatibleGuestWritableStorage(rg16,packed))
                 throw std::runtime_error("Typed R16G16 lost its mutable word storage");
         }
+        auto r11=ordinary;r11.data_format=6;r11.number_format=7;
+        if(!CompatibleGuestWritableStorage(packed,r11)||!CompatibleGuestWritableStorage(r11,packed))
+            throw std::runtime_error("Typed R11G11B10 lost its mutable word storage");
         for(u32 negative=0;negative<8;++negative){auto bad=scalar;
             switch(negative){case 0:bad.width++;break;case 1:bad.pitch+=32;break;
             case 2:bad.samples=4;break;case 3:bad.render_target=true;break;case 4:bad.depth_target=true;break;

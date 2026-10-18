@@ -38,12 +38,14 @@ int main(int argc,char** argv){try{
     const bool signed_color=std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool owned=mode.ends_with("-owned");
+    const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
+    const bool cached_r11=packed_word_writer||mode=="writable-packed10-cached-r11-owned";
     const bool cached_rg16=mode.starts_with("writable-packed10-cached-rg16-");
-    const u32 cached_word_number=cached_rg16?(mode=="writable-packed10-cached-rg16-unorm-owned"?0:
+    const u32 cached_word_number=cached_r11?7:cached_rg16?(mode=="writable-packed10-cached-rg16-unorm-owned"?0:
         mode=="writable-packed10-cached-rg16-snorm-owned"?1:mode=="writable-packed10-cached-rg16-sint-owned"?5:
         mode=="writable-packed10-cached-rg16-float-owned"?7:4):mode=="writable-packed10-cached-sint-owned"?5:
         mode=="writable-packed10-cached-float-owned"?7:4;
-    const bool cached_writable_word=cached_rg16||cached_word_number!=4||mode=="writable-packed10-cached-word-owned";
+    const bool cached_writable_word=cached_r11||cached_rg16||cached_word_number!=4||mode=="writable-packed10-cached-word-owned";
     const bool writable_word=cached_writable_word||mode=="writable-packed10-word-owned";
     const bool linear_download=mode=="linear-download-owned";
     const bool linear_attachment=mode=="linear-attachment-owned";
@@ -132,7 +134,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(writable_word){
-        RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_rg16?5:4);
+        RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_r11?6:cached_rg16?5:4,packed_word_writer);
     }else if(readonly_numeric){
         RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
     }else if(cached_depth_storage){

@@ -214,10 +214,10 @@ using ImageResourceList = boost::container::static_vector<ImageResource, NUM_IMA
 inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
 
     // These 32-bit guest families share word storage. Cross-family shader
-    // accesses select raw R32 codecs or typed R16G16 views of an explicitly
+    // accesses select raw R32 codecs or typed R16G16/R11G11B10 views of an explicitly
     // castable allocation. Other packed/compressed representations stay distinct.
-    if ((left.data_format == 4 || left.data_format == 5 || left.data_format == 9 || left.data_format == 10) &&
-        (right.data_format == 4 || right.data_format == 5 || right.data_format == 9 || right.data_format == 10)) {
+    if ((left.data_format == 4 || left.data_format == 5 || left.data_format == 6 || left.data_format == 9 || left.data_format == 10) &&
+        (right.data_format == 4 || right.data_format == 5 || right.data_format == 6 || right.data_format == 9 || right.data_format == 10)) {
         left.data_format = right.data_format = 4;
         left.num_format = right.num_format = 0;
     } else if (left.data_format == right.data_format) {

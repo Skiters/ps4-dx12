@@ -104,7 +104,7 @@ std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool su
     if(!supported||!IsDirectReadonlyWordClass(d))return {};
     return formats;
 }
-std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool supported){
+std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool supported,bool r11_uav){
     // Original _32BIT storage remains mutable after a write. Keep typed R16G16
     // UAVs and raw R32 codecs on one allocation, without changing the guest I.
     static constexpr std::array formats{DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_SINT,
@@ -112,13 +112,15 @@ std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool su
         DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,
         DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,
         DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
-        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT};
+        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R11G11B10_FLOAT};
+    const auto available=std::span(formats).first(formats.size()-size_t(!r11_uav));
     if(!supported||!d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1)return {};
-    if(d.UsesRaw32())return formats;
-    if(d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))return formats;
-    if(d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7))return formats;
+    if(d.UsesRaw32())return available;
+    if(d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))return available;
+    if(d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7))return available;
+    if(d.data_format==6&&d.number_format==7&&r11_uav)return available;
     if((d.data_format==9&&(d.number_format==0||d.number_format==4))||
-       (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5)))return formats;
+       (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5)))return available;
     return {};
 }
 bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
@@ -246,6 +248,13 @@ void GuestTextureCache::ValidateWritableFormat(DXGI_FORMAT format){
     writable_formats_.insert(format);
 }
 GuestTextureCache::GuestTextureCache(ID3D12Device* device,std::wstring converter):device_(device),texture_allocator_(device),converter_(std::move(converter)) {
+    // An optional typed UAV format must not become a requirement for every
+    // ordinary word allocation merely because another view can use its bits.
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT r11{DXGI_FORMAT_R11G11B10_FLOAT};
+    Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&r11,sizeof(r11))));
+    if((r11.Support1&D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW)&&
+       (r11.Support2&D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD)&&(r11.Support2&D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE))
+        writable_formats_.insert(DXGI_FORMAT_R11G11B10_FLOAT);
     ComPtr<IDXGIFactory4> factory;
     if(SUCCEEDED(DX12_API_CALL(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)))))
         DX12_API_CALL(factory->EnumAdapterByLuid(DX12_API_CALL(device->GetAdapterLuid()),IID_PPV_ARGS(&budget_adapter_)));
@@ -353,13 +362,14 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     // UAVs have no component mapping; guest storage swizzles are lowered in
     // the shader and do not require separate physical images.
     source.swizzle=view.swizzle={4,5,6,7};
-    const auto word_format=[](uint32_t format){return format==4||format==5||format==9||format==10;};
+    const auto word_format=[](uint32_t format){return format==4||format==5||format==6||format==9||format==10;};
     // Ordinary R32 UINT/SINT/FLOAT already use the same four-byte typeless
     // allocation with typed views. Numeric interpretation belongs to the view;
     // requiring a history-dependent raw flag retires valid I and loses its bits.
     const auto raw_word=[](const GuestTextureDesc& d){return d.UsesRaw32()||
         (d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))||
-        (d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7));};
+        (d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7))||
+        (d.data_format==6&&d.number_format==7);};
     if(raw_word(source)&&raw_word(view)&&word_format(source.data_format)&&word_format(view.data_format)){
         // Only comparison copies change. Both actual layouts are four-byte
         // words; typed R16G16 uses an actual resource cast, checked at binding.
@@ -2610,7 +2620,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(gpu_detile&&!tiler_)tiler_=std::make_shared<GuestTiler>(device_.Get());
     if(d.samples>1&&!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
     auto cast_formats=PackedFloatCasts(layout.format,texture_allocator_.SupportsFormatCasting());
-    const auto word_casts=d.writable?WritableWordCasts(d,texture_allocator_.SupportsFormatCasting()):
+    const auto word_casts=d.writable?WritableWordCasts(d,texture_allocator_.SupportsFormatCasting(),
+        writable_formats_.contains(DXGI_FORMAT_R11G11B10_FLOAT)):
         ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
     if(!word_casts.empty())cast_formats=word_casts;
     if(d.samples>1&&(d.data_format==6||d.data_format==34)&&cast_formats.empty())
