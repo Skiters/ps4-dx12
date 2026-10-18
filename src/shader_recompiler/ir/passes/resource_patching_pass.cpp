@@ -271,7 +271,7 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
         .is_written = is_written,
         .is_r128 = bool(inst_info.is_r128),
         .native_srgb_read = srgb_read,
-        .native_packed10_raw = is_written && packed10_raw,
+        .native_packed10_raw = packed10_raw,
         .native_raw32 = is_written && raw32,
         .post_op = resource.sharps[0].post_op,
     };
@@ -372,7 +372,7 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
                 lod_prod.IsEmpty() ? UNKNOWN_LOCATION : SharpLocationFromSource(lod_prod.Inst()),
             .is_depth = bool(inst_info.is_depth), // true for the _C (compare) opcodes
             .native_manual_sampling = profile.native_coherent_images &&
-                (image_res.is_written || AmdGpu::IsInteger(image.GetNumberFmt()) ||
+                (image_res.is_written || image_res.native_packed10_raw || AmdGpu::IsInteger(image.GetNumberFmt()) ||
                  (inst_info.is_gather && !inst_info.force_level0) ||
                  (inst_info.is_depth && (inst_info.has_bias || inst_info.has_derivatives))),
         });
@@ -848,15 +848,16 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
     const IR::F32 lod_clamp = inst_info.has_lod_clamp ? get_addr_reg(addr_reg++) : IR::F32{};
 
     if (profile.native_coherent_images &&
-        (image_res.is_written || AmdGpu::IsInteger(image.GetNumberFmt()) ||
+        (image_res.is_written || image_res.native_packed10_raw || AmdGpu::IsInteger(image.GetNumberFmt()) ||
          NativeSampler::RequiresManualAddressing(sampler, view_type) ||
          (!inst_info.is_gather && NativeSampler::RequiresManualAnisotropy(sampler)) || (inst_info.is_gather &&
          (inst_info.has_lod || inst_info.has_bias || inst_info.has_lod_clamp ||
           (!inst_info.force_level0 && sampler.mip_filter == AmdGpu::MipFilter::Point &&
            (view_type == AmdGpu::ImageType::Color2D || view_type == AmdGpu::ImageType::Color2DArray)))) ||
          (inst_info.is_depth && (inst_info.has_bias || inst_info.has_derivatives))) && !is_msaa) {
-        // D3D12 cannot Sample a UAV or bind an overlapping SRV concurrently.
-        // Evaluate filtering with typed loads from the shared mip UAVs.
+        // D3D12 cannot Sample a UAV or filter packed integer words directly.
+        // Evaluate filtering with typed loads: readonly packed words decode and
+        // apply guest mapping per texel before interpolation, like storage I.
         // Comparison bias/grad also use typed loads from read-only SRVs:
         // their hardware sample operations require SM6.8, above our SM6.6 target.
         // Explicit-LOD Gather uses the same SRV loads because native Gather
@@ -1110,7 +1111,7 @@ void PatchImageSampleArgs(IR::Inst& inst, Info& info, const ImageResource& image
                                       !image_res.is_written || image_res.mip_fallback_mode == MipStorageFallbackMode::DynamicIndex ? mip : IR::U32{},
                                       {}, inst_info);
             value = ApplyReadNumberConversionVec4(ir, value, image.GetNumberConversion());
-            if (image_res.is_written) value = ApplySwizzle(ir, value, image.DstSelect(), integer_components);
+            if (image_res.is_written || image_res.native_packed10_raw) value = ApplySwizzle(ir, value, image.DstSelect(), integer_components);
             if (sampler.force_degamma && image.GetNumberFmt() != AmdGpu::NumberFormat::Srgb)
                 value = ApplyForceDegamma(ir, value);
             if (border_addressing) {
@@ -1362,8 +1363,8 @@ void PatchImageArgs(IR::Inst& inst, Info& info, const Profile& profile) {
         // Convert fetched components first. A forced ZERO/ONE is a value in
         // the guest result domain and must not itself be normalized or biased.
         if (converted_storage) texel = ApplyReadNumberConversionVec4(ir, texel, conversion);
-        if (is_storage) {
-            // Storage image requires shader swizzle.
+        if (is_storage || image_res.native_packed10_raw) {
+            // Raw readonly packed words and storage images require shader swizzle.
             texel = ApplySwizzle(ir, texel, image.DstSelect(),
                 profile.native_coherent_images && !converted_storage &&
                 AmdGpu::IsInteger(image.GetNumberFmt()));

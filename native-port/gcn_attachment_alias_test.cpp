@@ -51,7 +51,9 @@ int main(int argc,char** argv){try{
     const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
     const bool readonly_numeric_exclusive=mode=="readonly-numeric-exclusive-owned";
-    const u32 readonly_signed_word=mode=="readonly-snormword-owned"?1:mode=="readonly-sintword-owned"?5:0;
+    const bool readonly_packed_ms=mode=="readonly-snormword-msaa-owned"||mode=="readonly-sintword-msaa-owned";
+    const bool readonly_packed_sample=mode=="readonly-snormword-sample-owned";
+    const u32 readonly_signed_word=(readonly_packed_sample||mode=="readonly-snormword-msaa-owned"||mode=="readonly-snormword-owned")?1:(mode=="readonly-sintword-owned"||mode=="readonly-sintword-msaa-owned")?5:0;
     const bool readonly_mutable32=readonly_signed_word||mode=="readonly-mutable32-owned";
     const bool readonly_numeric=readonly_mutable32||readonly_numeric_exclusive||mode=="readonly-numeric-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
@@ -121,7 +123,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(readonly_numeric){
-        RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word);
+        RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
     }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
     }else if(ordered_formatted){

@@ -148,7 +148,31 @@ static void RunPacked(u32 read_number,u32 write_number,bool native,bool external
             throw std::runtime_error("Mixed packed numeric aliases lost common raw storage classification");
     }
 }
-int main(){try{for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool same:{false,true})for(bool native:{false,true})for(bool loaded:{false,true})Run(dynamic,reverse,same,native,loaded);
+static void RunReadonlyPacked(u32 number,bool native){
+    Common::ObjectPool<IR::Inst> pool{128};IR::Block block(pool);Info info;
+    const auto add=[&](IR::Opcode op,std::initializer_list<IR::Value> args){block.AppendNewInst(op,args);return IR::Value{&block.back()};};
+    const IR::Value zero{u32(0)};auto coords=add(IR::Opcode::CompositeConstructU32x4,{zero,zero,zero,zero});
+    auto read=add(IR::Opcode::ImageRead,{zero,coords,{}, {}}),raw_read=add(IR::Opcode::ImageRead,{zero,coords,{}, {}});
+    IR::TextureInstInfo flags{};read.Inst()->SetFlags(flags);raw_read.Inst()->SetFlags(flags);
+    AmdGpu::Image image{};image.base_address=0x100000;image.width=image.height=image.pitch=7;
+    image.type=u64(AmdGpu::ImageType::Color2D);image.data_format=9;image.num_format=number;image.tiling_index=13;
+    image.dst_sel_x=7;image.dst_sel_y=0;image.dst_sel_z=1;image.dst_sel_w=4;
+    auto raw=image;raw.data_format=4;raw.num_format=4;
+    info.flattened_ud_buf.resize(16);memcpy(info.flattened_ud_buf.data(),&image,sizeof(image));memcpy(info.flattened_ud_buf.data()+8,&raw,sizeof(raw));
+    Optimization::ResourceDiscovery r{},u{};r.user=read.Inst();u.user=raw_read.Inst();r.sharps[0].num_dwords=u.sharps[0].num_dwords=8;
+    for(u32 i=0;i<8;++i){r.sharps[0].dwords[i]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(i)}});
+        u.sharps[0].dwords[i]=add(IR::Opcode::GetUserData,{IR::Value{static_cast<IR::ScalarReg>(i+8)}});}
+    Optimization::ResourceDiscoveryList uses;uses.push_back(r);uses.push_back(u);Profile profile{};profile.native_coherent_images=native;
+    Optimization::ResourcePatchingPass(info,uses,profile);
+    if(info.images.size()!=2)throw std::runtime_error("Readonly packed/word views lost distinct original sharps");
+    for(const auto& resource:info.images){const auto sharp=resource.GetSharp(info);
+        if(resource.is_written||resource.mip_fallback_mode!=MipStorageFallbackMode::None||resource.native_raw32)
+            throw std::runtime_error("Readonly packed decoding invented a writer or mip UAV");
+        if(resource.native_packed10_raw!=(native&&u32(sharp.GetDataFmt())==9))
+            throw std::runtime_error("Readonly packed decoding lost native/backend isolation");
+    }
+}
+int main(){try{for(u32 number:{1u,5u})for(bool native:{false,true})RunReadonlyPacked(number,native);for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool same:{false,true})for(bool native:{false,true})for(bool loaded:{false,true})Run(dynamic,reverse,same,native,loaded);
     for(u32 read_number:{0U,1U,4U,5U})for(u32 write_number:{0U,1U,4U,5U})for(bool native:{false,true})RunPacked(read_number,write_number,native,false);
     for(u32 write_number:{0U,4U})for(bool native:{false,true})RunPacked(0,write_number,native,true);
     for(u32 scalar:{4U,5U,7U})for(u32 rgba:{0U,1U,4U,5U,9U})for(bool native:{false,true}){

@@ -19,6 +19,10 @@ public:
         GuestRasterizer(d,g,p,mesa,dxc),gpu_(g),inspector_(p),inspect_(inspect){}
     void DispatchDirect()override{
         if(inspect_){auto& stage=inspector_.BuildCompute(gpu_);
+            for(const auto& buffer:stage.info.buffers){const auto sharp=buffer.GetSharp(stage.info);
+                printf("BUFFER address=%llx bytes=%llu formatted=%u written=%u gpu_modified=%u\n",u64(sharp.base_address),
+                    u64(sharp.GetSize()),unsigned(buffer.is_formatted),unsigned(buffer.is_written),
+                    unsigned(sharp.GetSize()&&IsGpuBufferModified(sharp.base_address,sharp.GetSize())));}
             for(const auto& image:stage.info.images){const auto sharp=image.GetSharp(stage.info);
                 printf("OPERAND image=%llx data=%u number=%u width=%u writable=%u\n",u64(sharp.base_address)<<8,
                     u32(sharp.data_format),u32(sharp.num_format),u32(sharp.width)+1,unsigned(image.is_written));}
@@ -27,7 +31,7 @@ public:
     }
 };
 inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    std::byte* memory,std::byte* backing,u64 base,bool exclusive_seed=false,bool mutable_views=false,u32 signed_word_number=0){
+    std::byte* memory,std::byte* backing,u64 base,bool exclusive_seed=false,bool mutable_views=false,u32 signed_word_number=0,bool packed_sample=false,bool packed_ms=false){
     constexpr u64 ImageOffset=16384,OutputOffset=57344,AllocationBytes=65536;
     constexpr u32 Marker=0x13579bdf;
     struct alignas(256) Code {std::array<u32,256> words{};};
@@ -42,7 +46,7 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     const auto bind=[&](const Code& code){compute={};compute.address=reinterpret_cast<u64>(code.words.data())>>8;
         compute.num_thread_x.full=compute.num_thread_y.full=compute.num_thread_z.full=1;
         compute.dim_x=compute.dim_y=compute.dim_z=1;compute.settings.num_user_regs=12;
-        compute.settings.num_vgprs=3;compute.settings.num_sgprs=3;
+        compute.settings.num_vgprs=3;compute.settings.num_sgprs=packed_sample?4:3;
         const u64 pointer=reinterpret_cast<u64>(table.data());memcpy(compute.user_data.data(),&pointer,8);};
     gpu.BindRasterizer(&rasterizer);
     struct Drain {GuestRasterizer& r;AmdGpu::Liverpool& g;~Drain(){g.WaitGpuIdle();try{r.Finish();}catch(...){}g.BindRasterizer(nullptr);}} drain{rasterizer,gpu};
@@ -63,10 +67,13 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         if(data==6||data==34)return std::array<u32,4>{one,std::bit_cast<u32>(2.f),std::bit_cast<u32>(0.5f),one};
         return std::array<u32,4>{one,0,0,one};};
     unsigned cases{};
+    for(const u32 sample_index:{0u,1u,2u,3u})
     for(const u32 word_class:{0u,5u,6u,9u,10u,34u})
     for(const auto numbers:{std::array<u32,2>{0,4},std::array<u32,2>{1,5},std::array<u32,2>{9,4}})
-    for(const bool reverse:{false,true})for(const bool formatted:{false,true})for(const bool modified:{false,true}){
-        if(mutable_views?(word_class==0||numbers!=std::array<u32,2>{0,4}||modified):word_class!=0)continue;
+    for(const bool reverse:{false,true})for(const bool formatted:{false,true})for(const bool modified:{false,true})
+    for(const bool force_swizzle:{false,true}){
+        if(mutable_views?(word_class==0||numbers!=std::array<u32,2>{0,4}||(modified&&!signed_word_number)):word_class!=0)continue;
+        if((!packed_ms&&sample_index)||force_swizzle&&!packed_sample)continue;
         if(signed_word_number&&word_class!=9)continue;
         if(exclusive_seed&&!modified)continue;
         const u32 ImageWord=signed_word_number?0x1ffu|(0x201u<<10)|(3u<<30):word_class==5?0xffff0000u:word_class==6?0x3c0u|(0x400u<<11)|(0x1c0u<<22):
@@ -75,18 +82,26 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         printf("CASE: actual GCN readonly numeric pair=%u/%u reverse=%u formatted=%u GpuModified=%u\n",numbers[0],numbers[1],reverse,formatted,modified);fflush(stdout);
         rasterizer.Finish();rasterizer.UnmapMemory(base,AllocationBytes);rasterizer.MapMemory(base,AllocationBytes);
         rasterizer.NotifyHostMapping(base,AllocationBytes,true,true);memset(memory,0xa7,AllocationBytes);
-        AmdGpu::Image image{};image.base_address=(base+ImageOffset)>>8;image.type=u64(AmdGpu::ImageType::Color2D);
+        AmdGpu::Image image{};image.base_address=(base+ImageOffset)>>8;image.type=u64(packed_ms?AmdGpu::ImageType::Color2DMsaa:AmdGpu::ImageType::Color2D);
+        if(packed_ms)image.last_level=2;
         image.width=image.height=31;image.pitch=31;image.tiling_index=5;image.data_format=mutable_views?4:10;image.num_format=4;
         image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
         const auto desc=DescribeGuestTexture(image);const auto layout=LayoutGuestTexture(desc);
-        if(layout.guest_bytes!=4096||GuestPixelOffset(desc,layout,0,0,1,0)!=4)
+        if(layout.guest_bytes!=(packed_ms?16384u:4096u)||(!packed_ms&&GuestPixelOffset(desc,layout,0,0,1,0)!=4))
             throw std::runtime_error("Readonly numeric fixture requires original 4KiB padded image/word1");
-        for(u32 y=0;y<desc.height;++y)for(u32 x=0;x<desc.width;++x)
-            memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y),&ImageWord,4);
+        const auto pack_signed=[](s32 r,s32 g,s32 b,s32 a){return (u32(r)&1023u)|((u32(g)&1023u)<<10)|((u32(b)&1023u)<<20)|((u32(a)&3u)<<30);};
+        const std::array<u32,4> sample_words{pack_signed(511,0,0,1),pack_signed(-511,511,0,-1),pack_signed(0,-511,511,0),pack_signed(0,0,-511,0)};
+        for(u32 y=0;y<desc.height;++y)for(u32 x=0;x<desc.width;++x)for(u32 sample=0;sample<desc.samples;++sample){
+            const u32 word=packed_ms?sample_words[sample]:ImageWord;
+            memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y,sample),&word,4);}
+        const u32 ProbeWord=packed_ms?sample_words[sample_index]:packed_sample?pack_signed(-511,511,0,-1):ImageWord;
+        if(packed_sample){const u32 corners[]{pack_signed(511,0,0,1),ProbeWord,pack_signed(0,-511,511,0),pack_signed(0,0,-511,0)};
+            for(u32 y=0;y<2;++y)for(u32 x=0;x<2;++x)memcpy(memory+ImageOffset+GuestPixelOffset(desc,layout,0,0,x,y),corners+y*2+x,4);}
+        u32 marker_source{};memcpy(&marker_source,memory+ImageOffset+4,4);
         std::vector<std::byte> expected(backing,backing+AllocationBytes);
-        AmdGpu::Buffer input{};input.base_address=base+ImageOffset;input.stride=4;input.num_records=1024;
+        AmdGpu::Buffer input{};input.base_address=base+ImageOffset;input.stride=4;input.num_records=layout.guest_bytes/4;
         input.data_format=4;input.num_format=4;input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
-        auto output=input;output.base_address=base+OutputOffset;
+        auto output=input;output.base_address=base+OutputOffset;output.num_records=1024;
         table={image,image};
         // Materialize a complete native B arena with an actual raw GPU read.
         // A four-byte shifted writer alone has no independently protectable
@@ -99,14 +114,17 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         // SMRD3 loads an original T# from a real user-data table into S16..23.
         // All descriptors fit the16 original user registers; no out-of-bounds
         // GetCsRegs access or artificial public renderer inspection is used.
-        initialize(warm,{0x7e000281,0x7e020280,0xf0000f00,0x00000400,0xbf8c0000,
-            0xe0700000,0x80020400,0xe0700004,0x80020500,0xe0700008,0x80020600,0xe070000c,0x80020700,0xbf810000},0x524e554d5741524eULL);
+        std::vector<u32> warm_code{0x7e000281,0x7e020280};
+        if(packed_ms)warm_code.insert(warm_code.end(),{0x7e0402ff,sample_index});
+        warm_code.insert(warm_code.end(),{0xf0000f00,0x00000400,0xbf8c0000,
+            0xe0700000,0x80020400,0xe0700004,0x80020500,0xe0700008,0x80020600,0xe070000c,0x80020700,0xbf810000});
+        initialize(warm,warm_code,0x524e554d5741524eULL+(u64(packed_ms)<<40)+(u64(sample_index)<<42));
         bind(warm);memcpy(compute.user_data.data(),&image,sizeof(image));memcpy(compute.user_data.data()+8,&output,sizeof(output));dispatch();
         rasterizer.ReadMemory(output.base_address,output.GetSize());rasterizer.Finish();
         rasterizer.ValidateDebugMessages();
         // Pinned RemapSwizzle(Format32) redirects T# Alpha(7) to Red.
         // This differs from a handcrafted native SRV with missing alpha1.
-        const auto warm_words=mutable_views?std::array<u32,4>{ImageWord,0,0,ImageWord}:channels(4);memcpy(expected.data()+OutputOffset,warm_words.data(),16);
+        const auto warm_words=mutable_views?std::array<u32,4>{ProbeWord,0,0,ProbeWord}:channels(4);memcpy(expected.data()+OutputOffset,warm_words.data(),16);
         if(memcmp(backing,expected.data(),AllocationBytes)){
             for(u64 i=0;i<AllocationBytes;++i)if(backing[i]!=expected[i]){fprintf(stderr,"Readonly seed mismatch byte=%llu got=%02x expected=%02x\n",i,std::to_integer<unsigned>(backing[i]),std::to_integer<unsigned>(expected[i]));break;}
             u32 got[4]{};memcpy(got,backing+OutputOffset,16);fprintf(stderr,"Warm channels=%08x %08x %08x %08x\n",got[0],got[1],got[2],got[3]);
@@ -117,9 +135,12 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             // excludes a merely CPU-initialized readonly I from formatted I->B.
             std::vector<u32> writes;
             if(!exclusive_seed)writes={0x7e1802ff,Marker,0xe0700000,0x80020c00};
-            writes.insert(writes.end(),{0x7e000281,0x7e020280,0x7e0802ff,255,0x7e0a0280,0x7e0c0280,0x7e0e02ff,255,
+            if(packed_ms)writes.insert(writes.end(),{0x7e0402ff,sample_index});
+            if(signed_word_number)writes.insert(writes.end(),{0x7e000281,0x7e020280,0x7e0802ff,ProbeWord,
+                0x7e0a0280,0x7e0c0280,0x7e0e02ff,ProbeWord,0xf0200f00,0x00000400,0xbf810000});
+            else writes.insert(writes.end(),{0x7e000281,0x7e020280,0x7e0802ff,255,0x7e0a0280,0x7e0c0280,0x7e0e02ff,255,
                 0xf0200f00,0x00000400,0xbf810000});
-            initialize(image_write,writes,0x524e554d57524954ULL+u64(exclusive_seed));
+            initialize(image_write,writes,0x524e554d57524954ULL+u64(exclusive_seed)+(u64(packed_ms)<<40)+(u64(sample_index)<<42));
             auto separate=input;separate.base_address+=4;separate.num_records=1;
             bind(image_write);memcpy(compute.user_data.data(),&image,sizeof(image));memcpy(compute.user_data.data()+8,&separate,sizeof(separate));dispatch();
         }
@@ -129,25 +150,53 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         bind(marker);memcpy(compute.user_data.data()+8,&shifted,sizeof(shifted));dispatch();
         if(!rasterizer.IsGpuBufferModified(shifted.base_address,4))throw std::runtime_error("Readonly numeric marker did not write B");
         if(mutable_views){auto view=image;view.data_format=word_class;view.num_format=signed_word_number?signed_word_number:word_class==6||word_class==34?7:0;
+            if(force_swizzle){view.dst_sel_x=7;view.dst_sel_y=0;view.dst_sel_z=1;view.dst_sel_w=4;}
             table=reverse?std::array<AmdGpu::Image,2>{image,view}:std::array<AmdGpu::Image,2>{view,image};
         }else{table[0].num_format=numbers[reverse?1:0];table[1].num_format=numbers[reverse?0:1];}
-        const u64 identity=u64(numbers[0])|(u64(numbers[1])<<4)|(u64(reverse)<<8)|(u64(formatted)<<9)|(u64(modified)<<10)|(u64(word_class)<<16)|(u64(signed_word_number)<<24);
-        initialize(pair,{0xc0c80100,0xc0cc0108,0xbf8c0000,formatted?0xe0000004u:0xe0300004u,0x80020c00,
-            0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xf0000f00,0x00060800,0xbf8c0000,
-            0xe0700000,0x80010c00,0xe0700004,0x80010400,0xe0700008,0x80010500,0xe070000c,0x80010600,
+        const u64 identity=u64(numbers[0])|(u64(numbers[1])<<4)|(u64(reverse)<<8)|(u64(formatted)<<9)|(u64(modified)<<10)|(u64(word_class)<<16)|(u64(signed_word_number)<<24)|(u64(packed_sample)<<32)|(u64(packed_ms)<<34)|(u64(sample_index)<<36);
+        std::vector<u32> probe{0xc0c80100,0xc0cc0108,0xbf8c0000,formatted?0xe0000004u:0xe0300004u,0x80020c00};
+        if(packed_sample){AmdGpu::Sampler sampler{};sampler.clamp_x.Assign(AmdGpu::ClampMode::ClampLastTexel);
+            sampler.clamp_y.Assign(AmdGpu::ClampMode::ClampLastTexel);sampler.clamp_z.Assign(AmdGpu::ClampMode::ClampLastTexel);
+            sampler.xy_mag_filter.Assign(AmdGpu::Filter::Bilinear);sampler.xy_min_filter.Assign(AmdGpu::Filter::Bilinear);
+            sampler.mip_filter.Assign(AmdGpu::MipFilter::Point);
+            probe.insert(probe.end(),{0xbea003ff,u32(sampler.raw0),0xbea103ff,u32(sampler.raw0>>32),
+                0xbea203ff,u32(sampler.raw1),0xbea303ff,u32(sampler.raw1>>32)});}
+        for(u32 slot=0;slot<2;++slot){const u32 operand=slot?0x00060800:0x00040400;
+            if(packed_sample&&u32(table[slot].data_format)==9){
+                probe.insert(probe.end(),{0x7e0002ff,std::bit_cast<u32>(0.75f/32),0x7e0202ff,std::bit_cast<u32>(1.25f/32),
+                    0xf09c0f00,operand|0x01000000});
+            }else{probe.insert(probe.end(),{0x7e000281,0x7e020280});
+                if(packed_ms)probe.insert(probe.end(),{0x7e0402ff,sample_index});
+                probe.insert(probe.end(),{0xf0000f00,operand});}}
+        probe.push_back(0xbf8c0000);
+        probe.insert(probe.end(),{0xe0700000,0x80010c00,0xe0700004,0x80010400,0xe0700008,0x80010500,0xe070000c,0x80010600,
             0xe0700010,0x80010700,0xe0700014,0x80010800,0xe0700018,0x80010900,0xe070001c,0x80010a00,
-            0xe0700020,0x80010b00,0xbf810000},0x524e554d50414900ULL+identity);
+            0xe0700020,0x80010b00,0xbf810000});
+        // Identical guest code/hash across forced-swizzle cases exercises the
+        // readonly raw image specialization key, not an artificial cache miss.
+        initialize(pair,probe,0x524e554d50414900ULL+identity);
         bind(pair);memcpy(compute.user_data.data()+4,&output,sizeof(output));memcpy(compute.user_data.data()+8,&input,sizeof(input));dispatch();
-        const u32 final_word=formatted&&modified?ImageWord:Marker;memcpy(expected.data()+ImageOffset+4,&final_word,4);
+        const u32 final_word=formatted&&modified?marker_source:Marker;memcpy(expected.data()+ImageOffset+4,&final_word,4);
         memcpy(expected.data()+OutputOffset,&final_word,4);
         const auto expected_view=[&](const AmdGpu::Image& view){
             // Signed10 R=+511,G=-511,B=0,A=-1: original SNORM clamps
             // endpoints to +/-1; SINT preserves the exact signed components.
+            // Weights3/16,1/16,9/16,3/16 over four independently encoded
+            // endpoint texels give (1/8,-1/2,3/8,1/8), before guest swizzle.
+            if(packed_sample&&u32(view.data_format)==9)return force_swizzle?
+                std::array<u32,4>{std::bit_cast<u32>(0.125f),0,std::bit_cast<u32>(1.f),std::bit_cast<u32>(0.125f)}:
+                std::array<u32,4>{std::bit_cast<u32>(0.125f),std::bit_cast<u32>(-0.5f),std::bit_cast<u32>(0.375f),std::bit_cast<u32>(0.125f)};
+            if(packed_ms&&u32(view.data_format)==9){
+                const std::array<std::array<s32,4>,4> integer{{{511,0,0,1},{-511,511,0,-1},{0,-511,511,0},{0,0,-511,0}}};
+                const std::array<std::array<float,4>,4> normalized{{{1,0,0,1},{-1,1,0,-1},{0,-1,1,0},{0,0,-1,0}}};
+                std::array<u32,4> result{};for(u32 c=0;c<4;++c)result[c]=signed_word_number==1?
+                    std::bit_cast<u32>(normalized[sample_index][c]):u32(integer[sample_index][c]);return result;
+            }
             if(signed_word_number&&u32(view.data_format)==9)return signed_word_number==1?
                 std::array<u32,4>{std::bit_cast<u32>(1.f),std::bit_cast<u32>(-1.f),0,std::bit_cast<u32>(-1.f)}:
                 std::array<u32,4>{511u,u32(-511),0,0xffffffffu};
             return mutable_views?
-            (u32(view.data_format)==4?std::array<u32,4>{ImageWord,0,0,ImageWord}:word_channels(u32(view.data_format))):channels(u32(view.num_format));};
+            (u32(view.data_format)==4?std::array<u32,4>{ProbeWord,0,0,ProbeWord}:word_channels(u32(view.data_format))):channels(u32(view.num_format));};
         const auto a=expected_view(table[0]),b=expected_view(table[1]);
         memcpy(expected.data()+OutputOffset+4,a.data(),16);memcpy(expected.data()+OutputOffset+20,b.data(),16);
         rasterizer.ReadMemory(output.base_address,output.GetSize());rasterizer.ReadMemory(input.base_address,input.GetSize());rasterizer.Finish();
@@ -158,7 +207,7 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             throw std::runtime_error("Readonly numeric views lost typed I/B/order or full physical padding");}
         ++cases;
     }
-    if(mutable_views)printf("PASS:%u actual GCN mutable32 typed views and raw/formatted B, descriptor orders, original GpuModified0 and full65536 physical bytes\n",cases);
+    if(mutable_views)printf("PASS:%u actual GCN mutable32 typed views and raw/formatted B, descriptor orders, original GpuModified%s and full65536 physical bytes\n",cases,signed_word_number?"0/1":"0");
     else puts(exclusive_seed?"PASS:12 standalone exclusive I cases: numeric pairs, descriptor orders, raw/formatted interior B writer, full physical readback":
         "PASS:24 actual GCN readonly UNORM/UINT/SNORM/SINT/sRGB pairs, both descriptor orders, original GpuModified0/1, raw B versus eligible formatted I residency and complete65536 physical bytes");
 }

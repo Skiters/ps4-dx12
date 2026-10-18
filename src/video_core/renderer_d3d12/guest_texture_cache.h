@@ -40,8 +40,8 @@ struct GuestTextureDesc {
     bool one_dimensional=false;
     uint32_t volume_depth=0;
     uint32_t samples=1;
-    bool UsesRawPacked10()const{return data_format==9&&writable&&!render_target&&!depth_target&&
-        (native_packed10_raw||number_format==1||number_format==5);}
+    bool UsesRawPacked10()const{return data_format==9&&!render_target&&!depth_target&&
+        (native_packed10_raw||(writable&&(number_format==1||number_format==5)));}
     bool UsesRaw32()const{return UsesRawPacked10()||((data_format==4||data_format==10)&&
         native_raw32&&writable&&!render_target&&!depth_target);}
     bool operator==(const GuestTextureDesc&)const=default;
@@ -453,16 +453,13 @@ public:
         RememberNativeImageStorage(entry);return true;
     }
     bool CanShareReadonlyWordStorage(const GuestTextureDesc& a,const GuestTextureDesc& b)const{
-        return texture_allocator_.SupportsFormatCasting()&&CompatibleGuestReadonlyWordStorage(a,b);
+        const bool r32_family=(a.data_format==4||a.UsesRawPacked10())&&(b.data_format==4||b.UsesRawPacked10());
+        return (texture_allocator_.SupportsFormatCasting()||r32_family)&&CompatibleGuestReadonlyWordStorage(a,b);
     }
-    bool HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
-        const auto [first,last]=address_index_.equal_range(desc.address);
-        for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&
-            (CompatibleGuestShaderStorage(it->second->desc,desc)||
-             (it->second->desc.depth_target&&CompatibleGuestDepthSubview(
-                 it->second->desc,it->second->layout,desc,LayoutGuestTexture(desc)))||
-             CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
-        return false;}
+    // Actual native view proof is also used to pin the current source before
+    // buffer preparation/other image allocations can apply cache pressure.
+    bool CanBindReadonlyWordView(const Entry&,const GuestTextureDesc&)const;
+    bool HasOwnedShaderStorage(const GuestTextureDesc&)const;
     void SetPendingRetirement(std::function<void()> retirement){retire_pending_=std::move(retirement);}
     // CPU backing reads/watch callbacks can submit and retire the caller's list.
     // Resolve the current context again at each subsequent upload recording step.

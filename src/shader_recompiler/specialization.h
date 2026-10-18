@@ -147,15 +147,15 @@ struct StageSpecialization {
                              spec.native_number_format = u32(sharp.GetNumberFmt());
                          spec.is_storage = desc.is_written;
                          const u32 data_format = u32(sharp.GetDataFmt());
-                         if (profile_.native_coherent_images && desc.is_written &&
-                             (desc.native_raw32 || (data_format == 9 && (desc.native_packed10_raw ||
+                         if (profile_.native_coherent_images && (desc.native_packed10_raw || (desc.is_written &&
+                             (desc.native_raw32 || (data_format == 9 && (
                                sharp.GetNumberFmt() == AmdGpu::NumberFormat::Snorm ||
                                sharp.GetNumberFmt() == AmdGpu::NumberFormat::Sint)) ||
-                              (data_format >= 16 && data_format <= 19)))
+                              (data_format >= 16 && data_format <= 19)))))
                              spec.native_packed_format = data_format;
                          spec.native_srgb_read = desc.native_srgb_read;
                          spec.native_slice_view = profile_.native_coherent_images && desc.NeedsNativeSliceView(*info);
-                         if (spec.is_storage) {
+                         if (spec.is_storage || desc.native_packed10_raw) {
                              spec.dst_select = sharp.DstSelect();
                          } else {
                              spec.is_srgb = sharp.GetNumberFmt() == AmdGpu::NumberFormat::Srgb;

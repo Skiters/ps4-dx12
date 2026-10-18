@@ -395,7 +395,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     if(textures)for(auto& group:shader_image_storage){
         for(const auto& cached:textures->Entries())if(cached->gpu_owned&&
-            CompatibleGuestImageMipGeometry(group.desc,group.layout,cached->desc,cached->layout)){
+            (CompatibleGuestImageMipGeometry(group.desc,group.layout,cached->desc,cached->layout)||
+             textures->CanBindReadonlyWordView(*cached,group.desc))){
             shader_storage_pins.push_back(textures->PinBinding(*cached));
             if(cached->desc.levels>group.desc.levels){
                 group.desc.levels=cached->desc.levels;group.layout=LayoutGuestTexture(group.desc);

@@ -1156,9 +1156,9 @@ void EmitContext::DefineImagesAndSamplers() {
         const u32 data_format = u32(sharp.GetDataFmt());
         const bool signed_packed10 = data_format == 9 &&
             (nfmt == AmdGpu::NumberFormat::Snorm || nfmt == AmdGpu::NumberFormat::Sint);
-        const u32 packed_format = profile.native_coherent_images && is_storage &&
-            (signed_packed10 || image_desc.native_packed10_raw || image_desc.native_raw32 ||
-             (data_format >= 16 && data_format <= 19)) ? data_format : 0U;
+        const u32 packed_format = profile.native_coherent_images &&
+            (image_desc.native_packed10_raw || (is_storage && (signed_packed10 || image_desc.native_raw32 ||
+             (data_format >= 16 && data_format <= 19)))) ? data_format : 0U;
         const VectorIds& data_types = packed_format ? U32 : GetAttributeType(*this, nfmt);
         const Id sampled_type = data_types[1];
         const Id image_type{ImageType(*this, image_desc, sampled_type)};

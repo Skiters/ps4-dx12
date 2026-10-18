@@ -79,7 +79,9 @@ std::span<const DXGI_FORMAT> PackedFloatCasts(DXGI_FORMAT format,bool supported)
 }
 bool IsDirectReadonlyWordClass(const GuestTextureDesc& d){
     if(d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1||
-       d.native_raw32||d.native_packed10_raw)return false;
+       d.native_raw32)return false;
+    if(d.native_packed10_raw)return d.data_format==9&&
+        (d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5);
     switch(d.data_format){
     case 4:return d.number_format==4||d.number_format==5||d.number_format==7;
     case 5:return d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7;
@@ -101,6 +103,23 @@ std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool su
         DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
     if(!supported||!IsDirectReadonlyWordClass(d))return {};
     return formats;
+}
+bool IsReadonlyRawR32Class(const GuestTextureDesc& d){
+    if(d.writable||d.render_target||d.depth_target||d.stencil_address||d.native_raw32||
+       !std::has_single_bit(d.samples)||d.samples>16||
+       (d.samples>1&&(d.levels!=1||d.volume_depth||d.one_dimensional)))return false;
+    if(d.data_format==4)return d.number_format==4||d.number_format==5||d.number_format==7;
+    return d.UsesRawPacked10()&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5);
+}
+bool CanBindReadonlyWordSrv(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
+    if(!CompatibleGuestReadonlyWordStorage(entry.desc,view)||!entry.texture.handle)return false;
+    const auto format=LayoutGuestTexture(view).format;
+    if(entry.texture.AllowsCast(format))return true;
+    // A real R32 typeless resource needs no relaxed format-list feature for
+    // its R32 views. Fully typed resources without a list retain exact format.
+    const auto native=entry.texture.handle->GetDesc().Format;
+    const bool r32=format==DXGI_FORMAT_R32_UINT||format==DXGI_FORMAT_R32_SINT||format==DXGI_FORMAT_R32_FLOAT;
+    return r32&&(native==DXGI_FORMAT_R32_TYPELESS||native==format);
 }
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
     return resource.castable_formats?std::span<const DXGI_FORMAT>(*resource.castable_formats):std::span<const DXGI_FORMAT>{};
@@ -336,7 +355,7 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
         source.depth_target=view.depth_target=false;
     }
     if(((source.data_format==9&&(source.number_format==1||source.number_format==5||
-        view.number_format==1||view.number_format==5))||(source.data_format>=16&&source.data_format<=19))&&
+        view.number_format==1||view.number_format==5)&&!(source.UsesRawPacked10()&&view.UsesRawPacked10()))||(source.data_format>=16&&source.data_format<=19))&&
        source.writable!=view.writable)
         return false;
     // Ordinary color allocations already use their DXGI typeless family even
@@ -345,7 +364,8 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
     // signed packed10 and depth retain their distinct representation/aspects.
     if(!source.writable&&!view.writable&&source.number_format!=view.number_format){
         const bool expanded_packed=source.data_format==9&&(source.number_format==1||
-            source.number_format==5||view.number_format==1||view.number_format==5);
+            source.number_format==5||view.number_format==1||view.number_format==5)&&
+            !(source.UsesRawPacked10()&&view.UsesRawPacked10());
         if(depth_storage||expanded_packed||source.data_format!=view.data_format||
            GuestStorageFormat(source.data_format,DXGI_FORMAT_UNKNOWN)==DXGI_FORMAT_UNKNOWN)return false;
     }
@@ -353,10 +373,30 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
     source.swizzle=view.swizzle={4,5,6,7};
     return CompatibleGuestWritableStorage(source,view);
 }
+bool GuestTextureCache::CanBindReadonlyWordView(const Entry& image,const GuestTextureDesc& view)const{
+    return CanBindReadonlyWordSrv(image,view);
+}
+bool GuestTextureCache::HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
+    const auto [first,last]=address_index_.equal_range(desc.address);
+    for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&
+        (CompatibleGuestShaderStorage(it->second->desc,desc)||CanBindReadonlyWordView(*it->second,desc)||
+         (it->second->desc.depth_target&&CompatibleGuestDepthSubview(it->second->desc,it->second->layout,
+             desc,LayoutGuestTexture(desc)))||CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
+    return false;
+}
 bool CompatibleGuestReadonlyWordStorage(GuestTextureDesc source,GuestTextureDesc view){
-    if(source.data_format==view.data_format||!IsDirectReadonlyWordClass(source)||
-       !IsDirectReadonlyWordClass(view))return false;
+    // Readonly binds can retain an already GPU-written R32 allocation. This
+    // normalizes only the comparison; source permissions/history never change.
+    const bool raw=source.UsesRaw32();
+    if(source.writable&&(source.data_format==4||raw)){
+        source.writable=false;source.native_raw32=false;
+        if(source.data_format==9&&raw)source.native_packed10_raw=true;
+    }
+    const bool raw_family=IsReadonlyRawR32Class(source)&&IsReadonlyRawR32Class(view);
+    if((source.data_format==view.data_format&&source.native_packed10_raw==view.native_packed10_raw)||
+       (!raw_family&&(!IsDirectReadonlyWordClass(source)||!IsDirectReadonlyWordClass(view))))return false;
     source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+    source.native_packed10_raw=view.native_packed10_raw=false;
     source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
     return source==view;
@@ -689,7 +729,7 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
         throw std::invalid_argument("Signed packed 10-bit attachment storage requires exact native packing");
     const auto [format,bpp]=Format(d.data_format,d.writable&&d.number_format==9?0:d.number_format);
     GuestTextureLayout layout;layout.format=format;layout.bytes_per_pixel=bpp;
-    if(signed_packed10&&!d.writable&&!d.render_target)layout.expanded_bytes_per_pixel=16;
+    if(signed_packed10&&!d.writable&&!d.render_target&&!d.UsesRawPacked10())layout.expanded_bytes_per_pixel=16;
     // Sampled B4 MSAA uses exact packed expansion on adapters without native
     // B4 attachment support. Render targets retain native4-bit quantization
     // and blending, subject to the actual format/sample capability checks.
@@ -922,7 +962,9 @@ std::vector<std::byte> DecodeGuestSubresource(const GuestTextureDesc& d,const Gu
     CopyGuestSubresource(d,l,mip,layer,bytes.data(),linear.data(),false);return linear;
 }
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
-    auto swizzle=desc.swizzle;
+    // Raw readonly packed10 is decoded and swizzled per texel in the shader.
+    // The SRV must expose its unmodified R32 word even for forced guest channels.
+    auto swizzle=desc.UsesRawPacked10()?std::array<uint32_t,4>{4,5,6,7}:desc.swizzle;
     if(desc.data_format==13)for(auto& component:swizzle)if(component==7)component=1;
     D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=layout.format;view.Shader4ComponentMapping=Mapping(swizzle);
     const float minimum=std::min(float(desc.min_lod)/256.0f,float(desc.levels-1));
@@ -948,7 +990,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
         CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool shader_alias=!sampled_view.writable&&
         (CompatibleGuestShaderStorage(desc,sampled_view)||
-         (CompatibleGuestReadonlyWordStorage(desc,sampled_view)&&texture.AllowsCast(LayoutGuestTexture(sampled_view).format))||
+         CanBindReadonlyWordSrv(*this,sampled_view)||
          (desc.levels>=sampled_view.levels&&CompatibleGuestShaderMipPrefixes(desc,layout,
              sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
@@ -1646,7 +1688,7 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
         ((entry.desc.writable||!desc.writable)&&CompatibleGuestShaderStorage(entry.desc,desc))||
-        (CompatibleGuestReadonlyWordStorage(entry.desc,desc)&&entry.texture.AllowsCast(layout.format))||
+        CanBindReadonlyWordSrv(entry,desc)||
         (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc))||
         CanBindReadonlyBcMipPrefix(entry,desc,layout))&&
         MatchesGuestMipLayout(entry.layout,layout);
@@ -2536,6 +2578,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(IsExpandedReadonlyBcRgba8(d,layout))r.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
         if(!d.depth_target&&!layout.expanded_bytes_per_pixel)r.Format=GuestStorageFormat(d.data_format,layout.format);
         if(HasExactPackedExpansion(d,layout))r.Format=DXGI_FORMAT_R32G32B32A32_TYPELESS;
+        if(d.UsesRaw32())r.Format=DXGI_FORMAT_R32_TYPELESS;
         if(!word_casts.empty())r.Format=layout.format;
         if(d.depth_target) {
             if(d.writable||d.render_target||(d.samples>1&&d.levels!=1)||
