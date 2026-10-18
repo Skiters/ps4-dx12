@@ -245,7 +245,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
             if (image.is_written)
                 pipeline_writes.push_back({image.GetSharp(stage->info), image.is_array, image.is_depth});
             const auto sharp=image.GetSharp(stage->info);
-            if(!image.is_depth&&(u32(sharp.GetDataFmt())==4||u32(sharp.GetDataFmt())==9||u32(sharp.GetDataFmt())==10))
+            if(!image.is_depth&&(u32(sharp.GetDataFmt())==4||u32(sharp.GetDataFmt())==5||u32(sharp.GetDataFmt())==9||u32(sharp.GetDataFmt())==10))
                 raw32_views.push_back({sharp,image.is_array,image.is_depth});
             if(u32(sharp.GetDataFmt())==9&&(sharp.GetNumberFmt()==AmdGpu::NumberFormat::Snorm||
                sharp.GetNumberFmt()==AmdGpu::NumberFormat::Sint))

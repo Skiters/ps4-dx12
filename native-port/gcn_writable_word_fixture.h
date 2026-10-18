@@ -6,8 +6,27 @@ namespace NativeDX12 {
 // Real T# loads, image_load/image_store and S_BARRIER through Liverpool/GCN.
 // Independent endpoint constants check the shared word BEFORE and AFTER store.
 inline void RunWritableWordGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    std::byte* memory,std::byte* backing,u64 base,bool cached_seed=false,u32 scalar_number=4){
-    constexpr u32 OldWord=0xc00805ff,NewWord=0x5ff00200,SeedWord=0x4007fe00;
+    std::byte* memory,std::byte* backing,u64 base,bool cached_seed=false,u32 scalar_number=4,u32 scalar_format=4){
+    constexpr u32 OldWord=0xc00805ff,NewWord=0x5ff00200;
+    const u32 SeedWord=scalar_format==5?0x3c00c000:0x4007fe00;
+    // Independent typed R16G16 endpoints; pinned RemapSwizzle leaves RG unchanged.
+    const auto scalar_channels=[&](u32 word){
+        if(scalar_format!=5)return std::array<u32,4>{word,0,0,word};
+        u32 lo=word&65535,hi=word>>16;
+        const auto channel=[&](u32 half){
+            if(scalar_number==4)return half;
+            if(scalar_number==5)return u32(s32(s16(half)));
+            if(scalar_number==0)return std::bit_cast<u32>(float(half)/65535.f);
+            if(scalar_number==1)return std::bit_cast<u32>(std::max(-1.f,float(s16(half))/32767.f));
+            // Three authored finite half words, not a copy of the GPU codec.
+            if(word==OldWord)return half==lo?0x38bfe000u:0xc0010000u;
+            if(word==SeedWord)return half==lo?0xc0000000u:0x3f800000u;
+            return half==lo?0x38000000u:0x43fe0000u;
+        };
+        const u32 r=channel(lo),g=channel(hi);
+        const u32 one=scalar_number==4||scalar_number==5?1:0x3f800000;
+        return std::array<u32,4>{r,g,0,one};
+    };
     constexpr u32 ImageOffset=16384,OutputOffset=57344,Bytes=65536;
     struct alignas(256) Code{std::array<u32,256> words{};} code;
     alignas(256) std::array<AmdGpu::Image,2> table{};
@@ -20,7 +39,7 @@ inline void RunWritableWordGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverp
         rasterizer.NotifyHostMapping(base,Bytes,true,true);memset(memory,0xa7,Bytes);
         AmdGpu::Image scalar{};scalar.base_address=(base+ImageOffset)>>8;
         scalar.type=u64(AmdGpu::ImageType::Color2D);scalar.width=scalar.height=scalar.pitch=31;
-        scalar.data_format=4;scalar.num_format=scalar_number;scalar.tiling_index=5;
+        scalar.data_format=scalar_format;scalar.num_format=scalar_number;scalar.tiling_index=5;
         scalar.dst_sel_x=4;scalar.dst_sel_y=5;scalar.dst_sel_z=6;scalar.dst_sel_w=7;
         const auto desc=DescribeGuestTexture(scalar);const auto layout=LayoutGuestTexture(desc);
         for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)
@@ -60,23 +79,26 @@ inline void RunWritableWordGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverp
                 0xe0300004,0x80021400,0xbf8c0000,0xe0700060,0x80011400,
                 0x7e000281,0x7e020280};
             memcpy(expected.data()+OutputOffset+96,&OldWord,4);
-            if(warm)seed.insert(seed.end(),{0x7e1802ff,SeedWord,0x7e1a0280,0x7e1c0280,0x7e1e02ff,SeedWord,
+            const auto seed_values=scalar_channels(SeedWord);
+            if(warm)seed.insert(seed.end(),{0x7e1802ff,seed_values[0],0x7e1a02ff,seed_values[1],0x7e1c0280,0x7e1e02ff,seed_values[3],
                 0xf0200f00,write_operand|0x0c00,0xbf8c0000,0xbf8a0000});
             seed.insert(seed.end(),{0xf0000f00,write_operand|0x0400,0xbf8c0000});
             for(u32 channel=0;channel<4;++channel){seed.push_back(0xe0700050|channel*4);seed.push_back(0x80010000|((channel+4)<<8));}
-            seed.push_back(0xbf810000);dispatch(seed,0x5752434143484900ull+warm+u64(reverse)*16+(u64(scalar_number)<<32));
-            const u32 word=warm?SeedWord:OldWord;const u32 warm_channels[]{word,0,0,word};
-            memcpy(expected.data()+OutputOffset+80,warm_channels,16);
+            seed.push_back(0xbf810000);dispatch(seed,0x5752434143484900ull+warm+u64(reverse)*16+(u64(scalar_number)<<32)+(u64(scalar_format)<<40));
+            const auto warm_channels=scalar_channels(warm?SeedWord:OldWord);
+            memcpy(expected.data()+OutputOffset+80,warm_channels.data(),16);
         }
+        const auto write_values=scalar_channels(NewWord);
         std::vector<u32> words{0xc0c80100,0xc0cc0108,0xbf8c0000,0x7e000281,0x7e020280,
             0xf0000f00,read_operand|0x0400,0xbf8c0000,
-            0x7e1802ff,NewWord,0x7e1a0280,0x7e1c0280,0x7e1e02ff,NewWord,
+            0x7e1802ff,write_values[0],0x7e1a02ff,write_values[1],0x7e1c0280,0x7e1e02ff,write_values[3],
             0xf0200f00,write_operand|0x0c00,0xbf8c0000,0xbf8a0000,
             0xf0000f00,read_operand|0x0800,0xbf8c0000};
         for(u32 channel=0;channel<8;++channel){words.push_back(0xe0700000|channel*4);words.push_back(0x80010000|((channel+4)<<8));}
         if(cached_seed)words.insert(words.end(),{0xe0300004,0x80021400,0xbf8c0000,0xe0700020,0x80011400});
-        words.push_back(0xbf810000);dispatch(words,0x57524f5244414c00ull+number+u64(reverse)*16+(u64(cached_seed)<<16)+(u64(scalar_number)<<32));
-        const std::array<u32,4> before=cached_seed&&warm?(number==1?std::array<u32,4>{0xbf800000,0x3f800000,0,0x3f800000}:
+        words.push_back(0xbf810000);dispatch(words,0x57524f5244414c00ull+number+u64(reverse)*16+(u64(cached_seed)<<16)+(u64(scalar_number)<<32)+(u64(scalar_format)<<40));
+        const std::array<u32,4> before=cached_seed&&warm&&scalar_format==5?(number==1?std::array<u32,4>{0,std::bit_cast<u32>(48.f/511.f),std::bit_cast<u32>(-64.f/511.f),0}:
+            std::array<u32,4>{0,48,u32(-64),0}):cached_seed&&warm?(number==1?std::array<u32,4>{0xbf800000,0x3f800000,0,0x3f800000}:
             std::array<u32,4>{u32(-512),511,0,1}):number==1?std::array<u32,4>{0x3f800000,0xbf800000,0,0xbf800000}:
             std::array<u32,4>{511,u32(-511),0,u32(-1)};
         const std::array<u32,4> after=number==1?std::array<u32,4>{0xbf800000,0,0x3f800000,0x3f800000}:
@@ -100,8 +122,8 @@ inline void RunWritableWordGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverp
             throw std::runtime_error("Actual GCN writable word alias lost contents/barrier/padding");
         }
     }
-    printf("SCALAR donor number=%u\n",scalar_number);
-    puts(cached_seed?"PASS:8 actual GCN cached ordinary R32 I(GpuModified0/1) to signed packed10 writer, separate raw B, before/after barrier and full65536 bytes":
+    printf("SCALAR donor data=%u number=%u\n",scalar_format,scalar_number);
+    puts(cached_seed?"PASS:8 actual GCN cached ordinary32-bit I(GpuModified0/1) to signed packed10 writer, separate raw B, before/after barrier and full65536 bytes":
         "PASS:8 actual GCN signed packed10/R32 stores, before/after S_BARRIER, both descriptor orders, warm reuse and full65536 bytes");
 }
 } // namespace NativeDX12

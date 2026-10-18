@@ -104,6 +104,30 @@ std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool su
     if(!supported||!IsDirectReadonlyWordClass(d))return {};
     return formats;
 }
+std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool supported){
+    // Original _32BIT storage remains mutable after a write. Keep typed R16G16
+    // UAVs and raw R32 codecs on one allocation, without changing the guest I.
+    static constexpr std::array formats{DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_SINT,
+        DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,DXGI_FORMAT_R16G16_UINT,
+        DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,
+        DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
+        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT};
+    if(!supported||!d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1)return {};
+    if(d.UsesRaw32())return formats;
+    if(d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))return formats;
+    if(d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7))return formats;
+    if((d.data_format==9&&(d.number_format==0||d.number_format==4))||
+       (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5)))return formats;
+    return {};
+}
+bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
+    if(!entry.texture.handle)return false;
+    const auto format=LayoutGuestTexture(view).format;
+    const auto native=entry.texture.handle->GetDesc().Format;
+    if(native==format||entry.texture.AllowsCast(format))return true;
+    return native==(view.UsesRaw32()?DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(view.data_format,format));
+}
 bool IsReadonlyRawR32Class(const GuestTextureDesc& d){
     if(d.writable||d.render_target||d.depth_target||d.stencil_address||d.native_raw32||
        !std::has_single_bit(d.samples)||d.samples>16||
@@ -329,15 +353,17 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     // UAVs have no component mapping; guest storage swizzles are lowered in
     // the shader and do not require separate physical images.
     source.swizzle=view.swizzle={4,5,6,7};
-    const auto word_format=[](uint32_t format){return format==4||format==9||format==10;};
+    const auto word_format=[](uint32_t format){return format==4||format==5||format==9||format==10;};
     // Ordinary R32 UINT/SINT/FLOAT already use the same four-byte typeless
     // allocation with typed views. Numeric interpretation belongs to the view;
     // requiring a history-dependent raw flag retires valid I and loses its bits.
     const auto raw_word=[](const GuestTextureDesc& d){return d.UsesRaw32()||
-        (d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7));};
+        (d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))||
+        (d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7));};
     if(raw_word(source)&&raw_word(view)&&word_format(source.data_format)&&word_format(view.data_format)){
         // Only comparison copies change. Both actual layouts are four-byte
-        // R32 words; the original image class, codecs and ownership survive.
+        // words; typed R16G16 uses an actual resource cast, checked at binding.
+        // The original image class, codecs and ownership survive.
         source.native_packed10_raw=view.native_packed10_raw=false;
         source.data_format=view.data_format=4;source.number_format=view.number_format=4;
         source.native_raw32=view.native_raw32=true;
@@ -1008,6 +1034,8 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
+    if(shader_alias&&desc.data_format!=sampled_view.data_format&&!CanBindNativeWordFormat(*this,sampled_view))
+        throw std::invalid_argument("Native image word alias requires a compatible resource format list");
     Entry view;view.desc=sampled_view;view.desc.stencil_address=desc.stencil_address;
     view.layout=shader_alias||block_alias||depth_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
 }
@@ -1021,6 +1049,8 @@ void EncodeGuestSubresource(const GuestTextureDesc& d,const GuestTextureLayout& 
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(uint32_t mip)const {
     if(!desc.writable||mip<desc.first_mip||mip>=desc.levels)throw std::out_of_range("invalid guest texture UAV mip/access");
+    if(texture.handle&&!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+        throw std::invalid_argument("Native texture resource does not allow UAV views");
     D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=layout.format;
     if(desc.volume_depth){view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE3D;view.Texture3D={mip,0,std::max(desc.volume_depth>>mip,1u)};return view;}
     if(desc.one_dimensional) {
@@ -1041,6 +1071,10 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
        writable_view.first_layer>=writable_view.layers||!writable_view.view_layers||
        writable_view.view_layers>writable_view.layers-writable_view.first_layer)
         throw std::invalid_argument("Incompatible native writable view storage/range");
+    if(desc.data_format!=writable_view.data_format&&!CanBindNativeWordFormat(*this,writable_view))
+        throw std::invalid_argument("Native writable word alias requires a compatible resource format list");
+    if(texture.handle&&!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+        throw std::invalid_argument("Native texture resource does not allow UAV views");
     Entry view;view.desc=writable_view;view.layout=LayoutGuestTexture(writable_view);return view.Uav(mip);
 }
 D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(uint32_t mip)const {
@@ -2576,7 +2610,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(gpu_detile&&!tiler_)tiler_=std::make_shared<GuestTiler>(device_.Get());
     if(d.samples>1&&!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
     auto cast_formats=PackedFloatCasts(layout.format,texture_allocator_.SupportsFormatCasting());
-    const auto word_casts=ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
+    const auto word_casts=d.writable?WritableWordCasts(d,texture_allocator_.SupportsFormatCasting()):
+        ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
     if(!word_casts.empty())cast_formats=word_casts;
     if(d.samples>1&&(d.data_format==6||d.data_format==34)&&cast_formats.empty())
         throw std::runtime_error("Native packed-float MSAA requires bit-preserving D3D12 format casting");
@@ -2612,6 +2647,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(d.data_format,layout.format);
             if(d.samples==1)r.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
+        if(!word_casts.empty())r.Format=layout.format;
         if(d.render_target||(d.samples>1&&!d.depth_target)) {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{layout.format};
             Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));

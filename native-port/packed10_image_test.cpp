@@ -191,18 +191,50 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
         if(!CompatibleGuestWritableStorage(packed,scalar)||!CompatibleGuestWritableStorage(scalar,packed))
             throw std::runtime_error("Exact raw word storage was not compatible in both directions");
         auto ordinary=scalar;ordinary.native_raw32=false;
-        if(!CompatibleGuestWritableStorage(packed,ordinary)||!CompatibleGuestWritableStorage(ordinary,packed))
-            throw std::runtime_error("Ordinary R32_UINT lost its exact word representation without a codec hint");
+        for(u32 number:{4u,5u,7u}){
+            ordinary.number_format=number;
+            if(!CompatibleGuestWritableStorage(packed,ordinary)||!CompatibleGuestWritableStorage(ordinary,packed))
+                throw std::runtime_error("Ordinary R32 lost its exact word representation without a codec hint");
+        }
+        auto rg16=ordinary;rg16.data_format=5;
+        for(u32 number:{0u,1u,4u,5u,7u}){
+            rg16.number_format=number;
+            if(!CompatibleGuestWritableStorage(packed,rg16)||!CompatibleGuestWritableStorage(rg16,packed))
+                throw std::runtime_error("Typed R16G16 lost its mutable word storage");
+        }
         for(u32 negative=0;negative<8;++negative){auto bad=scalar;
             switch(negative){case 0:bad.width++;break;case 1:bad.pitch+=32;break;
             case 2:bad.samples=4;break;case 3:bad.render_target=true;break;case 4:bad.depth_target=true;break;
-            case 5:bad.writable=false;break;case 6:bad.native_raw32=false;bad.number_format=7;break;case 7:bad.data_format=16;break;}
+            case 5:bad.writable=false;break;case 6:bad.stencil_address=bad.address+65536;break;case 7:bad.data_format=16;break;}
             if(CompatibleGuestWritableStorage(packed,bad)||CompatibleGuestWritableStorage(bad,packed))
                 throw std::runtime_error("Writable raw word admitted an incompatible geometry/access/codec");
         }
         auto expanded=packed;expanded.number_format=0;expanded.native_packed10_raw=false;
         if(CompatibleGuestWritableStorage(expanded,scalar)||CompatibleGuestWritableStorage(scalar,expanded))
             throw std::runtime_error("Typed packed10 storage was mistaken for a raw R32 allocation");
+        ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
+        ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
+        PlacedTextureAllocator allocator(device.Get(),1024*1024,4*1024*1024);
+        if(!allocator.SupportsFormatCasting())throw std::runtime_error("Word cast fixture requires native format-list support");
+        rg16.number_format=4;GuestTextureCache::Entry image;image.desc=rg16;image.layout=LayoutGuestTexture(rg16);
+        D3D12_RESOURCE_DESC shape{};shape.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        shape.Width=rg16.width;shape.Height=rg16.height;shape.DepthOrArraySize=shape.MipLevels=1;
+        shape.SampleDesc.Count=1;shape.Format=DXGI_FORMAT_R16G16_UINT;shape.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        const std::array casts{DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R32_UINT};
+        image.texture=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON,nullptr,casts);
+        const auto uav=image.Uav(scalar,0);
+        if(uav.Format!=DXGI_FORMAT_R32_UINT||!image.texture.AllowsCast(uav.Format))
+            throw std::runtime_error("Mutable word view lost actual native resource casting");
+        Descriptors views(device.Get(),D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,true);
+        device->CreateUnorderedAccessView(image.texture.handle.Get(),nullptr,&uav,views.Cpu(0));
+        GuestTextureCache::Entry no_cast;no_cast.desc=image.desc;no_cast.layout=image.layout;
+        no_cast.texture=image.texture;no_cast.texture.castable_formats.reset();
+        bool rejected=false;try{(void)no_cast.Uav(scalar,0);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Writable word alias bypassed its actual cast-list proof");
+        shape.Flags=D3D12_RESOURCE_FLAG_NONE;no_cast.texture=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON,nullptr,casts);
+        rejected=false;try{(void)no_cast.Uav(scalar,0);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Writable word alias invented UAV permission on a readonly allocation");
+        Rasterizer validation(device.Get());validation.ValidateDebugMessages();
         puts("PASS: common writable word domain preserves geometry, permissions and representation negatives");return 0;
     }
     if(mode==L"packed10-0-word-writer"||mode==L"packed10-1-word-writer"||
