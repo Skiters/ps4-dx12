@@ -7,6 +7,7 @@
 #include "gcn_ordered_formatted_fixture.h"
 #include "gcn_readonly_numeric_fixture.h"
 #include "gcn_writable_word_fixture.h"
+#include "gcn_shared_exponent_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -35,6 +36,10 @@ static ComPtr<ID3D12Device> HardwareDevice(DXGI_FORMAT required_format=DXGI_FORM
 }
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and attachment mode");
+    const bool shared_exponent_sample=std::string_view(argv[3])=="shared-exponent-sample-owned";
+    const bool shared_exponent_extremes=std::string_view(argv[3])=="shared-exponent-extremes-owned";
+    const bool shared_exponent_word=std::string_view(argv[3])=="shared-exponent-word-donor-owned";
+    const bool shared_exponent=shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_color=std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool owned=mode.ends_with("-owned");
@@ -73,7 +78,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -133,7 +138,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(writable_word){
+    if(shared_exponent){
+        RunSharedExponentGcnFixture(rasterizer,gpu,memory,backing,base,shared_exponent_sample,shared_exponent_extremes,shared_exponent_word);
+    }else if(writable_word){
         RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_r11?6:cached_rg16?5:4,packed_word_writer);
     }else if(readonly_numeric){
         RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
@@ -997,7 +1004,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

@@ -212,9 +212,11 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
             if(CompatibleGuestWritableStorage(packed,bad)||CompatibleGuestWritableStorage(bad,packed))
                 throw std::runtime_error("Writable raw word admitted an incompatible geometry/access/codec");
         }
-        auto expanded=packed;expanded.number_format=0;expanded.native_packed10_raw=false;
-        if(CompatibleGuestWritableStorage(expanded,scalar)||CompatibleGuestWritableStorage(scalar,expanded))
-            throw std::runtime_error("Typed packed10 storage was mistaken for a raw R32 allocation");
+        // Original _32BIT includes ordinary typed packed10. Compatibility is
+        // logical; the binding still needs a real mutable resource cast below.
+        auto typed_packed=packed;typed_packed.number_format=0;typed_packed.native_packed10_raw=false;
+        if(!CompatibleGuestWritableStorage(typed_packed,scalar)||!CompatibleGuestWritableStorage(scalar,typed_packed))
+            throw std::runtime_error("Typed packed10 lost original mutable word compatibility");
         ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
         ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
         PlacedTextureAllocator allocator(device.Get(),1024*1024,4*1024*1024);
@@ -223,7 +225,8 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
         D3D12_RESOURCE_DESC shape{};shape.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         shape.Width=rg16.width;shape.Height=rg16.height;shape.DepthOrArraySize=shape.MipLevels=1;
         shape.SampleDesc.Count=1;shape.Format=DXGI_FORMAT_R16G16_UINT;shape.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-        const std::array casts{DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R32_UINT};
+        const std::array casts{DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R32_UINT,
+            DXGI_FORMAT_R9G9B9E5_SHAREDEXP,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
         image.texture=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON,nullptr,casts);
         const auto uav=image.Uav(scalar,0);
         if(uav.Format!=DXGI_FORMAT_R32_UINT||!image.texture.AllowsCast(uav.Format))
@@ -234,6 +237,11 @@ int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_v
         no_cast.texture=image.texture;no_cast.texture.castable_formats.reset();
         bool rejected=false;try{(void)no_cast.Uav(scalar,0);}catch(const std::invalid_argument&){rejected=true;}
         if(!rejected)throw std::runtime_error("Writable word alias bypassed its actual cast-list proof");
+        GuestTextureCache::Entry typed_only;typed_only.desc=typed_packed;typed_only.layout=LayoutGuestTexture(typed_packed);
+        auto typed_shape=shape;typed_shape.Format=DXGI_FORMAT_R10G10B10A2_TYPELESS;
+        typed_only.texture=allocator.Allocate(typed_shape,D3D12_RESOURCE_STATE_COMMON);
+        rejected=false;try{(void)typed_only.Uav(scalar,0);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Typed packed10 allocation invented a missing cross-family cast");
         shape.Flags=D3D12_RESOURCE_FLAG_NONE;no_cast.texture=allocator.Allocate(shape,D3D12_RESOURCE_STATE_COMMON,nullptr,casts);
         rejected=false;try{(void)no_cast.Uav(scalar,0);}catch(const std::invalid_argument&){rejected=true;}
         if(!rejected)throw std::runtime_error("Writable word alias invented UAV permission on a readonly allocation");

@@ -112,7 +112,8 @@ std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool su
         DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,
         DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,
         DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
-        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R11G11B10_FLOAT};
+        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,
+        DXGI_FORMAT_R9G9B9E5_SHAREDEXP,DXGI_FORMAT_R11G11B10_FLOAT};
     const auto available=std::span(formats).first(formats.size()-size_t(!r11_uav));
     if(!supported||!d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1)return {};
     if(d.UsesRaw32())return available;
@@ -362,14 +363,16 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     // UAVs have no component mapping; guest storage swizzles are lowered in
     // the shader and do not require separate physical images.
     source.swizzle=view.swizzle={4,5,6,7};
-    const auto word_format=[](uint32_t format){return format==4||format==5||format==6||format==9||format==10;};
+    const auto word_format=[](uint32_t format){return format==4||format==5||format==6||format==9||format==10||format==34;};
     // Ordinary R32 UINT/SINT/FLOAT already use the same four-byte typeless
     // allocation with typed views. Numeric interpretation belongs to the view;
     // requiring a history-dependent raw flag retires valid I and loses its bits.
     const auto raw_word=[](const GuestTextureDesc& d){return d.UsesRaw32()||
         (d.data_format==4&&(d.number_format==4||d.number_format==5||d.number_format==7))||
         (d.data_format==5&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7))||
-        (d.data_format==6&&d.number_format==7);};
+        (d.data_format==9&&(d.number_format==0||d.number_format==4))||
+        (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==9))||
+        ((d.data_format==6||d.data_format==34)&&d.number_format==7);};
     if(raw_word(source)&&raw_word(view)&&word_format(source.data_format)&&word_format(view.data_format)){
         // Only comparison copies change. Both actual layouts are four-byte
         // words; typed R16G16 uses an actual resource cast, checked at binding.
@@ -420,6 +423,11 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
 }
 bool GuestTextureCache::CanBindReadonlyWordView(const Entry& image,const GuestTextureDesc& view)const{
     return CanBindReadonlyWordSrv(image,view);
+}
+bool GuestTextureCache::CanRetainReadonlyWordStorage(const GuestTextureDesc& desc)const{
+    // Sharing tests deliberately exclude an identical descriptor. Retention
+    // asks whether this original image can have a real mutable-word backing.
+    return !ReadonlyWordCasts(desc,texture_allocator_.SupportsFormatCasting()).empty();
 }
 bool GuestTextureCache::HasOwnedShaderStorage(const GuestTextureDesc& desc)const{
     const auto [first,last]=address_index_.equal_range(desc.address);
@@ -1007,6 +1015,8 @@ std::vector<std::byte> DecodeGuestSubresource(const GuestTextureDesc& d,const Gu
     CopyGuestSubresource(d,l,mip,layer,bytes.data(),linear.data(),false);return linear;
 }
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
+    if(IsDirectReadonlyWordClass(desc)&&texture.handle&&!CanBindNativeWordFormat(*this,desc))
+        throw std::invalid_argument("Native readonly word view requires its actual resource cast list");
     // Raw readonly packed10 is decoded and swizzled per texel in the shader.
     // The SRV must expose its unmodified R32 word even for forced guest channels.
     auto swizzle=desc.UsesRawPacked10()?std::array<uint32_t,4>{4,5,6,7}:desc.swizzle;
@@ -1074,8 +1084,12 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(uint32_t mip)cons
     return view;
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextureDesc& writable_view,uint32_t mip)const {
+    auto written_source=desc;written_source.writable=true;
+    const bool mutable_readonly=IsDirectReadonlyWordClass(desc)&&writable_view.writable&&
+        texture.handle&&(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)&&
+        CompatibleGuestWritableStorage(written_source,writable_view)&&CanBindNativeWordFormat(*this,writable_view);
     if(writable_view==desc)return Uav(mip);
-    if((!CompatibleGuestWritableStorage(desc,writable_view)&&
+    if((!mutable_readonly&&!CompatibleGuestWritableStorage(desc,writable_view)&&
         !(desc.writable&&writable_view.writable&&desc.levels>=writable_view.levels&&
           CompatibleGuestShaderMipPrefixes(desc,layout,writable_view,LayoutGuestTexture(writable_view))))||
        writable_view.first_layer>=writable_view.layers||!writable_view.view_layers||
@@ -1740,7 +1754,10 @@ bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const Guest
     if(CompatibleGuestDepthSubview(entry.desc,entry.layout,desc,layout))return true;
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||
-        ((entry.desc.writable||!desc.writable)&&CompatibleGuestShaderStorage(entry.desc,desc))||
+        ((entry.desc.writable||!desc.writable||
+          (IsDirectReadonlyWordClass(entry.desc)&&entry.texture.handle&&
+           (entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)&&
+           CanBindNativeWordFormat(entry,desc)))&&CompatibleGuestShaderStorage(entry.desc,desc))||
         CanBindReadonlyWordSrv(entry,desc)||
         (!desc.writable&&!desc.render_target&&!desc.depth_target&&CompatibleGuestSampledStorage(entry.desc,desc))||
         CanBindReadonlyBcMipPrefix(entry,desc,layout))&&
@@ -2659,6 +2676,13 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             if(d.samples==1)r.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
         if(!word_casts.empty())r.Format=layout.format;
+        // Pinned Vulkan non-block images always retain storage usage. Physical
+        // mutable-word capability is independent of the original readonly
+        // shader descriptor and does not publish writes, residency or ownership.
+        if(!d.writable&&!word_casts.empty()){
+            r.Format=DXGI_FORMAT_R32_UINT;
+            r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        }
         if(d.render_target||(d.samples>1&&!d.depth_target)) {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{layout.format};
             Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));

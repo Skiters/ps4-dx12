@@ -1403,6 +1403,10 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
         const ImageResource source{.sharp_fetch=ConstructSharpFetch<AmdGpu::Image>(usage.sharps[0]),
             .is_array=bool(flags.is_array),.is_r128=bool(flags.is_r128),.post_op=usage.sharps[0].post_op};
         const auto format=source.GetSharp(info).GetDataFmt();
+        // RGB9E5 has no typed UAV on the native adapter. A read promoted by
+        // an actual aliased writer uses raw words and decodes each texel.
+        if(u32(format)==34)return usage.user->GetOpcode()!=IR::Opcode::ImageWrite&&
+            !IsImageAtomicInstruction(*usage.user);
         if(u32(format)!=4&&u32(format)!=10)return false;
         for(const auto& other:resources){
             if(!IsImageInstruction(*other.user))continue;
@@ -1439,16 +1443,16 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
                 .is_depth=bool(other_flags.is_depth),.is_array=bool(other_flags.is_array),.is_r128=bool(other_flags.is_r128),
                 .post_op=other.sharps[0].post_op};
             const auto other_sharp=alias.GetSharp(info);
-            if((signed_packed(other_sharp)||u32(other_sharp.GetDataFmt())==4||u32(other_sharp.GetDataFmt())==5||u32(other_sharp.GetDataFmt())==6||u32(other_sharp.GetDataFmt())==10)&&
+            if((signed_packed(other_sharp)||u32(other_sharp.GetDataFmt())==4||u32(other_sharp.GetDataFmt())==5||u32(other_sharp.GetDataFmt())==6||u32(other_sharp.GetDataFmt())==10||u32(other_sharp.GetDataFmt())==34)&&
                NativeImageViewAliases(source,alias,info))return true;
         }
         for(const auto& write:info.native_pipeline_writes)
-            if((signed_packed(write.sharp)||u32(write.sharp.GetDataFmt())==4||u32(write.sharp.GetDataFmt())==5||u32(write.sharp.GetDataFmt())==6||u32(write.sharp.GetDataFmt())==10)&&
+            if((signed_packed(write.sharp)||u32(write.sharp.GetDataFmt())==4||u32(write.sharp.GetDataFmt())==5||u32(write.sharp.GetDataFmt())==6||u32(write.sharp.GetDataFmt())==10||u32(write.sharp.GetDataFmt())==34)&&
                NativeImageViewAliases(source,write,info))return true;
         for(const auto& view:info.native_pipeline_signed_packed_views)
             if(signed_packed(view.sharp)&&NativeImageViewAliases(source,view,info))return true;
         for(const auto& view:info.native_pipeline_raw32_views)
-            if((u32(view.sharp.GetDataFmt())==4||u32(view.sharp.GetDataFmt())==5||u32(view.sharp.GetDataFmt())==6||u32(view.sharp.GetDataFmt())==10)&&
+            if((u32(view.sharp.GetDataFmt())==4||u32(view.sharp.GetDataFmt())==5||u32(view.sharp.GetDataFmt())==6||u32(view.sharp.GetDataFmt())==10||u32(view.sharp.GetDataFmt())==34)&&
                NativeImageViewAliases(source,view,info))return true;
         return false;
     };

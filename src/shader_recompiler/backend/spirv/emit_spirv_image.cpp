@@ -459,6 +459,22 @@ static Id PackNativePacked16(EmitContext& ctx, Id color, u32 format) {
     const auto zero = ctx.ConstU32(0U);
     return ctx.OpCompositeConstruct(ctx.U32[4], word, zero, zero, zero);
 }
+// Shared exponent is per texel. Decode before filtering, not after averaging
+// packed mantissas and exponent bits from unrelated texels.
+static Id UnpackNativeSharedExponent(EmitContext& ctx, Id texel) {
+    const Id word = ctx.OpCompositeExtract(ctx.U32[1], texel, 0U);
+    const Id exponent = ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(27U), ctx.ConstU32(5U));
+    // m * 2^(e-24): e+103 is the normal IEEE exponent for the exact scale.
+    const Id scale = ctx.OpBitcast(ctx.F32[1], ctx.OpShiftLeftLogical(ctx.U32[1],
+        ctx.OpIAdd(ctx.U32[1], exponent, ctx.ConstU32(103U)), ctx.ConstU32(23U)));
+    std::array<Id, 3> channels;
+    for (u32 i = 0; i < 3; ++i) {
+        const Id mantissa = ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(i * 9), ctx.ConstU32(9U));
+        channels[i] = ctx.OpFMul(ctx.F32[1], ctx.OpConvertUToF(ctx.F32[1], mantissa), scale);
+    }
+    return ctx.OpCompositeConstruct(ctx.F32[4], channels[0], channels[1], channels[2], ctx.ConstF32(1.0f));
+}
+
 static Id UnpackNativePacked10(EmitContext& ctx, Id texel, AmdGpu::NumberFormat number, u32 format = 9) {
     const bool signed_value = number == AmdGpu::NumberFormat::Snorm || number == AmdGpu::NumberFormat::Sint;
     const bool integer = AmdGpu::IsInteger(number);
@@ -594,7 +610,9 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
             ctx.OpBitcast(ctx.F32[1],ctx.ConstU32(1U)):ctx.ConstF32(1.0f);
         texel=ctx.OpCompositeConstruct(ctx.F32[4],ctx.OpBitcast(ctx.F32[1],word),
             ctx.f32_zero_value,ctx.f32_zero_value,one);
-    }else if(texture.native_packed_format==9||texture.native_packed_format==10)
+    }else if(texture.native_packed_format==34)
+        texel=UnpackNativeSharedExponent(ctx,texel);
+    else if(texture.native_packed_format==9||texture.native_packed_format==10)
         texel=UnpackNativePacked10(ctx,texel,texture.native_packed_number_format,texture.native_packed_format);
     else if(texture.native_packed_format)texel=UnpackNativePacked16(ctx,texel,texture.native_packed_format);
     if (ctx.profile.native_coherent_images && texture.is_storage &&

@@ -156,7 +156,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
         for(auto& [address,domain]:domains){
             if(!domain.cached_plan)domain.cached_plan=textures.PlanCachedImageBinding(domain.desc,domain.layout);
             if(domain.cached_plan)continue;
-            for(const auto& entry:textures.Entries())if(entry->gpu_owned&&entry->HasValidLogicalImage()&&
+            for(const auto& entry:textures.Entries())if(entry->gpu_owned&&textures.CanRevalidateReadonly(*entry)&&
                 (CompatibleGuestImageMipGeometry(domain.desc,domain.layout,entry->desc,entry->layout)||
                  (domain.desc.samples==1&&CompatibleGuestDepthSubview(entry->desc,entry->layout,domain.desc,domain.layout)))){
                 result.pins->push_back(textures.PinBinding(*entry));
@@ -194,7 +194,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 // original I remains the semantic source until BindTextures.
                 // Preserve its old prefix/interpretation for earlier buffers;
                 // do not retile a future expanded tail into B prematurely.
-                if((!MatchesGuestMipLayout(previous->layout,domain.layout)||
+                if(previous->logical_gpu_modified&&(!MatchesGuestMipLayout(previous->layout,domain.layout)||
                     (!CompatibleGuestShaderStorage(previous->desc,domain.desc)&&
                      !CompatibleGuestDepthSubview(previous->desc,previous->layout,domain.desc,domain.layout)))&&
                    std::ranges::any_of(buffers,[&](const auto& buffer){const auto index=size_t(&buffer-buffers.data());
@@ -208,6 +208,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 const auto guest=std::span(reinterpret_cast<const std::byte*>(address),size_t(domain.layout.guest_bytes));
                 auto& entry=textures.Upload(domain.desc,guest,rasterizer.RecordingList(),rasterizer.CompletedFence(),
                     {},false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
+                // Preparation must not publish a future readonly I's ownership
+                // before the original stage binds its buffers and images.
                 if(entry.HasValidLogicalImage()&&!textures.RevalidateReadonly(entry))
                     throw std::runtime_error("Ordered stage grown I cannot retain independent ownership");
                 result.pins->push_back(textures.PinBinding(entry));arm();
@@ -266,7 +268,9 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                     if(!metadata)for(auto& [address,domain]:domains)if(Overlaps(address,domain.layout.guest_bytes,original.address,original.size)){
                         const bool old_prefix=!domain.bound&&!domain.generation&&domain.initial_tiled.handle;
                         auto* image=old_prefix?nullptr:textures.FindValidIndependentImage(domain.desc,domain.layout);
-                        if(!old_prefix&&!image)continue;
+                        // Current readonly I can be retained without an
+                        // original image write. It is not SafeToDownload.
+                        if(!old_prefix&&(!image||!image->logical_gpu_modified))continue;
                         if(address!=original.address)throw std::runtime_error("Ordered formatted read aliases an image subresource");
                         const auto bytes=old_prefix?domain.initial_bytes:image->layout.guest_bytes;
                         if(((address+bytes-1)>>32)>((original.address+original.size-1)>>32))
@@ -316,7 +320,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 if(image.written){
                     entry->buffer_alias_version=true;
                     if(!textures.Own(*entry))throw std::runtime_error("Ordered stage writable I cannot keep independent ownership");
-                }else if(entry->HasValidLogicalImage()&&!textures.RevalidateReadonly(*entry))
+                }else if(textures.CanRevalidateReadonly(*entry)&&!textures.RevalidateReadonly(*entry))
                     throw std::runtime_error("Ordered stage refreshed readonly I cannot retain its logical history");
             }
         }

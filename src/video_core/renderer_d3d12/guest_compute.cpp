@@ -582,7 +582,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     for(size_t i=0;i<ordinary_count;++i)if(!ordered_stages&&separate_overlap(requests[i].address,requests[i].size)){
         if(pending[i].guest_read&&std::ranges::none_of(formatted_metadata,[i](const auto& item){return item.first==i;})){
-            const bool needs_sync=pending[i].formatted_read&&!streams_before_binding(i);
+            bool needs_sync=pending[i].formatted_read&&!streams_before_binding(i);
             const auto request_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                 return buffer.written&&buffer.address<requests[i].address+requests[i].size&&
                     requests[i].address<buffer.address+buffer.size;});
@@ -605,6 +605,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 throw std::runtime_error("Independent formatted image/buffer partial or simultaneous-write ordering is not adapted");
             if(version->logical_dirty)
                 throw std::runtime_error("Formatted buffer cannot read an invalidated independent image version");
+            // Original SafeToDownload requires GpuModified, independently of
+            // retaining a current readonly I beside the native buffer version.
+            needs_sync&=version->logical_gpu_modified;
+            if(!needs_sync&&!overlaps_writer)continue;
             const auto first_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                 return buffer.written&&buffer.address<version->desc.address+version->layout.guest_bytes&&
                     version->desc.address<buffer.address+buffer.size;});
@@ -615,7 +619,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 const auto invalidating_writer=std::ranges::find_if(requests,[&](const auto& buffer){
                     return buffer.written&&buffer.WriteRange().address==version->desc.address;
                 });
-                const bool reads_image=pending[i].formatted_read&&
+                const bool reads_image=pending[i].formatted_read&&version->logical_gpu_modified&&
                     (invalidating_writer==requests.end()||i<size_t(invalidating_writer-requests.begin()));
                 const auto ownership=DescribeGuestImageOwnership(*version);
                 const auto& layout=version->layout;const auto& desc=version->desc;

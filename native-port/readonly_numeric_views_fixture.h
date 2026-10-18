@@ -69,6 +69,10 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
             cache.SetIndependentVersionTransfer([&](auto&,u64,u64)->Resource{++transfers;throw std::runtime_error("Readonly compatible view attempted private I conversion");},acquire,[&](auto&){++retirements;});
             const auto source_desc=integer_first?u:f;
             auto& source=cache.Upload(source_desc,original,renderer.RecordingList(),renderer.CompletedFence());
+            if(cross_word){
+                require(!source.logical_gpu_modified&&cache.RevalidateReadonly(source),"Current readonly word cannot retain independent storage");
+                require(!source.logical_gpu_modified&&source.desc==source_desc,"Readonly retention invented original GPU modification or changed its class");
+            }
             // A real GPU copy, like original CopyImage, establishes modified I
             // while retaining a readonly cache description/allocation. CPU
             // upload alone must not invent that original GpuModified history.
@@ -79,14 +83,18 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
             renderer.RetainUntilFinish([copied](u64){(void)copied;});
             require(cache.Own(source),"Readonly GPU-copy fixture cannot retain its physical-geometry witness");
             const auto uid=source.image_uid;auto* native=source.texture.handle.Get();auto pin=cache.PinBinding(source);const bool modified=source.logical_gpu_modified;
-            require(!(native->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),"Readonly allocation gained unrequested UAV permission");
+            // Original ImageUsageFlags always includes storage for non-block
+            // images. Physical UAV capability must not mutate logical access.
+            require(!source.desc.writable,"Readonly description gained guest write authority");
+            bool denied=false;try{(void)source.Uav(source.desc,0);}catch(const std::out_of_range&){denied=true;}
+            require(denied,"Readonly binding acquired a writable view without an explicit writer");
             auto& first=cache.Upload(integer_first?f:u,unrelated,renderer.RecordingList(),renderer.CompletedFence());
             require(&first==&source&&cache.Entries().size()==1&&source.image_uid==uid&&source.texture.handle.Get()==native&&source.desc==source_desc&&
                 !transfers&&!retirements&&source.logical_gpu_modified==modified,"Readonly numeric view recreated or reclassified the original I");
             if(cross_word){
                 const auto other_desc=integer_first?f:u;
                 GuestTextureCache::Entry no_cast;no_cast.desc=source.desc;no_cast.layout=source.layout;no_cast.texture=source.texture;no_cast.texture.castable_formats.reset();
-                bool rejected=false;try{(void)no_cast.Srv(other_desc);}catch(const std::invalid_argument&){rejected=true;}
+                bool rejected=false;try{(void)no_cast.Srv(f);}catch(const std::invalid_argument&){rejected=true;}
                 require(rejected,"Word view sharing bypassed actual resource format-list proof");
                 auto writer=other_desc;writer.writable=true;require(!CompatibleGuestReadonlyWordStorage(source.desc,writer),"Readonly word sharing admitted a writer");
                 const OrderedGuestImage images[]{{source_desc,LayoutGuestTexture(source_desc),false,false},{other_desc,LayoutGuestTexture(other_desc),false,false}};
@@ -104,6 +112,23 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
                 void* cpu{};Check(rb.handle->Map(0,nullptr,&cpu));const std::vector<std::byte> expected_b(PhysicalBytes,std::byte{0x39});
                 const bool unchanged=!memcmp(cpu,expected_b.data(),PhysicalBytes);D3D12_RANGE none{};rb.handle->Unmap(0,&none);
                 require(unchanged,"Readonly ordered word views published I over physical/resident B");
+                require(cache.CanRetainReadonlyWordStorage(source_desc),"Ordinary word retention used a different-view sharing predicate");
+                auto raw_writer=selected_u;raw_writer.writable=true;raw_writer.native_raw32=true;
+                auto& written=cache.Upload(raw_writer,unrelated,renderer.RecordingList(),renderer.CompletedFence());
+                require(&written==&source&&source.image_uid==uid&&source.texture.handle.Get()==native&&source.desc==source_desc&&
+                    !transfers&&!retirements,"Explicit word writer replaced or reclassified the original readonly I");
+                const auto writable=source.Uav(raw_writer,1);
+                require(writable.Format==DXGI_FORMAT_R32_UINT,"Explicit writer did not select raw word storage");
+                auto visible=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,true);
+                auto cpu_view=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,false);
+                device->CreateUnorderedAccessView(native,nullptr,&writable,visible->Cpu(0));
+                device->CreateUnorderedAccessView(native,nullptr,&writable,cpu_view->Cpu(0));
+                auto* write_list=renderer.RecordingList();source.texture.Transition(write_list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                ID3D12DescriptorHeap* write_heaps[]{visible->Heap()};write_list->SetDescriptorHeaps(1,write_heaps);
+                const UINT value[]{input[0],0,0,0};
+                write_list->ClearUnorderedAccessViewUint(visible->Gpu(0),cpu_view->Cpu(0),native,value,0,nullptr);
+                source.texture.UavBarrier(write_list);
+                renderer.RetainUntilFinish([visible,cpu_view,pin](u64){(void)visible;(void)cpu_view;(void)pin;});
             }
             const auto fsrv=source.Srv(selected_f),usrv=source.Srv(selected_u);
             auto views=std::make_shared<Descriptors>(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,3,true);auto output=GuestTiler::Scratch(device,32);

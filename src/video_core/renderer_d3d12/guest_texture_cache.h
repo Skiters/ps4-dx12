@@ -42,7 +42,7 @@ struct GuestTextureDesc {
     uint32_t samples=1;
     bool UsesRawPacked10()const{return data_format==9&&!render_target&&!depth_target&&
         (native_packed10_raw||(writable&&(number_format==1||number_format==5)));}
-    bool UsesRaw32()const{return UsesRawPacked10()||((data_format==4||data_format==10)&&
+    bool UsesRaw32()const{return UsesRawPacked10()||((data_format==4||data_format==10||data_format==34)&&
         native_raw32&&writable&&!render_target&&!depth_target);}
     bool operator==(const GuestTextureDesc&)const=default;
 };
@@ -454,14 +454,22 @@ public:
         if(!acquire_independent_||!acquire_independent_(entry))return false;
         entry.SetGpuOwned(true);if(notify_write_)notify_write_(entry);RememberNativeImageStorage(entry);return true;
     }
+    bool CanRevalidateReadonly(const Entry& entry)const{
+        // A refreshed ordinary readonly word image is current without an
+        // original GPU write. Retaining its native version must not invent
+        // GpuModified (which controls formatted I-to-B synchronization).
+        return entry.HasValidLogicalImage()||(entry.cached_native_current&&!entry.logical_dirty&&
+            CanRetainReadonlyWordStorage(entry.desc));
+    }
     bool RevalidateReadonly(Entry& entry){
-        if(!entry.HasValidLogicalImage()||!acquire_independent_||!acquire_independent_(entry))return false;
+        if(!CanRevalidateReadonly(entry)||!acquire_independent_||!acquire_independent_(entry))return false;
         RememberNativeImageStorage(entry);return true;
     }
     bool CanShareReadonlyWordStorage(const GuestTextureDesc& a,const GuestTextureDesc& b)const{
         const bool r32_family=(a.data_format==4||a.UsesRawPacked10())&&(b.data_format==4||b.UsesRawPacked10());
         return (texture_allocator_.SupportsFormatCasting()||r32_family)&&CompatibleGuestReadonlyWordStorage(a,b);
     }
+    bool CanRetainReadonlyWordStorage(const GuestTextureDesc&)const;
     // Actual native view proof is also used to pin the current source before
     // buffer preparation/other image allocations can apply cache pressure.
     bool CanBindReadonlyWordView(const Entry&,const GuestTextureDesc&)const;
