@@ -50,7 +50,8 @@ int main(int argc,char** argv){try{
         mode=="cached-depth-packed18-storage-owned"?18:mode=="cached-depth-packed19-storage-owned"?19:0;
     const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted=mode=="ordered-formatted-owned";
-    const bool readonly_numeric=mode=="readonly-numeric-owned";
+    const bool readonly_numeric_exclusive=mode=="readonly-numeric-exclusive-owned";
+    const bool readonly_numeric=readonly_numeric_exclusive||mode=="readonly-numeric-owned";
     const bool image_writer=mode=="readonly-depth-image"||mode=="readonly-depth-image-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool mixed_planes=mode=="mixed-depth-buffer"||mode=="mixed-depth-buffer-owned"||
@@ -118,7 +119,7 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(readonly_numeric){
-        RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base);
+        RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive);
     }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
     }else if(ordered_formatted){

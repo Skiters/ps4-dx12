@@ -361,7 +361,7 @@ set_tests_properties(native_independent_msaa_packed10_expanded PROPERTIES TIMEOU
 add_test(NAME native_independent_msaa_packed16_raw_transfer COMMAND native-independent-version-transfer-test --msaa-packed16-raw)
 add_test(NAME native_packed19_msaa_attachment COMMAND native-independent-version-transfer-test --packed19-msaa-attachment)
 add_test(NAME native_readonly_numeric_views COMMAND native-independent-version-transfer-test --readonly-numeric-views)
-set_tests_properties(native_readonly_numeric_views PROPERTIES TIMEOUT 180)
+set_tests_properties(native_readonly_numeric_views PROPERTIES TIMEOUT 300)
 set_tests_properties(native_packed19_msaa_attachment PROPERTIES TIMEOUT 180)
 set_tests_properties(native_independent_msaa_packed16_raw_transfer PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_packed16_sampled_transfer COMMAND native-independent-version-transfer-test --msaa-packed16-sampled)

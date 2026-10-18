@@ -27,7 +27,7 @@ public:
     }
 };
 inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    std::byte* memory,std::byte* backing,u64 base){
+    std::byte* memory,std::byte* backing,u64 base,bool exclusive_seed=false){
     constexpr u64 ImageOffset=16384,OutputOffset=57344,AllocationBytes=65536;
     constexpr u32 ImageWord=0xff0000ff,Marker=0x13579bdf;
     struct alignas(256) Code {std::array<u32,256> words{};};
@@ -60,6 +60,7 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         return std::array<u32,4>{one,0,0,one};};
     for(const auto numbers:{std::array<u32,2>{0,4},std::array<u32,2>{1,5},std::array<u32,2>{9,4}})
     for(const bool reverse:{false,true})for(const bool formatted:{false,true})for(const bool modified:{false,true}){
+        if(exclusive_seed&&(numbers!=std::array<u32,2>{0,4}||reverse||formatted||!modified))continue;
         printf("CASE: actual GCN readonly numeric pair=%u/%u reverse=%u formatted=%u GpuModified=%u\n",numbers[0],numbers[1],reverse,formatted,modified);fflush(stdout);
         rasterizer.Finish();rasterizer.UnmapMemory(base,AllocationBytes);rasterizer.MapMemory(base,AllocationBytes);
         rasterizer.NotifyHostMapping(base,AllocationBytes,true,true);memset(memory,0xa7,AllocationBytes);
@@ -101,9 +102,11 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             // Change ORIGINAL GpuModified history through a real image_store,
             // without changing the independently known word. SafeToDownload
             // excludes a merely CPU-initialized readonly I from formatted I->B.
-            initialize(image_write,{0x7e1802ff,Marker,0xe0700000,0x80020c00,
-                0x7e000281,0x7e020280,0x7e0802ff,255,0x7e0a0280,0x7e0c0280,0x7e0e02ff,255,
-                0xf0200f00,0x00000400,0xbf810000},0x524e554d57524954ULL);
+            std::vector<u32> writes;
+            if(!exclusive_seed)writes={0x7e1802ff,Marker,0xe0700000,0x80020c00};
+            writes.insert(writes.end(),{0x7e000281,0x7e020280,0x7e0802ff,255,0x7e0a0280,0x7e0c0280,0x7e0e02ff,255,
+                0xf0200f00,0x00000400,0xbf810000});
+            initialize(image_write,writes,0x524e554d57524954ULL+u64(exclusive_seed));
             auto separate=input;separate.base_address+=4;separate.num_records=1;
             bind(image_write);memcpy(compute.user_data.data(),&image,sizeof(image));memcpy(compute.user_data.data()+8,&separate,sizeof(separate));dispatch();
         }
@@ -127,8 +130,11 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         rasterizer.ReadMemory(output.base_address,output.GetSize());rasterizer.ReadMemory(input.base_address,input.GetSize());rasterizer.Finish();
         if(memcmp(backing,expected.data(),AllocationBytes)){
             for(u64 i=0;i<AllocationBytes;++i)if(backing[i]!=expected[i]){fprintf(stderr,"Readonly numeric mismatch byte=%llu got=%02x expected=%02x\n",i,std::to_integer<unsigned>(backing[i]),std::to_integer<unsigned>(expected[i]));break;}
+            for(u32 i=0;i<9;++i){u32 got{},want{};memcpy(&got,backing+OutputOffset+i*4,4);memcpy(&want,expected.data()+OutputOffset+i*4,4);
+                fprintf(stderr,"Readonly output[%u]=%08x expected=%08x\n",i,got,want);}
             throw std::runtime_error("Readonly numeric views lost typed I/B/order or full physical padding");}
     }
-    puts("PASS:24 actual GCN readonly UNORM/UINT/SNORM/SINT/sRGB pairs, both descriptor orders, original GpuModified0/1, raw B versus eligible formatted I residency and complete65536 physical bytes");
+    puts(exclusive_seed?"PASS: standalone exclusive I preserved across later interior B writer":
+        "PASS:24 actual GCN readonly UNORM/UINT/SNORM/SINT/sRGB pairs, both descriptor orders, original GpuModified0/1, raw B versus eligible formatted I residency and complete65536 physical bytes");
 }
 } // namespace NativeDX12
