@@ -610,6 +610,16 @@ static class Program
                 File.WriteAllText(Path.Combine(Settings.DataRoot, "core-list.json"), JsonSerializer.Serialize(CoreVersions.Discover()));
                 return 0;
             }
+            if (args.Contains("--verify-selected-core"))
+            {
+                var selected = CoreVersions.Selected(Settings.Load()) ?? throw new IOException("Ядро не выбрано.");
+                string path = CoreVersions.Validate(selected);
+                File.WriteAllText(Path.Combine(Settings.DataRoot, "current-core-verification.json"), JsonSerializer.Serialize(new {
+                    executable = path, sha256 = CoreVersions.Hash(path), source = selected.Commit,
+                    selected.Id, selected.ProfileId, runtimeFiles = selected.Files.Count,
+                    validation = "file identities verified; core/game not executed" }));
+                return 0;
+            }
             int launchIndex = Array.IndexOf(args, "--launch-game");
             if (launchIndex >= 0)
             {

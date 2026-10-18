@@ -18446,5 +18446,11 @@
       },
       "scope_correction": "No same-adapter original/native capability mismatch established requiring a fallback. Original-unsupported NVIDIA is not a missing software path. Native supported-adapter semantic defects fixed and narrowly proven; full acceptance separate."
     }
+  },
+  "artifact_retention_policy": {
+    "current_policy": "docs/codex-progress/STORAGE_POLICY.md",
+    "historical_binary_paths": "May be retired after verification; immutable hashes/commands/source/results remain. Never claim acceptance of a rebuilt hash.",
+    "current_application_core": "C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current",
+    "cleanup_evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\FINAL_STORAGE_PROOF.json"
   }
 }

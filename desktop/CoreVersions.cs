@@ -21,6 +21,8 @@ sealed class CoreVersion
     public Dictionary<string, string> Files { get; set; } = [];
     public string Results { get; set; } = "";
     public bool IsolatedProfile { get; set; }
+    // Stable profile identity survives replacement of the current core package.
+    public string ProfileId { get; set; } = "";
     public int ManifestVersion { get; set; } = 1;
     public CoreSourceIdentity? Source { get; set; }
     public CoreBuildIdentity? Build { get; set; }
@@ -166,6 +168,9 @@ static class CoreVersions
     public static string Validate(CoreVersion version)
     {
         if (version.Error is not null) throw new IOException(version.Error);
+        if (!string.IsNullOrEmpty(version.ProfileId) && (version.ProfileId is "." or ".." ||
+            version.ProfileId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            throw new IOException("Некорректная идентичность профиля ядра.");
         if (version.Backend is not ("dx12" or "vulkan")) throw new IOException("Неизвестный backend ядра.");
         if (version.ManifestVersion is < 1 or > 2) throw new IOException("Неизвестная версия manifest ядра.");
         if (version.ManifestVersion == 2) ValidateIdentity(version);
@@ -281,7 +286,8 @@ static class NativeGameLaunch
             var isolated = JsonSerializer.Deserialize<Settings>(JsonSerializer.Serialize(settings))
                 ?? throw new IOException("Не удалось подготовить настройки отдельного профиля ядра.");
             string root = Path.GetFullPath(Path.Combine(Settings.DataRoot, "core-profiles"));
-            string versionRoot = Path.GetFullPath(Path.Combine(root, selected.Id));
+            string versionRoot = Path.GetFullPath(Path.Combine(root,
+                string.IsNullOrEmpty(selected.ProfileId) ? selected.Id : selected.ProfileId));
             if (!versionRoot.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Профиль версии находится вне каталога данных.");
             isolated.ProfileRoot = Directory.Exists(sourceProfile) ? sourceProfile : settings.ProfileRoot;
@@ -338,8 +344,19 @@ static class NativeGameLaunch
     }
     public static bool Start(Process process)
     {
-        ValidateStart(process.StartInfo);
-        return process.Start();
+        string directory = Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(Path.GetFullPath(process.StartInfo.FileName))!);
+        string key = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(directory.ToUpperInvariant())));
+        using var publication = new Mutex(false, @"Local\PS4Desktop-Core-" + key);
+        bool acquired;
+        try { acquired = publication.WaitOne(0); }
+        catch (AbandonedMutexException) { acquired = true; }
+        if (!acquired) throw new IOException("Идёт обновление ядра. Повторите запуск после завершения обновления.");
+        try
+        {
+            ValidateStart(process.StartInfo);
+            return process.Start();
+        }
+        finally { publication.ReleaseMutex(); }
     }
     public static Task<bool> ObserveRuntime(Process process, string destination)
     {

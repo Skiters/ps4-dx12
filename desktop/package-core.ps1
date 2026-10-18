@@ -13,11 +13,14 @@ param(
     [string]$Executable = 'shadPS4-DX12-Core.exe',
     [ValidateSet('Экспериментальное','Тесты пройдены','Проверено в игре')][string]$Status = 'Экспериментальное',
     [string]$Results = '',
+    [string]$ProfileId = '',
     [switch]$IsolatedProfile,
     [switch]$Dirty
 )
 $ErrorActionPreference = 'Stop'
 if ($Id -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]+$') { throw 'Invalid version ID' }
+if ($Backend -eq 'dx12' -and $Id -ne 'dx12-current') { throw 'DX12 uses the single stable Id dx12-current; do not create version archives.' }
+if ($ProfileId -and ($ProfileId -in @('.','..') -or $ProfileId.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0)) { throw 'Invalid profile identity' }
 $root = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd('\') + '\'
 $source = [IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\') + '\'
 function Inside([string]$base, [string]$relative) {
@@ -50,9 +53,74 @@ if ($Dirty -and $sourceIdentity.PatchFile -notin $runtime) { throw 'Source patch
 if ($Backend -eq 'dx12' -and (!$buildIdentity.NativeCompilerContractFile -or $buildIdentity.NativeCompilerContractFile -notin $runtime)) { throw 'Native compiler contract missing' }
 if ($buildIdentity.ReferenceCompletionContractFile -and ($Backend -ne 'vulkan' -or $buildIdentity.ReferenceCompletionContractFile -notin $runtime)) { throw 'Invalid reference completion contract' }
 $destination = Inside $root $Id
-if (Test-Path -LiteralPath $destination) { throw 'Version already exists; refusing overwrite' }
+function Assert-NoReparse([string]$path) {
+    $item = Get-Item -LiteralPath $path
+    while ($item) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Reparse path is not a package target: $path" }
+        $item = if ($item -is [IO.DirectoryInfo]) { $item.Parent } else { $item.Directory }
+    }
+    if ((Get-ChildItem -LiteralPath $path -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } | Select-Object -First 1)) {
+        throw 'Package contains a reparse point'
+    }
+}
+function Assert-NotRunning([string]$path) {
+    $prefix = [IO.Path]::GetFullPath($path).TrimEnd('\') + '\'
+    foreach ($process in Get-CimInstance Win32_Process) {
+        if ($process.ExecutablePath -and $process.ExecutablePath.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) {
+            throw "Core is still in use by PID $($process.ProcessId); leave it unchanged."
+        }
+    }
+    # Refuse replacement if another reader holds a package file, even if it is
+    # not itself the core process. These probes never terminate a process.
+    foreach ($file in Get-ChildItem -LiteralPath $path -File -Recurse) {
+        $probe = [IO.File]::Open($file.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+        $probe.Dispose()
+    }
+}
+function Assert-OwnedPackage([string]$path) {
+    Assert-NoReparse $path
+    $old = Get-Content -LiteralPath (Join-Path $path 'core-version.json') -Raw | ConvertFrom-Json -AsHashtable
+    if ($old.Backend -ne 'dx12' -or $old.Id -ne $Id) { throw 'Not an owned current DX12 package' }
+    $expected = @($old.Files.Keys) + @('core-version.json')
+    foreach ($file in Get-ChildItem -LiteralPath $path -File -Recurse) {
+        $relative = [IO.Path]::GetRelativePath($path,$file.FullName).Replace('\','/')
+        if ($relative -notin $expected) { throw "Unowned file in current package: $relative" }
+    }
+    foreach ($entry in $old.Files.GetEnumerator()) {
+        if ((Get-FileHash -LiteralPath (Inside ($path.TrimEnd('\')+'\') $entry.Key)).Hash -ine $entry.Value) { throw 'Old package changed; preserve it for review' }
+    }
+    return $old
+}
+New-Item -ItemType Directory -Path $root -Force | Out-Null
+Assert-NoReparse $root
+$mutexKey = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($destination.TrimEnd('\').ToUpperInvariant())))
+$publication = [Threading.Mutex]::new($false,('Local\PS4Desktop-Core-'+$mutexKey))
+$acquired = $false
+try { $acquired = $publication.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired = $true }
+if (!$acquired) { $publication.Dispose(); throw 'A core launch or publication is in progress; keep the current package unchanged.' }
+try {
+$oldManifest = $null
+if (Test-Path -LiteralPath $destination) {
+    if ($Backend -ne 'dx12') { throw 'Reference versions are immutable' }
+    $oldManifest = Assert-OwnedPackage $destination
+    Assert-NotRunning $destination
+    if (!$ProfileId) { $ProfileId = $oldManifest.ProfileId }
+}
+if ($Backend -eq 'dx12') {
+    $pdb = [IO.Path]::ChangeExtension($Executable,'.pdb')
+    if ($pdb -notin $runtime) { throw 'Current DX12 package requires corresponding PDB in runtime list' }
+    foreach ($directory in Get-ChildItem -LiteralPath $root -Directory) {
+        $manifestPath = Join-Path $directory.FullName 'core-version.json'
+        if ($directory.FullName -ne $destination -and (Test-Path -LiteralPath $manifestPath)) {
+            $other = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            if ($other.Backend -eq 'dx12') { throw 'Retire old DX12 packages before publishing one current package' }
+        }
+    }
+}
 if (!(Test-Path -LiteralPath (Join-Path $SourceDirectory $Executable))) { throw 'Executable missing' }
 $staging = $destination + '.staging-' + [Guid]::NewGuid().ToString('N')
+$previous = $destination + '.replacing'
+if (Test-Path -LiteralPath $previous) { throw 'Previous replacement needs recovery; refusing to discard it' }
 if (![IO.Path]::GetFullPath($staging).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw 'Staging path outside destination root' }
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 try {
@@ -83,14 +151,34 @@ try {
     }
     $manifest = @{ ManifestVersion=2; Id=$Id; Name=$Name; BuildDate=(Get-Item -LiteralPath (Inside $source $Executable)).LastWriteTimeUtc.ToString('o'); Branch=$Branch;
         Commit=$Commit; Dirty=[bool]$Dirty; Backend=$Backend; Description=$Description; Status=$Status; Executable=$Executable;
-        Sha256=$files[$Executable]; Files=$files; Results=$Results; Source=$sourceIdentity; Build=$buildIdentity; IsolatedProfile=[bool]$IsolatedProfile }
+        Sha256=$files[$Executable]; Files=$files; Results=$Results; Source=$sourceIdentity; Build=$buildIdentity; IsolatedProfile=[bool]$IsolatedProfile; ProfileId=$ProfileId }
     $manifest | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath (Join-Path $staging 'core-version.json') -Encoding utf8NoBOM
-    Move-Item -LiteralPath $staging -Destination $destination
+    if ($oldManifest) {
+        $null = Assert-OwnedPackage $destination
+        Assert-NotRunning $destination
+        Move-Item -LiteralPath $destination -Destination $previous
+    }
+    try { Move-Item -LiteralPath $staging -Destination $destination }
+    catch {
+        if ($oldManifest) { Move-Item -LiteralPath $previous -Destination $destination }
+        throw
+    }
+    if ($oldManifest) {
+        $null = Assert-OwnedPackage $previous
+        Assert-NotRunning $previous
+        if ([IO.Path]::GetFullPath($previous) -ne ([IO.Path]::GetFullPath($destination)+'.replacing')) { throw 'Replacement cleanup outside owned target' }
+        Remove-Item -LiteralPath $previous -Recurse -Force
+    }
     Write-Output $destination
 } finally {
     if (Test-Path -LiteralPath $staging) {
         $cleanup = [IO.Path]::GetFullPath($staging)
         if (!$cleanup.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw 'Cleanup path outside destination root' }
+        Assert-NoReparse $cleanup
         Remove-Item -LiteralPath $cleanup -Recurse -Force
     }
+}
+} finally {
+    $publication.ReleaseMutex()
+    $publication.Dispose()
 }

@@ -167,6 +167,49 @@ static class CoreVersionTests
         require(NativeGameLaunch.Create(settings, Settings.DataRoot).WorkingDirectory == isolatedProfile);
         require(File.ReadAllText(isolatedSave) == "preview save");
         NativeGameLaunch.ValidateStart(isolated);
+        // Publication and launch use the same cross-process gate: a launcher
+        // cannot validate old files and start while the package is being swapped.
+        string packagePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(final.Directory));
+        string gateKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(packagePath.ToUpperInvariant())));
+        using var gateReady = new ManualResetEventSlim();
+        using var releaseGate = new ManualResetEventSlim();
+        var publisher = new Thread(() => {
+            using var gate = new Mutex(false, @"Local\PS4Desktop-Core-" + gateKey);
+            gate.WaitOne();
+            try { gateReady.Set(); releaseGate.Wait(); }
+            finally { gate.ReleaseMutex(); }
+        });
+        publisher.Start();
+        try
+        {
+            require(gateReady.Wait(TimeSpan.FromSeconds(10)));
+            using var blocked = new System.Diagnostics.Process { StartInfo = isolated };
+            rejected(() => NativeGameLaunch.Start(blocked)); // Fake executable must never run.
+        }
+        finally { releaseGate.Set(); publisher.Join(); }
+        // Replacing a stable current package must reuse the selected isolated
+        // profile, including saves changed since its initial creation.
+        final.ProfileId = final.Id;
+        string stableProfileId = final.ProfileId;
+        final.ProfileId = "../escape";
+        rejected(() => CoreVersions.Validate(final));
+        final.ProfileId = stableProfileId;
+        File.WriteAllText(finalManifest, JsonSerializer.Serialize(final));
+        require(NativeGameLaunch.Create(settings, Settings.DataRoot).WorkingDirectory == isolatedProfile);
+        require(File.ReadAllText(isolatedSave) == "preview save");
+        var migrated = JsonSerializer.Deserialize<CoreVersion>(JsonSerializer.Serialize(final))!;
+        migrated.Id = "dx12-current";
+        migrated.Directory = final.Directory;
+        migrated.External = true;
+        CoreVersions.Select(settings, migrated);
+        require(NativeGameLaunch.Create(settings, Settings.DataRoot).WorkingDirectory == isolatedProfile);
+        require(File.ReadAllText(isolatedSave) == "preview save");
+        settings.ExternalCoreDirectory = "";
+        settings.ExternalCore = null;
+        settings.SelectedCoreId = final.Id;
+        final.ProfileId = "";
+        File.WriteAllText(finalManifest, JsonSerializer.Serialize(final));
         settings.SelectedCoreId = baseline.Id;
         require(NativeGameLaunch.Create(settings, Settings.DataRoot).WorkingDirectory == settings.VulkanProfileRoot);
         final.IsolatedProfile = false;

@@ -8,10 +8,25 @@
 
 # Bloodborne emulation research
 
-- New core builds remain in separate artifact folders. Do not automatically
-  install them in the application catalogue or change the selected core. The
-  user requested manual folder selection on 2026-10-17; later explicit requests
-  may authorize a particular installation or selection.
+- Storage policy (user correction, 2026-10-18): maintain ONE current DX12
+  application core with matching PDB, runtime dependencies, source/build identity,
+  SHA256 and verification status. Replace it safely after relevant checks; never
+  replace/delete a core while a process uses it. Preserve the selected profile.
+  `desktop/package-core.ps1` publishes the stable `dx12-current` package; do not
+  create a versioned artifact directory after each test/commit. This supersedes
+  older instructions to keep intermediate DX12 packages or require manual install.
+- Reuse `build-migration-core`, `build-migration-checks` and the existing single
+  clean Release checkout. Git retains source history. Reports retain exact
+  commands, commit/dirty patch, EXE/PDB/runtime hashes, required inputs and results;
+  do NOT copy full runtimes/EXE/PDB/MAP for successful intermediate tests. Runtime
+  acceptance belongs only to the exact tested hash, never a rebuilt executable.
+- Unresolved crashes may temporarily retain a minimal exact binary/PDB/runtime,
+  input and exception/dump report. Retire that bundle only after diagnosis,
+  regression acceptance and a reproducible case are saved. Preserve original
+  shadPS4, games, all profiles/saves, toolchains/dependencies and unknown sources.
+  Cleanup must validate absolute paths and skip reparse points, retain unique
+  sources/diagnostics, and record actual free-space changes per disk. Never move
+  all archives to another disk as a substitute for cleanup.
 
 - For native DirectX renderer/core work, use
   `docs/codex-progress/vulkan-emulation-20261011/CORE_CONTRACT.md` as the saved
