@@ -9,7 +9,7 @@
 #include <cstring>
 #include <cstdio>
 namespace NativeDX12 {
-inline void RunReadonlyNumericViewsFixture(ID3D12Device* device,bool cross_word=false,bool word_families=false){
+inline void RunReadonlyNumericViewsFixture(ID3D12Device* device,bool cross_word=false,bool word_families=false,u32 cross_class=10){
     const auto require=[](bool b,const char* message){if(!b)throw std::runtime_error(message);};
     const char* code=R"(
 Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByteAddressBuffer output:register(u0);
@@ -25,9 +25,11 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
     struct Allocation {std::byte* bytes{};~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}} physical;
     if(cross_word){physical.bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,PhysicalBytes,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         require(physical.bytes,"Readonly word physical allocation failed");}
-    for(const u32 data:{1u,2u,3u,4u,5u,9u,10u,11u,12u,13u,14u})for(const u32 tile:{0u,14u})for(const bool integer_first:{false,true}){
-        if(cross_word&&data!=10)continue;
-        if(word_families&&data!=4&&data!=10)continue;
+    unsigned cases{};
+    for(const u32 data:{1u,2u,3u,4u,5u,6u,9u,10u,11u,12u,13u,14u,34u})for(const u32 tile:{0u,14u})for(const bool integer_first:{false,true}){
+        if(!cross_word&&(data==6||data==34))continue;
+        if(cross_word&&(cross_class?data!=cross_class:(data!=5&&data!=6&&data!=9&&data!=10&&data!=34)))continue;
+        if(word_families&&data!=4&&data!=5&&data!=9&&data!=10)continue;
         printf("CASE: readonly numeric data=%u tile=%u integer_first=%u mips=2 layers=2\n",data,tile,integer_first);
         Rasterizer renderer(device);GuestTextureCache cache(device);cache.SetRecordingListProvider([&]{return renderer.RecordingList();});
         try{
@@ -35,7 +37,7 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
             if(cross_word){f.address=reinterpret_cast<VAddr>(physical.bytes);memset(physical.bytes,0x39,PhysicalBytes);
                 renderer.MapMemory(f.address,PhysicalBytes);renderer.SetBufferOwnership([](VAddr,u64){return true;},
                     [](VAddr address,std::span<const std::byte> bytes){memcpy(reinterpret_cast<void*>(address),bytes.data(),bytes.size());return true;},[](VAddr,u64){});}
-            const bool floats=data==4||data==11||data==13||data==14;f.number_format=floats?7:0;
+            const bool floats=data==4||data==6||data==34||data==11||data==13||data==14;f.number_format=floats?7:0;
             auto u=f;u.number_format=4;if(cross_word)u.data_format=4;auto selected_f=f,selected_u=u;
             selected_f.first_mip=selected_u.first_mip=1;selected_f.first_layer=selected_u.first_layer=1;selected_f.view_layers=selected_u.view_layers=1;
             const auto layout=LayoutGuestTexture(f);if(cross_word)require(layout.guest_bytes<=PhysicalBytes,"Readonly word fixture storage exceeds physical allocation");std::array<u32,4> input{},integer{0,0,0,1};
@@ -46,6 +48,14 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
             if(data==10){input[0]|=255u<<24;integer[3]=255;}
             if(data==12){input[1]=65535u<<16;integer[3]=65535;}
             if(data==14){input[3]=one;integer[3]=one;}
+            std::array<u32,4> expected_float{one,0,0,one};
+            if(cross_word&&data==5){input[0]=0xffff0000u;expected_float={0,one,0,one};}
+            // UF11/UF10 mantissa/exponent widths are6/5, bias15. RGB9E5
+            // uses mantissa *2^(exponent-24). These words encode1,2,0.5
+            // independently of any production decoder or observed GPU value.
+            if(cross_word&&data==6)input[0]=0x3c0u|(0x400u<<11)|(0x1c0u<<22);
+            if(cross_word&&data==34)input[0]=128u|(256u<<9)|(64u<<18)|(17u<<27);
+            if(cross_word&&(data==6||data==34))expected_float={one,std::bit_cast<u32>(2.f),std::bit_cast<u32>(0.5f),one};
             if(cross_word)integer={input[0],0,0,1};
             std::vector<std::byte> original(size_t(layout.guest_bytes),std::byte{0xa7}),unrelated(size_t(layout.guest_bytes),std::byte{0x39});
             const std::array<u32,4> zero{};
@@ -105,17 +115,16 @@ Texture2DArray<float4> f:register(t0);Texture2DArray<uint4> u:register(t1);RWByt
             ID3D12DescriptorHeap* heaps[]{views->Heap()};list->SetDescriptorHeaps(1,heaps);list->SetComputeRootSignature(root.Get());list->SetPipelineState(pipeline.Get());list->SetComputeRootDescriptorTable(0,views->Gpu(0));list->Dispatch(1,1,1);
             output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,32);cache.Submitted(renderer.Flush());renderer.Finish();cache.Collect(renderer.CompletedFence());
             void* mapped{};Check(readback.handle->Map(0,nullptr,&mapped));std::array<u32,8> actual{};memcpy(actual.data(),mapped,32);D3D12_RANGE none{};readback.handle->Unmap(0,&none);
-            const std::array<u32,4> expected_float{one,0,0,one};
             for(u32 c=0;c<4;++c)if(actual[c]!=expected_float[c]||actual[c+4]!=integer[c]){fprintf(stderr,"Readonly numeric data=%u channel=%u float=%08x/%08x uint=%08x/%08x\n",data,c,actual[c],expected_float[c],actual[c+4],integer[c]);throw std::runtime_error("Readonly typed GPU view contents mismatch");}
-            renderer.ValidateDebugMessages();
+            renderer.ValidateDebugMessages();++cases;
         }catch(...){renderer.Finish();throw;}
     }
     GuestTextureDesc depth;depth.data_format=2;depth.number_format=0;depth.depth_target=true;auto integer_depth=depth;integer_depth.depth_target=false;integer_depth.number_format=4;
     require(!CompatibleGuestShaderStorage(depth,integer_depth),"Readonly numeric sharing admitted a depth/color aspect reinterpretation");
     GuestTextureDesc packed;packed.data_format=9;packed.number_format=1;auto packed_integer=packed;packed_integer.number_format=5;
     require(!CompatibleGuestShaderStorage(packed,packed_integer),"Readonly numeric sharing admitted converted signed packed10 values");
-    puts(cross_word?"PASS:4 readonly R32/RGBA8 mutable word GPU views, both original classes, selected mip/layer, same native UID/allocation and unchanged I/history; two ordered stages, full physical B and no-cast/writer negatives":
-        word_families?"PASS:8 related same-data readonly R32/RGBA8 numeric views on new format-list allocations":
+    if(cross_word)printf("PASS:%u readonly mutable32 GPU views, both source classes, selected mip/layer, same UID/native allocation/history,2 ordered stages, whole1MiB B and no-cast/writer negatives\n",cases);
+    else puts(word_families?"PASS:16 related same-data readonly R32/RG16/RGB10A2/RGBA8 numeric views on format-list allocations":
         "PASS:44 readonly typeless numeric GPU pairs, original UID/allocation/class/history, selected mip/layer, RGB32 synthetic alpha, no private conversion or extra write permission; depth/expanded negatives");
 }
 } // namespace NativeDX12

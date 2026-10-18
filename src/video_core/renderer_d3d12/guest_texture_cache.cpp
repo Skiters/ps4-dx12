@@ -77,14 +77,29 @@ std::span<const DXGI_FORMAT> PackedFloatCasts(DXGI_FORMAT format,bool supported)
     if(format==DXGI_FORMAT_R9G9B9E5_SHAREDEXP)return rgb9;
     return {};
 }
+bool IsDirectReadonlyWordClass(const GuestTextureDesc& d){
+    if(d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1||
+       d.native_raw32||d.native_packed10_raw)return false;
+    switch(d.data_format){
+    case 4:return d.number_format==4||d.number_format==5||d.number_format==7;
+    case 5:return d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==7;
+    case 6:case 34:return d.number_format==7;
+    case 9:return d.number_format==0||d.number_format==4; // Signed packed10 is expanded.
+    case 10:return d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||d.number_format==9;
+    default:return false;
+    }
+}
 std::span<const DXGI_FORMAT> ReadonlyWordCasts(const GuestTextureDesc& d,bool supported){
-    // Pinned Vulkan _32BIT mutable class, restricted here to direct R32/RGBA8
-    // readonly color views. A single explicit format-list resource retains I.
+    // Pinned Vulkan _32BIT mutable class, restricted to direct readonly native
+    // representations. An explicit format-list allocation retains the same I;
+    // expanded signed packed10, depth, writers and MSAA have separate domains.
     static constexpr std::array formats{DXGI_FORMAT_R32_FLOAT,DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_SINT,
+        DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,
+        DXGI_FORMAT_R11G11B10_FLOAT,DXGI_FORMAT_R9G9B9E5_SHAREDEXP,
+        DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,
         DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,DXGI_FORMAT_R8G8B8A8_UINT,
         DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
-    if(!supported||d.writable||d.render_target||d.depth_target||d.stencil_address||d.samples!=1||
-       d.native_raw32||(d.data_format!=4&&d.data_format!=10))return {};
+    if(!supported||!IsDirectReadonlyWordClass(d))return {};
     return formats;
 }
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
@@ -339,11 +354,8 @@ bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view)
     return CompatibleGuestWritableStorage(source,view);
 }
 bool CompatibleGuestReadonlyWordStorage(GuestTextureDesc source,GuestTextureDesc view){
-    if(source.data_format==view.data_format||
-       (source.data_format!=4&&source.data_format!=10)||(view.data_format!=4&&view.data_format!=10)||
-       source.writable||view.writable||source.render_target||view.render_target||source.depth_target||view.depth_target||
-       source.stencil_address||view.stencil_address||source.samples!=1||view.samples!=1||
-       source.native_raw32||view.native_raw32)return false;
+    if(source.data_format==view.data_format||!IsDirectReadonlyWordClass(source)||
+       !IsDirectReadonlyWordClass(view))return false;
     source.data_format=view.data_format=4;source.number_format=view.number_format=4;
     source.first_mip=view.first_mip=source.first_layer=view.first_layer=source.min_lod=view.min_lod=0;
     source.view_layers=view.view_layers=1;source.swizzle=view.swizzle={4,5,6,7};
@@ -368,7 +380,8 @@ bool CompatibleGuestImageMipGeometry(GuestTextureDesc a,const GuestTextureLayout
        (a.levels<=b.levels?bl.guest_bytes:al.guest_bytes))return false;
     a.levels=b.levels=std::max(a.levels,b.levels);
     auto writable_a=a,writable_b=b;writable_a.writable=writable_b.writable=true;
-    if(!CompatibleGuestShaderStorage(writable_a,writable_b)&&!CompatibleGuestPackedStorage(a,b))return false;
+    if(!CompatibleGuestShaderStorage(writable_a,writable_b)&&!CompatibleGuestPackedStorage(a,b)&&
+       !CompatibleGuestReadonlyWordStorage(a,b))return false;
     // Mips are stored mip-major, including all layers/depth slices. Equal
     // offsets and slice geometry prove the complete prefix, not just texel0.
     for(UINT mip=0;mip<count;++mip){const auto& x=al.mips[mip];const auto& y=bl.mips[mip];

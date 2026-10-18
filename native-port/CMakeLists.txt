@@ -360,6 +360,8 @@ add_test(NAME native_independent_msaa_packed10_expanded COMMAND native-independe
 set_tests_properties(native_independent_msaa_packed10_expanded PROPERTIES TIMEOUT 180)
 add_test(NAME native_independent_msaa_packed16_raw_transfer COMMAND native-independent-version-transfer-test --msaa-packed16-raw)
 add_test(NAME native_packed19_msaa_attachment COMMAND native-independent-version-transfer-test --packed19-msaa-attachment)
+add_test(NAME native_readonly_mutable32_views COMMAND native-independent-version-transfer-test --readonly-mutable32-views)
+set_tests_properties(native_readonly_mutable32_views PROPERTIES TIMEOUT 180)
 add_test(NAME native_readonly_word_numeric_views COMMAND native-independent-version-transfer-test --readonly-word-numeric-views)
 set_tests_properties(native_readonly_word_numeric_views PROPERTIES TIMEOUT 120)
 add_test(NAME native_readonly_word_views COMMAND native-independent-version-transfer-test --readonly-word-views)
