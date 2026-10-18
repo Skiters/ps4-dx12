@@ -79,7 +79,7 @@ sealed class ReferenceCompletionContract
 
 static class CoreVersions
 {
-    public static string Root => Environment.GetEnvironmentVariable("PS4DESKTOP_CORE_ROOT") ?? Path.Combine(Settings.DataRoot, "cores");
+    public static string Root => Path.GetFullPath(Environment.GetEnvironmentVariable("PS4DESKTOP_CORE_ROOT") ?? Path.Combine(Settings.DataRoot, "cores"));
     public static string Hash(string path)
     {
         using var stream = File.OpenRead(path);

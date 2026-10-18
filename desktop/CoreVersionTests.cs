@@ -10,7 +10,9 @@ static class CoreVersionTests
         string? previousCoreRoot = Environment.GetEnvironmentVariable("PS4DESKTOP_CORE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "ps4-core-test-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("PS4DESKTOP_DATA_ROOT", root);
-        Environment.SetEnvironmentVariable("PS4DESKTOP_CORE_ROOT", null);
+        // A supported Windows forward-slash path must have the same runtime
+        // identity as the canonical manifest paths (launcher integration case).
+        Environment.SetEnvironmentVariable("PS4DESKTOP_CORE_ROOT", Path.Combine(root, "cores").Replace('\\','/'));
         try
         {
             Directory.CreateDirectory(root);
