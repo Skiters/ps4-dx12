@@ -813,6 +813,19 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
             ReleaseCpuBufferWatches(base,mapping.size);
         }
     };
+    std::vector<std::byte> physical_cpu;
+    if(HasGpuImageOverlap(base,mapping.size)&&!mapping.gpu_owned&&
+       (!mapping.cpu_upload_ranges.empty()||(!mapping.cpu_watched&&!cpu_proven_unchanged))){
+        // A host buffer envelope may include an unrelated exclusive I outside
+        // the original sharp. Reading its protected guest VA would fault and
+        // resolve I into B. Original CopySparseMemory uploads physical B only;
+        // take that same backing without changing I's class/history/ownership.
+        physical_cpu.resize(size_t(mapping.size));
+        if(!ReadDmaBacking(base,physical_cpu))
+            throw std::runtime_error("Buffer envelope lost physical backing beside a native image");
+        cpu=physical_cpu.data();
+        Diagnostics::Count("buffer-snapshot.physical-image-overlap.bytes",mapping.size);
+    }
     diagnostic.Stage("snapshot-compare");
     if(!mapping.gpu_owned&&!mapping.cpu_upload_ranges.empty()){
         // Original CPU dirty tracking uploads whole touched pages. The

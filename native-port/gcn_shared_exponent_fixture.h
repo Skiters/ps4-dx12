@@ -75,13 +75,13 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
             auto initial_writer=reader;initial_writer.data_format=4;initial_writer.num_format=4;table[0]=initial_writer;
             // Original R32 writer I must subsequently expose a typed RGB9E5
             // SRV without requiring a nonexistent typed RGB9E5 UAV.
-            dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0x7e1802ff,Old,
-                0x7e1a0280,0x7e1c0280,0x7e1e02ff,Old,0xf0200f00,0x00040c00,0xbf810000},0x52474239574f5244);
+            dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0x7e1802ff,Seed,
+                0x7e1a0280,0x7e1c0280,0x7e1e02ff,Seed,0xf0200f00,0x00040c00,0xbf810000},0x52474239574f5244);
             table[0]=reader;
         }
         dispatch({0xc0c80100,0xbf8c0000,0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xbf8c0000,
                   0xe0700040,0x80010400,0xe0700044,0x80010500,0xe0700048,0x80010600,0xe070004c,0x80010700,0xbf810000},0x5247423952454144);
-        memcpy(expected.data()+OutputOffset+64,old_color.data(),16);
+        memcpy(expected.data()+OutputOffset+64,(word_donor?seed_color:old_color).data(),16);
         if(modified){
             auto seed_writer=reader;seed_writer.data_format=4;seed_writer.num_format=4;table[0]=seed_writer;
             dispatch({0xc0c80100,0xbf8c0000,0xe0300004,0x80021400,0xbf8c0000,0xe0700060,0x80011400,
@@ -117,7 +117,7 @@ inline void RunSharedExponentGcnFixture(GuestRasterizer& r,AmdGpu::Liverpool& gp
         for(u32 c=0;c<8;++c){words.push_back(0xe0700000|c*4);words.push_back(0x80010000|((c+4)<<8));}
         words.insert(words.end(),{0xe0300004,0x80021400,0xbf8c0000,0xe0700020,0x80011400,0xbf810000});
         dispatch(words,0x5247423950524f00ull+writer_class[0]+u64(writer_class[1])*64+u64(reverse)*1024+u64(modified)*2048+u64(filtered)*4096+u64(extremes)*8192+u64(word_donor)*16384);
-        memcpy(expected.data()+OutputOffset,(modified?seed_color:old_color).data(),16);
+        memcpy(expected.data()+OutputOffset,(modified||word_donor?seed_color:old_color).data(),16);
         memcpy(expected.data()+OutputOffset+16,final_color.data(),16);memcpy(expected.data()+OutputOffset+32,&Old,4);
         if(filtered){
             const std::array<float,4> before=modified?std::array<float,4>{4.796875f,2.375f,1.4375f,1.f}:
