@@ -27,7 +27,7 @@ public:
     }
 };
 inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    std::byte* memory,std::byte* backing,u64 base,bool exclusive_seed=false,bool mutable_views=false){
+    std::byte* memory,std::byte* backing,u64 base,bool exclusive_seed=false,bool mutable_views=false,u32 signed_word_number=0){
     constexpr u64 ImageOffset=16384,OutputOffset=57344,AllocationBytes=65536;
     constexpr u32 Marker=0x13579bdf;
     struct alignas(256) Code {std::array<u32,256> words{};};
@@ -67,8 +67,9 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
     for(const auto numbers:{std::array<u32,2>{0,4},std::array<u32,2>{1,5},std::array<u32,2>{9,4}})
     for(const bool reverse:{false,true})for(const bool formatted:{false,true})for(const bool modified:{false,true}){
         if(mutable_views?(word_class==0||numbers!=std::array<u32,2>{0,4}||modified):word_class!=0)continue;
+        if(signed_word_number&&word_class!=9)continue;
         if(exclusive_seed&&!modified)continue;
-        const u32 ImageWord=word_class==5?0xffff0000u:word_class==6?0x3c0u|(0x400u<<11)|(0x1c0u<<22):
+        const u32 ImageWord=signed_word_number?0x1ffu|(0x201u<<10)|(3u<<30):word_class==5?0xffff0000u:word_class==6?0x3c0u|(0x400u<<11)|(0x1c0u<<22):
             word_class==9?0xc00003ffu:word_class==34?128u|(256u<<9)|(64u<<18)|(17u<<27):0xff0000ffu;
         if(mutable_views){printf("MUTABLE32: data=%u\n",word_class);fflush(stdout);}
         printf("CASE: actual GCN readonly numeric pair=%u/%u reverse=%u formatted=%u GpuModified=%u\n",numbers[0],numbers[1],reverse,formatted,modified);fflush(stdout);
@@ -127,10 +128,10 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         initialize(marker,{0x7e1802ff,Marker,0xe0700000,0x80020c00,0xbf810000},0x524e554d4d41524bULL);
         bind(marker);memcpy(compute.user_data.data()+8,&shifted,sizeof(shifted));dispatch();
         if(!rasterizer.IsGpuBufferModified(shifted.base_address,4))throw std::runtime_error("Readonly numeric marker did not write B");
-        if(mutable_views){auto view=image;view.data_format=word_class;view.num_format=word_class==6||word_class==34?7:0;
+        if(mutable_views){auto view=image;view.data_format=word_class;view.num_format=signed_word_number?signed_word_number:word_class==6||word_class==34?7:0;
             table=reverse?std::array<AmdGpu::Image,2>{image,view}:std::array<AmdGpu::Image,2>{view,image};
         }else{table[0].num_format=numbers[reverse?1:0];table[1].num_format=numbers[reverse?0:1];}
-        const u64 identity=u64(numbers[0])|(u64(numbers[1])<<4)|(u64(reverse)<<8)|(u64(formatted)<<9)|(u64(modified)<<10)|(u64(word_class)<<16);
+        const u64 identity=u64(numbers[0])|(u64(numbers[1])<<4)|(u64(reverse)<<8)|(u64(formatted)<<9)|(u64(modified)<<10)|(u64(word_class)<<16)|(u64(signed_word_number)<<24);
         initialize(pair,{0xc0c80100,0xc0cc0108,0xbf8c0000,formatted?0xe0000004u:0xe0300004u,0x80020c00,
             0x7e000281,0x7e020280,0xf0000f00,0x00040400,0xf0000f00,0x00060800,0xbf8c0000,
             0xe0700000,0x80010c00,0xe0700004,0x80010400,0xe0700008,0x80010500,0xe070000c,0x80010600,
@@ -139,7 +140,13 @@ inline void RunReadonlyNumericGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         bind(pair);memcpy(compute.user_data.data()+4,&output,sizeof(output));memcpy(compute.user_data.data()+8,&input,sizeof(input));dispatch();
         const u32 final_word=formatted&&modified?ImageWord:Marker;memcpy(expected.data()+ImageOffset+4,&final_word,4);
         memcpy(expected.data()+OutputOffset,&final_word,4);
-        const auto expected_view=[&](const AmdGpu::Image& view){return mutable_views?
+        const auto expected_view=[&](const AmdGpu::Image& view){
+            // Signed10 R=+511,G=-511,B=0,A=-1: original SNORM clamps
+            // endpoints to +/-1; SINT preserves the exact signed components.
+            if(signed_word_number&&u32(view.data_format)==9)return signed_word_number==1?
+                std::array<u32,4>{std::bit_cast<u32>(1.f),std::bit_cast<u32>(-1.f),0,std::bit_cast<u32>(-1.f)}:
+                std::array<u32,4>{511u,u32(-511),0,0xffffffffu};
+            return mutable_views?
             (u32(view.data_format)==4?std::array<u32,4>{ImageWord,0,0,ImageWord}:word_channels(u32(view.data_format))):channels(u32(view.num_format));};
         const auto a=expected_view(table[0]),b=expected_view(table[1]);
         memcpy(expected.data()+OutputOffset+4,a.data(),16);memcpy(expected.data()+OutputOffset+20,b.data(),16);
