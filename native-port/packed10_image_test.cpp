@@ -81,7 +81,7 @@ std::vector<u32> Emit(Shader::Info& info,const GuestTextureDesc& d,u32 number,u3
     c.OpReturn();c.OpFunctionEnd();c.AddEntryPoint(spv::ExecutionModel::GLCompute,fn,"main",c.interfaces);
     c.AddExecutionMode(fn,spv::ExecutionMode::LocalSize,1u,1u,1u);return c.Assemble();
 }
-int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,bool mip_alias,bool coherent_alias=false,u32 read_format=9){
+int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,bool mip_alias,bool coherent_alias=false,u32 read_format=9,u32 mixed_writer_format=0){
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     struct Allocation{void* p;~Allocation(){if(p)VirtualFree(p,0,MEM_RELEASE);}} allocation{
@@ -92,7 +92,9 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
     sharp.depth=sharp.last_array=2;sharp.last_level=2;sharp.type=u64(AmdGpu::ImageType::Color2DArray);
     sharp.data_format=read_format;sharp.num_format=5;sharp.tiling_index=13;
     sharp.dst_sel_x=4;sharp.dst_sel_y=5;sharp.dst_sel_z=6;sharp.dst_sel_w=7;
-    auto desc=DescribeGuestTexture(sharp);desc.writable=true;const auto layout=LayoutGuestTexture(desc);
+    auto desc=DescribeGuestTexture(sharp);desc.writable=true;
+    desc.native_raw32=mixed_writer_format&&(read_format==4||read_format==10);
+    const auto layout=LayoutGuestTexture(desc);
     auto output=sharp;output.base_address=(address+0x100000)>>8;output.data_format=14;
     output.num_format=Integer(number)?4:7;output.last_level=0;
     auto output_desc=DescribeGuestTexture(output);output_desc.writable=true;const auto output_layout=LayoutGuestTexture(output_desc);
@@ -114,6 +116,8 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
             write.data_format=read_format==4?10:4;
             write.num_format=read_format==4?(pass==0?0:pass==1?1:4):(pass==0?4:pass==1?5:7);
         }
+        if(mixed_writer_format){write.data_format=mixed_writer_format;write.num_format=mixed_writer_format==4?4:
+            mixed_writer_format==10?(pass==0?0:pass==1?1:4):pass%2?1:5;}
         read.base_array=read.last_array=mip_alias?2:pass%2?2:1;
         write.base_array=write.last_array=mip_alias?2:pass%2?1:2;
         read.base_level=mip_alias?1:0;
@@ -125,7 +129,9 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
         auto sampled=ImageResource(8,desc.levels,false,true);sampled.is_written=false;
         sampled.mip_fallback_mode=Shader::MipStorageFallbackMode::None;
         if(coherent_alias){
-            if(read_format==9)writer.native_packed10_raw=sampled.native_packed10_raw=true;
+            if(mixed_writer_format){writer.native_raw32=mixed_writer_format==4||mixed_writer_format==10;writer.native_packed10_raw=mixed_writer_format==9;
+                sampled.native_raw32=read_format==4||read_format==10;sampled.native_packed10_raw=read_format==9;}
+            else if(read_format==9)writer.native_packed10_raw=sampled.native_packed10_raw=true;
             else writer.native_raw32=sampled.native_raw32=true;
             sampled.is_written=true;
         }
@@ -142,6 +148,7 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
         const auto lod=coherent_alias?Sirit::Id{}:c.ConstU32(0u);
         const auto loaded=EmitImageRead(c,nullptr,read_slot,coord,lod,{});EmitImageWrite(c,nullptr,2,coord,{}, {},loaded);
         auto color=Color(u32(write.num_format),pass+2);
+        if(mixed_writer_format==4)color[0]=0xc00805ffu+pass*0x00100401u;
         if(u32(write.data_format)==4&&u32(write.num_format)==7)color[0]=0x7fa12345U;
         EmitImageWrite(c,nullptr,writer_slot,coord,{}, {},c.OpBitcast(c.F32[4],c.ConstU32(color[0],color[1],color[2],color[3])));
         if(coherent_alias){
@@ -156,6 +163,7 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
         const auto value=Decode(source_word,number,read_format);
         const auto out_at=GuestPixelOffset(output_desc,output_layout,0,0,0,0);memcpy(expected_output.data()+out_at,value.data(),16);
         const auto written=Encode(color,u32(write.num_format),u32(write.data_format));
+        if(mixed_writer_format&&written==source_word)throw std::runtime_error("Mixed word fixture must change the stored word");
         memcpy(expected.data()+GuestPixelOffset(desc,layout,u32(write.base_level),u32(write.base_array),0,0),&written,4);
         const auto after=Decode(written,number,read_format);const auto out_after=GuestPixelOffset(output_desc,output_layout,0,0,1,0);
         if(coherent_alias)memcpy(expected_output.data()+out_after,after.data(),16);
@@ -171,11 +179,40 @@ int RunDisjointPacked10(const wchar_t* converter,const wchar_t* dxc,u32 number,b
         raster.Finish();raster.ValidateDebugMessages();
     }
     if(GetModuleHandleW(L"vulkan-1.dll"))throw std::runtime_error("Unexpected Vulkan disjoint packed10 execution");
-    puts(read_format!=9?"PASS: coherent R32/RGBA8 shader views share writes, raw bits and guest padding":coherent_alias?"PASS: coherent packed10 numeric views share writes and retain original words and guest padding":
+    puts(mixed_writer_format?"PASS: coherent packed10/word shader views share changed writes, barriers and full guest padding":read_format!=9?"PASS: coherent R32/RGBA8 shader views share writes, raw bits and guest padding":coherent_alias?"PASS: coherent packed10 numeric views share writes and retain original words and guest padding":
         "PASS: disjoint packed10 sampled/UAV views retain numeric interpretation, writable backing and guest padding");return 0;
 }
 }
 int RunNativePacked10(const wchar_t* converter,const wchar_t* dxc,std::wstring_view mode){
+    if(mode==L"packed10-word-domain"){
+        GuestTextureDesc packed{};packed.address=0x10000;packed.data_format=9;packed.number_format=1;
+        packed.width=32;packed.height=16;packed.pitch=32;packed.writable=true;packed.native_packed10_raw=true;
+        auto scalar=packed;scalar.data_format=4;scalar.number_format=4;scalar.native_packed10_raw=false;scalar.native_raw32=true;
+        if(!CompatibleGuestWritableStorage(packed,scalar)||!CompatibleGuestWritableStorage(scalar,packed))
+            throw std::runtime_error("Exact raw word storage was not compatible in both directions");
+        for(u32 negative=0;negative<8;++negative){auto bad=scalar;
+            switch(negative){case 0:bad.width++;break;case 1:bad.pitch+=32;break;
+            case 2:bad.samples=4;break;case 3:bad.render_target=true;break;case 4:bad.depth_target=true;break;
+            case 5:bad.writable=false;break;case 6:bad.native_raw32=false;break;case 7:bad.data_format=16;break;}
+            if(CompatibleGuestWritableStorage(packed,bad)||CompatibleGuestWritableStorage(bad,packed))
+                throw std::runtime_error("Writable raw word admitted an incompatible geometry/access/codec");
+        }
+        auto expanded=packed;expanded.number_format=0;expanded.native_packed10_raw=false;
+        if(CompatibleGuestWritableStorage(expanded,scalar)||CompatibleGuestWritableStorage(scalar,expanded))
+            throw std::runtime_error("Typed packed10 storage was mistaken for a raw R32 allocation");
+        puts("PASS: common writable word domain preserves geometry, permissions and representation negatives");return 0;
+    }
+    if(mode==L"packed10-0-word-writer"||mode==L"packed10-1-word-writer"||
+       mode==L"packed10-4-word-writer"||mode==L"packed10-5-word-writer")
+        return RunDisjointPacked10(converter,dxc,u32(mode[9]-L'0'),false,true,9,4);
+    if(mode==L"raw32-4-4-packed-writer"||mode==L"raw32-4-5-packed-writer"||mode==L"raw32-4-7-packed-writer")
+        return RunDisjointPacked10(converter,dxc,u32(mode[8]-L'0'),false,true,4,9);
+    if(mode==L"packed10-0-byte-writer"||mode==L"packed10-1-byte-writer"||
+       mode==L"packed10-4-byte-writer"||mode==L"packed10-5-byte-writer")
+        return RunDisjointPacked10(converter,dxc,u32(mode[9]-L'0'),false,true,9,10);
+    if(mode==L"raw32-10-0-packed-writer"||mode==L"raw32-10-1-packed-writer"||
+       mode==L"raw32-10-4-packed-writer"||mode==L"raw32-10-5-packed-writer")
+        return RunDisjointPacked10(converter,dxc,u32(mode[9]-L'0'),false,true,10,9);
     if(mode.starts_with(L"raw32-4-")&&mode.size()==9){
         const u32 number=u32(mode[8]-L'0');
         if(number!=4&&number!=5&&number!=7)throw std::invalid_argument("Invalid R32 alias number format");

@@ -6,6 +6,7 @@
 #include "common/elf_info.h"
 #include "gcn_ordered_formatted_fixture.h"
 #include "gcn_readonly_numeric_fixture.h"
+#include "gcn_writable_word_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -37,6 +38,7 @@ int main(int argc,char** argv){try{
     const bool signed_color=std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool owned=mode.ends_with("-owned");
+    const bool writable_word=mode=="writable-packed10-word-owned";
     const bool linear_download=mode=="linear-download-owned";
     const bool linear_attachment=mode=="linear-attachment-owned";
     const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
@@ -62,7 +64,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -122,7 +124,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(readonly_numeric){
+    if(writable_word){
+        RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base);
+    }else if(readonly_numeric){
         RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
     }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
@@ -984,7 +988,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

@@ -213,10 +213,11 @@ using ImageResourceList = boost::container::static_vector<ImageResource, NUM_IMA
 // and UAV descriptors retain these fields independently for each access.
 inline bool NativeImageStorageAliases(AmdGpu::Image left, AmdGpu::Image right) {
 
-    // These families have typeless native storage with fully typed UAV views.
-    // Packed/compressed families without that representation stay distinct.
-    if ((left.data_format == 4 || left.data_format == 10) &&
-        (right.data_format == 4 || right.data_format == 10)) {
+    // These 32-bit guest families share word storage. Cross-family shader
+    // accesses select raw R32 views and lower their numeric codecs explicitly.
+    // Other packed/compressed representations remain distinct.
+    if ((left.data_format == 4 || left.data_format == 9 || left.data_format == 10) &&
+        (right.data_format == 4 || right.data_format == 9 || right.data_format == 10)) {
         left.data_format = right.data_format = 4;
         left.num_format = right.num_format = 0;
     } else if (left.data_format == right.data_format) {

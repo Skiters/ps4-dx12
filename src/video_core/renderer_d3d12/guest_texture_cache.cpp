@@ -329,9 +329,13 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     // UAVs have no component mapping; guest storage swizzles are lowered in
     // the shader and do not require separate physical images.
     source.swizzle=view.swizzle={4,5,6,7};
-    if(source.UsesRaw32()&&view.UsesRaw32()&&
-       (source.data_format==4||source.data_format==10)&&(view.data_format==4||view.data_format==10)){
+    const auto word_format=[](uint32_t format){return format==4||format==9||format==10;};
+    if(source.UsesRaw32()&&view.UsesRaw32()&&word_format(source.data_format)&&word_format(view.data_format)){
+        // Only comparison copies change. Both actual layouts are four-byte
+        // R32 words; the original image class, codecs and ownership survive.
+        source.native_packed10_raw=view.native_packed10_raw=false;
         source.data_format=view.data_format=4;source.number_format=view.number_format=4;
+        source.native_raw32=view.native_raw32=true;
     }
     if(source.UsesRaw32()!=view.UsesRaw32())return false;
     source.native_raw32=view.native_raw32=false;

@@ -132,7 +132,7 @@ static void RunPacked(u32 read_number,u32 write_number,bool native,bool external
     Optimization::ResourceDiscoveryList resources;
     if(external_hint){
         auto hint=sharp;
-        if(read_format==9){hint.num_format=1;info.native_pipeline_signed_packed_views.push_back({hint,false,false});}
+        if(read_format==9&&write_format==9){hint.num_format=1;info.native_pipeline_signed_packed_views.push_back({hint,false,false});}
         else info.native_pipeline_raw32_views.push_back({hint,false,false});
         resources.push_back(w);
     }
@@ -140,12 +140,16 @@ static void RunPacked(u32 read_number,u32 write_number,bool native,bool external
     Profile profile{};profile.native_coherent_images=native;
     Optimization::ResourcePatchingPass(info,resources,profile);
     const auto signed_number=[](u32 number){return number==1||number==5;};
-    const bool raw=native&&read_format==9&&(external_hint||signed_number(read_number)||signed_number(write_number));
+    const bool raw=native&&(read_format==9||write_format==9)&&
+        (external_hint||read_format!=write_format||signed_number(read_number)||signed_number(write_number));
     const bool raw32=native&&read_format!=write_format;
     if(info.images.size()!=(external_hint?1u:2u))throw std::runtime_error("Packed numeric access descriptions lost their T# identity");
     for(u32 index=0;index<info.images.size();++index){const auto& image=info.images[index];
-        if(image.native_packed10_raw!=raw||image.native_raw32!=raw32||image.is_written!=(external_hint||index==1||native))
+        const auto format=u32(image.GetSharp(info).GetDataFmt());
+        if(image.native_packed10_raw!=(raw&&format==9)||image.native_raw32!=(raw32&&(format==4||format==10))||image.is_written!=(external_hint||index==1||native)){
+            fprintf(stderr,"classification native=%d read=%u/%u write=%u/%u hint=%d index=%u format=%u packed=%d raw32=%d written=%d\n",native,read_format,read_number,write_format,write_number,external_hint,index,format,image.native_packed10_raw,image.native_raw32,image.is_written);
             throw std::runtime_error("Mixed packed numeric aliases lost common raw storage classification");
+        }
     }
 }
 static void RunReadonlyPacked(u32 number,bool native){
@@ -173,6 +177,10 @@ static void RunReadonlyPacked(u32 number,bool native){
     }
 }
 int main(){try{for(u32 number:{1u,5u})for(bool native:{false,true})RunReadonlyPacked(number,native);for(bool dynamic:{false,true})for(bool reverse:{false,true})for(bool same:{false,true})for(bool native:{false,true})for(bool loaded:{false,true})Run(dynamic,reverse,same,native,loaded);
+    for(u32 number:{0u,1u,4u,5u})for(bool native:{false,true})for(bool external:{false,true}){
+        RunPacked(number,4,native,external,9,4);RunPacked(4,number,native,external,4,9);
+        RunPacked(number,4,native,external,9,10);RunPacked(4,number,native,external,10,9);
+    }
     for(u32 read_number:{0U,1U,4U,5U})for(u32 write_number:{0U,1U,4U,5U})for(bool native:{false,true})RunPacked(read_number,write_number,native,false);
     for(u32 write_number:{0U,4U})for(bool native:{false,true})RunPacked(0,write_number,native,true);
     for(u32 scalar:{4U,5U,7U})for(u32 rgba:{0U,1U,4U,5U,9U})for(bool native:{false,true}){
