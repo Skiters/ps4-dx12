@@ -346,6 +346,19 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
             // Emulates GCN's factor-scaled min/max blend: min/max(src*src, dst*dst).
             value = ctx.OpFMul(ctx.F32[1], value, value);
         }
+        if(ctx.profile.native_coherent_images&&target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
+           target.num_format==AmdGpu::NumberFormat::Snorm){
+            // Vulkan SNORM conversion: clamp, scale by the positive signed
+            // maximum, then choose nearest-even. Keep packed bits in UINT lanes
+            // so masks/logic ops do not canonicalize untouched -512/-2 codes.
+            // Regression snorm-color-owned checks all samples and whole backing.
+            const u32 bits=element==3?2:10;
+            const auto input=ctx.OpSelect(ctx.F32[1],ctx.OpIsNan(ctx.U1[1],value),ctx.ConstF32(0.f),value);
+            const auto clamped=ctx.OpFClamp(ctx.F32[1],input,ctx.ConstF32(-1.f),ctx.ConstF32(1.f));
+            const auto scaled=ctx.OpFMul(ctx.F32[1],clamped,ctx.ConstF32(float((1u<<(bits-1))-1)));
+            const auto code=ctx.OpConvertFToS(ctx.S32[1],ctx.OpRoundEven(ctx.F32[1],scaled));
+            value=ctx.OpBitcast(ctx.F32[1],ctx.OpBitwiseAnd(ctx.U32[1],ctx.OpBitcast(ctx.U32[1],code),ctx.ConstU32((1u<<bits)-1)));
+        }
         if (info.num_components == 1) {
             return op_store(info.id);
         } else {

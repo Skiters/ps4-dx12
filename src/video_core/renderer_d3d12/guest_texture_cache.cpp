@@ -227,7 +227,7 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
             (d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5);
         const bool native=!d.UsesRawPacked10()&&
             ((d.number_format==0&&layout.format==DXGI_FORMAT_R10G10B10A2_UNORM)||
-             ((d.number_format==4||(d.render_target&&d.number_format==5))&&
+             ((d.number_format==4||(d.render_target&&(d.number_format==1||d.number_format==5)))&&
               layout.format==DXGI_FORMAT_R10G10B10A2_UINT));
         return (raw||native)&&layout.bytes_per_pixel==4&&layout.HostBytesPerPixel()==4;
     }
@@ -366,7 +366,7 @@ bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc samp
     if(source.writable||sampled.writable||sampled.stencil_address||
        sampled.render_target||sampled.depth_target)return false;
     if(source.stencil_address&&!source.depth_target)return false;
-    if(source.render_target&&source.data_format==9&&source.number_format==5)return false;
+    if(source.render_target&&source.data_format==9&&(source.number_format==1||source.number_format==5))return false;
     source.stencil_address=0;
     source.render_target=source.depth_target=false;
     source.storage_height=sampled.storage_height=0;
@@ -806,7 +806,7 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
         throw std::runtime_error("Invalid guest texture view range");
     Mapping(d.swizzle);
     const bool signed_packed10=d.data_format==9&&(d.number_format==1||d.number_format==5);
-    if(signed_packed10&&(d.depth_target||(d.render_target&&d.number_format==1)))
+    if(signed_packed10&&d.depth_target)
         throw std::invalid_argument("Signed packed 10-bit attachment storage requires exact native packing");
     const auto [format,bpp]=Format(d.data_format,d.writable&&d.number_format==9?0:d.number_format);
     GuestTextureLayout layout;layout.format=format;layout.bytes_per_pixel=bpp;
@@ -819,7 +819,10 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
        !d.writable&&d.number_format==0){
         layout.expanded_bytes_per_pixel=16;layout.format=DXGI_FORMAT_R32G32B32A32_FLOAT;
     }
-    if(d.data_format==9&&d.number_format==5&&d.render_target)layout.format=DXGI_FORMAT_R10G10B10A2_UINT;
+    // Integer physical lanes preserve untouched SNORM endpoint encodings.
+    // Fragment export quantizes before fixed-function writes/logic operations;
+    // normalized blending needs a separate ordered post-blend path.
+    if(signed_packed10&&d.render_target)layout.format=DXGI_FORMAT_R10G10B10A2_UINT;
     if(d.UsesRaw32()||(d.writable&&d.data_format>=16&&d.data_format<=19))layout.format=DXGI_FORMAT_R32_UINT;
     if(d.data_format>=35&&d.data_format<=41){
         if(d.writable||d.render_target||d.depth_target)

@@ -2705,7 +2705,96 @@
         "ordering": "Existing graphics PSO/sample/RTV setup, depth/stencil behavior, disjoint MRT layer merging, CMASK raw clear words, GPU ownership, padded readback and fences retain their contracts. A signed integer attachment is never borrowed as an incompatible sixteen-byte sampled view. Compatible two-dimensional signed packed backing uses GPU retile/expand with retained original words and written-byte mask; incompatible layouts still use existing image reconciliation before sampled expansion.",
         "verification_prepared": "An additional signed-color mode of the existing full-core GCN fixture emits actual negative/positive signed endpoints and two-bit alpha to three simultaneous MRT array layers, testing one/four samples, original CB-slot permutations, cold/warm real GuestRasterizer::Draw, eager readback and all untouched bytes. The original unsigned fixture mode remains intact. Fixture compilation/linking succeeded; it has not executed.",
         "historical_review_notes": "Final frontend/DXIL/PSO execution, remapped Format10_10_10_2, integer out-of-domain payloads, legal logic-operation cases, original differential acceptance and sampled conversion from an authoritative signed render target remain unrun. Snorm render/blend semantics and arbitrary alias layouts remain separate implementation work.",
-        "open_contracts": "R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected."
+        "open_contracts": "R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected.",
+        "function_verification_20261019_snorm_logic": {
+          "upstream_sha": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
+          "implementation_state": "connected partial SNORM attachment; blend remains a production gap",
+          "behavior_state": "PASS for listed narrow cases only",
+          "source_base": "6188dc86e6981704f8914baa8251efebcd39c7fc",
+          "production_fingerprint_sha256": "69ccc84d8828d8628c01faa4efa62f6362bd26de2eb8762491634a180eae686c",
+          "source_file_sha256": {
+            "src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp": "7ea031030f00b2dfc34745eb602d447ee46cae53ec10ceb3e81e9c7938a7c26f",
+            "src/shader_recompiler/backend/spirv/spirv_emit_context.cpp": "159fd85748e27d29ae8d090b465c65204d438b94475a4441ff5174e510e884d6",
+            "src/video_core/renderer_d3d12/guest_graphics_state.cpp": "853337103af50f4fce4335d94bb5fee113b28c1b8ad91488eb55d27c53603eb0",
+            "src/video_core/renderer_d3d12/guest_shader_cache.cpp": "0cd62d5843a1f8500c7c630fe0b753254248c18dff7180d0b03452568fc69f67",
+            "src/video_core/renderer_d3d12/guest_texture_cache.cpp": "ccc2b3646d3852f7a054232e6220fbee5f49c17f26f4bf2942d712eded96d05b"
+          },
+          "upstream_to_native": [
+            {
+              "upstream": "LiverpoolToVK::SurfaceFormat / Instance::GetSupportedFormat",
+              "native": "guest_texture_cache.cpp: LayoutGuestTexture / SupportsGuestImageTransfer / CompatibleGuestSampledStorage",
+              "invariant": "Exact 32bit packed contents; masked -512/-2 endpoint encodings untouched. SNORM RT retains physical UINT lanes; sampled expansion not borrowed as a typed attachment."
+            },
+            {
+              "upstream": "SPIRV::EmitSetAttribute / EmitContext::DefineOutputs",
+              "native": "emit_spirv_context_get_set.cpp: EmitSetAttribute / spirv_emit_context.cpp: DefineOutputs",
+              "invariant": "For native packed SNORM exports clamp and nearest-even code before fixed-function write/logic. Valid channels, signed codes and alpha2 maintained; no skipped draw or shader hash condition."
+            },
+            {
+              "upstream": "Vulkan::GraphicsPipeline blend state / Rasterizer::UpdateDynamicState",
+              "native": "guest_graphics_state.cpp: BuildGuestGraphicsState",
+              "invariant": "D3D12 single/shared compatible MRT logic state is valid with independent blend disabled. Incompatible per-target masks and post-blend SNORM quantization remain explicit failures, not successful emulation."
+            },
+            {
+              "upstream": "PipelineCache shader specialization/cache",
+              "native": "guest_shader_cache.cpp: GuestShaderCache constructor",
+              "invariant": "native v8 cache key invalidates older DXIL after changed SNORM export semantics; same-version reload/rollback verified, no v7 hit claim."
+            }
+          ],
+          "commands": [
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "snorm-color-owned"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-logic"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-color"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "mixed-samples-matrix-owned"
+            ],
+            [
+              "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+              "--test-dir",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks",
+              "-R",
+              "^(native_guest_graphics_resources|native_sampled_graphics_pipeline|native_robust_sample_copy|native_independent_image_version_transfer)$",
+              "--output-on-failure",
+              "-j",
+              "1"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\shader-reload-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll"
+            ]
+          ],
+          "test_binary_sha256": {
+            "gcn": "cea57766a479bfa311019448fefe448c930a7dfdeabf40c7305ca4f4bbfdffd3",
+            "native": {
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-guest-graphics-resources-test.exe": "53923138892ba508c51cd7a5f9d27b1c54e2a4b767b66d463dee0ba61f6e1120",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-shader-pipeline-test.exe": "3b9bea2fbc8a2cdee1f1405a6e89197241c82b187860958c9c766682044b86bf",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\native-independent-version-transfer-test.exe": "e361d32c8d0e5c55e426fc636fdfa97469c446cb44bd6404d0365ff4320e8f05"
+            },
+            "shader_reload": "baf8573630d2e8a653d53ca91b34e6ba5ced83c9683c183df05c4e4ace407fe6"
+          },
+          "results": "SNORM24 x3 authored payload draws, masks15/1/10, samples1/2/4/8, nonzero layer/full65536 padding and blend negative PASS. Signed shared3MRT XOR/SINT prior and mixed16 PASS. Four native GPU regressions PASS16.887s. Reload PASS.",
+          "limits": "No SNORM normalized blending, arbitrary per-target logic masks, nondefault component swizzles, general attachment feedback or final game acceptance claimed. Prepared final suite remains448. Earlier PASS for changed symbols is historical; this record supersedes only these addressed cases.",
+          "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -4028,7 +4117,96 @@
         "continuation_20261015": "Native cull-both classification uses final GS output and tessellation isolines; RectList retains pinned Vulkan cull exemption. Shader side effects are preserved. Source corrections to CB sRGB encoding and dual-face fixture oracle retain expected bytes; no runtime result for this delta.",
         "color_write_mask_20261015": "d7d9064: valid guest CB color write masks use original Swizzle().ApplyMask scatter, matching pinned vk_pipeline_cache.cpp independently of shader export gather. Native-only callers with absent guest CB format keep explicit mask. Existing format19 transfer handles packed nibble layout; no extra color swizzle. Prepared 1152 format/swap/mask combinations plus disabled/hole/native-only boundaries are unrun. Standalone backend now links pixel_format.cpp and its existing fixture diagnostic sink.",
         "historical_review_notes": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim.",
-        "open_contracts": "Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture.; Simultaneous constant-color and constant-alpha RGB blend factors on adapters without native ALPHA_FACTOR require an exact fallback; native supporting adapters are handled."
+        "open_contracts": "Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture.; Simultaneous constant-color and constant-alpha RGB blend factors on adapters without native ALPHA_FACTOR require an exact fallback; native supporting adapters are handled. Shared compatible MRT logic now uses a valid D3D12 state and narrowly GPU verified. Original independent MRT logic write masks still need an ordered implementation; rejecting the incompatible case is not parity closure.",
+        "function_verification_20261019_snorm_logic": {
+          "upstream_sha": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
+          "implementation_state": "connected partial SNORM attachment; blend remains a production gap",
+          "behavior_state": "PASS for listed narrow cases only",
+          "source_base": "6188dc86e6981704f8914baa8251efebcd39c7fc",
+          "production_fingerprint_sha256": "69ccc84d8828d8628c01faa4efa62f6362bd26de2eb8762491634a180eae686c",
+          "source_file_sha256": {
+            "src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp": "7ea031030f00b2dfc34745eb602d447ee46cae53ec10ceb3e81e9c7938a7c26f",
+            "src/shader_recompiler/backend/spirv/spirv_emit_context.cpp": "159fd85748e27d29ae8d090b465c65204d438b94475a4441ff5174e510e884d6",
+            "src/video_core/renderer_d3d12/guest_graphics_state.cpp": "853337103af50f4fce4335d94bb5fee113b28c1b8ad91488eb55d27c53603eb0",
+            "src/video_core/renderer_d3d12/guest_shader_cache.cpp": "0cd62d5843a1f8500c7c630fe0b753254248c18dff7180d0b03452568fc69f67",
+            "src/video_core/renderer_d3d12/guest_texture_cache.cpp": "ccc2b3646d3852f7a054232e6220fbee5f49c17f26f4bf2942d712eded96d05b"
+          },
+          "upstream_to_native": [
+            {
+              "upstream": "LiverpoolToVK::SurfaceFormat / Instance::GetSupportedFormat",
+              "native": "guest_texture_cache.cpp: LayoutGuestTexture / SupportsGuestImageTransfer / CompatibleGuestSampledStorage",
+              "invariant": "Exact 32bit packed contents; masked -512/-2 endpoint encodings untouched. SNORM RT retains physical UINT lanes; sampled expansion not borrowed as a typed attachment."
+            },
+            {
+              "upstream": "SPIRV::EmitSetAttribute / EmitContext::DefineOutputs",
+              "native": "emit_spirv_context_get_set.cpp: EmitSetAttribute / spirv_emit_context.cpp: DefineOutputs",
+              "invariant": "For native packed SNORM exports clamp and nearest-even code before fixed-function write/logic. Valid channels, signed codes and alpha2 maintained; no skipped draw or shader hash condition."
+            },
+            {
+              "upstream": "Vulkan::GraphicsPipeline blend state / Rasterizer::UpdateDynamicState",
+              "native": "guest_graphics_state.cpp: BuildGuestGraphicsState",
+              "invariant": "D3D12 single/shared compatible MRT logic state is valid with independent blend disabled. Incompatible per-target masks and post-blend SNORM quantization remain explicit failures, not successful emulation."
+            },
+            {
+              "upstream": "PipelineCache shader specialization/cache",
+              "native": "guest_shader_cache.cpp: GuestShaderCache constructor",
+              "invariant": "native v8 cache key invalidates older DXIL after changed SNORM export semantics; same-version reload/rollback verified, no v7 hit claim."
+            }
+          ],
+          "commands": [
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "snorm-color-owned"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-logic"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-color"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "mixed-samples-matrix-owned"
+            ],
+            [
+              "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+              "--test-dir",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks",
+              "-R",
+              "^(native_guest_graphics_resources|native_sampled_graphics_pipeline|native_robust_sample_copy|native_independent_image_version_transfer)$",
+              "--output-on-failure",
+              "-j",
+              "1"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\shader-reload-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll"
+            ]
+          ],
+          "test_binary_sha256": {
+            "gcn": "cea57766a479bfa311019448fefe448c930a7dfdeabf40c7305ca4f4bbfdffd3",
+            "native": {
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-guest-graphics-resources-test.exe": "53923138892ba508c51cd7a5f9d27b1c54e2a4b767b66d463dee0ba61f6e1120",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-shader-pipeline-test.exe": "3b9bea2fbc8a2cdee1f1405a6e89197241c82b187860958c9c766682044b86bf",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\native-independent-version-transfer-test.exe": "e361d32c8d0e5c55e426fc636fdfa97469c446cb44bd6404d0365ff4320e8f05"
+            },
+            "shader_reload": "baf8573630d2e8a653d53ca91b34e6ba5ced83c9683c183df05c4e4ace407fe6"
+          },
+          "results": "SNORM24 x3 authored payload draws, masks15/1/10, samples1/2/4/8, nonzero layer/full65536 padding and blend negative PASS. Signed shared3MRT XOR/SINT prior and mixed16 PASS. Four native GPU regressions PASS16.887s. Reload PASS.",
+          "limits": "No SNORM normalized blending, arbitrary per-target logic masks, nondefault component swizzles, general attachment feedback or final game acceptance claimed. Prepared final suite remains448. Earlier PASS for changed symbols is historical; this record supersedes only these addressed cases.",
+          "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -4840,7 +5018,96 @@
         "original_slot_continuation_20261016": "e877a3f/792f3fe preserve original Guest buffer/image cache preparation despite no surviving native reflection. Coverage/emission follows actual Layout; buffers retain logical invalidation/dirty-page effects, images run existing Upload/Own/readback/pin/retirement. Null/count/mip/format/backing/FMASK/sampler policies remain. No-resource ReplaceShader retains original info, providing a concrete deferred acceptance scenario. Full readonly sticky-modified revalidation is a separate confirmed gap, not claimed fixed by liveness gate removal.",
         "grouped_spirv_continuation_20261016": "NativeStorageBufferUavs now accepts legal grouped19/24 via sanitized per-target clones; source/manual reviewed only. Existing compatible cache namespace retained because prior accepted valid rewrite output is identical. Replacement compiler/GPU acceptance unrun.",
         "historical_review_notes": "Reload contents, failed compilation rollback, resource/interface compatibility, in-flight retirement, preload patches, editor/context shutdown and closed-selection completion still need final semantic fixtures and acceptance.",
-        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
+        "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate.",
+        "function_verification_20261019_snorm_logic": {
+          "upstream_sha": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
+          "implementation_state": "connected partial SNORM attachment; blend remains a production gap",
+          "behavior_state": "PASS for listed narrow cases only",
+          "source_base": "6188dc86e6981704f8914baa8251efebcd39c7fc",
+          "production_fingerprint_sha256": "69ccc84d8828d8628c01faa4efa62f6362bd26de2eb8762491634a180eae686c",
+          "source_file_sha256": {
+            "src/shader_recompiler/backend/spirv/emit_spirv_context_get_set.cpp": "7ea031030f00b2dfc34745eb602d447ee46cae53ec10ceb3e81e9c7938a7c26f",
+            "src/shader_recompiler/backend/spirv/spirv_emit_context.cpp": "159fd85748e27d29ae8d090b465c65204d438b94475a4441ff5174e510e884d6",
+            "src/video_core/renderer_d3d12/guest_graphics_state.cpp": "853337103af50f4fce4335d94bb5fee113b28c1b8ad91488eb55d27c53603eb0",
+            "src/video_core/renderer_d3d12/guest_shader_cache.cpp": "0cd62d5843a1f8500c7c630fe0b753254248c18dff7180d0b03452568fc69f67",
+            "src/video_core/renderer_d3d12/guest_texture_cache.cpp": "ccc2b3646d3852f7a054232e6220fbee5f49c17f26f4bf2942d712eded96d05b"
+          },
+          "upstream_to_native": [
+            {
+              "upstream": "LiverpoolToVK::SurfaceFormat / Instance::GetSupportedFormat",
+              "native": "guest_texture_cache.cpp: LayoutGuestTexture / SupportsGuestImageTransfer / CompatibleGuestSampledStorage",
+              "invariant": "Exact 32bit packed contents; masked -512/-2 endpoint encodings untouched. SNORM RT retains physical UINT lanes; sampled expansion not borrowed as a typed attachment."
+            },
+            {
+              "upstream": "SPIRV::EmitSetAttribute / EmitContext::DefineOutputs",
+              "native": "emit_spirv_context_get_set.cpp: EmitSetAttribute / spirv_emit_context.cpp: DefineOutputs",
+              "invariant": "For native packed SNORM exports clamp and nearest-even code before fixed-function write/logic. Valid channels, signed codes and alpha2 maintained; no skipped draw or shader hash condition."
+            },
+            {
+              "upstream": "Vulkan::GraphicsPipeline blend state / Rasterizer::UpdateDynamicState",
+              "native": "guest_graphics_state.cpp: BuildGuestGraphicsState",
+              "invariant": "D3D12 single/shared compatible MRT logic state is valid with independent blend disabled. Incompatible per-target masks and post-blend SNORM quantization remain explicit failures, not successful emulation."
+            },
+            {
+              "upstream": "PipelineCache shader specialization/cache",
+              "native": "guest_shader_cache.cpp: GuestShaderCache constructor",
+              "invariant": "native v8 cache key invalidates older DXIL after changed SNORM export semantics; same-version reload/rollback verified, no v7 hit claim."
+            }
+          ],
+          "commands": [
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "snorm-color-owned"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-logic"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "signed-color"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\gcn-attachment-alias-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll",
+              "mixed-samples-matrix-owned"
+            ],
+            [
+              "C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+              "--test-dir",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks",
+              "-R",
+              "^(native_guest_graphics_resources|native_sampled_graphics_pipeline|native_robust_sample_copy|native_independent_image_version_transfer)$",
+              "--output-on-failure",
+              "-j",
+              "1"
+            ],
+            [
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\shader-reload-test.exe",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\spirv_to_dxil.dll",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-core\\native-compiler\\dxcompiler.dll"
+            ]
+          ],
+          "test_binary_sha256": {
+            "gcn": "cea57766a479bfa311019448fefe448c930a7dfdeabf40c7305ca4f4bbfdffd3",
+            "native": {
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-guest-graphics-resources-test.exe": "53923138892ba508c51cd7a5f9d27b1c54e2a4b767b66d463dee0ba61f6e1120",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\dx12-shader-pipeline-test.exe": "3b9bea2fbc8a2cdee1f1405a6e89197241c82b187860958c9c766682044b86bf",
+              "F:\\PS4Dev\\work\\shadps4-dx12-src\\build-migration-checks\\native-independent-version-transfer-test.exe": "e361d32c8d0e5c55e426fc636fdfa97469c446cb44bd6404d0365ff4320e8f05"
+            },
+            "shader_reload": "baf8573630d2e8a653d53ca91b34e6ba5ced83c9683c183df05c4e4ace407fe6"
+          },
+          "results": "SNORM24 x3 authored payload draws, masks15/1/10, samples1/2/4/8, nonzero layer/full65536 padding and blend negative PASS. Signed shared3MRT XOR/SINT prior and mixed16 PASS. Four native GPU regressions PASS16.887s. Reload PASS.",
+          "limits": "No SNORM normalized blending, arbitrary per-target logic masks, nondefault component swizzles, general attachment feedback or final game acceptance claimed. Prepared final suite remains448. Earlier PASS for changed symbols is historical; this record supersedes only these addressed cases.",
+          "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json"
+        }
       },
       "final_verification": {
         "state": "not_run",
@@ -18351,8 +18618,8 @@
     "signed-packed10-attachment": {
       "upstream_symbol": "Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState",
-      "missing_semantics": "R10G10B10A2 SNORM attachment writes, exact per-fragment quantization, blend and logic behavior; sampled/storage signed packed paths are already connected.",
-      "evidence": "src/video_core/renderer_d3d12/guest_texture_cache.cpp: Signed packed 10-bit attachment storage requires exact native packing",
+      "missing_semantics": "Normalized SNORM blending still needs exact ordered per-fragment post-blend quantization; arbitrary mixed MRT logic masks remain unimplemented. Unblended/masked/XOR packed SNORM1/2/4/8 and compatible shared SINT MRT logic now connected and narrowly GPU verified. Existing sampled/storage signed packed paths stay connected.",
+      "evidence": "guest_graphics_state.cpp: explicit SNORM blend / independent MRT logic mask guards; native-port/gcn_snorm_attachment_fixture.h; F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json",
       "groups": [
         13,
         14,

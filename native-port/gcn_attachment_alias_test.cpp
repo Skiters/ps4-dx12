@@ -9,6 +9,7 @@
 #include "gcn_writable_word_fixture.h"
 #include "gcn_shared_exponent_fixture.h"
 #include "gcn_mixed_samples_fixture.h"
+#include "gcn_snorm_attachment_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -43,8 +44,10 @@ int main(int argc,char** argv){try{
     const bool shared_exponent_extremes=std::string_view(argv[3])=="shared-exponent-extremes-owned";
     const bool shared_exponent_word=std::string_view(argv[3])=="shared-exponent-word-donor-owned";
     const bool shared_exponent=shared_exponent_msaa_writer||shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
-    const bool signed_color=std::string_view(argv[3])=="signed-color";
+    const bool signed_logic=std::string_view(argv[3])=="signed-logic";
+    const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
+    const bool snorm_color=mode=="snorm-color-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
     const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
@@ -82,7 +85,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -142,7 +145,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(mixed_samples){
+    if(snorm_color){
+        RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
+    }else if(mixed_samples){
         RunMixedSamplesGcnFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="mixed-samples-matrix-owned");
     }else if(shared_exponent){
         if(shared_exponent_msaa_writer)for(u32 samples:{2u,4u,8u})RunSharedExponentGcnFixture(rasterizer,gpu,memory,backing,base,false,false,false,samples);
@@ -933,7 +938,7 @@ int main(int argc,char** argv){try{
         const auto format=u32(AmdGpu::ShaderExportFormat::ABGR_32);
         regs.color_export_format.raw=format|(format<<4)|(format<<8);
         regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
-        regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+        regs.color_control.rop3=signed_logic?AmdGpu::ColorControl::LogicOp::Xor:AmdGpu::ColorControl::LogicOp::Copy;
         regs.color_target_mask.raw=regs.color_shader_mask.raw=0xfff;
         regs.clipper_control.clip_space=AmdGpu::ClipSpace::ZeroToW;
         auto& control=regs.viewport_control;
@@ -967,7 +972,8 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
-                memcpy(expected.data()+4096+offset,&values[i],4);
+                const auto word=signed_logic?(values[i]^0xeeeeeeee):values[i];
+                memcpy(expected.data()+4096+offset,&word,4);
             }
             if(linear_attachment){
                 const Rasterizer::ShaderBufferRequest raw[]{{base+4096,layout.guest_bytes,false,false,true}};
@@ -1012,7 +1018,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

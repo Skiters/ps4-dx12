@@ -284,9 +284,18 @@ int wmain(int argc,wchar_t** argv){try {
     logic_regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Xor;logic_regs.color_target_mask.raw=0xf;
     const std::array<DXGI_FORMAT,1> logic_format{DXGI_FORMAT_R8G8B8A8_UNORM};
     const auto logic_state=BuildGuestGraphicsState(logic_regs,logic_format);
-    if(!logic_state.pipeline.BlendState.RenderTarget[0].LogicOpEnable||
+    if(logic_state.pipeline.BlendState.IndependentBlendEnable||!logic_state.pipeline.BlendState.RenderTarget[0].LogicOpEnable||
        logic_state.pipeline.BlendState.RenderTarget[0].LogicOp!=D3D12_LOGIC_OP_XOR)
         throw std::runtime_error("Guest raster logic operation mapping mismatch");
+    const std::array logic_mrt{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM};
+    logic_regs.color_target_mask.raw=0xff;
+    if(BuildGuestGraphicsState(logic_regs,logic_mrt).pipeline.BlendState.IndependentBlendEnable)
+        throw std::runtime_error("Shared MRT logic state is invalid in D3D12");
+    logic_regs.color_target_mask.raw=0x1f;
+    bool independent_logic_rejected=false;
+    try{(void)BuildGuestGraphicsState(logic_regs,logic_mrt);}
+    catch(const std::runtime_error& error){independent_logic_rejected=std::string_view(error.what()).find("independent write masks")!=std::string_view::npos;}
+    if(!independent_logic_rejected)throw std::runtime_error("Independent MRT logic masks silently collapsed");
     AmdGpu::Sampler sampler_desc{};sampler_desc.raw0=u64(AmdGpu::ClampMode::ClampHalfBorder)|
         (u64(AmdGpu::ClampMode::MirrorOnceBorder)<<3)|(u64(1)<<15);
     sampler_desc.raw1=u64(AmdGpu::BorderColor::Custom)<<62;

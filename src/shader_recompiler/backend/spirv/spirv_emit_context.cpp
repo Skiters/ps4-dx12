@@ -810,7 +810,7 @@ void EmitContext::DefineOutputs() {
             auto num_format=runtime_info.hw.fs.color_buffers[i].num_format;
             if(profile.native_coherent_images&&
                runtime_info.hw.fs.color_buffers[i].data_format==AmdGpu::DataFormat::Format2_10_10_10&&
-               num_format==AmdGpu::NumberFormat::Sint)
+               (num_format==AmdGpu::NumberFormat::Sint||num_format==AmdGpu::NumberFormat::Snorm))
                 num_format=AmdGpu::NumberFormat::Uint;
             const Id type{GetAttributeType(*this, num_format)[num_components]};
             Id id;

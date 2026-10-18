@@ -185,6 +185,9 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         const bool logic=regs.color_control.rop3!=AmdGpu::ColorControl::LogicOp::Copy;
         rt.LogicOpEnable=logic;rt.LogicOp=LogicOp(regs.color_control.rop3);
         const auto& source=regs.blend_control[i];rt.BlendEnable=!logic&&source.enable&&!regs.color_buffers[i].info.blend_bypass;
+        if(rt.BlendEnable&&regs.color_buffers[i].GetDataFmt()==AmdGpu::DataFormat::Format2_10_10_10&&
+           regs.color_buffers[i].GetNumberFmt()==AmdGpu::NumberFormat::Snorm)
+            throw std::runtime_error("Native packed10 SNORM blending requires ordered post-blend quantization");
         if(rt.BlendEnable) {
             using BF=AmdGpu::BlendControl::BlendFactor;
             const auto is_color=[](BF f){return f==BF::ConstantColor||f==BF::OneMinusConstantColor;};
@@ -219,6 +222,27 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             NormalizeMinMaxBlend(rt.BlendOp,rt.SrcBlend,rt.DestBlend,regs.color_buffers[i].GetNumberFmt());
             NormalizeMinMaxBlend(rt.BlendOpAlpha,rt.SrcBlendAlpha,rt.DestBlendAlpha,regs.color_buffers[i].GetNumberFmt());
         }
+    }
+    // D3D12 forbids logic operations with IndependentBlendEnable. A single
+    // shared state is exact only when every bound target has the same scattered
+    // write mask. Do not silently write a masked MRT or replay side-effecting
+    // guest shaders to emulate independent masks. Regression: snorm-color-owned
+    // and signed-logic (real GCN/readback); native_guest_graphics_resources
+    // additionally rejects incompatible independent masks before submission.
+    const D3D12_RENDER_TARGET_BLEND_DESC* logic_state=nullptr;
+    for(UINT i=0;i<p.NumRenderTargets;++i)
+        if(targets[i]!=DXGI_FORMAT_UNKNOWN&&p.BlendState.RenderTarget[i].LogicOpEnable){
+            logic_state=&p.BlendState.RenderTarget[i];break;
+        }
+    if(logic_state){
+        const auto common=*logic_state;
+        for(UINT i=0;i<p.NumRenderTargets;++i)if(targets[i]!=DXGI_FORMAT_UNKNOWN){
+            const auto& target=p.BlendState.RenderTarget[i];
+            if(target.RenderTargetWriteMask!=common.RenderTargetWriteMask||
+               target.LogicOpEnable!=common.LogicOpEnable||target.LogicOp!=common.LogicOp)
+                throw std::runtime_error("Native MRT logic operations require ordered independent write masks");
+        }
+        p.BlendState.IndependentBlendEnable=FALSE;p.BlendState.RenderTarget[0]=common;
     }
     if(!native_alpha_factor&&needs_constant_color_rgb&&needs_constant_alpha_rgb)
         throw std::runtime_error("Native MRT blend simultaneously requires constant color and constant alpha RGB factors");
