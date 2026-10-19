@@ -7,7 +7,7 @@
 #include <string>
 
 namespace NativeDX12 {
-inline void RunOrderedBcWordStages(ID3D12Device* device){
+inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
@@ -45,24 +45,30 @@ inline void RunOrderedBcWordStages(ID3D12Device* device){
         throw std::runtime_error("BC/word ordered-stage fixture unexpectedly downloaded I into B");});
 
     AmdGpu::Image word{};word.base_address=base>>8;word.type=u64(AmdGpu::ImageType::Color2DArray);
-    word.data_format=14;word.num_format=4;word.width=word.height=11;word.pitch=15;
+    word.data_format=14;word.num_format=4;
+    word.width=word.height=prefix?23:11;word.pitch=prefix?31:15;
+    word.last_level=prefix?2:0;word.base_level=prefix?2:0;
     word.depth=word.last_array=1;word.tiling_index=5;
     word.dst_sel_x=4;word.dst_sel_y=5;word.dst_sel_z=6;word.dst_sel_w=7;
-    auto bc=word;bc.width=bc.height=47;bc.pitch=63;bc.data_format=37;bc.num_format=0;
+    auto bc=word;bc.width=bc.height=prefix?95:47;bc.pitch=prefix?127:63;
+    bc.last_level=prefix?3:0;bc.base_level=0;bc.data_format=37;bc.num_format=0;
     auto writable=DescribeGuestTexture(word);writable.writable=true;
     auto sampled=DescribeGuestTexture(bc);
     const auto writable_layout=LayoutGuestTexture(writable),sampled_layout=LayoutGuestTexture(sampled);
-    require(sampled.levels==1&&writable.levels==1&&sampled_layout.block_extent==4&&
-        writable_layout.block_extent==1&&sampled_layout.guest_bytes==8192&&
-        writable_layout.guest_bytes==sampled_layout.guest_bytes,
+    require(sampled_layout.block_extent==4&&writable_layout.block_extent==1&&
+        (prefix?(sampled.levels==4&&writable.levels==3&&writable.first_mip==2&&
+                 sampled_layout.guest_bytes==36864&&writable_layout.guest_bytes<sampled_layout.guest_bytes):
+                (sampled.levels==1&&writable.levels==1&&sampled_layout.guest_bytes==8192&&
+                 writable_layout.guest_bytes==sampled_layout.guest_bytes)),
         "BC/word ordered-stage physical domain changed");
     require(CompatibleGuestBlockWordStorage(sampled,sampled_layout,writable,writable_layout),
-        "Exact one-level BC/word storage was not recognized");
+        "Exact BC/word terminal prefix was not recognized");
     auto shifted=writable;shifted.address+=256;
-    auto multilevel=sampled;multilevel.levels=2;
+    auto nonterminal=writable;nonterminal.first_mip=nonterminal.levels>1?nonterminal.levels-2:0;
+    if(nonterminal.levels==1)++nonterminal.levels;
     require(!CompatibleGuestBlockWordStorage(sampled,sampled_layout,shifted,writable_layout)&&
-        !CompatibleGuestBlockWordStorage(multilevel,LayoutGuestTexture(multilevel),writable,writable_layout),
-        "BC/word ordered-stage guard admitted shifted or multilevel storage");
+        !CompatibleGuestBlockWordStorage(sampled,sampled_layout,nonterminal,LayoutGuestTexture(nonterminal)),
+        "BC/word ordered-stage guard admitted shifted or nonterminal storage");
     std::vector<std::byte> initial(size_t(sampled_layout.guest_bytes),std::byte{0xa6});
     std::vector<std::byte> current(size_t(sampled_layout.guest_bytes),std::byte{0x5c});
     for(size_t offset=0;offset<initial.size();offset+=4){
@@ -74,8 +80,8 @@ inline void RunOrderedBcWordStages(ID3D12Device* device){
     auto& seed=textures.Upload(sampled,initial,rasterizer.RecordingList(),rasterizer.CompletedFence(),
         {},true,nullptr,true,true);
     require(textures.Own(seed),"BC/word ordered-stage seed could not retain I");
-    std::vector<Rasterizer::ShaderBufferRequest> requests{{base,sampled_layout.guest_bytes,true,true,true}};
-    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,sampled_layout.guest_bytes}};
+    std::vector<Rasterizer::ShaderBufferRequest> requests{{base,writable_layout.guest_bytes,true,true,true}};
+    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,writable_layout.guest_bytes}};
     const std::vector<OrderedGuestImage> images{{sampled,sampled_layout,false,false},
         {writable,writable_layout,true,false}};
     const std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
@@ -93,15 +99,18 @@ inline void RunOrderedBcWordStages(ID3D12Device* device){
     // remains in current guest B, so resolve both native representations over
     // that independent padding oracle.
     auto expected_early=current;
-    for(UINT layer=0;layer<sampled.layers;++layer)
-    for(UINT y=0;y<(sampled.height+3)/4;++y)for(UINT x=0;x<(sampled.width+3)/4;++x){
-        const auto offset=GuestPixelOffset(sampled,sampled_layout,0,layer,x,y);
+    for(UINT layer=0;layer<sampled.layers;++layer)for(UINT mip=0;mip<sampled.levels;++mip)
+    for(UINT y=0;y<(std::max(sampled.height>>mip,1u)+3)/4;++y)
+    for(UINT x=0;x<(std::max(sampled.width>>mip,1u)+3)/4;++x){
+        const auto offset=GuestPixelOffset(sampled,sampled_layout,mip,layer,x,y);
         memcpy(expected_early.data()+offset,initial.data()+offset,sampled_layout.bytes_per_pixel);
     }
-    auto observed_early=current,observed_late=current;
+    auto observed_early=current;
+    std::vector<std::byte> observed_late(current.begin(),current.begin()+size_t(writable_layout.guest_bytes));
     early.Resolve(rasterizer.CompletedFence(),observed_early);late.Resolve(rasterizer.CompletedFence(),observed_late);
     require(observed_early==expected_early,"Early BC sampled view did not preserve original logical I or current B padding");
-    require(observed_late==current,"Late word writable view did not use current B and padding");
+    require(std::equal(observed_late.begin(),observed_late.end(),current.begin()),
+        "Late word writable view did not use current B prefix and padding");
     rasterizer.ValidateDebugMessages();
 }
 
@@ -305,6 +314,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
     }
     RunOrderedConvertedPackedStages(device);
     RunOrderedBcWordStages(device);
+    RunOrderedBcWordStages(device,true);
     puts("PASS: ordered stage I/B refreshes preserve shared views, dirty state, streams and complete tiled padding");
     return 0;
 }

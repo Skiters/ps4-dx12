@@ -1900,8 +1900,10 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextu
 }
 bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
-    if(a.levels!=1||b.levels!=1||(al.block_extent==4)==(bl.block_extent==4))return false;
-    return MatchesReferenceBlockImage(a,al,b,bl)&&MatchesReferenceBlockImage(b,bl,a,al);
+    if((al.block_extent==4)==(bl.block_extent==4))return false;
+    auto readonly_a=a,readonly_b=b;readonly_a.writable=readonly_b.writable=false;
+    return MatchesReadonlyBlockMipPrefix(readonly_a,al,readonly_b,bl)||
+        MatchesReadonlyBlockMipPrefix(readonly_b,bl,readonly_a,al);
 }
 GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
