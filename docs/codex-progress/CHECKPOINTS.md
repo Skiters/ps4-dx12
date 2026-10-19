@@ -1273,3 +1273,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 4654660: normalized RG16 ordered blending connected;32 GCN cases prepared/compiled, GPU NOT_RUN; clean Release identities rg16-normalized-4654660.json. No FPS claim/app replacement.
 
 2026-10-20 e830b9c:80 CPU-only actual GCN/SPIR-V/signed DXIL variants PASS1.113s, exact identities ordered-cpu-compiler-e830b9c.json; GPU/game NOT_RUN.
+
+2026-10-20 fadb22b: topology-aware point capture reservation and CPU bounds checks PASS; winding compiled only; clean Release identities point-bound-fadb22b.json. Tessellation capture stays open, GPU/game NOT_RUN.
