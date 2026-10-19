@@ -32,6 +32,24 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);return result;
     };
     {
+        u64 commits{},committed{};Adapter renderer(device);attach(renderer,commits,committed);
+        renderer.NotifyHostMapping(base,bytes,true,false);
+        const Rasterizer::ShaderBufferRequest writer{base+0x810,1024,true,true,true};
+        renderer.NotifyHostMapping(writer.address,writer.size,true,true);
+        renderer.PrepareShaderBuffers(std::span(&writer,1));
+        require(!renderer.BuffersMayDefer(std::span(&writer,1)),
+            "Writable ownership expanded beyond confirmed writable guest rights");
+    }
+    {
+        u64 commits{},committed{};Adapter renderer(device);attach(renderer,commits,committed);
+        const Rasterizer::ShaderBufferRequest mixed[]{
+            {base+64,64,false,false,true},{base+0x810,1024,true,true,true}};
+        const auto views=renderer.PrepareShaderBuffers(mixed);
+        require(views[0].resource.Get()!=views[1].resource.Get(),
+            "Ownership rounding merged incompatible simultaneous SRV/UAV allocations");
+        require(!renderer.BuffersMayDefer(mixed),
+            "Ownership rounding crossed an incompatible simultaneous resource domain");
+    }    {
         require(bytes>=65536,"Unaligned ownership fixture needs full committed pages");
         memset(physical,0x37,size_t(bytes));u64 commits{},committed{};
         Adapter renderer(device);attach(renderer,commits,committed);
