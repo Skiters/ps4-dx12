@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_shader_cache.h"
 #include "diagnostics.h"
+#include "shader_recompiler/native_ordered_color.h"
+#include <fstream>
 #include <stdexcept>
 
 namespace NativeDX12 {
@@ -8,6 +10,28 @@ namespace DXIL = Shader::Backend::DX12;
 namespace {
 std::filesystem::path CacheDirectory(){
     return NativeCacheDirectory("dxil");
+}
+void OrderedColorOptions(DXIL::SpirvConvertOptions& options,u32 mask) {
+    if (!mask) return;
+    options.raster_ordered_uav_space = Shader::NativeOrderedColor::DescriptorSet;
+    options.raster_ordered_uav_register = Shader::NativeOrderedColor::Binding;
+    options.raster_ordered_uav_count = Shader::NativeOrderedColor::Count;
+}
+void SaveFailedStages(std::span<const DXIL::LinkedSpirvStage> stages) noexcept {
+    try {
+        const char* directory = std::getenv("SHADPS4_NATIVE_FAILED_SHADER_DIR");
+        if (!directory || !*directory) return;
+        std::filesystem::create_directories(directory);
+        for (u32 i = 0; i < stages.size(); ++i) {
+            std::ofstream output(std::filesystem::path(directory) /
+                ("linked-stage-" + std::to_string(i) + ".spv"), std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(stages[i].words.data()),
+                         std::streamsize(stages[i].words.size_bytes()));
+        }
+    } catch (...) {
+        // Preserve the original compiler diagnostic if the optional dump path
+        // is unavailable.
+    }
 }
 void OptionsKey(CacheKey& key,const DXIL::SpirvConvertOptions& o){
     key.Add(o.stage);key.Text(o.entry_point);key.Add(o.shader_model_minor);key.Add(o.validator_minor);
@@ -55,6 +79,12 @@ GuestShaderCache::GuestShaderCache(std::wstring converter,DXIL::SpirvConvertOpti
 }
 void GuestShaderCache::ValidateStage(const GuestShaderStage& stage){
     auto options=options_;options.stage=HostStage(stage.info.sw_stage);
+    if (stage.info.sw_stage == Shader::SwStage::Fragment) {
+        u32 mask{};
+        for (u32 i = 0; i < stage.runtime.hw.fs.ordered_color_targets.size(); ++i)
+            if (stage.runtime.hw.fs.ordered_color_targets[i].enabled) mask |= 1u << i;
+        OrderedColorOptions(options, mask);
+    }
     const auto compiled=DXIL::ConvertSpirv(converter_,stage.EffectiveSpirv(),options);
     if(!compiled.success||compiled.bytecode.empty())throw std::runtime_error("Native shader replacement compilation failed: "+compiled.diagnostics);
 }
@@ -64,7 +94,9 @@ const GuestDxilStages& GuestShaderCache::Graphics(const GuestGraphicsStages& gue
     if (const auto existing = graphics_.find(key); existing != graphics_.end()) return existing->second;
     std::vector<DXIL::LinkedSpirvStage> inputs;
     std::vector<u32> indices;
-    auto disk_key=configuration_;disk_key.Text("graphics");
+    auto options = options_;
+    OrderedColorOptions(options, guest.ordered_color_mask);
+    auto disk_key=configuration_;disk_key.Text("graphics");OptionsKey(disk_key,options);
     for (u32 index = 0; index < guest.stages.size(); ++index) {
         const auto* stage = guest.stages[index];
         if (!stage) continue;
@@ -85,9 +117,11 @@ const GuestDxilStages& GuestShaderCache::Graphics(const GuestGraphicsStages& gue
         if(!reader.data.empty())throw std::runtime_error("Trailing DXIL cache bytes");
         ++disk_hits_;return graphics_.emplace(key,std::move(result)).first->second;
     }catch(const std::exception&){}
-    auto compiled = DXIL::ConvertLinkedStages(converter_, inputs, options_);
-    if (!compiled.success || compiled.stages.size() != indices.size())
+    auto compiled = DXIL::ConvertLinkedStages(converter_, inputs, options);
+    if (!compiled.success || compiled.stages.size() != indices.size()) {
+        SaveFailedStages(inputs);
         throw std::runtime_error("Guest linked DXIL compilation failed: " + compiled.diagnostics);
+    }
     GuestDxilStages result;
     for (u32 index = 0; index < indices.size(); ++index) {
         if (!compiled.stages[index].success || compiled.stages[index].bytecode.empty())

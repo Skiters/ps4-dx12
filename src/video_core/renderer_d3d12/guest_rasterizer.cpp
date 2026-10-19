@@ -1,6 +1,7 @@
 #include "common/api_trace.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_rasterizer.h"
+#include "shader_recompiler/native_ordered_color.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "guest_graphics_state.h"
 #include "guest_viewports.h"
@@ -993,6 +994,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     catch(const Shader::NativePointCapture::Required&){
         capture=frontend_.BuildPointCaptureGraphics(r,vertex_sgpr,instance_sgpr,indirect != nullptr);
         guest=capture->producer;guest.mrt_mask=capture->replay.mrt_mask;
+        guest.ordered_color_mask=capture->replay.ordered_color_mask;
         guest.stages[u32(Shader::SwStage::Fragment)]=capture->replay.stages[u32(Shader::SwStage::Fragment)];
     }
     diagnostic.Stage("attachment-validation");
@@ -1075,6 +1077,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     auto state=BuildGuestGraphicsState(r,std::span(formats.data(),target_count),depth_format,
         r.ls_hs_config.hs_input_control_points,native_alpha_factor_);
+    const u32 shader_ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
+    if(state.ordered_color_mask!=shader_ordered_mask)
+        throw std::logic_error("Native ordered color shader/state target masks disagree");
     if(state.discard)return;
     const bool clear_stencil=depth_tests.stencil&&r.depth_render_control.stencil_clear_enable;
     const bool explicit_depth_clear=depth_tests.depth&&r.depth_render_control.depth_clear_enable&&
@@ -1336,6 +1341,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     Shader::PushData push{};const auto& c=r.viewport_control;const auto& v=r.viewports[0];
     push.xoffset=c.xoffset_enable?v.xoffset:0;push.xscale=c.xscale_enable?v.xscale:1;
     push.yoffset=c.yoffset_enable?v.yoffset:0;push.yscale=c.yscale_enable?v.yscale:1;
+    push.blend_constants=r.blend_constants;
     GraphicsRuntime runtime{};runtime.first_vertex=indexed?u32(draw.base_vertex):draw.first;
     runtime.base_instance=draw.first_instance;runtime.indexed=indexed;
     runtime.yz_flip_mask=viewport.flip_mask;runtime.SetViewports(viewport.viewports,expanded_points,viewport.clip_transforms);
@@ -1385,7 +1391,18 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             OwnImage(entry);textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
             if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
                 throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
-            targets[i]=&entry;attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
+            targets[i]=&entry;
+            if(state.ordered_color_mask&(1u<<i)){
+                const auto first=descriptions[i].first_layer;
+                const auto count=descriptions[i].view_layers;
+                for(UINT layer=first;layer<first+count;++layer)
+                    entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                             layer*entry.desc.levels);
+                const auto view=entry.OrderedColorUav();
+                bindings.Uav(Shader::NativeOrderedColor::Binding+i,
+                             Shader::NativeOrderedColor::DescriptorSet,
+                             entry.texture.handle.Get(),view);
+            }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
         DepthAttachment depth{};
         if(has_depth) {
@@ -1538,9 +1555,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             const auto& dxil=shaders_.Graphics(guest).stages[u32(Shader::SwStage::Fragment)].bytecode;
             DisplayCapture::Save(capture_id,pass_name+"-fragment.dxil",std::as_bytes(std::span(dxil)),"Linked production fragment DXIL");
         }
-        ExecuteGraphics(pipeline,bindings,state,std::span(attachments.data(),target_count),has_depth?&depth:nullptr,
+        ExecuteGraphics(pipeline,bindings,state,
+            std::span(attachments.data(),pipeline.TargetFormats().size()),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
+        for(UINT i=0;i<target_count;++i)if(targets[i]&&(state.ordered_color_mask&(1u<<i)))
+            targets[i]->texture.UavBarrier(RecordingList());
         // A recorded attachment writer changes original GpuModified history,
         // even when recreation copied a CPU-initialized (GpuModified0) source.
         for(UINT i=0;i<target_count;++i)if(targets[i])targets[i]->NoteLogicalImageWrite();

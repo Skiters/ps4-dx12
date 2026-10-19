@@ -334,7 +334,8 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
         const u32 index{u32(attr) - u32(IR::Attribute::RenderTarget0)};
         const auto& info{ctx.frag_outputs.at(index)};
         const auto& target=ctx.runtime_info.hw.fs.color_buffers[index];
-        if(ctx.profile.native_coherent_images&&target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
+        if(ctx.profile.native_coherent_images&&!ctx.runtime_info.hw.fs.ordered_color_targets[index].enabled&&
+           target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
            target.num_format==AmdGpu::NumberFormat::Sint){
             const u32 bits=element==3?2:10;
             const auto clamped=ctx.OpSClamp(ctx.S32[1],ctx.OpBitcast(ctx.S32[1],value),
@@ -346,7 +347,8 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
             // Emulates GCN's factor-scaled min/max blend: min/max(src*src, dst*dst).
             value = ctx.OpFMul(ctx.F32[1], value, value);
         }
-        if(ctx.profile.native_coherent_images&&target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
+        if(ctx.profile.native_coherent_images&&!ctx.runtime_info.hw.fs.ordered_color_targets[index].enabled&&
+           target.data_format==AmdGpu::DataFormat::Format2_10_10_10&&
            target.num_format==AmdGpu::NumberFormat::Snorm){
             // Vulkan SNORM conversion: clamp, scale by the positive signed
             // maximum, then choose nearest-even. Keep packed bits in UINT lanes

@@ -2,6 +2,7 @@
 #include "guest_shader_frontend.h"
 #include "guest_point_shader.h"
 #include "guest_point_transport.h"
+#include "guest_graphics_state.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
 #include "video_core/amdgpu/liverpool.h"
@@ -12,6 +13,16 @@
 #endif
 
 namespace NativeDX12 {
+namespace {
+void RestrictOrderedColorTargets(Shader::RuntimeInfo& runtime, u32 mrt_mask) {
+    for (u32 i = 0; i < Shader::MaxColorBuffers; ++i) {
+        if ((mrt_mask & (1u << i)) == 0) {
+            runtime.hw.fs.ordered_color_targets[i] = {};
+        }
+    }
+}
+} // namespace
+
 GuestShaderStage* GuestShaderFrontend::FindStage(u64 id){
     for(auto& [key,variants]:programs_)for(auto& [index,stage]:variants)if(stage->id==id&&!stage->requires_point_capture)return stage.get();
     for(auto& [key,stage]:auxiliary_)if(stage->id==id)return stage.get();return nullptr;
@@ -25,6 +36,15 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     std::span<const Shader::NativeImageWrite> raw32_views) {
     auto runtime = VideoCore::BuildGuestRuntimeInfo(regs, compute, hardware, logical, context);
     if(logical==Shader::SwStage::Fragment){
+        const u32 ordered_mask = GuestOrderedColorMask(regs);
+        for (u32 i = 0; i < Shader::MaxColorBuffers; ++i) if (ordered_mask & (1u << i)) {
+            auto& target = runtime.hw.fs.ordered_color_targets[i];
+            target.enabled = true;
+            target.blend = regs.blend_control[i];
+            target.write_mask = u8(regs.color_buffers[i].Swizzle().ApplyMask(
+                regs.color_target_mask.GetMask(i)));
+            target.shader_mask = u8(regs.color_shader_mask.GetMask(i));
+        }
         runtime.hw.fs.native_point_input_compaction=(regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&
             regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList)||
             (regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs&&
@@ -92,6 +112,9 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             variant->info.native_pipeline_signed_packed_views.assign(signed_packed_views.begin(),signed_packed_views.end());
             variant->info.native_pipeline_raw32_views.assign(raw32_views.begin(),raw32_views.end());
             auto requested_runtime=runtime;
+            if (logical == Shader::SwStage::Fragment) {
+                RestrictOrderedColorTargets(requested_runtime, variant->info.mrt_mask);
+            }
             if(logical==Shader::SwStage::Fragment&&runtime.hw.fs.native_point_input_compaction){
                 const auto transport=BuildNativePointTransport(variant->info,regs.num_interp,
                     [&](u32 input){return runtime.hw.fs.inputs[input];});
@@ -136,6 +159,9 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
         mutable_runtime, stage_profile);
     if (stage->info.translation_failed)
         throw std::runtime_error("Guest shader translation failed");
+    if (logical == Shader::SwStage::Fragment) {
+        RestrictOrderedColorTargets(mutable_runtime, stage->info.mrt_mask);
+    }
     if(logical==Shader::SwStage::Fragment&&mutable_runtime.hw.fs.native_point_input_compaction){
         const auto transport=BuildNativePointTransport(stage->info,regs.num_interp,
             [&](u32 input){return mutable_runtime.hw.fs.inputs[input];});
@@ -213,6 +239,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
     bind(HwStage::Fragment, SwStage::Fragment, false);
     if (const auto* fragment = result.stages[static_cast<u32>(SwStage::Fragment)])
         result.mrt_mask = fragment->info.mrt_mask;
+    result.ordered_color_mask = GuestOrderedColorMask(regs) & result.mrt_mask;
     switch (regs.stage_enable.raw) {
     case AmdGpu::ShaderStageEnable::VgtStages::Vs:
         bind(HwStage::Vertex, SwStage::Vertex); break;
@@ -316,7 +343,9 @@ GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const Amd
         throw std::logic_error("Missing native point capture producer");
     GuestPointCaptureStages result;result.producer=original;
     result.producer.stages[u32(SwStage::Fragment)]=nullptr;result.producer.mrt_mask=0;
+    result.producer.ordered_color_mask=0;
     result.replay.mrt_mask=original.mrt_mask;
+    result.replay.ordered_color_mask=original.ordered_color_mask;
     result.replay.stages[u32(SwStage::Fragment)]=original.stages[u32(SwStage::Fragment)];
     const auto auxiliary=[&](Shader::SwStage logical,std::vector<u32> words){
         auto found=auxiliary_.find(words);

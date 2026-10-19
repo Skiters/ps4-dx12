@@ -9,6 +9,7 @@
 #include "common/types.h"
 #include "shader_recompiler/frontend/tessellation.h"
 #include "video_core/amdgpu/pixel_format.h"
+#include "video_core/amdgpu/regs_color.h"
 #include "video_core/amdgpu/regs_shader.h"
 #include "video_core/amdgpu/regs_vertex.h"
 
@@ -213,6 +214,14 @@ struct PsColorBuffer {
 };
 
 struct HwFragmentRuntimeInfo {
+    struct OrderedColorTarget {
+        AmdGpu::BlendControl blend{};
+        u8 write_mask{};
+        u8 shader_mask{};
+        bool enabled{};
+
+        bool operator==(const OrderedColorTarget&) const noexcept = default;
+    };
     struct PsInput {
         u8 param_index;
         bool is_default;
@@ -234,6 +243,7 @@ struct HwFragmentRuntimeInfo {
     u32 num_inputs;
     std::array<PsInput, 32> inputs;
     std::array<PsColorBuffer, MaxColorBuffers> color_buffers;
+    std::array<OrderedColorTarget, MaxColorBuffers> ordered_color_targets{};
     AmdGpu::ShaderExportFormat z_export_format;
     u8 num_samples{1};
     u8 mrtz_mask{};
@@ -248,6 +258,7 @@ struct HwFragmentRuntimeInfo {
 
     bool operator==(const HwFragmentRuntimeInfo& other) const noexcept {
         return std::ranges::equal(color_buffers, other.color_buffers) &&
+               ordered_color_targets == other.ordered_color_targets &&
                en_flags == other.en_flags && addr_flags == other.addr_flags &&
                num_inputs == other.num_inputs && z_export_format == other.z_export_format &&
                num_samples == other.num_samples && mrtz_mask == other.mrtz_mask &&

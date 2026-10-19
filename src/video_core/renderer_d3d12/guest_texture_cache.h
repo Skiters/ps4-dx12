@@ -232,6 +232,7 @@ public:
         D3D12_SHADER_RESOURCE_VIEW_DESC Srv(const GuestTextureDesc& sampled_view)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(uint32_t mip)const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC Uav(const GuestTextureDesc& view,uint32_t mip)const;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC OrderedColorUav()const;
         D3D12_UNORDERED_ACCESS_VIEW_DESC StorageUav(const GuestTextureDesc& view,uint32_t sample)const;
         D3D12_RENDER_TARGET_VIEW_DESC Rtv(uint32_t mip=0)const;
         D3D12_RENDER_TARGET_VIEW_DESC Rtv(const GuestTextureDesc&,uint32_t mip=0)const;

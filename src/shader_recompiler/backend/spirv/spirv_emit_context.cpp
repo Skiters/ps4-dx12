@@ -4,6 +4,7 @@
 #include "common/assert.h"
 #include "common/div_ceil.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
+#include "shader_recompiler/native_ordered_color.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_point.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_point_capture.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
@@ -90,6 +91,7 @@ EmitContext::EmitContext(const Profile& profile_, const RuntimeInfo& runtime_inf
     DefineSharedMemory();
     DefineBuffers();
     DefineImagesAndSamplers();
+    DefineOrderedColorImages();
     DefineFunctions();
 }
 
@@ -359,7 +361,9 @@ void EmitContext::DefineInputs() {
         break;
     }
     case SwStage::Fragment: {
-        if (info.loads.GetAny(IR::Attribute::FragCoord) ||
+        const bool ordered_color = std::ranges::any_of(runtime_info.hw.fs.ordered_color_targets,
+            [](const auto& target) { return target.enabled; });
+        if (ordered_color || info.loads.GetAny(IR::Attribute::FragCoord) ||
             (info.loads.GetAny(IR::Attribute::BaryCoordPullModel) &&
              !profile.supports_amd_shader_explicit_vertex_parameter)) {
             frag_coord = DefineVariable(F32[4], spv::BuiltIn::FragCoord, spv::StorageClass::Input);
@@ -368,7 +372,7 @@ void EmitContext::DefineInputs() {
             front_facing =
                 DefineVariable(U1[1], spv::BuiltIn::FrontFacing, spv::StorageClass::Input);
         }
-        if (info.loads.GetAny(IR::Attribute::RenderTargetIndex)) {
+        if (ordered_color || info.loads.GetAny(IR::Attribute::RenderTargetIndex)) {
             output_layer = DefineVariable(U32[1], spv::BuiltIn::Layer, spv::StorageClass::Input);
             Decorate(output_layer, spv::Decoration::Flat);
         }
@@ -807,6 +811,18 @@ void EmitContext::DefineOutputs() {
                 continue;
             }
             const u32 num_components = info.stores.NumComponents(mrt);
+            if (runtime_info.hw.fs.ordered_color_targets[i].enabled) {
+                const Id id = DefineVar(F32[4], spv::StorageClass::Private,
+                    ConstF32(0.f, 0.f, 0.f, 0.f));
+                Name(id, fmt::format("ordered_frag_color{}", i));
+                // SPIR-V 1.4+ requires every module-scope variable used by an
+                // entry point, including Private storage, in its interface.
+                interfaces.push_back(id);
+                frag_outputs[i] = GetAttributeInfo(AmdGpu::NumberFormat::Float, id, 4, true);
+                frag_outputs[i].pointer_type = TypePointer(spv::StorageClass::Private, F32[1]);
+                ++num_render_targets;
+                continue;
+            }
             auto num_format=runtime_info.hw.fs.color_buffers[i].num_format;
             if(profile.native_coherent_images&&
                runtime_info.hw.fs.color_buffers[i].data_format==AmdGpu::DataFormat::Format2_10_10_10&&
@@ -883,7 +899,7 @@ void EmitContext::DefineOutputs() {
 void EmitContext::DefinePushDataBlock() {
     // Create push constants block for instance steps rates
     const Id struct_type{
-        Name(TypeStruct(F32[1], F32[1], F32[1], F32[1], U32[4], U32[4], U32[2]), "AuxData")};
+        Name(TypeStruct(F32[1], F32[1], F32[1], F32[1], U32[4], U32[4], U32[2], F32[4]), "AuxData")};
     Decorate(struct_type, spv::Decoration::Block);
     MemberName(struct_type, PushData::XOffsetIndex, "xoffset");
     MemberName(struct_type, PushData::YOffsetIndex, "yoffset");
@@ -892,6 +908,7 @@ void EmitContext::DefinePushDataBlock() {
     MemberName(struct_type, PushData::BufOffsetIndex + 0, "buf_offsets0");
     MemberName(struct_type, PushData::BufOffsetIndex + 1, "buf_offsets1");
     MemberName(struct_type, PushData::BufOffsetIndex + 2, "buf_offsets2");
+    MemberName(struct_type, PushData::BlendConstantsIndex, "blend_constants");
     MemberDecorate(struct_type, PushData::XOffsetIndex, spv::Decoration::Offset, 0U);
     MemberDecorate(struct_type, PushData::YOffsetIndex, spv::Decoration::Offset, 4U);
     MemberDecorate(struct_type, PushData::XScaleIndex, spv::Decoration::Offset, 8U);
@@ -899,9 +916,30 @@ void EmitContext::DefinePushDataBlock() {
     MemberDecorate(struct_type, PushData::BufOffsetIndex + 0, spv::Decoration::Offset, 16U);
     MemberDecorate(struct_type, PushData::BufOffsetIndex + 1, spv::Decoration::Offset, 32U);
     MemberDecorate(struct_type, PushData::BufOffsetIndex + 2, spv::Decoration::Offset, 48U);
+    MemberDecorate(struct_type, PushData::BlendConstantsIndex, spv::Decoration::Offset, 64U);
     push_data_block = DefineVar(struct_type, spv::StorageClass::PushConstant);
     Name(push_data_block, "push_data");
     interfaces.push_back(push_data_block);
+}
+
+void EmitContext::DefineOrderedColorImages() {
+    if (sw_stage != SwStage::Fragment) return;
+    const bool any = std::ranges::any_of(runtime_info.hw.fs.ordered_color_targets,
+        [](const auto& target) { return target.enabled; });
+    if (!any) return;
+    ordered_color_image_type = TypeImage(U32[1], spv::Dim::Dim2D, false, true, false, 2,
+                                         spv::ImageFormat::R32ui);
+    const Id pointer = TypePointer(spv::StorageClass::UniformConstant, ordered_color_image_type);
+    for (u32 i = 0; i < ordered_color_images.size(); ++i) {
+        if (!runtime_info.hw.fs.ordered_color_targets[i].enabled) continue;
+        const Id image = AddGlobalVariable(pointer, spv::StorageClass::UniformConstant);
+        Decorate(image, spv::Decoration::DescriptorSet, NativeOrderedColor::DescriptorSet);
+        Decorate(image, spv::Decoration::Binding, NativeOrderedColor::Binding + i);
+        Decorate(image, spv::Decoration::Coherent);
+        Name(image, fmt::format("ordered_color{}", i));
+        interfaces.push_back(image);
+        ordered_color_images[i] = image;
+    }
 }
 
 EmitContext::BufferSpv EmitContext::DefineBuffer(bool is_written, bool is_coherent, u32 elem_shift,

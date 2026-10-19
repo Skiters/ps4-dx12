@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=27,PipelineVersion=4;
+constexpr u32 StageVersion=28,PipelineVersion=4;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";
@@ -238,6 +238,10 @@ void GuestPipelineCache::WarmUp(){
                         bool present{};load.Read(present);if(present){guest.stages[i]=&stage();
                             if(u32(guest.stages[i]->info.sw_stage)!=i)throw std::runtime_error("Native cached graphics stage slot mismatch");}
                     }
+                    if(const auto* fragment=guest.stages[u32(Shader::SwStage::Fragment)])
+                        for(u32 i=0;i<fragment->runtime.hw.fs.ordered_color_targets.size();++i)
+                            if(fragment->runtime.hw.fs.ordered_color_targets[i].enabled)
+                                guest.ordered_color_mask|=1u<<i;
                     GraphicsState state(ar);bool bounds{};ShaderPipeline::StencilFaces masks{};
                     load.Read(bounds);load.Read(&masks,sizeof(masks));
                     if(!ar.IsEoS())throw std::runtime_error("Trailing native graphics record");

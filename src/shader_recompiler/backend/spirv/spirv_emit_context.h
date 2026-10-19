@@ -278,6 +278,8 @@ public:
     Id sample_mask_in{};
     Id helper_invocation{};
     Id sample_index{};
+    Id ordered_color_image_type{};
+    std::array<Id, MaxColorBuffers> ordered_color_images{};
     Id clip_distances{};
     Id cull_distances{};
 
@@ -471,6 +473,7 @@ private:
     void DefineVertexBlock();
     void DefineOutputs();
     void DefinePushDataBlock();
+    void DefineOrderedColorImages();
     void DefineBuffers();
     void DefineImagesAndSamplers();
     void DefineSharedMemory();

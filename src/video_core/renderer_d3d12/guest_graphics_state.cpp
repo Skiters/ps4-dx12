@@ -170,6 +170,7 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     const bool normal=regs.color_control.mode==AmdGpu::ColorControl::OperationMode::Normal;
     if(!normal&&regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable)
         throw std::runtime_error("Native guest fast-clear/resolve/decompress pass needs attachment operation");
+    const u32 ordered_color_mask = GuestOrderedColorMask(regs);
     bool needs_constant_color_rgb=false,needs_constant_alpha_rgb=false;
     for(UINT i=0;i<8;++i) {
         auto& rt=p.BlendState.RenderTarget[i];rt.SrcBlend=rt.SrcBlendAlpha=D3D12_BLEND_ONE;
@@ -182,12 +183,27 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         // component gather. Native-only callers can omit the guest CB format.
         if(regs.color_buffers[i].info.format)
             rt.RenderTargetWriteMask=UINT8(regs.color_buffers[i].Swizzle().ApplyMask(rt.RenderTargetWriteMask));
+        if (ordered_color_mask & (1u << i)) {
+            using BF = AmdGpu::BlendControl::BlendFactor;
+            const auto dual = [](BF factor) {
+                return factor == BF::Src1Color || factor == BF::InvSrc1Color ||
+                       factor == BF::Src1Alpha || factor == BF::InvSrc1Alpha;
+            };
+            const auto& blend = regs.blend_control[i];
+            if (regs.color_buffers[i].NumSamples() != 1)
+                throw std::runtime_error("Native packed10 SNORM ordered blending needs single-sample storage");
+            if (dual(blend.color_src_factor) || dual(blend.color_dst_factor) ||
+                (blend.separate_alpha_blend &&
+                 (dual(blend.alpha_src_factor) || dual(blend.alpha_dst_factor))))
+                throw std::runtime_error("Native packed10 SNORM ordered blending does not support dual-source input");
+            result.ordered_color_mask |= 1u << i;
+            p.RTVFormats[i] = DXGI_FORMAT_UNKNOWN;
+            rt.RenderTargetWriteMask = 0;
+            continue;
+        }
         const bool logic=regs.color_control.rop3!=AmdGpu::ColorControl::LogicOp::Copy;
         rt.LogicOpEnable=logic;rt.LogicOp=LogicOp(regs.color_control.rop3);
         const auto& source=regs.blend_control[i];rt.BlendEnable=!logic&&source.enable&&!regs.color_buffers[i].info.blend_bypass;
-        if(rt.BlendEnable&&regs.color_buffers[i].GetDataFmt()==AmdGpu::DataFormat::Format2_10_10_10&&
-           regs.color_buffers[i].GetNumberFmt()==AmdGpu::NumberFormat::Snorm)
-            throw std::runtime_error("Native packed10 SNORM blending requires ordered post-blend quantization");
         if(rt.BlendEnable) {
             using BF=AmdGpu::BlendControl::BlendFactor;
             const auto is_color=[](BF f){return f==BF::ConstantColor||f==BF::OneMinusConstantColor;};
@@ -223,6 +239,11 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             NormalizeMinMaxBlend(rt.BlendOpAlpha,rt.SrcBlendAlpha,rt.DestBlendAlpha,regs.color_buffers[i].GetNumberFmt());
         }
     }
+    // Ordered targets are UAV-only. D3D12 rejects a nonzero RTV count when
+    // every slot in that trailing range is UNKNOWN, while lower ordinary MRT
+    // slots still require their original indices.
+    while (p.NumRenderTargets && p.RTVFormats[p.NumRenderTargets - 1] == DXGI_FORMAT_UNKNOWN)
+        --p.NumRenderTargets;
     // D3D12 forbids logic operations with IndependentBlendEnable. A single
     // shared state is exact only when every bound target has the same scattered
     // write mask. Do not silently write a masked MRT or replay side-effecting

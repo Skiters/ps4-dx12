@@ -25,6 +25,7 @@ struct GuestShaderStage {
 struct GuestGraphicsStages {
     std::array<GuestShaderStage*, Shader::MaxStageTypes> stages{};
     u32 mrt_mask{};
+    u32 ordered_color_mask{};
 };
 struct GuestPointCaptureStages {GuestGraphicsStages producer,replay;};
 // Owns original guest reflection and specialization. Stage objects have stable

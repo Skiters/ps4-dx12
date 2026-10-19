@@ -8,6 +8,7 @@
 #include "shader_recompiler/ir/debug_print.h"
 #include "shader_recompiler/ir/microinstruction.h"
 #include <stdexcept>
+#include <algorithm>
 #include <bit>
 
 namespace Shader::Backend::SPIRV {
@@ -82,7 +83,149 @@ void ConvertPositionToClipSpace(EmitContext& ctx) {
     ctx.OpStore(ctx.output_position, vector);
 }
 
+namespace {
+Id OrderedSnormDecode(EmitContext& ctx, Id word, u32 shift, u32 bits) {
+    const Id code = ctx.OpBitFieldSExtract(ctx.U32[1], word, ctx.ConstU32(shift),
+                                           ctx.ConstU32(bits));
+    const Id value = ctx.OpFDiv(ctx.F32[1],
+        ctx.OpConvertSToF(ctx.F32[1], ctx.OpBitcast(ctx.S32[1], code)),
+        ctx.ConstF32(float((1u << (bits - 1)) - 1)));
+    return ctx.OpFMax(ctx.F32[1], value, ctx.ConstF32(-1.f));
+}
+
+Id OrderedBlendFactor(EmitContext& ctx, AmdGpu::BlendControl::BlendFactor factor,
+                      Id source, Id destination, Id constants, u32 component,
+                      bool shader_alpha) {
+    using F = AmdGpu::BlendControl::BlendFactor;
+    const Id zero = ctx.f32_zero_value;
+    const Id one = ctx.ConstF32(1.f);
+    const auto channel = [&](Id vector, u32 index) {
+        return ctx.OpCompositeExtract(ctx.F32[1], vector, index);
+    };
+    const Id src_alpha = shader_alpha ? channel(source, 3) : one;
+    const Id dst_alpha = channel(destination, 3);
+    const Id src_color = channel(source, component == 3 ? 3 : component);
+    const Id dst_color = channel(destination, component == 3 ? 3 : component);
+    const Id constant_color = channel(constants, component == 3 ? 3 : component);
+    switch (factor) {
+    case F::Zero: return zero;
+    case F::One: return one;
+    case F::SrcColor: return src_color;
+    case F::OneMinusSrcColor: return ctx.OpFSub(ctx.F32[1], one, src_color);
+    case F::SrcAlpha: return src_alpha;
+    case F::OneMinusSrcAlpha: return ctx.OpFSub(ctx.F32[1], one, src_alpha);
+    case F::DstAlpha: return dst_alpha;
+    case F::OneMinusDstAlpha: return ctx.OpFSub(ctx.F32[1], one, dst_alpha);
+    case F::DstColor: return dst_color;
+    case F::OneMinusDstColor: return ctx.OpFSub(ctx.F32[1], one, dst_color);
+    case F::SrcAlphaSaturate:
+        return component == 3 ? one : ctx.OpFMin(ctx.F32[1], src_alpha,
+            ctx.OpFSub(ctx.F32[1], one, dst_alpha));
+    case F::ConstantColor: return constant_color;
+    case F::OneMinusConstantColor: return ctx.OpFSub(ctx.F32[1], one, constant_color);
+    case F::ConstantAlpha: return channel(constants, 3);
+    case F::OneMinusConstantAlpha:
+        return ctx.OpFSub(ctx.F32[1], one, channel(constants, 3));
+    case F::Src1Color:
+    case F::InvSrc1Color:
+    case F::Src1Alpha:
+    case F::InvSrc1Alpha:
+        throw std::runtime_error("Ordered color reached unsupported dual-source blend factor");
+    }
+    throw std::runtime_error("Ordered color reached invalid blend factor");
+}
+
+Id OrderedBlendChannel(EmitContext& ctx, const HwFragmentRuntimeInfo::OrderedColorTarget& target,
+                       Id source, Id destination, Id constants, u32 component) {
+    const auto& blend = target.blend;
+    const bool alpha = component == 3;
+    const auto operation = alpha && blend.separate_alpha_blend ? blend.alpha_func : blend.color_func;
+    const Id src = ctx.OpCompositeExtract(ctx.F32[1], source, component);
+    const Id dst = ctx.OpCompositeExtract(ctx.F32[1], destination, component);
+    if (operation == AmdGpu::BlendControl::BlendFunc::Min)
+        return ctx.OpFMin(ctx.F32[1], src, dst);
+    if (operation == AmdGpu::BlendControl::BlendFunc::Max)
+        return ctx.OpFMax(ctx.F32[1], src, dst);
+    const auto src_factor = alpha && blend.separate_alpha_blend ? blend.alpha_src_factor : blend.color_src_factor;
+    const auto dst_factor = alpha && blend.separate_alpha_blend ? blend.alpha_dst_factor : blend.color_dst_factor;
+    const bool shader_alpha = (target.shader_mask & AmdGpu::ColorBufferMask::ComponentA) != 0;
+    const Id scaled_src = ctx.OpFMul(ctx.F32[1], src,
+        OrderedBlendFactor(ctx, src_factor, source, destination, constants, component, shader_alpha));
+    const Id scaled_dst = ctx.OpFMul(ctx.F32[1], dst,
+        OrderedBlendFactor(ctx, dst_factor, source, destination, constants, component, shader_alpha));
+    switch (operation) {
+    case AmdGpu::BlendControl::BlendFunc::Add:
+        return ctx.OpFAdd(ctx.F32[1], scaled_src, scaled_dst);
+    case AmdGpu::BlendControl::BlendFunc::Subtract:
+        return ctx.OpFSub(ctx.F32[1], scaled_src, scaled_dst);
+    case AmdGpu::BlendControl::BlendFunc::ReverseSubtract:
+        return ctx.OpFSub(ctx.F32[1], scaled_dst, scaled_src);
+    default: break;
+    }
+    throw std::runtime_error("Ordered color reached invalid blend operation");
+}
+
+Id OrderedSnormCode(EmitContext& ctx, Id value, u32 bits) {
+    const Id input = ctx.OpSelect(ctx.F32[1], ctx.OpIsNan(ctx.U1[1], value),
+                                  ctx.ConstF32(0.f), value);
+    const Id clamped = ctx.OpFClamp(ctx.F32[1], input, ctx.ConstF32(-1.f), ctx.ConstF32(1.f));
+    const Id scaled = ctx.OpFMul(ctx.F32[1], clamped,
+                                 ctx.ConstF32(float((1u << (bits - 1)) - 1)));
+    const Id code = ctx.OpConvertFToS(ctx.S32[1], ctx.OpRoundEven(ctx.F32[1], scaled));
+    return ctx.OpBitwiseAnd(ctx.U32[1], ctx.OpBitcast(ctx.U32[1], code),
+                            ctx.ConstU32((1u << bits) - 1));
+}
+
+void EmitOrderedColor(EmitContext& ctx) {
+    const Id constants_ptr = ctx.OpAccessChain(
+        ctx.TypePointer(spv::StorageClass::PushConstant, ctx.F32[4]), ctx.push_data_block,
+        ctx.ConstU32(PushData::BlendConstantsIndex));
+    const Id constants = ctx.OpLoad(ctx.F32[4], constants_ptr);
+    const Id position = ctx.OpLoad(ctx.F32[4], ctx.frag_coord);
+    const Id coordinates = ctx.OpCompositeConstruct(ctx.S32[3],
+        ctx.OpConvertFToS(ctx.S32[1], ctx.OpCompositeExtract(ctx.F32[1], position, 0)),
+        ctx.OpConvertFToS(ctx.S32[1], ctx.OpCompositeExtract(ctx.F32[1], position, 1)),
+        ctx.OpBitcast(ctx.S32[1], ctx.OpLoad(ctx.U32[1], ctx.output_layer)));
+    for (u32 index = 0; index < ctx.ordered_color_images.size(); ++index) {
+        const auto& target = ctx.runtime_info.hw.fs.ordered_color_targets[index];
+        if (!target.enabled) continue;
+        const Id image = ctx.OpLoad(ctx.ordered_color_image_type, ctx.ordered_color_images[index]);
+        const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
+        const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
+        std::array<Id, 4> destination_channels{};
+        for (u32 component = 0; component < 4; ++component)
+            destination_channels[component] = OrderedSnormDecode(ctx, old_word,
+                component * 10, component == 3 ? 2 : 10);
+        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
+        const Id source = ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[index].id);
+        Id packed = ctx.u32_zero_value;
+        u32 raw_mask{};
+        for (u32 component = 0; component < 4; ++component) {
+            const u32 bits = component == 3 ? 2 : 10;
+            const u32 shift = component * 10;
+            const Id blended = OrderedBlendChannel(ctx, target, source, destination, constants, component);
+            const Id code = OrderedSnormCode(ctx, blended, bits);
+            packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
+                shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
+            if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;
+        }
+        const Id mask = ctx.ConstU32(raw_mask);
+        const Id result = ctx.OpBitwiseOr(ctx.U32[1],
+            ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),
+            ctx.OpBitwiseAnd(ctx.U32[1], packed, mask));
+        const Id texel = ctx.OpCompositeConstruct(ctx.U32[4], result, ctx.u32_zero_value,
+                                                   ctx.u32_zero_value, ctx.u32_zero_value);
+        ctx.OpImageWrite(image, coordinates, texel);
+    }
+}
+} // namespace
+
 void EmitEpilogue(EmitContext& ctx) {
+    if (ctx.hw_stage == HwStage::Fragment &&
+        std::ranges::any_of(ctx.runtime_info.hw.fs.ordered_color_targets,
+            [](const auto& target) { return target.enabled; })) {
+        EmitOrderedColor(ctx);
+    }
     if (ctx.hw_stage == HwStage::Vertex &&
         ctx.runtime_info.hw.vs.emulate_depth_negative_one_to_one) {
         ConvertDepthMode(ctx);

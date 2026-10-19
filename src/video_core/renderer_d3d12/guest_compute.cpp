@@ -8,6 +8,7 @@
 #include "diagnostics.h"
 #include "guest_dma.h"
 #include "shader_recompiler/native_dma.h"
+#include "shader_recompiler/native_ordered_color.h"
 #ifdef SHADPS4_NATIVE_DX12_CORE
 #include "core/memory.h"
 #endif
@@ -751,6 +752,11 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         // never interpreted as a guest sharp or mapped into PageWatch.
         if(!pipeline.IsCompute()&&binding.space==33&&binding.reg==0&&binding.count==1&&
            (binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV||binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV))continue;
+        if(!pipeline.IsCompute()&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&
+           binding.space==Shader::NativeOrderedColor::DescriptorSet&&
+           binding.reg>=Shader::NativeOrderedColor::Binding&&
+           uint64_t(binding.reg)+binding.count<=uint64_t(Shader::NativeOrderedColor::Binding)+
+                                                Shader::NativeOrderedColor::Count)continue;
         if(dma&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&binding.space==Shader::NativeDma::DescriptorSet&&
            binding.reg==0&&binding.count==Shader::NativeDma::BankCount)continue;
         if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.count==1&&

@@ -29,6 +29,20 @@ inline GuestDepthActivity GuestDepthTests(const AmdGpu::Regs& regs) {
     result.bounds=regs.depth_control.depth_bounds_enable&&regs.depth_buffer.DepthValid()&&result.HasAttachment();
     return result;
 }
+inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs) {
+    u32 result{};
+    if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Normal ||
+        regs.color_control.rop3 != AmdGpu::ColorControl::LogicOp::Copy) return result;
+    for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
+        const auto& color = regs.color_buffers[i];
+        const auto& blend = regs.blend_control[i];
+        if (color && color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i)) &&
+            blend.enable && !color.info.blend_bypass &&
+            color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) result |= 1u << i;
+    }
+    return result;
+}
 struct GuestGraphicsState {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline{};
     D3D_PRIMITIVE_TOPOLOGY topology=D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
@@ -42,6 +56,7 @@ struct GuestGraphicsState {
     bool dynamic_depth_bias{};
     float depth_bias{},depth_bias_clamp{},slope_depth_bias{};
     bool blend_constant_alpha_rgb{};
+    u32 ordered_color_mask{};
     bool rasterizer_discard{};
     bool discard{};
     bool WritesDepth(bool clear_depth=false)const {

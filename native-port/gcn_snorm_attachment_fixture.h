@@ -72,14 +72,36 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
         }
         if(!logic){
             const auto formats=std::array{DXGI_FORMAT_R10G10B10A2_UINT};regs.blend_control[0].enable=1;
-            bool rejected=false;try{(void)BuildGuestGraphicsState(regs,formats);}catch(const std::runtime_error& error){
-                rejected=std::string_view(error.what()).find("SNORM blending")!=std::string_view::npos;
+            auto& blend=regs.blend_control[0];
+            blend.color_src_factor=blend.alpha_src_factor=AmdGpu::BlendControl::BlendFactor::One;
+            blend.color_dst_factor=blend.alpha_dst_factor=AmdGpu::BlendControl::BlendFactor::One;
+            blend.color_func=blend.alpha_func=AmdGpu::BlendControl::BlendFunc::Add;
+            blend.separate_alpha_blend=1;
+            if(log==0){
+                // Independent exact result for source {0,.25,1/511,-.5}
+                // added to the preceding {1,-1,0,-1} destination.
+                regs.ps_program.address=reinterpret_cast<u64>(pixels[1].data())>>8;
+                const auto blended=pack({511,-383,1,-1});
+                for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
+                    const auto offset=4096+GuestPixelOffset(desc,layout,0,1,x,y,0);u32 old;
+                    memcpy(&old,expected.data()+offset,4);
+                    const auto result=(old&~bitmask)|(blended&bitmask);
+                    memcpy(expected.data()+offset,&result,4);
+                }
+                r.Draw(false);r.ReadMemory(desc.address,layout.guest_bytes);r.Finish();r.ValidateDebugMessages();
+                if(memcmp(backing,expected.data(),expected.size()))
+                    throw std::runtime_error("SNORM ordered blend lost destination contents, quantization, mask or padding");
+                ++cases;
+            }else{
+                bool rejected=false;try{(void)BuildGuestGraphicsState(regs,formats);}catch(const std::runtime_error& error){
+                    rejected=std::string_view(error.what()).find("single-sample")!=std::string_view::npos;
+                }
+                if(!rejected)throw std::runtime_error("Multisample SNORM blend accepted without per-sample ordered access");
             }
-            if(!rejected)throw std::runtime_error("SNORM blend accepted without post-blend normalized quantization");
             regs.blend_control[0].enable=0;
         }
         ++cases;
     }
-    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer and full65536 padding;blend remains rejected\n",cases);
+    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer/full65536 padding;sample1 ordered Add blend and explicit MSAA rejection\n",cases);
 }
 } // namespace NativeDX12
