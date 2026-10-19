@@ -59,6 +59,7 @@ public:
     GuestPointCaptureStages BuildPointCaptureGraphics(const AmdGpu::Regs&,
         u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0,bool is_indirect=false);
     GuestGraphicsStages BuildPrimitiveStream(const GuestGraphicsStages&);
+    GuestGraphicsStages BuildBufferedPointCapture(const GuestGraphicsStages&);
     GuestShaderStage& BuildCompute(AmdGpu::Liverpool&);
 };
 }

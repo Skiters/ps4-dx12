@@ -389,6 +389,25 @@ GuestGraphicsStages GuestShaderFrontend::BuildPrimitiveStream(const GuestGraphic
     result.stages[u32(SwStage::Fragment)]=nullptr;result.mrt_mask=result.ordered_color_mask=0;
     return result;
 }
+GuestGraphicsStages GuestShaderFrontend::BuildBufferedPointCapture(const GuestGraphicsStages& source){
+    using Shader::SwStage;
+    auto* geometry=source.stages[u32(SwStage::Geometry)];
+    if(!geometry||geometry->auxiliary||!geometry->runtime.hw.gs.native_point_capture||
+       !geometry->runtime.hw.gs.native_point_capture_stream_input)
+        throw std::invalid_argument("Buffered point consumer requires original captured-input GS");
+    auto words=EmitNativePointReplayVertex();auto found=auxiliary_.find(words);
+    if(found==auxiliary_.end()){
+        auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;
+        stage->info.hw_stage=Shader::HwStage::Vertex;stage->info.sw_stage=SwStage::Vertex;stage->spirv=words;
+        found=auxiliary_.emplace(std::move(words),std::move(stage)).first;
+    }
+    GuestGraphicsStages result;
+    result.stages[u32(SwStage::Vertex)]=found->second.get();
+    result.stages[u32(SwStage::Geometry)]=geometry;
+    // Original producer stages ran in BuildPrimitiveStream. No original VS,
+    // HS, DS or FS effects may be repeated in this GS-only capture pass.
+    return result;
+}
 GuestShaderStage& GuestShaderFrontend::BuildCompute(AmdGpu::Liverpool& gpu) {
     VideoCore::GuestRuntimeContext context{profile_};
     Shader::Backend::Bindings bindings{};
