@@ -1329,3 +1329,5 @@ DX12 adaptation added per-layer/per-tile CMASK planning in `guest_texture_cache.
 2026-10-19: CPU-decoded texture row/volume upload immutable source -> pre-COPY/DIRECT host completion connected. Footprint64KiB..64MiB; raw GPU-detile input/decode unchanged. CONNECTED/COMPILE_LINKED, GPU_CONTENTS_NOT_RUN; eight scheduler texture cases prepared, cache integration acceptance pending.
 
 2026-10-19: Readonly raw-detile input snapshot owner is retained through host-copy completion and normal image coherence, without another full-source copy. Sampled/stencil/readonly-BC versions now share immutable COW storage. CONNECTED/COMPILE_LINKED, runtime NOT_RUN. Writable/GPU-resident source paths unchanged.
+
+2026-10-19: CPU immutable host-copy helper executed PASS0.102s; no GPU/game proof. Color live feedback remains a concrete production gap: pinned same image/feedback-layout versus native pre-draw CPU snapshot. A GPU snapshot alone would still not establish live feedback; no group closure.
