@@ -1,3 +1,7 @@
+## Ordered capture partitions checkpoint — 2026-10-20
+
+Source864be3f adds complete lazy primitive-aligned capture partitions and production Replay GPU-argument scheduling, local capture plans and first/last markers. CPU exact coverage/tail/adjacency/typed negatives PASS; core/fixture compile-link PASS; clean Release864be3f PASS15.928s. Prepared actual-count/empty-tail/lifetime GPU test compiled, NOT_RUN. Hashes/logs and remaining partitioned GS/PS attachment integration plus separate producer-capacity proof in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/partitioned-stream-864be3f.json. Game/GPU NOT_RUN; app unchanged; full port incomplete.
+
 ## Buffered original GS consumer checkpoint — 2026-10-20
 
 Source d78286a adds GS-only capture construction with auxiliary VS and no repeated original VS/HS/DS/FS. Fixed-tessellation producer->SO->GPU count->original GS->PS readback fixtures prepared/compiled, GPU NOT_RUN; CPU signed-DXIL and exact1024-component ordinary-unit boundary/oversized negatives PASS. Separate clean Release d78286a PASS21.990s. Identities/logs, fixture-only capacity and remaining generic capacity/partition/GuestRasterizer integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/buffered-consumer-d78286a.json. Game/GPU NOT_RUN; app unchanged; guest guard and full-port gaps remain.
