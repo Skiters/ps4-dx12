@@ -2,7 +2,7 @@
 
 ## Current continuation boundary - 2026-10-19
 
-Do not repeat the ROV compiler, resource-binding or single-sample packed-SNORM audit. Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** passed the 27-case production GCN fixture plus focused metadata, hardware-ordering and resource tests. First publish a post-commit rebuild with exact EXE/PDB hashes as the one `dx12-current` application core. Then implement independent MRT logic operations and per-target write masks through the ordered path. Keep packed-SNORM MSAA as an explicit gap, and preserve real contents, visibility, ordering, ownership and lifetime in each focused GPU/readback check.
+Do not repeat the ROV compiler, resource-binding or single-sample packed-SNORM audit. Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** passed the 27-case production GCN fixture plus focused metadata, hardware-ordering and resource tests. Clean commit **825905c866988dbdc2ee2f57116e3ad93022be75** is installed and identity-validated as the sole `dx12-current` core. Implement independent MRT logic operations and per-target write masks through the ordered path. Keep packed-SNORM MSAA as an explicit gap, and preserve real contents, visibility, ordering, ownership and lifetime in each focused GPU/readback check.
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 

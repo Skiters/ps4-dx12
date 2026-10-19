@@ -2,7 +2,7 @@
 
 ## Current production ordered packed-SNORM checkpoint - 2026-10-19
 
-Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** connects single-sample packed 10:10:10:2 SNORM blending end to end through a rasterizer-ordered `R32_UINT` UAV. Blend constants/state, destination read/modify/write, masks, transitions, barriers, ownership and resource lifetime are connected. The production GCN fixture passed 27 cases; ROV metadata, hardware ordering and guest graphics-resource tests also passed. The implementation is connected and mechanism-verified, while game/final-suite behavior is not yet verified. Independent MRT logic/write masks and packed-SNORM MSAA remain concrete gaps. The installed core still has the earlier `378bda3` identity until the post-commit build is published.
+Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** connects single-sample packed 10:10:10:2 SNORM blending end to end through a rasterizer-ordered `R32_UINT` UAV. Blend constants/state, destination read/modify/write, masks, transitions, barriers, ownership and resource lifetime are connected. The production GCN fixture passed 27 cases; ROV metadata, hardware ordering and guest graphics-resource tests also passed. The implementation is connected and mechanism-verified, while game/final-suite behavior is not yet verified. Independent MRT logic/write masks and packed-SNORM MSAA remain concrete gaps. The one installed core is the clean **825905c** build: EXE SHA256 **337da2b09a7dd5ac247b8e8a25d77e9b466438f29ba81731c42de9c6223eefb0**, PDB SHA256 **c211ed28351b14913694385e877630f9cbaa021c1ca2c764b376ca651eb36227**; catalogue and file-identity validation passed.
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 

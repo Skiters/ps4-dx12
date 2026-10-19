@@ -7,6 +7,7 @@
 - Verified: 27 production GCN cases; ROV metadata; 64-fragment hardware ordering/readback; guest graphics resources; incremental Release core link.
 - Not verified: Bloodborne image/gameplay/FPS and final suite for this identity.
 - Open production gaps: independent MRT logic/write masks and packed-SNORM MSAA.
+- Installed core: clean **825905c866988dbdc2ee2f57116e3ad93022be75**, EXE SHA256 **337da2b09a7dd5ac247b8e8a25d77e9b466438f29ba81731c42de9c6223eefb0**, PDB SHA256 **c211ed28351b14913694385e877630f9cbaa021c1ca2c764b376ca651eb36227**; one catalogue entry and 19 runtime files validated.
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
