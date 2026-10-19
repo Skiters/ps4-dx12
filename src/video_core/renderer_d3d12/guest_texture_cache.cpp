@@ -2686,10 +2686,10 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             static std::atomic<unsigned> retirement_pairs{};
             if(retirement_pairs.fetch_add(1)<32){
                 const auto& source=existing->desc;
-                fprintf(stderr,"DX12 retirement pair source=%llx/%ux%u/fmt%u-%u/tile%u/levels%u/layers%u/rt%u/depth%u/write%u target=%llx/%ux%u/fmt%u-%u/tile%u/levels%u/layers%u/rt%u/depth%u/write%u storage_match=%u logical_dirty=%u pending=%u\n",
+                fprintf(stderr,"DX12 retirement pair source=%llx/%ux%u/fmt%u-%u/tile%u/levels%u/layers%u/rt%u/depth%u/write%u target=%llx/%ux%u/fmt%u-%u/tile%u/levels%u/layers%u/rt%u/depth%u/write%u storage_match=%u logical_dirty=%u pending=%u dirty_origin=%s\n",
                     (unsigned long long)source.address,source.width,source.height,source.data_format,source.number_format,source.tile_mode,source.levels,source.layers,unsigned(source.render_target),unsigned(source.depth_target),unsigned(source.writable),
                     (unsigned long long)d.address,d.width,d.height,d.data_format,d.number_format,d.tile_mode,d.levels,d.layers,unsigned(d.render_target),unsigned(d.depth_target),unsigned(d.writable),
-                    unsigned(MatchesGuestUploadStorage(*existing,d,layout)),unsigned(existing->logical_dirty),unsigned(existing->pending));
+                    unsigned(MatchesGuestUploadStorage(*existing,d,layout)),unsigned(existing->logical_dirty),unsigned(existing->pending),existing->logical_dirty_origin);
                 fflush(stderr);
             }
         }

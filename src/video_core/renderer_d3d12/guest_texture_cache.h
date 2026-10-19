@@ -1,3 +1,4 @@
+#include <source_location>
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "guest_page_range.h"
@@ -184,7 +185,10 @@ public:
         // Logical validity does not imply current physical/page ownership.
         bool logical_gpu_modified=false,logical_dirty=true;
         void NoteLogicalImageWrite(){logical_gpu_modified=true;logical_dirty=false;}
-        void MarkLogicalDirty(){logical_dirty=true;}
+        const char* logical_dirty_origin="initial";
+        void MarkLogicalDirty(std::source_location origin=std::source_location::current()){
+            logical_dirty=true;logical_dirty_origin=origin.function_name();
+        }
         bool HasValidLogicalImage()const{return logical_gpu_modified&&!logical_dirty;}
         // Separate shader buffer/image writers retain the original cache
         // domains. Their image version does not replace physical buffer bytes.
