@@ -118,16 +118,17 @@ struct Construction {
     uintptr_t address{};
     u32 capacity_dw{};
     u32 output_dw{};
+    uintptr_t caller{};
     u64 serial{};
 };
 inline std::array<Construction, 4096> constructions{};
 inline u64 construction_serial{};
-inline void RecordConstruction(const u32* address, u32 capacity_dw, u32 output_dw) {
+inline void RecordConstruction(const u32* address, u32 capacity_dw, u32 output_dw, uintptr_t caller = 0) {
     if (!address || !output_dw || output_dw > capacity_dw) return;
     std::scoped_lock lock{EntriesMutex()};
     const u64 serial = ++construction_serial;
     constructions[(serial - 1) % constructions.size()] = {
-        reinterpret_cast<uintptr_t>(address), capacity_dw, output_dw, serial};
+        reinterpret_cast<uintptr_t>(address), capacity_dw, output_dw, caller, serial};
 }
 [[nodiscard]] inline Construction FindConstruction(uintptr_t address) {
     std::scoped_lock lock{EntriesMutex()};

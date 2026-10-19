@@ -93,10 +93,10 @@ int main() {
     }
     Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
                 reinterpret_cast<uintptr_t>(writer_buffer.data() + 7)).empty());
-    Libraries::GnmDriver::CommandWriterTrace::RecordConstruction(writer_buffer.data(), 8, 2);
+    Libraries::GnmDriver::CommandWriterTrace::RecordConstruction(writer_buffer.data(), 8, 2, 0x12345678);
     const auto context = Libraries::GnmDriver::CommandWriterTrace::FindConstruction(
         reinterpret_cast<uintptr_t>(writer_buffer.data() + 7));
-    Require(context.serial != 0 && context.output_dw == 2 && context.capacity_dw == 8);
+    Require(context.serial != 0 && context.output_dw == 2 && context.capacity_dw == 8 && context.caller == 0x12345678);
     Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
                 reinterpret_cast<uintptr_t>(writer_buffer.data() + 7)).empty());
     Require(Libraries::GnmDriver::CommandWriterTrace::FindConstruction(
