@@ -299,7 +299,9 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
         const D3D12_VIEWPORT viewport{0,0,float(8u>>mip),float(8u>>mip),0,1};
         const D3D12_RECT scissor{0,0,LONG(8u>>mip),LONG(8u>>mip)};const std::array<float,4> blend{};
         for(unsigned warm=0;warm<2;++warm){
-            ResourceBindings table(device,pipeline.Layout());srv.Texture2DArray.FirstArraySlice=target_layer;
+            ResourceBindings table(device,pipeline.Layout(),nullptr,feedback);srv.Texture2DArray.FirstArraySlice=target_layer;
+            unsigned preparations{};
+            table.BeforeBind([&](ResourceBindings&){++preparations;});
             table.Srv(0,0,entry.texture.handle.Get(),srv);
             bool rejected{};
             try{rasterizer.ExecuteGraphics(pipeline,table,state,std::span(&attachment,1),nullptr,
@@ -343,14 +345,21 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
                 // slice must still read the immutable pre-draw contents. A
                 // fresh snapshot here would add .125 twice and fail the
                 // unchanged independent full-image/padding oracle below.
-                ResourceBindings continuation(device,pipeline.Layout());
-                continuation.Srv(0,0,entry.texture.handle.Get(),srv);
-                if(continuation.RemapTextureSrvs(entry.texture.handle.Get(),saved_feedback)!=1||
-                   continuation.HasTextureSrvs(entry.texture.handle.Get())||
-                   !continuation.HasTextureSrvs(saved_feedback.handle.Get()))
+                auto continuation=table.ForkForReplay();
+                continuation->Srv(0,0,entry.texture.handle.Get(),srv);
+                if(continuation->RemapTextureSrvs(entry.texture.handle.Get(),saved_feedback)!=1||
+                   continuation->HasTextureSrvs(entry.texture.handle.Get())||
+                   !continuation->HasTextureSrvs(saved_feedback.handle.Get())||
+                   table.HasTextureSrvs(entry.texture.handle.Get())||!table.HasTextureSrvs(saved_feedback.handle.Get()))
                     throw std::runtime_error("Feedback continuation did not retain the original snapshot");
-                rasterizer.ExecuteGraphics(pipeline,continuation,state,std::span(&attachment,1),nullptr,
+                rasterizer.RetainUntilFinish([continuation](u64){});
+                rasterizer.ExecuteGraphics(pipeline,*continuation,state,std::span(&attachment,1),nullptr,
                     std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+                if(preparations!=1)throw std::runtime_error("Feedback fork repeated logical resource preparation");
+            }else{
+                bool rejected_fork{};
+                try{table.ForkForReplay();}catch(const std::logic_error&){rejected_fork=true;}
+                if(!rejected_fork)throw std::runtime_error("Ordinary descriptor table permitted unsupported replay cloning");
             }
             GuestImageReadback readback(device,entry,rasterizer.RecordingList());
             const auto fence=rasterizer.Flush();readback.Submitted(fence);textures.Submitted(fence);rasterizer.Finish();

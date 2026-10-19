@@ -56,6 +56,10 @@ class ResourceBindings {
     const ResourceLayout& layout_;
     DescriptorHeapPool::Slice resources_,samplers_;
     ComPtr<ID3D12DescriptorHeap> owned_resources_,owned_samplers_;
+    // Opt-in CPU descriptors are legal CopyDescriptors sources. Ordinary
+    // draws keep writing their shader-visible tables directly.
+    ComPtr<ID3D12DescriptorHeap> replay_resources_,replay_samplers_;
+    bool replayable_{};
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
     std::unordered_map<ID3D12Resource*,UINT> shader_planes_;
@@ -88,7 +92,11 @@ public:
         before_bind_=std::move(prepare);
     }
 public:
-    ResourceBindings(ID3D12Device*,const ResourceLayout&,DescriptorHeapPool* = nullptr);
+    ResourceBindings(ID3D12Device*,const ResourceLayout&,DescriptorHeapPool* = nullptr,bool replayable=false);
+    // Prepare once, then fork independent mutable tables sharing the exact
+    // resource/allocation leases. Does not rerun guest ownership or writeback.
+    // Caller must retain each returned table through its submission fence.
+    std::shared_ptr<ResourceBindings> ForkForReplay();
     // Explicit retirement, never automatic destructor recycling: callers can
     // also record bindings without waiting for the GPU.
     void RecycleRetiredHeaps();

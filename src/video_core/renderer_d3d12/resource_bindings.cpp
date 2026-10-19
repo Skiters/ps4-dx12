@@ -215,12 +215,21 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
     if(FAILED(hr))throw std::runtime_error(errors?std::string(static_cast<const char*>(DX12_API_CALL(errors->GetBufferPointer())),DX12_API_CALL(errors->GetBufferSize())):"DX12 root signature serialization failed");
     Check(DX12_API_CALL(device->CreateRootSignature(0,DX12_API_CALL(blob->GetBufferPointer()),DX12_API_CALL(blob->GetBufferSize()),IID_PPV_ARGS(&root_))));
 }
-ResourceBindings::ResourceBindings(ID3D12Device* device,const ResourceLayout& layout,DescriptorHeapPool* pool):device_(device),layout_(layout),
-    written_resources_(layout.resource_count_),written_samplers_(layout.sampler_count_),pool_(pool) {
+ResourceBindings::ResourceBindings(ID3D12Device* device,const ResourceLayout& layout,DescriptorHeapPool* pool,bool replayable):device_(device),layout_(layout),
+    replayable_(replayable),written_resources_(layout.resource_count_),written_samplers_(layout.sampler_count_),pool_(pool) {
     if(!device)throw std::invalid_argument("Null resource binding device");
     ComPtr<ID3D12Device> owner;Check(DX12_API_CALL(layout.Root()->GetDevice(IID_PPV_ARGS(&owner))));
     if(owner.Get()!=device)throw std::invalid_argument("Resource layout belongs to another D3D12 device");
     if(pool&&pool->Device()!=device)throw std::invalid_argument("Descriptor pool belongs to another D3D12 device");
+    if(replayable_){
+        const auto staging=[&](UINT count,D3D12_DESCRIPTOR_HEAP_TYPE type,ComPtr<ID3D12DescriptorHeap>& target){
+            if(!count)return;
+            D3D12_DESCRIPTOR_HEAP_DESC desc{type,count,D3D12_DESCRIPTOR_HEAP_FLAG_NONE,0};
+            Check(DX12_API_CALL(device->CreateDescriptorHeap(&desc,IID_PPV_ARGS(&target))));
+        };
+        staging(layout.resource_count_,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,replay_resources_);
+        staging(layout.sampler_count_,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,replay_samplers_);
+    }
     auto heap=[&](UINT count,D3D12_DESCRIPTOR_HEAP_TYPE type,DescriptorHeapPool::Slice& target,ComPtr<ID3D12DescriptorHeap>& owned) {
         if(!count)return;D3D12_DESCRIPTOR_HEAP_DESC desc{type,count,D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,0};
         if(pool_){target=pool_->Acquire(count,type);return;}
@@ -238,6 +247,41 @@ ResourceBindings::ResourceBindings(ID3D12Device* device,const ResourceLayout& la
         Uav(binding.reg,binding.space,nullptr,desc);
     }
 }
+std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(){
+    if(!replayable_)throw std::logic_error("Descriptor replay was not enabled before resource preparation");
+    Prepare();
+    // Owned child heaps need no pool mutation on exceptional construction or
+    // unwind; the caller's fence lease owns their full lifetime.
+    auto child=std::make_shared<ResourceBindings>(device_.Get(),layout_,nullptr,true);
+    const auto copy=[&](const ComPtr<ID3D12DescriptorHeap>& source,
+                        const ComPtr<ID3D12DescriptorHeap>& target,
+                        const std::vector<bool>& written,D3D12_DESCRIPTOR_HEAP_TYPE type){
+        if(!source)return;
+        const auto from=source->GetCPUDescriptorHandleForHeapStart();
+        const auto to=target->GetCPUDescriptorHandleForHeapStart();
+        const auto step=device_->GetDescriptorHandleIncrementSize(type);
+        for(size_t i=0;i<written.size();++i)if(written[i])
+            DX12_API_CALL(device_->CopyDescriptorsSimple(1,{to.ptr+i*step},{from.ptr+i*step},type));
+    };
+    copy(replay_resources_,child->replay_resources_,written_resources_,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    copy(replay_samplers_,child->replay_samplers_,written_samplers_,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    child->written_resources_=written_resources_;child->written_samplers_=written_samplers_;
+    child->keep_alive_=keep_alive_;child->allocation_leases_=allocation_leases_;
+    child->shader_planes_=shader_planes_;child->shader_texture_ranges_=shader_texture_ranges_;
+    child->capture_buffers_=capture_buffers_;child->capture_textures_=capture_textures_;
+    const auto rebase=[&](SIZE_T descriptor){
+        if(!replay_resources_)throw std::logic_error("Replay metadata without a resource descriptor heap");
+        const auto from=replay_resources_->GetCPUDescriptorHandleForHeapStart().ptr;
+        const auto step=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        if(descriptor<from||(descriptor-from)%step||(descriptor-from)/step>=written_resources_.size())
+            throw std::logic_error("Replay descriptor metadata is outside its source table");
+        return child->replay_resources_->GetCPUDescriptorHandleForHeapStart().ptr+(descriptor-from);
+    };
+    for(auto& [_,ranges]:child->shader_texture_ranges_)for(auto& range:ranges)range.descriptor=rebase(range.descriptor);
+    for(auto& view:child->capture_buffers_)view.descriptor=rebase(view.descriptor);
+    for(auto& view:child->capture_textures_)view.descriptor=rebase(view.descriptor);
+    return child;
+}
 void ResourceBindings::RecycleRetiredHeaps(){
     if(!pool_)return;
     if(recycled_)throw std::logic_error("Descriptor heaps already recycled");
@@ -250,8 +294,9 @@ D3D12_CPU_DESCRIPTOR_HANDLE ResourceBindings::Slot(D3D12_DESCRIPTOR_RANGE_TYPE t
         if(index>=binding.count)throw std::out_of_range("Descriptor array index");
         const bool sampler=type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
         const auto& slice=sampler?samplers_:resources_;auto* heap=slice?slice.page->heap.Get():(sampler?owned_samplers_:owned_resources_).Get();
+        if(replayable_)heap=(sampler?replay_samplers_:replay_resources_).Get();
         auto handle=DX12_API_CALL(heap->GetCPUDescriptorHandleForHeapStart());
-        handle.ptr+=SIZE_T((slice?slice.offset:0)+binding.offset+index)*DX12_API_CALL(device_->GetDescriptorHandleIncrementSize(sampler?D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER:D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
+        handle.ptr+=SIZE_T((!replayable_&&slice?slice.offset:0)+binding.offset+index)*DX12_API_CALL(device_->GetDescriptorHandleIncrementSize(sampler?D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER:D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
         (sampler?written_samplers_:written_resources_)[binding.offset+index]=true;
         return handle;
     }
@@ -434,6 +479,15 @@ void ResourceBindings::UnreachableUavTail(UINT reg,UINT space,UINT first){
         if(first>binding.count)throw std::out_of_range("Unreachable UAV tail extent");
         if(std::find(written_resources_.begin()+binding.offset,written_resources_.begin()+binding.offset+first,false)!=
             written_resources_.begin()+binding.offset+first)throw std::logic_error("Sparse UAV prefix contains unbound descriptors");
+        if(replayable_){
+            // Unreachable tier-3 slots may otherwise be uninitialized. CPU
+            // descriptor copies must never read uninitialized descriptors.
+            D3D12_UNORDERED_ACCESS_VIEW_DESC null_view{};
+            null_view.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;
+            null_view.Format=DXGI_FORMAT_R32_TYPELESS;
+            null_view.Buffer.NumElements=1;null_view.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
+            for(UINT index=first;index<binding.count;++index)Uav(reg,space,nullptr,null_view,index);
+        }
         std::fill(written_resources_.begin()+binding.offset+first,written_resources_.begin()+binding.offset+binding.count,true);
         return;
     }
@@ -468,6 +522,16 @@ void ResourceBindings::Bind(ID3D12GraphicsCommandList* list,bool compute) {
     ID3D12DescriptorHeap* heaps[2]{};UINT count=0;
     auto* resource_heap=resources_?resources_.page->heap.Get():owned_resources_.Get();
     auto* sampler_heap=samplers_?samplers_.page->heap.Get():owned_samplers_.Get();
+    if(replayable_&&!sealed_){
+        const auto publish=[&](ID3D12DescriptorHeap* target,ID3D12DescriptorHeap* source,UINT offset,UINT count,D3D12_DESCRIPTOR_HEAP_TYPE type){
+            if(!count)return;
+            auto destination=target->GetCPUDescriptorHandleForHeapStart();
+            destination.ptr+=SIZE_T(offset)*device_->GetDescriptorHandleIncrementSize(type);
+            DX12_API_CALL(device_->CopyDescriptorsSimple(count,destination,source->GetCPUDescriptorHandleForHeapStart(),type));
+        };
+        publish(resource_heap,replay_resources_.Get(),resources_?resources_.offset:0,layout_.resource_count_,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        publish(sampler_heap,replay_samplers_.Get(),samplers_?samplers_.offset:0,layout_.sampler_count_,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    }
     if(resource_heap)heaps[count++]=resource_heap;if(sampler_heap)heaps[count++]=sampler_heap;
     if(count)DX12_API_CALL(list->SetDescriptorHeaps(count,heaps));
     if(compute)DX12_API_CALL(list->SetComputeRootSignature(layout_.Root()));else DX12_API_CALL(list->SetGraphicsRootSignature(layout_.Root()));

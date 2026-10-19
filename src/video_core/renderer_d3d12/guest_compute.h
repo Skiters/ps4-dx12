@@ -58,8 +58,10 @@ static_assert(sizeof(GraphicsRuntime)==816);
 // Shared native bindings for all linked graphics stages. submit must record the
 // actual native draw using the supplied immutable resource table. Completion
 // and guest writeback are owned here, including exceptional retirement.
+// replayable_bindings opts into independent descriptor forks inside submit;
+// all forks must retire before the common resource completion may release them.
 void ExecuteGuestGraphicsResources(ID3D12Device*,Rasterizer&,const ShaderPipeline&,
     std::span<const GuestResourceStage>,const Shader::PushData&,const GraphicsRuntime&,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache&,VAddr border_colors=0,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={});
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false);
 }

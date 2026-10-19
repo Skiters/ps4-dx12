@@ -98,7 +98,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const ComputeInvocation& invocation,Shader::PushData push,std::span<const std::byte> runtime_data,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache* textures,VAddr border_colors,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={}) {
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
@@ -1030,7 +1030,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
     }
     diagnostic.Stage("descriptor-heap-allocation");
-    auto bindings_lease=std::make_shared<ResourceBindings>(device,pipeline.Layout(),&rasterizer.BindingHeapPool());
+    auto bindings_lease=std::make_shared<ResourceBindings>(device,pipeline.Layout(),&rasterizer.BindingHeapPool(),replayable_bindings);
     auto& bindings=*bindings_lease;
     if(stage_bindings)bindings.RetainAllocation(stage_bindings->pins);
     diagnostic.Stage("buffer-descriptors-and-constants");
@@ -1451,8 +1451,8 @@ void ExecuteGuestGraphicsResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const Shader::PushData& push,const GraphicsRuntime& runtime,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache& textures,VAddr border_colors,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers) {
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers,bool replayable_bindings) {
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics command has compute PSO");
-    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers);
+    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers,replayable_bindings);
 }
 }
