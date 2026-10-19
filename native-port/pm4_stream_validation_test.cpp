@@ -58,20 +58,12 @@ int main() {
     Require(writers.size() == 2);
     Require(writers[0].function == "narrow-writer");
     Require(writers[1].function == "wide-writer");
-    Require(writers[0].fingerprint == writers[0].current_fingerprint);
-    Require(writers[0].snapshot[0] == 0);
-
-    {
-        Libraries::GnmDriver::CommandWriterTrace::Scope unchanged_scope{
-            "unchanged-writer", writer_buffer.data() + 4, 1};
-    }
-    Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
-                reinterpret_cast<uintptr_t>(writer_buffer.data() + 4))
-                .empty());
+    Require(writers[0].fingerprint == 0);
     {
         Libraries::GnmDriver::CommandWriterTrace::Scope changed_scope{
             "changed-writer", writer_buffer.data() + 4, 1};
         writer_buffer[4] = 0x12345678u;
+        changed_scope.MarkWritten();
     }
     const auto changed = Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
         reinterpret_cast<uintptr_t>(writer_buffer.data() + 4));

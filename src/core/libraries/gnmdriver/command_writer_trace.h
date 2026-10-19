@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string_view>
 #include <vector>
@@ -30,9 +31,21 @@ struct Entry {
 
 inline constexpr size_t EntryCount = 64_KB;
 inline constexpr u32 MaxFingerprintWords = 256;
-inline std::array<Entry, EntryCount> entries{};
-inline std::mutex entries_mutex{};
-inline u64 next_serial{};
+
+[[nodiscard]] inline std::array<Entry, EntryCount>& Entries() {
+    static const auto entries = std::make_unique<std::array<Entry, EntryCount>>();
+    return *entries;
+}
+
+[[nodiscard]] inline std::mutex& EntriesMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+[[nodiscard]] inline u64& NextSerial() {
+    static u64 serial{};
+    return serial;
+}
 
 [[nodiscard]] inline u64 Fingerprint(const u32* address, u32 size_dw) {
     constexpr u64 OffsetBasis = 14695981039346656037ull;
@@ -46,27 +59,39 @@ inline u64 next_serial{};
     return hash;
 }
 
-inline void Record(const char* function, const u32* address, u32 size_dw) {
+inline void RecordImpl(const char* function, const u32* address, u32 size_dw, bool written) {
     if (address == nullptr || size_dw == 0) {
         return;
     }
-    std::scoped_lock lock{entries_mutex};
-    const u64 serial = ++next_serial;
+    std::scoped_lock lock{EntriesMutex()};
+    auto& entries = Entries();
+    const u64 serial = ++NextSerial();
     auto& entry = entries[(serial - 1) % entries.size()];
     entry = {
         .address = reinterpret_cast<uintptr_t>(address),
         .size_dw = size_dw,
         .function = function,
         .serial = serial,
-        .fingerprint = Fingerprint(address, size_dw),
     };
-    entry.snapshot_size_dw = std::min(size_dw, Entry::SnapshotWords);
-    std::copy_n(address, entry.snapshot_size_dw, entry.snapshot.begin());
+    if (written) {
+        entry.fingerprint = Fingerprint(address, size_dw);
+        entry.snapshot_size_dw = std::min(size_dw, Entry::SnapshotWords);
+        std::copy_n(address, entry.snapshot_size_dw, entry.snapshot.begin());
+    }
+}
+
+inline void Record(const char* function, const u32* address, u32 size_dw) {
+    RecordImpl(function, address, size_dw, false);
+}
+
+inline void RecordWritten(const char* function, const u32* address, u32 size_dw) {
+    RecordImpl(function, address, size_dw, true);
 }
 
 [[nodiscard]] inline std::vector<Entry> FindRecentCovering(uintptr_t address) {
     std::vector<Entry> matches;
-    std::scoped_lock lock{entries_mutex};
+    std::scoped_lock lock{EntriesMutex()};
+    const auto& entries = Entries();
     for (const auto& entry : entries) {
         if (entry.serial == 0 || address < entry.address) {
             continue;
@@ -74,8 +99,10 @@ inline void Record(const char* function, const u32* address, u32 size_dw) {
         const uintptr_t byte_offset = address - entry.address;
         if (byte_offset < static_cast<uintptr_t>(entry.size_dw) * sizeof(u32)) {
             auto match = entry;
-            match.current_fingerprint =
-                Fingerprint(reinterpret_cast<const u32*>(entry.address), entry.size_dw);
+            if (entry.fingerprint != 0) {
+                match.current_fingerprint =
+                    Fingerprint(reinterpret_cast<const u32*>(entry.address), entry.size_dw);
+            }
             matches.push_back(std::move(match));
         }
     }
@@ -89,13 +116,18 @@ inline void Record(const char* function, const u32* address, u32 size_dw) {
 class Scope {
 public:
     Scope(const char* function_, const u32* address_, u32 size_dw_)
-        : function{function_}, address{address_}, size_dw{size_dw_},
-          initial_fingerprint{address && size_dw ? Fingerprint(address, size_dw) : 0} {}
+        : function{function_}, address{address_}, size_dw{size_dw_} {}
 
     ~Scope() {
-        if (address && size_dw && Fingerprint(address, size_dw) != initial_fingerprint) {
+        if (written) {
+            RecordWritten(function, address, size_dw);
+        } else {
             Record(function, address, size_dw);
         }
+    }
+
+    void MarkWritten() {
+        written = true;
     }
 
     Scope(const Scope&) = delete;
@@ -105,7 +137,7 @@ private:
     const char* function;
     const u32* address;
     u32 size_dw;
-    u64 initial_fingerprint;
+    bool written{};
 };
 
 } // namespace Libraries::GnmDriver::CommandWriterTrace

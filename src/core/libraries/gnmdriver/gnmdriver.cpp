@@ -127,7 +127,7 @@ static void LogMalformedPm4(std::span<const u32> stream, bool allow_type2,
                       writer.serial, writer.function, writer.address, writer.size_dw,
                       writer_offset,
                       has_recorded_word ? writer.snapshot[writer_offset] : 0,
-                      writer.fingerprint == writer.current_fingerprint);
+                      writer.fingerprint != 0 && writer.fingerprint == writer.current_fingerprint);
         }
     }
     Common::Log::Flush();
@@ -1802,6 +1802,7 @@ s32 PS4_SYSV_ABI sceGnmSetEmbeddedVsShader(u32* cmdbuf, u32 size, u32 shader_id,
     cmdbuf = PM4CmdSetData::SetContextReg(cmdbuf, 0x1c3u, vs_regs[5]); // SPI_SHADER_POS_FORMAT
 
     WriteNop<11>(cmdbuf);
+    command_writer_trace.MarkWritten();
     return ORBIS_OK;
 }
 
@@ -2135,6 +2136,7 @@ s32 PS4_SYSV_ABI sceGnmSetVsShader(u32* cmdbuf, u32 size, const u32* vs_regs, u3
     cmdbuf = PM4CmdSetData::SetContextReg(cmdbuf, 0x1c3u, vs_regs[5]); // SPI_SHADER_POS_FORMAT
 
     WriteNop<11>(cmdbuf);
+    command_writer_trace.MarkWritten();
     return ORBIS_OK;
 }
 
