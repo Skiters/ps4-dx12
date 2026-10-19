@@ -585,7 +585,7 @@ void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
         if(writing)DiscardBufferImageVersions(address,1,false);
         GuestBufferAccess::ResolveCpuFault(address,writing);return;
     }
-    ResolveGpuBuffers(address,1);
+    if(!writing||IsGpuBufferModified(address,1))Rasterizer::ReadMemory(address,1);
     if(writing){DiscardBufferImageVersions(address,1,false);InvalidateCpuBufferPages(address,1);ReleaseImageWatches(address,1);}
     ResolveMemory(address,1);if(!writing)WatchBufferImageVersions(address,1);
 }
@@ -656,6 +656,10 @@ void GuestRasterizer::DiscardImages(VAddr address,u64 size){
         image->SetGpuOwned(false);page_watch_->Untrack(image->desc.address,image->layout.guest_bytes);
         if(image->desc.stencil_address)page_watch_->Untrack(image->desc.stencil_address,image->stencil_layout.guest_bytes);}
     textures_.Invalidate(address,size,CompletedFence());
+}
+bool GuestRasterizer::PrepareCpuUpload(VAddr address,u64 size){
+    std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();ResolveMemory(address,size);
+    const bool readable=Rasterizer::PrepareCpuUpload(address,size);if(readable)WatchBufferImageVersions(address,size);return readable;
 }
 bool GuestRasterizer::ReadMemory(VAddr address,u64 size,bool assume){
     std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();ResolveMemory(address,size);

@@ -793,7 +793,7 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         // Resolve protected guest backing before choosing a stream slice:
         // a page-fault resolver may Finish(), which resets upload pages.
         const auto source=reinterpret_cast<VAddr>(data);
-        if(IsMapped(source,size))ReadMemory(source,size);
+        if(IsMapped(source,size))PrepareCpuUpload(source,size);
         data=snapshot(data);
         Begin();
         constexpr u64 page_size=4*1024*1024;
@@ -820,11 +820,11 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     // Resolve guest page ownership on the caller: workers must never fault
     // while the caller holds ExecutionMutex and waits for their copies.
     const auto source=reinterpret_cast<VAddr>(data);
-    if(IsMapped(source,size))ReadMemory(source,size);
+    if(IsMapped(source,size))PrepareCpuUpload(source,size);
     data=snapshot(data);
     if(memory_perf_.enabled&&size<=memory_perf_.cpu_pool/4){
         const auto source=reinterpret_cast<VAddr>(data);
-        if(IsMapped(source,size))ReadMemory(source,size);
+        if(IsMapped(source,size))PrepareCpuUpload(source,size);
         auto best=large_upload_pool_.end();
         for(auto it=large_upload_pool_.begin();it!=large_upload_pool_.end();++it)
             if(!it->used&&it->capacity>=size&&(best==large_upload_pool_.end()||it->capacity<best->capacity))best=it;
@@ -1277,7 +1277,8 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
                 struct StreamingGuard{bool& enabled;StreamingGuard(bool& e):enabled(e){enabled=false;}~StreamingGuard(){enabled=true;}} guard(stream_buffers_enabled_);
                 auto remaining=resident.empty()?std::vector<ShaderBufferView>{}:PrepareShaderBuffers(resident,known_writes);
                 for(size_t i=0;i<requests.size();++i)if(streamed[i]){
-                    CheckBacking(requests[i].address,requests[i].size,false);ReadMemory(requests[i].address,requests[i].size);}
+                    CheckBacking(requests[i].address,requests[i].size,false);
+                    PrepareCpuUpload(requests[i].address,requests[i].size);}
                 page->Reset(scheduler_.Completed());
                 std::vector<ShaderBufferView> result;result.reserve(requests.size());size_t index{};
                 for(size_t i=0;i<requests.size();++i){
@@ -2291,9 +2292,23 @@ void Rasterizer::Finish(){
         if(upload_pages_.size()>keep)upload_pages_.resize(keep);
     }
 }
-bool Rasterizer::ReadMemory(VAddr a,u64 s,bool){
+bool Rasterizer::PrepareCpuUpload(VAddr a,u64 s){
     std::lock_guard lock(execution_mutex_);if(!IsMapped(a,s))return false;
     ResolveGpuBuffers(a,s);
+    for(const auto base:dirty_mappings_){const auto& mapping=mappings_.at(base);
+        if(base<a+s&&a<base+mapping.size){Finish();break;}}
+    return true;
+}
+bool Rasterizer::ReadMemory(VAddr a,u64 s,bool){
+    std::lock_guard lock(execution_mutex_);if(!IsMapped(a,s))return false;
+    // Match BufferCache::ReadMemory: retire scattered GPU-modified islands
+    // in the CPU request's 512 KiB download window. ResolveGpuBuffers itself
+    // stays precise for GPU ownership transfers and never materializes holes.
+    constexpr u64 window_size=512*1024;
+    const VAddr begin=IsGdsRange(a,s)?a:a&~(window_size-1);
+    const VAddr window_end=begin>UINT64_MAX-window_size?UINT64_MAX:begin+window_size;
+    const VAddr end=IsGdsRange(a,s)?a+s:std::max(a+s,window_end);
+    ResolveGpuBuffers(begin,end-begin);
     // As in the original buffer cache, CPU reads of clean ranges do not drain
     // the whole queue. Recorded writes are marked dirty before submission.
     for(const auto base:dirty_mappings_){const auto& mapping=mappings_.at(base);

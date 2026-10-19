@@ -28,7 +28,9 @@ protected:
     // Separate logical GPU versions need to distinguish exposing a preceding
     // result to a CPU reader from retiring it before a real CPU store.
     virtual void ResolveCpuFault(VAddr address,bool writing){
-        ResolveGpuBuffers(address,1);
+        // A real read or pre-store fault follows the original CPU download
+        // window. A clean-page write must not download unrelated GPU islands.
+        if(!writing||IsGpuBufferModified(address,1))Rasterizer::ReadMemory(address,1);
         if(writing)InvalidateCpuBufferPages(address,1);
         ReleaseImageWatches(address,1);ResolveImages(address,1);
     }

@@ -401,6 +401,9 @@ public:
     u32 ReadDataFromGds(u32) override;
     bool InvalidateMemory(VAddr,u64,bool=false) override;
     bool ReadMemory(VAddr,u64,bool=false) override;
+    // Internal upload dependency: reconcile only the source, without a CPU
+    // download window that would unnecessarily retire neighbouring GPU data.
+    virtual bool PrepareCpuUpload(VAddr,u64);
     bool IsMapped(VAddr,u64) override;
     void MapMemory(VAddr,u64) override;
     void RegisterMemory(VAddr,u64) override;

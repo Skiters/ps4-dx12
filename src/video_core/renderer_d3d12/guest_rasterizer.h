@@ -68,6 +68,7 @@ public:
     void SetBackingAccess(std::function<bool(VAddr,u64)>,
         std::function<bool(VAddr,std::span<std::byte>)>,std::function<bool(VAddr,std::span<const std::byte>)>);
     bool ReadMemory(VAddr,u64,bool=false) override;
+    bool PrepareCpuUpload(VAddr,u64) override;
     u64 ClampMemoryRange(VAddr,u64) override;
     bool InvalidateMemory(VAddr,u64,bool=false) override;
     void NotifyCpuWrite(VAddr,u64) override;

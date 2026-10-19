@@ -44,6 +44,10 @@ public:
         if(before_read_){auto callback=std::move(before_read_);before_read_={};callback();}
         return Rasterizer::ReadMemory(a,s,assume);
     }
+    bool PrepareCpuUpload(VAddr a,u64 s) override {
+        if(before_read_){auto callback=std::move(before_read_);before_read_={};callback();}
+        return Rasterizer::PrepareCpuUpload(a,s);
+    }
 };
 static u64 Counter(const char* name){auto& hub=Diagnostics::Hub::Get();std::lock_guard lock(hub.mutex);
     for(const auto& c:hub.counters)if(c.name&&std::string_view(c.name)==name)return c.value;return 0;}
@@ -165,6 +169,62 @@ static void UnalignedPageWitness(ID3D12Device* device,std::byte* guest,std::byte
         renderer.Finish();renderer.ValidateDebugMessages();
     }
     puts("PASS: unaligned readonly B, zero warm full comparisons, real neighbouring CPU stores, page winners and untouched GPU bytes");
+}
+static void CpuDownloadWindow(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
+    constexpr u64 window=512*1024,total=2*window,page=4096;
+    Require(base%window==0,"CPU download fixture needs a deterministic original arena window");
+    Fixture renderer(device);renderer.MapMemory(base,total);renderer.NotifyHostMapping(base,total,true,true);
+    u64 committed{};bool reject_second{};
+    const Rasterizer::ShaderBufferRequest requests[]{{base+page,page,true,true,true},
+        {base+window/2,page,true,true,true},{base+window+page,page,true,true,true},
+        {base+window+window/2,page,true,true,true}};
+    renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=total&&n<=total-(a-base);},
+        [&](VAddr a,std::span<const std::byte> data){
+            if(reject_second&&a==requests[1].address)return false;
+            memcpy(physical+a-base,data.data(),data.size());committed+=data.size();return true;
+        });
+    const auto arm=[&]{
+        renderer.ResolveGpuBuffers(base,total);renderer.NotifyCpuWrite(base,total);memset(physical,0x4d,total);
+        (void)renderer.PrepareShaderBuffers(requests);
+        for(unsigned i=0;i<4;++i)renderer.FillPreparedShaderBuffer(requests[i].address,page,
+            0x11111111u*(i+1),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.MarkShaderBufferWrites(requests);
+        committed=0;
+    };
+    const auto check_first_window=[&]{
+        Require(committed==2*page,"CPU read did not download exactly the two modified islands in its512KiB window");
+        std::vector<std::byte> expected(total,std::byte{0x4d});
+        for(unsigned i=0;i<2;++i)memset(expected.data()+requests[i].address-base,0x11*(i+1),page);
+        Require(!memcmp(physical,expected.data(),total),"CPU window lost GPU contents, sparse holes or out-of-window physical bytes");
+        for(unsigned i=0;i<4;++i){
+            Require(renderer.IsGpuBufferModified(requests[i].address,page)==(i>=2),"CPU window retired the wrong GPU-modified domain");
+            MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(requests[i].address),&state,sizeof(state));
+            Require(state.Protect==(i>=2?PAGE_NOACCESS:PAGE_READONLY),"CPU window changed an unrelated protection owner");
+        }
+    };
+    arm();Require(renderer.ReadMemory(requests[0].address,4),"Explicit CPU read failed");check_first_window();
+    renderer.ResolveGpuBuffers(requests[2].address,4);
+    Require(renderer.IsGpuBufferModified(requests[3].address,page),"Internal exact-page GPU resolution was widened");
+    Require(renderer.ReadMemory(requests[2].address,4)&&!renderer.IsGpuBufferModified(requests[3].address,page),
+        "Explicit CPU read of a clean island missed its modified arena-window neighbour");
+    arm();const auto observed=*reinterpret_cast<volatile u32*>(guest+page);
+    Require(observed==0x11111111u,"Real protected CPU read lost GPU contents");check_first_window();
+    arm();*reinterpret_cast<volatile unsigned char*>(guest+page+17)=0x99;
+    Require(committed==2*page&&physical[page+17]==std::byte{0x99}&&physical[window/2]==std::byte{0x22},
+        "Pre-store fault did not download its window before preserving the actual CPU winner");
+    Require(renderer.IsGpuBufferModified(requests[2].address,page)&&renderer.IsGpuBufferModified(requests[3].address,page),
+        "CPU store retired GPU data outside its original window");
+    arm();reject_second=true;bool rejected=false;
+    try{renderer.ReadMemory(requests[0].address,4);}catch(const std::runtime_error&){rejected=true;}
+    Require(rejected&&physical[window/2]==std::byte{0x4d}&&renderer.IsGpuBufferModified(requests[1].address,page),
+        "Failed CPU-window commit falsely published a GPU island");
+    reject_second=false;Require(renderer.ReadMemory(requests[0].address,4),"CPU-window retry failed");
+    Require(physical[window/2]==std::byte{0x22},"CPU-window retry lost the uncommitted GPU island");
+    const auto before=committed;
+    Require(!renderer.ReadMemory(base+total,4)&&!renderer.ReadMemory(UINT64_MAX-1,4)&&committed==before,
+        "Invalid CPU-window request read outside mapped guest memory");
+    renderer.Finish();renderer.ValidateDebugMessages();
+    puts("PASS:512KiB CPU download window, explicit/fault/read/write paths, sparse islands, exact GPU primitive, outside ownership and failed-commit retry");
 }
 void Run(ID3D12Device* device,bool f2){
     constexpr u64 bytes=65536;
@@ -546,14 +606,17 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
-    if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof")){
-        HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,65536,nullptr);
+    if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof"||std::string_view(argv[1])=="cpu-window")){
+        const bool cpu_window=std::string_view(argv[1])=="cpu-window";const u64 allocation_bytes=cpu_window?1024*1024:65536;
+        HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,DWORD(allocation_bytes),nullptr);
         Require(section,"Physical proof section");SCOPE_EXIT {CloseHandle(section);};
-        auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
-        auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
+        auto* guest=static_cast<std::byte*>(MapViewOfFileEx(section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(allocation_bytes),
+            cpu_window?reinterpret_cast<void*>(0x1000000000ULL):nullptr));
+        auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(allocation_bytes)));
         Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
-        memset(physical,0x4d,65536);
-        if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        memset(physical,0x4d,SIZE_T(allocation_bytes));
+        if(cpu_window)CpuDownloadWindow(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        else if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
     }
     Run(device.Get(),argc>1&&std::string_view(argv[1])=="f2");puts("PASS: production guest buffer access");return 0;

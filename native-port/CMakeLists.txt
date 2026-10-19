@@ -105,6 +105,7 @@ add_test(NAME native_guest_buffer_watch_transfer COMMAND native-guest-buffer-acc
 add_test(NAME native_guest_buffer_gpu_chain COMMAND native-guest-buffer-access-test f3)
 add_test(NAME native_protected_physical_backing_epoch COMMAND native-guest-buffer-access-test physical-proof)
 add_test(NAME native_unaligned_buffer_page_witness COMMAND native-guest-buffer-access-test unaligned-proof)
+add_test(NAME native_cpu_buffer_download_window COMMAND native-guest-buffer-access-test cpu-window)
 add_executable(native-scheduler-lifetime-test scheduler_lifetime_test.cpp)
 target_link_libraries(native-scheduler-lifetime-test PRIVATE shadps4_native_d3d12)
 add_test(NAME native_scheduler_lifetime COMMAND native-scheduler-lifetime-test)
