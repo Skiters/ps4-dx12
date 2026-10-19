@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "common/scope_exit.h"
 #include "video_core/renderer_d3d12/guest_stage_bindings.h"
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include <cstring>
@@ -7,6 +8,62 @@
 #include <string>
 
 namespace NativeDX12 {
+inline int RunOrderedInteriorFormattedReads(ID3D12Device* device){
+    const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
+    for(const UINT offset:{0u,1u,256u,257u}){
+        struct Allocation {void* p=VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
+            ~Allocation(){if(p)VirtualFree(p,0,MEM_RELEASE);}} memory;
+        require(memory.p,"Interior formatted fixture allocation");
+        const auto base=reinterpret_cast<VAddr>(memory.p);memset(memory.p,0x4d,65536);
+        Rasterizer renderer(device);GuestTextureCache cache(device);
+        SCOPE_EXIT {renderer.Finish();};
+        renderer.MapMemory(base,65536);
+        renderer.SetBufferOwnership([](VAddr,u64){return true;},
+            [](VAddr address,std::span<const std::byte> bytes){memcpy(reinterpret_cast<void*>(address),bytes.data(),bytes.size());return true;},
+            [](VAddr,u64){});
+        cache.SetBufferAliasRetention([](const auto&,const auto&){return true;});
+        cache.SetIndependentImageRetention([](const auto&,const auto&){return true;});
+        const auto acquire=[](auto& image){image.buffer_alias_version=image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;};
+        cache.SetOwnershipAcquirer(acquire);cache.SetIndependentVersionTransfer({},acquire,{});
+        GuestTextureDesc desc;desc.address=base;desc.width=desc.height=desc.pitch=16;
+        desc.data_format=4;desc.number_format=4;desc.tile_mode=13;desc.writable=true;
+        const auto layout=LayoutGuestTexture(desc);require(layout.guest_bytes>offset+16,"Fixture sharp outside image");
+        std::vector<std::byte> image_bytes(layout.guest_bytes,std::byte{0x6e});
+        auto& image=cache.Upload(desc,image_bytes,renderer.RecordingList(),renderer.CompletedFence());
+        require(cache.Own(image),"Interior formatted fixture ownership");auto pin=cache.PinBinding(image);
+        const u8 adjust=offset&3;const u64 native_bytes=(16+adjust+3)&~u64(3);
+        std::vector<Rasterizer::ShaderBufferRequest> requests{{base+(offset&~3u),native_bytes,false,true,true,adjust,16}};
+        const OrderedGuestBuffer buffers[]{{true,true,false,adjust,1,16}};
+        const GuestStageBindingSpan stages[]{{0,1,0,0}};
+        bool rejected=false;
+        try{(void)PrepareOrderedGuestStages(device,renderer,cache,stages,requests,buffers,{},true,
+            [](VAddr,u64)->VAddr{throw std::runtime_error("Unexpected private CPU stream");});}
+        catch(const std::runtime_error& e){
+            if(std::string_view(e.what())!="Ordered formatted readers retain the original exact-base image contract")throw;
+            rejected=true;
+        }
+        require(rejected==(offset==1),"Formatted image address-bucket admission differs from original");
+        if(rejected){renderer.Finish();continue;}
+        auto snapshot=renderer.CapturePreparedShaderBuffer(base,layout.guest_bytes);
+        auto readback=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        snapshot.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,layout.guest_bytes);
+        GuestImageReadback image_readback(device,image,renderer.RecordingList());
+        const auto fence=renderer.Flush();cache.Submitted(fence);image_readback.Submitted(fence);renderer.Finish();
+        std::vector<std::byte> expected(layout.guest_bytes,std::byte{0x4d});
+        if(!offset){std::vector<std::byte> pixels(size_t(desc.width)*desc.height*4,std::byte{0x6e});
+            EncodeGuestSubresource(desc,layout,expected,pixels,0,0);}
+        void* mapped{};D3D12_RANGE all{0,SIZE_T(layout.guest_bytes)};Check(readback.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),expected.size());D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);
+        require(equal,"Interior formatted reader changed independent B or exact reader missed I");
+        auto observed=image_bytes;image_readback.Resolve(renderer.CompletedFence(),observed);
+        require(observed==image_bytes&&image.HasValidLogicalImage()&&image.gpu_owned,"Formatted reader changed independent I");
+        require(std::ranges::all_of(std::span(static_cast<const std::byte*>(memory.p),65536),
+            [](std::byte value){return value==std::byte{0x4d};}),"Formatted read reconciled physical CPU bytes");
+        renderer.ValidateDebugMessages();
+    }
+    puts("PASS: ordered formatted exact/interior/unaligned address buckets preserve original independent B/I contents");return 0;
+}
 inline void RunOrderedWritableOwnershipAcquisition(ID3D12Device* device){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));

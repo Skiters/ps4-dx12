@@ -342,6 +342,7 @@ int wmain(int argc,wchar_t** argv){try {
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware device");
+    if(argc==5&&std::wstring_view(argv[4])==L"ordered-interior-reads")return RunOrderedInteriorFormattedReads(device.Get());
     if(argc==5&&std::wstring_view(argv[4])==L"ordered-bc-word"){
         RunOrderedBcWordStages(device.Get());
         RunOrderedBcWordStages(device.Get(),true);

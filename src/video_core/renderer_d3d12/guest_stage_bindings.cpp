@@ -141,8 +141,12 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(requests[i].written&&(original.address!=requests[i].address||original.size!=requests[i].size)&&
                (!exact_buffer_bounds||(original.address&(buffers[i].access_alignment-1))))
                 throw std::runtime_error("Ordered stage narrow writer lacks exact naturally aligned shader bounds");
-            if(buffers[i].formatted&&!buffers[i].cpu_stream&&
-               (requests[i].address!=address||buffers[i].byte_adjust))
+            // FindImageFromRange uses ForEachImageWithAddress (address >> 8),
+            // not a range-overlap lookup. Interior arenas outside that bucket
+            // retain their independent B contents. The pinned assertion still
+            // applies to a non-exact sharp within the selected address bucket.
+            if(buffers[i].formatted&&!buffers[i].cpu_stream&&!requests[i].written&&
+               (original.address>>8)==(address>>8)&&original.address!=address)
                 throw std::runtime_error("Ordered formatted readers retain the original exact-base image contract");
         }
     }
@@ -270,7 +274,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 }
                 const auto state=request.unordered_access?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-                if(buffer.formatted&&!result.stream_views[i]){
+                if(buffer.formatted&&!request.written&&!result.stream_views[i]){
                     bool metadata=false;
                     if(const auto meta=textures.GetMetaInfo(original.address)){
                         const auto value=GuestFormattedMetadataValue(*meta);
@@ -279,7 +283,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                             rasterizer.FillPreparedShaderBuffer(request.address,request.size,*value,state);metadata=true;
                         }
                     }
-                    if(!metadata)for(auto& [address,domain]:domains)if(Overlaps(address,domain.layout.guest_bytes,original.address,original.size)){
+                    if(!metadata)for(auto& [address,domain]:domains)if((address>>8)==(original.address>>8)){
                         const bool old_prefix=!domain.bound&&!domain.generation&&domain.initial_tiled.handle;
                         auto* image=old_prefix?nullptr:textures.FindValidIndependentImage(domain.desc,domain.layout);
                         // Current readonly I can be retained without an
