@@ -3,14 +3,29 @@
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/native_point_capture.h"
 namespace Shader::Backend::SPIRV {
-inline std::array<Sirit::Id,2> DefineNativePointCaptureReader(Sirit::Module& ctx){
+inline std::array<Sirit::Id,2> DefineNativePointCaptureReader(Sirit::Module& ctx,
+    u32 binding=NativePointCapture::Binding){
     ctx.AddCapability(spv::Capability::SampledBuffer);
     const auto type=ctx.TypeImage(ctx.TypeUInt(32),spv::Dim::Buffer,false,false,false,1u,spv::ImageFormat::Unknown);
     const auto variable=ctx.AddGlobalVariable(ctx.TypePointer(spv::StorageClass::UniformConstant,type),spv::StorageClass::UniformConstant);
     ctx.Name(variable,"native_point_capture");
     ctx.Decorate(variable,spv::Decoration::DescriptorSet,NativePointCapture::DescriptorSet);
-    ctx.Decorate(variable,spv::Decoration::Binding,NativePointCapture::Binding);
+    ctx.Decorate(variable,spv::Decoration::Binding,binding);
     return {variable,type};
+}
+inline Id ReadNativePointStream(EmitContext& ctx,u32 vertex,u32 word){
+    const auto& geometry=ctx.runtime_info.hw.gs;
+    const u32 stride=geometry.in_vertex_data_size+1;
+    if(vertex>=ctx.native_point_stream_vertices||word>=stride)
+        throw std::out_of_range("Captured geometry input exceeds its original vertex layout");
+    const auto primitive=ctx.OpLoad(ctx.U32[1],ctx.primitive_id);
+    const auto record=ctx.OpIAdd(ctx.U32[1],ctx.OpIMul(ctx.U32[1],primitive,
+        ctx.ConstU32(ctx.native_point_stream_vertices)),ctx.ConstU32(vertex));
+    const auto offset=ctx.OpIAdd(ctx.U32[1],ctx.OpIMul(ctx.U32[1],record,
+        ctx.ConstU32(stride)),ctx.ConstU32(word));
+    const auto image=ctx.OpLoad(ctx.native_point_stream_image_type,ctx.native_point_stream_buffer);
+    return ctx.OpCompositeExtract(ctx.U32[1],ctx.OpImageFetch(ctx.U32[4],image,offset,
+        spv::ImageOperandsMask::MaskNone,{}),0u);
 }
 inline Sirit::Id DefineNativePointCaptureBuffer(Sirit::Module& ctx,bool writable){
     const auto uint_type=ctx.TypeUInt(32),words=ctx.TypeRuntimeArray(uint_type);
@@ -75,7 +90,11 @@ inline void EmitNativePointCapture(EmitContext& ctx){
             write(NativePointCapture::ParameterWord+source*4+component,ctx.OpBitcast(ctx.U32[1],
                 ctx.OpCompositeExtract(ctx.F32[1],value,component)));
     }
-    write(NativePointCapture::ValidWord,ctx.OpIAdd(ctx.U32[1],primitive,ctx.ConstU32(1u)));
+    // Slot addressing uses the generated primitive ordinal above. The guest
+    // and fragment replay retain the pre-tessellation patch identity instead.
+    const auto guest_primitive=geometry.native_point_capture_stream_input?
+        ReadNativePointStream(ctx,0,NativePointCapture::StreamPatchWord):primitive;
+    write(NativePointCapture::ValidWord,ctx.OpIAdd(ctx.U32[1],guest_primitive,ctx.ConstU32(1u)));
     ctx.OpBranch(end_label);ctx.AddLabel(end_label);
 }
 }

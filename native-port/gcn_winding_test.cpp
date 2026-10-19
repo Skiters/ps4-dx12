@@ -74,6 +74,10 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    const bool stream_inputs=mode.starts_with("stream-");
+    if(stream_inputs){
+        mode.remove_prefix(7);
+    }
     const bool point_capture_two=mode.starts_with("capture2-");
     const bool point_capture_three=mode.starts_with("capture3-");
     const u32 capture_instances=point_capture_three?3u:1u;
@@ -81,6 +85,8 @@ int main(int argc,char** argv){try{
     if(point_capture){
         mode.remove_prefix(point_capture_two||point_capture_three?9:8);
     }
+    if(stream_inputs&&(!point_capture||(mode!="point-size-gcn-loop-bound"&&mode!="point-unit-gcn-loop-bound")))
+        throw std::invalid_argument("Buffered input fixture requires a capture GCN loop mode");
     if(compile_shaders)if(const auto* compiler_log=std::getenv("NATIVE_POINT_COMPILER_LOG")){
         Common::Log::Setup(compiler_log);
         Common::Log::UpdateLogLevels("*:critical");
@@ -366,6 +372,7 @@ int main(int argc,char** argv){try{
     profile.needs_clip_distance_emulation=mode=="point-size-clip"||mode=="point-size-saturated-clip"||point_packed_clip;
     profile.native_viewport_clip_conversion=clip_disabled;
     profile.native_point_capture=point_capture;
+    profile.native_point_capture_stream_input=stream_inputs;
     GuestShaderFrontend frontend(profile);auto guest=frontend.BuildGraphics(regs);
     GuestShaderStage prepared_geometry;
     if(geometry_points){prepared_geometry=PreparedPointGeometry(profile,geometry_unit,frontend.ReserveStageId(),
@@ -405,6 +412,40 @@ int main(int argc,char** argv){try{
     Shader::Backend::DX12::SpirvConvertOptions options;options.native_storage_buffer_uavs=true;options.runtime_viewport_flips=true;
     if(compile_shaders){
         using namespace Shader::Backend::DX12;
+        if(stream_inputs){
+            // Exercise the full original input domain without allocating an
+            // impossible extra varying: parameter31.w, adjacency vertex5,
+            // position, guest PrimitiveId and invocation ID use production
+            // attribute readers. This is a compiler check, not GPU evidence.
+            using namespace Shader::Backend::SPIRV;
+            auto info=guest.stages[u32(Shader::SwStage::Geometry)]->info;
+            auto runtime=guest.stages[u32(Shader::SwStage::Geometry)]->runtime;
+            runtime.hw.gs.in_vertex_data_size=4*(Shader::IR::NumParams+1);
+            runtime.hw.gs.in_primitive=AmdGpu::PrimitiveType::AdjTriangleList;
+            runtime.hw.gs.output_vertices=1;runtime.hw.gs.num_invocations=1;
+            info.gs_copy_data.num_attrs=1;
+            info.stores.Set(Shader::IR::Attribute::Param0);
+            Shader::Backend::Bindings probe_bindings{};
+            EmitContext ctx(profile,runtime,info,probe_bindings);
+            const auto main=ctx.OpFunction(ctx.void_id,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(ctx.void_id));
+            ctx.AddExecutionMode(main,spv::ExecutionMode::InputTrianglesAdjacency);
+            ctx.AddExecutionMode(main,spv::ExecutionMode::OutputPoints);
+            ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,1u);
+            ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,1u);
+            ctx.AddEntryPoint(spv::ExecutionModel::Geometry,main,"main",ctx.interfaces);
+            ctx.AddLabel(ctx.OpLabel());
+            const auto values=ctx.OpCompositeConstruct(ctx.F32[4],
+                EmitGetAttribute(ctx,Shader::IR::Attribute::Param31,3,5),
+                EmitGetAttribute(ctx,Shader::IR::Attribute::Param0,0,0),
+                EmitGetAttribute(ctx,Shader::IR::Attribute::Position0,2,5),
+                ctx.OpBitcast(ctx.F32[1],EmitGetAttributeU32(ctx,Shader::IR::Attribute::PrimitiveId,0)));
+            ctx.OpStore(ctx.output_position,values);ctx.OpStore(ctx.output_params[0].id,values);
+            EmitEmitVertex(ctx);ctx.OpReturn();ctx.OpFunctionEnd();
+            const auto words=ctx.Assemble();const LinkedSpirvStage probe{SpirvStage::Geometry,words};
+            const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),std::span(&probe,1),options);
+            if(!result.success)throw std::runtime_error("Full buffered GS input compilation failed: "+result.diagnostics);
+            printf("COMPILED: buffered GS full32-parameter/adjacency/patch-ID domain, signed DXIL %zu bytes\n",result.stages[0].bytecode.size());
+        }
         if(point_saturated){
             const auto& vs=*guest.stages[u32(Shader::SwStage::Vertex)];
             const auto& fs=*guest.stages[u32(Shader::SwStage::Fragment)];
@@ -547,7 +588,8 @@ int main(int argc,char** argv){try{
             std::vector<std::byte> expected(memory,memory+65536);std::vector<bool> half_unorm(65536);
             rasterizer.InvalidateMemory(address,65536);
             textures.Invalidate(address,65536,rasterizer.CompletedFence());
-            if(gcn_geometry){const u32 counters[]{77+capture_instances,91+capture_instances*(point_capture_two?2u:1u)};memcpy(expected.data()+32768,counters,sizeof(counters));}
+            const u32 stream_primitives=stream_inputs?2u:1u;
+            if(gcn_geometry){const u32 counters[]{77+capture_instances*stream_primitives,91+capture_instances*stream_primitives*(point_capture_two?2u:1u)};memcpy(expected.data()+32768,counters,sizeof(counters));}
             if(point_saturated){const u32 counter=78;memcpy(expected.data()+32768,&counter,4);}
             for(unsigned y=0;y<8;++y)for(unsigned x=0;x<16;++x){const bool front=OriginalFront(regs,x/8,reverse);
                 if(sized_points){const double half=ccw&&!geometry_unit?2.:0.5;
@@ -562,11 +604,11 @@ int main(int argc,char** argv){try{
                 // https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm
                 for(u32 channel=0;channel<4;++channel)half_unorm[pixel+channel]=result[channel]==128;
                 if(!point_layer)expected[12288+GuestPixelOffset(stencil,sl,0,0,x,y)]=std::byte(gcn_geometry?
-                    7+2*capture_instances*(point_capture_two?2u:1u):sized_points||front?8:6);}
+                    7+2*capture_instances*stream_primitives*(point_capture_two?2u:1u):sized_points||front?8:6);}
             GraphicsRuntime runtime{};runtime.yz_flip_mask=viewports.flip_mask;runtime.SetViewports(viewports.viewports,expanded_points,viewports.clip_transforms);
             GuestTextureCache::Entry* target{};GuestTextureCache::Entry* ds{};
             auto color_memory=std::span(memory+4096,size_t(cl.guest_bytes)),depth_memory=std::span(memory+8192,size_t(dl.guest_bytes)),stencil_memory=std::span(memory+12288,size_t(sl.guest_bytes));
-            Rasterizer::DrawArguments output_draw{sized_points?1u:6u,capture_instances};
+            Rasterizer::DrawArguments output_draw{sized_points?stream_primitives:6u,capture_instances};
             const auto submit=[&](ResourceBindings& bindings){
                 target=&textures.Upload(color,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
                 ds=&textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
@@ -580,11 +622,51 @@ int main(int argc,char** argv){try{
                 const auto plan=Shader::NativePointCapture::Plan::Make(primitives,gs.num_invocations,gs.output_vertices,output_draw.instances);
                 const auto producer_state=NativePointCapturePass::ProducerState(original_state);
                 const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
+                Resource stream;
+                if(stream_inputs){
+                    // Independent fixture input: two generated primitives from
+                    // patch7. The original ES still executes once per vertex;
+                    // this tests buffered GS input, not a DS/SO producer.
+                    const u32 stride=gs.in_vertex_data_size+1;
+                    std::vector<u32> records(size_t(stream_primitives)*stride);
+                    for(u32 primitive=0;primitive<stream_primitives;++primitive){
+                        records[primitive*stride]=7;
+                        memcpy(records.data()+primitive*stride+1,memory+primitive*input.stride,16);
+                    }
+                    stream=Buffer(device.Get(),records.size()*4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+                    void* data{};D3D12_RANGE none{};Check(stream.handle->Map(0,&none,&data));
+                    memcpy(data,records.data(),records.size()*4);
+                    D3D12_RANGE written{0,records.size()*4};stream.handle->Unmap(0,&written);
+                }
                 capture_pass->Execute(rasterizer,plan,output_draw,original_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
                     ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
                         [&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
+                            if(stream_inputs)NativePointCapturePass::BindInputStream(bindings,stream,0,stream.handle->GetDesc().Width);
                             rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
                                 viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false);},textures);
+                    if(stream_inputs){
+                        auto download=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+                        buffer.UavBarrier(rasterizer.RecordingList());
+                        buffer.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+                        rasterizer.RecordingList()->CopyBufferRegion(download.handle.Get(),0,buffer.handle.Get(),offset,bytes);
+                        rasterizer.Finish();void* data{};D3D12_RANGE range{0,SIZE_T(bytes)};
+                        Check(download.handle->Map(0,&range,&data));
+                        const auto* records=static_cast<const Shader::NativePointCapture::Record*>(data);
+                        bool valid=true;
+                        for(u32 primitive=0;primitive<stream_primitives;++primitive)
+                            for(u32 invocation=0;invocation<gs.num_invocations;++invocation)
+                                for(u32 emission=0;emission<gs.output_vertices;++emission){
+                                    const auto& record=records[(primitive*gs.num_invocations+invocation)*gs.output_vertices+emission];
+                                    // The guest loop emits twice; every other
+                                    // slot stays invalid. Both primitives must
+                                    // survive even though their patch ID agrees.
+                                    valid&=record.valid==(emission<2?8u:0u);
+                                    if(emission<2)valid&=memcmp(record.position.data(),memory+primitive*input.stride,16)==0;
+                                }
+                        D3D12_RANGE none{};download.handle->Unmap(0,&none);
+                        if(!valid)throw std::runtime_error("Buffered GS lost primitive separation, original patch ID, position or sparse emission slots");
+                        buffer.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                    }
                     if(std::getenv("NATIVE_POINT_DEBUG_CAPTURE")){
                         const u64 count=std::min<u64>(bytes,Shader::NativePointCapture::RecordBytes*2);
                         auto download=Buffer(device.Get(),count,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);

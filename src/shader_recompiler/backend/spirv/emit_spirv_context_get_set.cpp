@@ -6,6 +6,7 @@
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/native_point_capture.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point_capture.h"
 #include "shader_recompiler/ir/attribute.h"
 #include "shader_recompiler/ir/microinstruction.h"
 #include "shader_recompiler/ir/patch.h"
@@ -80,6 +81,12 @@ Id EmitReadConstBuffer(EmitContext& ctx, u32 handle, Id index) {
 Id EmitGetAttribute(EmitContext& ctx, IR::Attribute attr, u32 comp, u32 index) {
     if (IR::IsParam(attr)) {
         const u32 param_index{u32(attr) - u32(IR::Attribute::Param0)};
+        if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture_stream_input){
+            if(comp>=4||param_index>=IR::NumParams)
+                throw std::out_of_range("Invalid buffered geometry parameter");
+            return ctx.OpBitcast(ctx.F32[1],ReadNativePointStream(ctx,index,
+                NativePointCapture::StreamParameterWord+param_index*4+comp));
+        }
         if(ctx.sw_stage==SwStage::Fragment&&ctx.runtime_info.hw.fs.native_point_capture){
             const auto& fragment=ctx.runtime_info.hw.fs;
             const u32 inputs=fragment.num_inputs-u32(fragment.clip_distance_emulation);
@@ -134,6 +141,11 @@ Id EmitGetAttribute(EmitContext& ctx, IR::Attribute attr, u32 comp, u32 index) {
     switch (attr) {
     case IR::Attribute::Position0:
         ASSERT(ctx.sw_stage == SwStage::Geometry);
+        if(ctx.runtime_info.hw.gs.native_point_capture_stream_input){
+            if(comp>=4)throw std::out_of_range("Invalid buffered geometry position");
+            return ctx.OpBitcast(ctx.F32[1],ReadNativePointStream(ctx,index,
+                NativePointCapture::StreamPositionWord+comp));
+        }
         return ctx.OpLoad(ctx.F32[1],
                           ctx.OpAccessChain(ctx.input_f32, ctx.gl_in, ctx.ConstU32(index),
                                             ctx.ConstU32(0U), ctx.ConstU32(comp)));
@@ -246,6 +258,8 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
     case IR::Attribute::RenderTargetIndex:
         return ctx.OpLoad(ctx.U32[1], ctx.output_layer);
     case IR::Attribute::PrimitiveId:
+        if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture_stream_input)
+            return ReadNativePointStream(ctx,0,NativePointCapture::StreamPatchWord);
         return ctx.OpLoad(ctx.U32[1], ctx.primitive_id);
     case IR::Attribute::InvocationId:
         ASSERT(ctx.info.sw_stage == SwStage::Geometry ||

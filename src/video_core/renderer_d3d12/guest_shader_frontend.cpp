@@ -63,6 +63,9 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     if(logical==Shader::SwStage::Geometry&&runtime.hw.gs.out_primitive[0]==AmdGpu::GsOutputPrimitiveType::PointList){
         runtime.hw.gs.native_point_expansion=true;
         runtime.hw.gs.native_point_capture=profile_.native_point_capture;
+        runtime.hw.gs.native_point_capture_stream_input=profile_.native_point_capture_stream_input;
+        if(runtime.hw.gs.native_point_capture_stream_input&&!runtime.hw.gs.native_point_capture)
+            throw std::invalid_argument("Buffered geometry inputs require point capture");
         runtime.hw.gs.native_point_clip_depth=!regs.clipper_control.clip_disable&&regs.clipper_control.ZclipEnable();
         runtime.hw.gs.native_point_clip_disable=regs.clipper_control.clip_disable;
         runtime.hw.gs.native_point_negative_one_to_one=regs.clipper_control.clip_space==AmdGpu::ClipSpace::MinusWToW;

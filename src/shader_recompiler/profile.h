@@ -62,6 +62,9 @@ struct Profile {
     bool native_coherent_images{};
     bool native_viewport_clip_conversion{};
     bool native_point_capture{};
+    // Internal post-tessellation GS replay reads captured vertex words and
+    // guest patch identity independently of the new IA primitive ordinal.
+    bool native_point_capture_stream_input{};
     // D3D12_OPTIONS13 exposes independent constant-alpha RGB blend factors.
     // Older devices route mixed constant-color/alpha targets through ordered
     // attachment storage instead of rewriting the global blend constant.

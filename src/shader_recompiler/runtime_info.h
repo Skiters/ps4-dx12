@@ -168,6 +168,7 @@ struct HwGeometryRuntimeInfo {
     u64 vs_copy_hash;
     bool native_point_expansion{},native_point_clip_depth{},native_point_clip_disable{},native_point_negative_one_to_one{};
     bool native_point_capture{};
+    bool native_point_capture_stream_input{};
     u32 native_point_live_parameters{};
     std::array<u8,32> native_point_live_components{};
     std::array<u8,32> native_point_component_masks{};
@@ -176,6 +177,7 @@ struct HwGeometryRuntimeInfo {
     bool operator==(const HwGeometryRuntimeInfo& other) const {
         return native_point_expansion==other.native_point_expansion&&
                native_point_capture==other.native_point_capture&&
+               native_point_capture_stream_input==other.native_point_capture_stream_input&&
                native_point_live_parameters==other.native_point_live_parameters&&
                native_point_live_components==other.native_point_live_components&&
                native_point_component_masks==other.native_point_component_masks&&

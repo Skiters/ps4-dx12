@@ -456,6 +456,8 @@ public:
     Id native_point_capture_buffer,native_point_capture_pointer,native_point_capture_counter;
     Id native_point_capture_index;
     Id native_point_capture_image_type;
+    Id native_point_stream_buffer,native_point_stream_image_type;
+    u32 native_point_stream_vertices{};
     std::array<SpirvAttribute, IR::NumRenderTargets> frag_outputs{};
 
     Id uf11_to_f32{};

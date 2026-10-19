@@ -554,6 +554,18 @@ void EmitContext::DefineInputs() {
         primitive_id = DefineVariable(U32[1], spv::BuiltIn::PrimitiveId, spv::StorageClass::Input);
         if(runtime_info.hw.gs.native_point_capture||info.loads.GetAny(IR::Attribute::InvocationId))
             invocation_id=DefineVariable(U32[1],spv::BuiltIn::InvocationId,spv::StorageClass::Input);
+        if(runtime_info.hw.gs.native_point_capture_stream_input){
+            const auto& geometry=runtime_info.hw.gs;
+            if(!geometry.native_point_capture||geometry.in_vertex_data_size<4||
+               geometry.in_vertex_data_size%4||geometry.in_vertex_data_size>4*(IR::NumParams+1))
+                throw std::invalid_argument("Invalid buffered geometry input layout");
+            native_point_stream_vertices=NumVertices(geometry.in_primitive);
+            const auto reader=DefineNativePointCaptureReader(*this,NativePointCapture::StreamBinding);
+            native_point_stream_buffer=reader[0];native_point_stream_image_type=reader[1];
+            Name(native_point_stream_buffer,"native_point_input_stream");
+            interfaces.push_back(native_point_stream_buffer);
+            break;
+        }
         const auto gl_per_vertex =
             Name(TypeStruct(F32[4], F32[1], TypeArray(F32[1], ConstU32(1u))), "gl_PerVertex");
         MemberName(gl_per_vertex, 0, "gl_Position");

@@ -11,9 +11,10 @@ namespace {
 bool Idle(const std::shared_ptr<Resource>& resource){
     return resource.use_count()==1&&(!resource->allocation||resource->allocation.use_count()==1);
 }
-bool HasBinding(const ResourceBindings& table,D3D12_DESCRIPTOR_RANGE_TYPE type){
+bool HasBinding(const ResourceBindings& table,D3D12_DESCRIPTOR_RANGE_TYPE type,
+    u32 binding=Shader::NativePointCapture::Binding){
     return std::any_of(table.Layout().Bindings().begin(),table.Layout().Bindings().end(),[&](const auto& b){
-        return b.space==Shader::NativePointCapture::DescriptorSet&&b.reg==Shader::NativePointCapture::Binding&&b.type==type;
+        return b.space==Shader::NativePointCapture::DescriptorSet&&b.reg==binding&&b.type==type;
     });
 }
 }
@@ -86,6 +87,21 @@ void NativePointCapturePass::BindReplay(ResourceBindings& table,Resource& buffer
     D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;view.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;
     view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;view.Buffer.NumElements=UINT(bytes/4);
     table.RetainAllocation(buffer.allocation);table.Srv(0,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
+}
+void NativePointCapturePass::BindInputStream(ResourceBindings& table,Resource& buffer,u64 offset,u64 bytes){
+    constexpr u32 binding=Shader::NativePointCapture::StreamBinding;
+    if(!HasBinding(table,D3D12_DESCRIPTOR_RANGE_TYPE_SRV,binding))
+        throw std::logic_error("Buffered geometry lost its input stream SRV");
+    if(!buffer.handle)throw std::invalid_argument("Missing buffered geometry input");
+    const auto desc=buffer.handle->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||offset%4||!bytes||bytes%4||
+       offset>desc.Width||bytes>desc.Width-offset||bytes>std::numeric_limits<u32>::max())
+        throw std::out_of_range("Buffered geometry input view exceeds its allocation");
+    D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;
+    view.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    view.Buffer.FirstElement=offset/4;view.Buffer.NumElements=UINT(bytes/4);
+    table.RetainAllocation(buffer.allocation);
+    table.Srv(binding,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
 }
 void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::NativePointCapture::Plan& plan,
     const DrawArguments& original,D3D_PRIMITIVE_TOPOLOGY topology,

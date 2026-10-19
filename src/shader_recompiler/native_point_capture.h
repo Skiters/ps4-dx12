@@ -8,6 +8,10 @@
 #include <type_traits>
 namespace Shader::NativePointCapture {
 inline constexpr u32 DescriptorSet=33,Binding=0;
+inline constexpr u32 StreamBinding=1;
+// Per input vertex: original patch/primitive ID, position.xyzw, then the
+// original ESGS parameter vectors. No float conversions or extra varyings.
+inline constexpr u32 StreamPatchWord=0,StreamPositionWord=1,StreamParameterWord=5;
 inline constexpr u32 ValidWord=0,PositionWord=1,SizeWord=5,LayerWord=6,ViewportWord=7,
     ClipWord=8,CullWord=16,ParameterWord=24,RecordWords=152;
 struct Record {
