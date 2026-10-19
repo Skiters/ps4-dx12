@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_pipeline_cache.h"
 #include "diagnostics.h"
+#include "primitive_stream_arguments.h"
 #include <d3d12sdklayers.h>
 namespace NativeDX12 {
+StreamOutputLayout GuestPipelineCache::PrimitiveStreamLayout(const GuestGraphicsStages& stages){
+    const auto& geometry=shaders_.Graphics(stages).stages[u32(Shader::SwStage::Geometry)];
+    return ReflectPrimitiveStreamLayout(dxc_,geometry.bytecode);
+}
 namespace {
 // Serialize semantic fields, never host pointer values or struct padding.
 // This preserves pipeline reuse across draws with different temporary layouts.

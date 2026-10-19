@@ -35,6 +35,13 @@ PrimitiveStreamRange PrimitiveStreamRange::Make(u32 stride,u32 capacity,u32 prim
         throw std::invalid_argument("Invalid bounded primitive stream range");
     return {stride,capacity,primitive,first,limit};
 }
+PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch,u32 vertices,u32 instances,u32 words){
+    if(patch!=3&&patch!=4)throw std::invalid_argument("Auxiliary point stream requires rectangle/quad patches");
+    const u64 primitives=std::max<u64>(1,u64(vertices/patch)*2*instances);
+    if(primitives>UINT32_MAX/3)throw std::overflow_error("Auxiliary tessellation capture exceeds native vertex addressing");
+    const u32 capacity=u32(primitives)*3;
+    return PrimitiveStreamRange::Make(Shader::NativePointCapture::StreamRecordWords(words)*4,capacity,3,0,capacity);
+}
 PrimitiveStreamPartitions::PrimitiveStreamPartitions(const PrimitiveStreamRange& input,u32 calls,u32 emissions,u64 budget)
     :input_(PrimitiveStreamRange::Make(input.stride,input.capacity_vertices,input.vertices_per_primitive,input.first,input.limit)),
     calls_(calls),emissions_(emissions){

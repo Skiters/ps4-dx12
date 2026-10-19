@@ -27,7 +27,10 @@ struct GuestGraphicsStages {
     u32 mrt_mask{};
     u32 ordered_color_mask{};
 };
-struct GuestPointCaptureStages {GuestGraphicsStages producer,replay;};
+struct GuestPointCaptureStages {
+    GuestGraphicsStages producer,replay,stream_producer;
+    u32 stream_patch_vertices{};
+};
 // Owns original guest reflection and specialization. Stage objects have stable
 // addresses because StageSpecialization retains an Info pointer.
 // GPU command thread only; outputs remain owned by this frontend.

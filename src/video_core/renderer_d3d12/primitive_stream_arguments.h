@@ -17,6 +17,7 @@ struct PrimitiveStreamRange {
     u32 stride{},capacity_vertices{},vertices_per_primitive{},first{},limit{};
     static PrimitiveStreamRange Make(u32 stride,u32 capacity,u32 vertices_per_primitive,u32 first,u32 limit);
 };
+PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch_vertices,u32 input_vertices,u32 instances,u32 vertex_words);
 struct PrimitiveStreamPartition {
     PrimitiveStreamRange input;
     Shader::NativePointCapture::Plan capture;

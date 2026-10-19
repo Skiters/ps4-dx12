@@ -428,6 +428,42 @@ int main(int argc,char** argv){try{
     if(compile_shaders){
         using namespace Shader::Backend::DX12;
         if(stream_inputs){
+            {
+                auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
+                geometry.in_vertex_data_size=132;geometry.in_primitive=AmdGpu::PrimitiveType::AdjTriangleList;
+                Shader::Info live;live.loads.Set(Shader::IR::Attribute::Position0,0);
+                live.loads.Set(Shader::IR::Attribute::Param31,3);
+                const auto words=EmitNativePrimitiveStream(geometry,&live);
+                const LinkedSpirvStage input{SpirvStage::Geometry,words};
+                const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),std::span(&input,1),options);
+                if(!result.success)throw std::runtime_error("Sparse full-width original GS input serialization failed: "+result.diagnostics);
+                (void)ReflectPrimitiveStreamLayout(std::filesystem::path(argv[2]).wstring(),result.stages[0].bytecode);
+                printf("COMPILED: sparse132-word original GS input with live Position.x/Param31.w only\n");
+            }
+            {
+                auto rect_regs=regs;rect_regs.primitive_type=AmdGpu::PrimitiveType::RectList;
+                auto rect_profile=profile;rect_profile.native_point_capture=false;rect_profile.native_point_capture_stream_input=false;
+                GuestShaderFrontend rect_frontend(rect_profile);
+                const auto rect=rect_frontend.BuildPointCaptureGraphics(rect_regs);
+                using Shader::SwStage;
+                if(rect.stream_patch_vertices!=3||!rect.stream_producer.stages[u32(SwStage::TessellationControl)]||
+                   !rect.stream_producer.stages[u32(SwStage::TessellationEval)]||
+                   rect.producer.stages[u32(SwStage::TessellationControl)]||rect.producer.stages[u32(SwStage::TessellationEval)])
+                    throw std::runtime_error("Production rectangle capture did not separate original tessellation from GS consumer");
+                const auto compile=[&](const GuestGraphicsStages& stages){
+                    std::vector<LinkedSpirvStage> inputs;
+                    for(const auto* stage:stages.stages)if(stage){
+                        const auto logical=stage->info.sw_stage;
+                        const auto kind=logical==SwStage::Vertex?SpirvStage::Vertex:logical==SwStage::TessellationControl?SpirvStage::TessellationControl:
+                            logical==SwStage::TessellationEval?SpirvStage::TessellationEvaluation:logical==SwStage::Geometry?SpirvStage::Geometry:SpirvStage::Pixel;
+                        inputs.push_back({kind,stage->spirv});
+                    }
+                    const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),inputs,options);
+                    if(!result.success)throw std::runtime_error("Production rectangle stream/consumer/replay linkage failed: "+result.diagnostics);
+                };
+                compile(rect.stream_producer);compile(rect.producer);compile(rect.replay);
+                printf("COMPILED: production automatic RectList stream producer, GS-only consumer and PS replay\n");
+            }
             for(const auto topology:std::array{AmdGpu::PrimitiveType::PointList,AmdGpu::PrimitiveType::LineList,
                 AmdGpu::PrimitiveType::TriangleList,AmdGpu::PrimitiveType::AdjLineList,AmdGpu::PrimitiveType::AdjTriangleList}){
                 auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;

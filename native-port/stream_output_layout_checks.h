@@ -7,6 +7,15 @@
 
 namespace NativeDX12::Tests {
 inline void CheckStreamOutputLayout(){
+    for(const u32 patch:std::array<u32,2>{3,4}){
+        const auto complete=AuxiliaryPointStreamRange(patch,patch*2,2,4);
+        const auto incomplete=AuxiliaryPointStreamRange(patch,patch-1,1,4);
+        if(complete.capacity_vertices!=24||complete.stride!=32||incomplete.capacity_vertices!=3)
+            throw std::runtime_error("Fixed auxiliary tessellation bound lost complete patches/instances or incomplete producer effects");
+    }
+    bool overflow{};try{(void)AuxiliaryPointStreamRange(3,UINT32_MAX,UINT32_MAX,4);}
+    catch(const std::overflow_error&){overflow=true;}
+    if(!overflow)throw std::runtime_error("Auxiliary tessellation count multiplication wrapped");
     const PrimitiveStreamPartitions parts(PrimitiveStreamRange::Make(32,15,3,0,15),2,256,622592);
     if(parts.Count()!=3)throw std::runtime_error("Capture budget did not partition all five input primitives");
     for(u32 index=0;index<3;++index){const auto part=parts.At(index);

@@ -38,7 +38,7 @@ std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool
 std::vector<u32> EmitNativePointReplayVertex();
 // Ordered uint4 SO chunks of the original DS/ES vertex payload plus patch ID.
 // This auxiliary GS replaces the original GS only in the first capture pass.
-std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo&);
+std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo&,const Shader::Info* input_info=nullptr);
 std::vector<u32> EmitNativePointReplayGeometry(const Shader::Info&,
     const Shader::HwGeometryRuntimeInfo&,const Shader::Profile&);
 }

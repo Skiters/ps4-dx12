@@ -463,7 +463,7 @@ std::vector<u32> EmitNativePointReplayVertex(){
     ctx.OpStore(position,ctx.ConstantComposite(vec4,zero,zero,zero,one));
     ctx.OpReturn();ctx.OpFunctionEnd();return ctx.Assemble();
 }
-std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo& geometry){
+std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo& geometry,const Shader::Info* input_info){
     using namespace Shader::NativePointCapture;
     const auto stride=StreamRecordWords(geometry.in_vertex_data_size);
     u32 vertices{};spv::ExecutionMode input_mode{};
@@ -483,10 +483,15 @@ std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo& 
     const auto uint4=ctx.TypeVector(uint_type,4),float4=ctx.TypeVector(float_type,4);
     const auto count=ctx.Constant(uint_type,vertices),zero=ctx.Constant(uint_type,0u);
     const auto primitive=ctx.Variable(uint_type,spv::StorageClass::Input,{},spv::BuiltIn::PrimitiveId);
-    const auto position=ctx.Variable(ctx.TypeArray(float4,count),spv::StorageClass::Input,{},spv::BuiltIn::Position);
+    const auto mask=[&](Shader::IR::Attribute attribute){
+        return input_info?u32(input_info->loads.flags[Shader::Info::AttributeFlags::Index(attribute)])&15u:15u;
+    };
+    const auto position_mask=mask(Shader::IR::Attribute::Position0);
+    const auto position=position_mask?ctx.Variable(ctx.TypeArray(float4,count),spv::StorageClass::Input,{},spv::BuiltIn::Position):Sirit::Id{};
     std::vector<Sirit::Id> parameters;
     for(u32 parameter=0;parameter<geometry.in_vertex_data_size/4-1;++parameter)
-        parameters.push_back(ctx.Variable(ctx.TypeArray(float4,count),spv::StorageClass::Input,parameter));
+        parameters.push_back(mask(Shader::IR::Attribute::Param0+parameter)?
+            ctx.Variable(ctx.TypeArray(float4,count),spv::StorageClass::Input,parameter):Sirit::Id{});
     const auto output=ctx.Variable(uint4,spv::StorageClass::Output,0);
     const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
     ctx.AddExecutionMode(main,input_mode);ctx.AddExecutionMode(main,spv::ExecutionMode::OutputPoints);
@@ -496,13 +501,14 @@ std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo& 
     const auto patch=ctx.OpLoad(uint_type,primitive);
     for(u32 vertex=0;vertex<vertices;++vertex){
         std::vector<Sirit::Id> words;words.reserve(stride);words.push_back(patch);
-        const auto append=[&](Sirit::Id input){
-            const auto value=ctx.OpLoad(float4,ctx.OpAccessChain(
-                ctx.TypePointer(spv::StorageClass::Input,float4),input,ctx.Constant(uint_type,vertex)));
+        const auto append=[&](Sirit::Id input,u32 live){
             for(u32 component=0;component<4;++component)
-                words.push_back(ctx.OpBitcast(uint_type,ctx.OpCompositeExtract(float_type,value,component)));
+                words.push_back(live&(1u<<component)?ctx.OpBitcast(uint_type,ctx.OpLoad(float_type,ctx.OpAccessChain(
+                    ctx.TypePointer(spv::StorageClass::Input,float_type),input,ctx.Constant(uint_type,vertex),ctx.Constant(uint_type,component)))):zero);
         };
-        append(position);for(const auto parameter:parameters)append(parameter);
+        append(position,position_mask);
+        for(u32 parameter=0;parameter<parameters.size();++parameter)
+            append(parameters[parameter],mask(Shader::IR::Attribute::Param0+parameter));
         words.resize(stride,zero);
         // Only one uint4 crosses the output signature. Serial points preserve
         // primitive/vertex/word order without consuming a spare guest varying

@@ -6,6 +6,7 @@
 #include "guest_graphics_state.h"
 #include "guest_viewports.h"
 #include "guest_point_capture.h"
+#include "primitive_stream_arguments.h"
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
 #include "guest_image_operations.h"
@@ -1082,7 +1083,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     try{guest=frontend_.BuildGraphics(gpu_,vertex_sgpr,instance_sgpr,indirect != nullptr);}
     catch(const Shader::NativePointCapture::Required&){
         capture=frontend_.BuildPointCaptureGraphics(r,vertex_sgpr,instance_sgpr,indirect != nullptr);
-        guest=capture->producer;guest.mrt_mask=capture->replay.mrt_mask;
+        guest=capture->stream_patch_vertices?capture->stream_producer:capture->producer;
+        // Keep original producer reflection for ownership/feedback analysis,
+        // even though the GS-only consumer no longer contains those stages.
+        guest.stages[u32(Shader::SwStage::Geometry)]=capture->producer.stages[u32(Shader::SwStage::Geometry)];
+        guest.mrt_mask=capture->replay.mrt_mask;
         guest.ordered_color_mask=capture->replay.ordered_color_mask;
         guest.stages[u32(Shader::SwStage::Fragment)]=capture->replay.stages[u32(Shader::SwStage::Fragment)];
     }
@@ -1779,7 +1784,60 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             readback_rows[i]=true;
         }
     };
-    if(capture){
+    if(capture&&capture->stream_patch_vertices){
+        const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
+        // Existing auxiliary quad tessellation has all factors1: exactly two
+        // triangles per complete3/4-control-point patch, per original instance.
+        // Reserve one invalid primitive for incomplete patches so original VS
+        // effects still execute, while the GPU count correctly stays zero.
+        const auto range=AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
+        const u32 primitives=range.capacity_vertices/3,stride=range.stride;
+        const auto plan=Shader::NativePointCapture::Plan::Make(primitives,geometry.num_invocations,geometry.output_vertices,1);
+        const auto stream_layout=pipelines_.PrimitiveStreamLayout(capture->stream_producer);
+        auto stream_state=NativePointCapturePass::ProducerState(source_state);
+        stream_state.pipeline.StreamOutput=stream_layout.Desc();
+        const auto& stream_pipeline=pipelines_.Graphics(capture->stream_producer,stream_state.pipeline);
+        auto consumer_state=NativePointCapturePass::ProducerState(source_state);
+        consumer_state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        consumer_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        consumer_state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+        const auto& consumer_pipeline=pipelines_.Graphics(capture->producer,consumer_state.pipeline);
+        std::vector<GuestResourceStage> stream_stages,consumer_stages,replay_stages;
+        for(const auto* stage:capture->stream_producer.stages)if(stage)stream_stages.push_back({&stage->info,stage->bindings_start});
+        for(const auto* stage:capture->producer.stages)if(stage)consumer_stages.push_back({&stage->info,stage->bindings_start});
+        for(const auto* stage:capture->replay.stages)if(stage)replay_stages.push_back({&stage->info,stage->bindings_start});
+        if(!primitive_stream_)primitive_stream_=std::make_unique<PrimitiveStreamPass>(device_.Get());
+        const auto stream=primitive_stream_->Capture(*this,stride,u32(primitives)*3,3,[&](PrimitiveStreamLease& lease){
+            ExecuteGuestGraphicsResources(device_.Get(),*this,stream_pipeline,stream_stages,push,runtime,
+                [&](ResourceBindings& bindings){
+                    bindings.Prepare();
+                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+                    if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
+                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*u32(primitives)*3,0};
+                    ExecuteGraphics(stream_pipeline,bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
+                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,nullptr,&target);
+                },textures_,r.ta_bc_base.Address(),index_requests);
+        });
+        if(!point_capture_)point_capture_=std::make_unique<NativePointCapturePass>(device_.Get());
+        point_capture_->Execute(*this,plan,DrawArguments{u32(primitives)*3,1},consumer_state.topology,
+            [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
+                auto consumer_runtime=runtime;consumer_runtime.first_vertex=consumer_runtime.base_instance=consumer_runtime.indexed=0;
+                ExecuteGuestGraphicsResources(device_.Get(),*this,consumer_pipeline,consumer_stages,push,consumer_runtime,
+                    [&](ResourceBindings& bindings){
+                        NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
+                        NativePointCapturePass::BindInputStream(bindings,stream->data,0,u64(stride)*u32(primitives)*3);
+                        const StreamDrawArguments indirect{&stream->arguments,0};
+                        ExecuteGraphics(consumer_pipeline,bindings,consumer_state,{},nullptr,viewport.viewports,
+                            viewport.scissors,r.blend_constants,bounds,{},nullptr,false,&indirect);
+                    },textures_,r.ta_bc_base.Address());
+            },[&](Resource& buffer,const DrawArguments& replay){
+                output_draw=replay;auto replay_runtime=runtime;
+                replay_runtime.first_vertex=replay_runtime.base_instance=replay_runtime.indexed=0;
+                ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,replay_stages,push,replay_runtime,
+                    [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit_replay(bindings);},
+                    textures_,r.ta_bc_base.Address());
+            });
+    }else if(capture){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
         // No GS invocation exists for an incomplete primitive, but retain one
         // invalid slot so the original VS producer still executes unchanged.

@@ -346,6 +346,9 @@ GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const Amd
         throw std::runtime_error("Native point capture currently requires export/geometry point output");
     struct RestoreProfile {Shader::Profile& target;Shader::Profile original;~RestoreProfile(){target=original;}};
     RestoreProfile restore{profile_,profile_};profile_.native_point_capture=true;
+    const u32 patch_vertices=regs.primitive_type==AmdGpu::PrimitiveType::RectList?3u:
+        regs.primitive_type==AmdGpu::PrimitiveType::QuadList?4u:0u;
+    profile_.native_point_capture_stream_input|=patch_vertices!=0;
     auto original=BuildGraphics(regs,vertex_sgpr_offset,instance_sgpr_offset,is_indirect);
     const auto* geometry=original.stages[u32(SwStage::Geometry)];
     if(!geometry||geometry->auxiliary||!geometry->runtime.hw.gs.native_point_capture)
@@ -368,6 +371,11 @@ GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const Amd
     result.replay.stages[u32(SwStage::Vertex)]=auxiliary(SwStage::Vertex,EmitNativePointReplayVertex());
     result.replay.stages[u32(SwStage::Geometry)]=auxiliary(SwStage::Geometry,
         EmitNativePointReplayGeometry(geometry->info,geometry->runtime.hw.gs,profile_));
+    if(patch_vertices){
+        result.stream_producer=BuildPrimitiveStream(original);
+        result.stream_patch_vertices=patch_vertices;
+        result.producer=BuildBufferedPointCapture(original);
+    }
     return result;
 }
 
@@ -376,7 +384,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildPrimitiveStream(const GuestGraphic
     const auto* geometry=source.stages[u32(SwStage::Geometry)];
     if(!geometry||geometry->auxiliary)
         throw std::invalid_argument("Primitive stream requires original guest GS input metadata");
-    auto words=EmitNativePrimitiveStream(geometry->runtime.hw.gs);
+    auto words=EmitNativePrimitiveStream(geometry->runtime.hw.gs,&geometry->info);
     auto found=auxiliary_.find(words);
     if(found==auxiliary_.end()){
         auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;

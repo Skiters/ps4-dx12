@@ -48,6 +48,7 @@ public:
 #endif
     const ShaderPipeline& Compute(AmdGpu::Liverpool&);
     const ShaderPipeline& Compute(const GuestShaderStage&);
+    StreamOutputLayout PrimitiveStreamLayout(const GuestGraphicsStages&);
     const ShaderPipeline& Graphics(AmdGpu::Liverpool&,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,
         u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0);
