@@ -643,6 +643,7 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
         if(previous->second.size>address-previous->first)first=previous;
     }
     std::vector<VAddr> requested;
+    bool needs_download=false;
     SCOPE_EXIT {
         for(const auto base:requested){resolving_buffer_ranges_.erase(base);resolving_buffers_.erase(base);}
     };
@@ -663,6 +664,9 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
             if(selected_begin<selected_end)RememberSpan(owned,selected_begin,selected_end);
         }
         if(owned.empty())continue;
+        for(const auto& [selected_begin,selected_end]:owned)
+            for(const auto& [dirty_begin,dirty_end]:mapping.dirty_ranges)
+                needs_download|=selected_begin<dirty_end&&dirty_begin<selected_end;
         requested.push_back(it->first);resolving_buffers_.insert(it->first);
         resolving_buffer_ranges_.emplace(it->first,std::move(owned));
     }
@@ -672,7 +676,11 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     // the outer set is not evidence that this CPU range needs another Finish.
     // Retain outer ownership, and unwind only our additions even on failure.
     if(requested.empty())return;
-    Finish();
+    // Strong guards cover native envelopes, while GPU writes are tracked per
+    // sharp/page. Like original MemoryTracker clean-page invalidation, retiring
+    // a clean guard needs no download or GPU submission. Physical CPU stores
+    // remain separate from the live native resource until the ordered upload.
+    if(needs_download)Finish();
     // Downloaded pages become a read-only CPU equality proof. Other protected
     // pages in the same native arena remain GPU-owned, matching Vulkan's
     // page-granular RegionManager instead of draining the whole allocation.

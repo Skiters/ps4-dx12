@@ -213,9 +213,23 @@ static void CpuDownloadWindow(ID3D12Device* device,std::byte* guest,std::byte* p
     VirtualQuery(reinterpret_cast<void*>(clean),&guard,sizeof(guard));
     Require(guard.Protect==PAGE_NOACCESS&&!renderer.IsGpuBufferModified(clean,1),
         "Clean-page regression did not establish a strong unmodified owner");
+    bool submitted=false;renderer.NotifyOnSubmission([&](u64){submitted=true;});
     committed=0;*reinterpret_cast<volatile unsigned char*>(guest+window+17)=0x91;
     Require(physical[window+17]==std::byte{0x91}&&committed==0&&renderer.IsGpuBufferModified(base,page),
         "Clean-page CPU store failed to retire its exact guard or drained unrelated GPU data");
+    Require(!submitted,"Clean-page CPU store submitted and waited for unrelated GPU commands");
+    const Rasterizer::ShaderBufferRequest read_envelope[]{{base,total,false,true,true}};
+    (void)renderer.PrepareShaderBuffers(read_envelope);
+    auto retained=renderer.CapturePreparedShaderBuffer(base,total);
+    auto readback=Buffer(device,total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+    retained.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+    renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,retained.handle.Get(),0,total);
+    renderer.Finish();void* contents{};Check(readback.handle->Map(0,nullptr,&contents));
+    std::vector<std::byte> clean_expected(total,std::byte{0x4d});
+    memset(clean_expected.data(),0x55,page);clean_expected[window+17]=std::byte{0x91};
+    const bool clean_contents=!memcmp(contents,clean_expected.data(),total);
+    readback.handle->Unmap(0,nullptr);
+    Require(submitted&&clean_contents,"Deferred clean-page CPU winner lost GPU data, ordering or padding");
     arm();Require(renderer.ReadMemory(requests[0].address,4),"Explicit CPU read failed");check_first_window();
     renderer.ResolveGpuBuffers(requests[2].address,4);
     Require(renderer.IsGpuBufferModified(requests[3].address,page),"Internal exact-page GPU resolution was widened");
