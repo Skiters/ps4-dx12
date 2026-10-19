@@ -1335,7 +1335,19 @@ std::vector<Rasterizer::ShaderBufferView> Rasterizer::PrepareShaderBuffersImpl(s
                 }
             }
         }
-        ranges.emplace_back(first,last);
+        // PageWatch ownership requires the complete host page envelope before
+        // native descriptors are selected. The logical sharp/write is unchanged.
+        if(request.written&&own_buffer_){
+            const auto pages=GuestProtectionPages(request.address,request.size);
+            bool allowed=pages&&pages->size<=Shader::NativeDma::MaxBufferBytes&&
+                IsMapped(pages->address,pages->size)&&
+                CoversSpan(committed_readable_,pages->address,pages->address+pages->size)&&
+                CoversSpan(committed_writable_,pages->address,pages->address+pages->size);
+            if(allowed)for(const auto& other:requests)
+                if(other.address<pages->address+pages->size&&pages->address<other.address+other.size&&
+                   other.unordered_access!=request.unordered_access){allowed=false;break;}
+            if(allowed){first=std::min(first,pages->address);last=std::max(last,pages->address+pages->size);}
+        }        ranges.emplace_back(first,last);
     }
     std::sort(ranges.begin(),ranges.end());std::vector<std::pair<VAddr,VAddr>> merged;
     for(auto range:ranges) {

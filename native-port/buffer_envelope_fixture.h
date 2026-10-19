@@ -32,6 +32,21 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);return result;
     };
     {
+        require(bytes>=65536,"Unaligned ownership fixture needs full committed pages");
+        memset(physical,0x37,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);
+        const Rasterizer::ShaderBufferRequest writer{base+0x810,43008,true,true,true};
+        renderer.PrepareShaderBuffers(std::span(&writer,1));
+        renderer.MarkShaderBufferWrites(std::span(&writer,1));
+        require(renderer.BuffersMayDefer(std::span(&writer,1)),
+            "Committed unaligned writer lost page-envelope ownership before execution");        renderer.FillPreparedShaderBuffer(writer.address,writer.size,0x6b6b6b6b,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.ReadMemory(writer.address,writer.size);renderer.Finish();
+        for(u64 i=0;i<bytes;++i)require(physical[i]==
+            (i>=0x810&&i<0x810+43008?std::byte{0x6b}:std::byte{0x37}),
+            "Unaligned ownership growth changed GPU contents or untouched page padding");
+        require(committed==writer.size,"Page ownership rounding committed extra guest bytes");
+    }    {
         // Upload-arena CPU streams are immutable snapshots, not generations
         // of the mutable DEFAULT mapping subsequently created at this address.
         memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
