@@ -1,3 +1,5 @@
+2026-10-20 source4516bfe: CPU464 shader validations PASS3.369s, clean Release PASS. No new GPU/game/FPS measure. CPU/pixel compile timings are not game performance. See F:/PS4Dev/handoff/native-port-comparison-20261019/srgb-ordered-4516bfe.json.
+
 2026-10-20 source178e323: CPU432 shader validations PASS3.100s; clean Release PASS. No new GPU/game/FPS measurement; compile timings are not game performance. Exact scope/hashes: F:/PS4Dev/handoff/native-port-comparison-20261019/packed16-ordered-178e323.json.
 
 ## Producer capture checkpoint — 2026-10-19 21:32 +05
