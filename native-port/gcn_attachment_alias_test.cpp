@@ -5,6 +5,7 @@
 #include "core/emulator_settings.h"
 #include "common/elf_info.h"
 #include "common/scope_exit.h"
+#include "unorm_color_oracle.h"
 #include "gcn_ordered_formatted_fixture.h"
 #include "gcn_readonly_numeric_fixture.h"
 #include "gcn_writable_word_fixture.h"
@@ -65,6 +66,8 @@ int main(int argc,char** argv){try{
     const bool linear_download=mode=="linear-download-owned";
     const bool linear_attachment=mode=="linear-attachment-owned";
     const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
+    using NativeDX12::Tests::Unorm8Color;
+    if(separate_versions)NativeDX12::Tests::CheckUnormColorOracleNegatives();
     const bool formatted_cmask=mode=="formatted-cmask-owned";
     const bool cached_depth_cmask6=mode=="cached-depth-cmask6-owned";
     const u32 cached_depth_cmask_packed=mode=="cached-depth-cmask16-owned"?16:mode=="cached-depth-cmask17-owned"?17:
@@ -344,7 +347,13 @@ int main(int argc,char** argv){try{
         image.num_format=number_format;
         const u32 packed16_shift=data_format==18?10:data_format==19?8:0;
         const float numeric_scale=packed16?(data_format==19?15.f:31.f):packed10?(signed_components?511.f:1023.f):half_components?(signed_components?32767.f:65535.f):signed_components?127.f:255.f;
-        const u8 buffer_quarter_red=packed16?(data_format==19?68:66):64;
+        const auto quarter_value=packed16?(data_format==19?4.f/15.f:8.f/31.f):
+            normalized||small_integer?(packed10?(signed_components?128.f:256.f):
+                half_components?(signed_components?8192.f:16384.f):signed_components?32.f:64.f)/numeric_scale:.25f;
+        const auto half_value=packed16?(data_format==19?8.f/15.f:16.f/31.f):
+            normalized||small_integer?(packed10?(signed_components?256.f:512.f):
+                half_components?(signed_components?16384.f:32768.f):signed_components?64.f:128.f)/numeric_scale:.5f;
+        const auto buffer_quarter_red=Unorm8Color::FromFloat(quarter_value);
         const u32 quarter_word=packed_float?((13u<<(data_format==7?5:6))<<(data_format==7?22:0)):
             packed16?((data_format==19?4u:8u)<<packed16_shift):packed10?(signed_components?128:256):half_components?(number_format==7?0x3400:signed_components?8192:16384):
             byte_components?(signed_components?32:64):0x3e800000;
@@ -354,8 +363,9 @@ int main(int argc,char** argv){try{
         const u32 one_word=packed_float?((15u<<(data_format==7?5:6))<<(data_format==7?22:0)):
             packed16?(u32(numeric_scale)<<packed16_shift):packed10?(signed_components?511:1023):half_components?(number_format==7?0x3c00:signed_components?32767:65535):
             byte_components?(signed_components?127:255):0x3f800000;
-        const u8 image_quarter_red=srgb?13:buffer_quarter_red;
-        const u8 image_half_red=packed16?(data_format==19?136:132):srgb?55:signed_components&&!half_components&&!packed10?129:128;
+        const auto srgb_decode=[](float v){return v<=.04045f?v/12.92f:std::pow((v+.055f)/1.055f,2.4f);};
+        const auto image_quarter_red=Unorm8Color::FromFloat(srgb?srgb_decode(quarter_value):quarter_value);
+        const auto image_half_red=Unorm8Color::FromFloat(srgb?srgb_decode(half_value):half_value);
         const auto desc=DescribeGuestTexture(image);const auto layout=LayoutGuestTexture(desc);
         const auto store_offset=GuestPixelOffset(desc,layout,selected_mip,selected_layer,0,0);
         const u64 extended_bytes=std::max<u64>(layout.guest_bytes+4096,20480);
@@ -468,17 +478,21 @@ int main(int argc,char** argv){try{
                     std::min(layout.bytes_per_pixel-component,4u));
             std::vector<std::byte> expected(backing,backing+65536);
             unsigned color_check{};
-            const auto check_color=[&](u8 red){
+            const auto check_color=[&](Unorm8Color red){
                 ++color_check;
-                const u32 rgba=u32(red)|0xff000000;
-                for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
+                const u32 rgba=u32(red.nearest)|0xff000000;std::array<size_t,64> color_red{};
+                for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
+                    color_red[y*8+x]=61440+GuestPixelOffset(color,cl,0,0,x,y);
                     memcpy(expected.data()+61440+GuestPixelOffset(color,cl,0,0,x,y),&rgba,4);
+                }
                 rasterizer.Finish();
-                if(memcmp(backing,expected.data(),65536)){
-                    size_t byte{};while(byte<65536&&backing[byte]==expected[byte])++byte;
-                    fprintf(stderr,"Independent GCN mismatch data=%u number=%u layers=%u mip=%u writer=%llu initial=%g check=%u red=%u byte=%zu actual=%02x expected=%02x\n",
+                if(memcmp(backing,expected.data(),65536)&&!NativeDX12::Tests::MatchesColorAllocation(
+                    {backing,65536},expected,color_red,red)){
+                    size_t byte{};while(byte<65536&&(backing[byte]==expected[byte]||
+                        (std::find(color_red.begin(),color_red.end(),byte)!=color_red.end()&&red.Accepts(u8(backing[byte])))))++byte;
+                    fprintf(stderr,"Independent GCN mismatch data=%u number=%u layers=%u mip=%u writer=%llu initial=%g check=%u red=%u range=%u..%u byte=%zu actual=%02x expected=%02x\n",
                         data_format,number_format,layers,selected_mip,(unsigned long long)writer_extent,double(initial),color_check,
-                        unsigned(red),byte,unsigned(backing[byte]),unsigned(expected[byte]));
+                        unsigned(red.nearest),unsigned(red.low),unsigned(red.high),byte,unsigned(backing[byte]),unsigned(expected[byte]));
                     throw std::runtime_error("Independent GCN buffer/image versions, CPU visibility or full-allocation padding mismatch");
                 }
             };
@@ -491,10 +505,10 @@ int main(int argc,char** argv){try{
                 if(image_contents&&layout.bytes_per_pixel>4)
                     memset(expected.data()+16384+store_offset+4,0,layout.bytes_per_pixel-4);
             };
-            const auto draw_image=[&](const auto& program,u8 red){
+            const auto draw_image=[&](const auto& program,Unorm8Color red){
                 bind_vertex(vertex,4);bind_pixel(program);rasterizer.Draw(false);check_color(red);
             };
-            const auto draw_formatted=[&](u8 red,u64 bytes=0){
+            const auto draw_formatted=[&](Unorm8Color red,u64 bytes=0){
                 bind_vertex(vertex,4);bind_pixel(formatted_pixel);regs.ps_program.settings.num_user_regs=4;
                 auto formatted=target;formatted.num_format=7;
                 if(normalized||half_components||small_integer||packed_float){
@@ -507,7 +521,7 @@ int main(int argc,char** argv){try{
                 memcpy(regs.ps_program.user_data.data(),&formatted,sizeof(formatted));
                 rasterizer.Draw(false);check_color(red);
             };
-            const auto draw_raw_byte=[&](u8 red){
+            const auto draw_raw_byte=[&](Unorm8Color red){
                 // A large raw read uses the resident arena and cannot refresh
                 // it from a cached image or stream the physical CPU bytes.
                 bind_vertex(vertex,4);bind_pixel(raw_byte_pixel);regs.ps_program.settings.num_user_regs=4;
@@ -515,7 +529,7 @@ int main(int argc,char** argv){try{
                 memcpy(regs.ps_program.user_data.data(),&raw,sizeof(raw));
                 rasterizer.Draw(false);check_color(red);
             };
-            const auto draw_raw_float=[&](u8 red){
+            const auto draw_raw_float=[&](Unorm8Color red){
                 bind_vertex(vertex,4);bind_pixel(raw_float_pixel);regs.ps_program.settings.num_user_regs=4;
                 auto raw=target;raw.num_records=u32(extended_bytes/4);
                 memcpy(regs.ps_program.user_data.data(),&raw,sizeof(raw));
@@ -577,7 +591,7 @@ int main(int argc,char** argv){try{
                         byte<65536?unsigned(backing[byte]):0,byte<65536?unsigned(expected[byte]):0);
                     throw std::runtime_error("Fence compact download or full physical padding mismatch");
                 }
-                draw_raw_float(0);draw_image(load_pixel,128);draw_image(next_pixel,128);
+                draw_raw_float(0);draw_image(load_pixel,Unorm8Color::FromFloat(.5f));draw_image(next_pixel,Unorm8Color::FromFloat(.5f));
                 rasterizer.OnFence();
                 if(downloaded()!=first+1)throw std::runtime_error("Empty fence repeated a stale image download");
                 clear_image(half_clear);rasterizer.OnFence();
@@ -588,7 +602,7 @@ int main(int argc,char** argv){try{
                 clear_image(quarter_clear);rasterizer.OnSubmit();rasterizer.Finish();expect_compact(0x3e800000);
                 if(downloaded()!=first+2||memcmp(backing,expected.data(),65536))
                     throw std::runtime_error("Submission compact download or full physical padding mismatch");
-                draw_raw_float(0);draw_image(load_pixel,64);
+                draw_raw_float(0);draw_image(load_pixel,Unorm8Color::FromFloat(.25f));
                 if(!selected_mip&&layers==1&&initial==0.f){
                     // The preceding raw arena still contains zero, while the
                     // legacy image download placed quarter in physical CPU.
@@ -617,19 +631,19 @@ int main(int argc,char** argv){try{
                 // only the image; CPU/raw arena reads keep their prior bits.
                 const float linear=srgb?(initial_value<=0.04045f?initial_value/12.92f:
                     std::pow((initial_value+0.055f)/1.055f,2.4f)):initial_value;
-                draw_image(load_pixel,u8(std::clamp(linear,0.f,1.f)*255.f+0.5f));
+                draw_image(load_pixel,Unorm8Color::FromFloat(linear));
                 const bool byte_raw=data_format==10||packed10||packed16;
-                const u8 raw_red=byte_raw?u8(initial_bits):u8(std::clamp(initial_value,0.f,1.f)*255.f+0.5f);
+                const Unorm8Color raw_red=byte_raw?Unorm8Color(u8(initial_bits)):Unorm8Color::FromFloat(initial_value);
                 if(byte_raw)draw_raw_byte(raw_red);else draw_raw_float(raw_red);
                 const bool integer_clear=small_integer;
                 const float value[]{integer_clear?std::bit_cast<float>(15u):0.5f,0.f,0.f,0.f};
                 clear_image(value);check_color(raw_red);read_buffer(initial_bits);
-                const u8 red=integer_clear?u8(15.f/numeric_scale*255.f+0.5f):srgb?128:image_half_red;
+                const Unorm8Color red=integer_clear?Unorm8Color::FromFloat(15.f/numeric_scale):srgb?Unorm8Color::FromFloat(.5f):image_half_red;
                 draw_image(load_pixel,red);draw_image(next_pixel,red);read_buffer(initial_bits);
                 if(byte_raw)draw_raw_byte(raw_red);else draw_raw_float(raw_red);
                 const float second[]{integer_clear?std::bit_cast<float>(7u):0.25f,0.f,0.f,0.f};
                 clear_image(second);check_color(raw_red);read_buffer(initial_bits);
-                const u8 second_red=integer_clear?u8(7.f/numeric_scale*255.f+0.5f):srgb?64:image_quarter_red;
+                const Unorm8Color second_red=integer_clear?Unorm8Color::FromFloat(7.f/numeric_scale):srgb?Unorm8Color::FromFloat(.25f):image_quarter_red;
                 draw_image(load_pixel,second_red);draw_image(next_pixel,second_red);read_buffer(initial_bits);
                 if(byte_raw)draw_raw_byte(raw_red);else draw_raw_float(raw_red);
                 clear_image(value);check_color(raw_red);draw_image(load_pixel,red);read_buffer(initial_bits);
@@ -645,7 +659,7 @@ int main(int argc,char** argv){try{
                 const bool integer_clear=(data_format==10||packed10)&&(number_format==4||number_format==5);
                 const float nonzero_clear[]{integer_clear?std::bit_cast<float>(15u):0.5f,0.f,0.f,0.f};
                 clear_image(nonzero_clear);check_color(0);
-                const u8 clear_red=integer_clear?u8(15.f/numeric_scale*255.f+0.5f):srgb?128:image_half_red;
+                const Unorm8Color clear_red=integer_clear?Unorm8Color::FromFloat(15.f/numeric_scale):srgb?Unorm8Color::FromFloat(.5f):image_half_red;
                 draw_image(load_pixel,clear_red);draw_image(next_pixel,clear_red);read_buffer(0);draw_raw_float(0);
                 // The next exact-base buffer writer retires the cleared image
                 // version and recreates the preceding quarter fixture state.
@@ -662,7 +676,7 @@ int main(int argc,char** argv){try{
             draw_formatted(buffer_quarter_red,extended_bytes);draw_image(load_pixel,image_quarter_red);
             const float initial_linear=srgb?(initial_value<=0.04045f?initial_value/12.92f:
                 std::pow((initial_value+0.055f)/1.055f,2.4f)):initial_value;
-            draw_image(next_pixel,u8(std::clamp(initial_linear,0.f,1.f)*255.f+0.5f));
+            draw_image(next_pixel,Unorm8Color::FromFloat(initial_linear));
             // Real protected guest accesses distinguish read and write faults;
             // the physical alias above observes bytes without resolving images.
             *reinterpret_cast<volatile u32*>(memory+16384+store_offset)=one_word;
