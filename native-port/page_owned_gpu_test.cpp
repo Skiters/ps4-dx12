@@ -49,6 +49,7 @@ int main(int argc,char**){try{
     auto* alias=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));Require(guest&&alias);
     auto device=CreateHardwareDevice();RunInvalidImagePressureFixture(device.Get());
     OwnershipRenderer renderer(device.Get());GuestTextureCache cache(device.Get());
+    SCOPE_EXIT {renderer.Finish();};
     cache.SetCopySubmission([&](const auto& record){renderer.SubmitCopyCommands(record);});
     const auto address=reinterpret_cast<VAddr>(guest);renderer.MapMemory(address,bytes);renderer.NotifyHostMapping(address,bytes,true,true);
     desc.address=address;
@@ -721,8 +722,12 @@ int main(int argc,char**){try{
         bool rearm_after_resolve=false;
         PageWatch watch([&](uint64_t at){
             ++faults;
-            buffers.ResolveGpuBuffers(at,1);
-            buffers.ReleaseCpuBufferWatches(at,1);
+            // This legacy control's Untrack callback releases its entire
+            // 16KiB watch. Resolve the same extent before exposing it; the
+            // production GuestBufferAccess fixture separately covers split
+            // page ownership and retained image/read-only proof neighbours.
+            buffers.ResolveGpuBuffers(base,buffer_bytes);
+            buffers.ReleaseCpuBufferWatches(base,buffer_bytes);
             if(rearm_after_resolve){
                 rearm_after_resolve=false;
                 // Reproduce the legal schedule where the GPU worker acquires

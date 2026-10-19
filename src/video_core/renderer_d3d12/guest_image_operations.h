@@ -30,7 +30,8 @@ inline bool GuestImageCopyCompatible(const GuestTextureCache::Entry& src,
         if(x.pitch!=y.pitch||x.height!=y.height||x.offset!=y.offset||x.slice_bytes!=y.slice_bytes||x.macro!=y.macro||x.thickness!=y.thickness)return false;}
     const auto x=src.texture.handle->GetDesc(),y=dst.texture.handle->GetDesc();
     const auto family=[](DXGI_FORMAT f){
-        if(f==DXGI_FORMAT_R32_TYPELESS||f==DXGI_FORMAT_R32_FLOAT||f==DXGI_FORMAT_D32_FLOAT)return DXGI_FORMAT_R32_TYPELESS;
+        if(f==DXGI_FORMAT_R32_TYPELESS||f==DXGI_FORMAT_R32_FLOAT||f==DXGI_FORMAT_D32_FLOAT||
+           f==DXGI_FORMAT_R32_UINT||f==DXGI_FORMAT_R32_SINT)return DXGI_FORMAT_R32_TYPELESS;
         if(f==DXGI_FORMAT_R8G8B8A8_TYPELESS||f==DXGI_FORMAT_R8G8B8A8_UNORM||f==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)return DXGI_FORMAT_R8G8B8A8_TYPELESS;
         return f;};
     return x.Dimension==y.Dimension&&x.Width==y.Width&&x.Height==y.Height&&
