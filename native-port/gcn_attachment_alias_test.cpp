@@ -14,6 +14,7 @@
 #include "gcn_snorm_attachment_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
 #include "gcn_color_feedback_fixture.h"
+#include "ufloat_attachment_oracle.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -61,7 +62,8 @@ int main(int argc,char** argv){try{
     const u32 rgba16_kind=std::string_view(argv[3])=="rgba16-unorm-mixed-constants-owned"?1:
         std::string_view(argv[3])=="rgba16-snorm-mixed-constants-owned"?2:
         std::string_view(argv[3])=="rgba16-float-mixed-constants-owned"?3:0;
-    const bool r11_mixed_constants=std::string_view(argv[3])=="r11-mixed-constants-owned";
+    const bool r11_edges=std::string_view(argv[3])=="r11-mixed-edges-owned";
+    const bool r11_mixed_constants=r11_edges||std::string_view(argv[3])=="r11-mixed-constants-owned";
     const bool float_mixed_constants=r11_mixed_constants||rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
     const bool mixed_constant_blend=rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
@@ -114,6 +116,7 @@ int main(int argc,char** argv){try{
     if(!color_feedback&&!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
+    if(r11_edges)NativeDX12::Tests::CheckUfloatBoundaryOracle();
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     if(linear_download)EmulatorSettings.SetReadbackLinearImagesEnabled(false);
     if(linear_attachment){EmulatorSettings.SetReadbackLinearImagesEnabled(true);
@@ -1088,9 +1091,18 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=(r11_mixed_constants||rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        const unsigned iterations=r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
+            (r11_mixed_constants||rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
             if(r11_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
+            if(r11_edges){
+                regs.color_target_mask.raw=(warm&1)?4:1;
+                regs.blend_constants[0]=regs.blend_constants[2]=.25f;regs.blend_constants[3]=0;
+                const auto bits=NativeDX12::Tests::UfloatBoundaries[warm/2].input;
+                const u32 literal=std::bit_cast<u32>(std::bit_cast<float>(bits)*4.f);
+                initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,literal,0x7e020280,0x7e0402ff,literal,
+                    0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x55464c4f45440000ULL+warm);
+            }
             if(rgba16_kind)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(wide_float_format)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
@@ -1129,6 +1141,14 @@ int main(int argc,char** argv){try{
                 if(r11_mixed_constants){
                     const auto mini=[](u32 r,u32 g,u32 b){return r|(g<<11)|(b<<22);};
                     u32 before=mini(0x380,0x340,0x1d0); // .5,.25,.75
+                    if(r11_edges){
+                        before=mini(1,0x7e5,1);
+                        const auto& point=NativeDX12::Tests::UfloatBoundaries[warm/2];
+                        const u32 shift=(warm&1)?22:0,mask=((warm&1)?1023u:2047u)<<shift;
+                        const u32 result=i?before:(before&~mask)|(((warm&1)?point.uf10:point.uf11)<<shift);
+                        memcpy(memory+4096+offset,&before,4);memcpy(expected.data()+4096+offset,&result,4);
+                        continue;
+                    }
                     if(warm&&i==0)before=mini(0x380,0x7e5,0x1d0); // Masked NaN payload.
                     if(warm&&i==1)before=mini(1,0x340,0x1d0); // Masked subnormal.
                     const u32 after[]{mini(0x380,0x300,0x1b0),mini(0x360,0x390,0x190),mini(0x340,0x300,0x1d8)};

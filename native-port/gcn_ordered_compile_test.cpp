@@ -2,6 +2,7 @@
 #include "video_core/renderer_d3d12/guest_shader_frontend.h"
 #include "video_core/renderer_d3d12/guest_shader_cache.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
+#include "ufloat_attachment_oracle.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
@@ -14,6 +15,7 @@
 // DXIL proves translation/compilation, never GPU pixels, ordering or lifetime.
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and mode");
+    NativeDX12::Tests::CheckUfloatBoundaryOracle();
     using Capture=NativeDX12::NativePointCapturePass;
     const std::pair<D3D_PRIMITIVE_TOPOLOGY,u32> primitive_cases[]{
         {D3D_PRIMITIVE_TOPOLOGY_POINTLIST,7},{D3D_PRIMITIVE_TOPOLOGY_LINELIST,3},
