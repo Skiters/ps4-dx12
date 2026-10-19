@@ -2,12 +2,14 @@
 
 #include "resources.h"
 #include "common/types.h"
+#include "host_copy_queue.h"
 #include <deque>
 #include <functional>
 #include <span>
 #include <thread>
 #include <condition_variable>
 #include <exception>
+#include <memory>
 
 namespace NativeDX12 {
 
@@ -53,6 +55,7 @@ class CommandScheduler {
     bool priority_in_flight_{};
     std::exception_ptr priority_failure_;
     std::jthread priority_worker_;
+    HostCopyQueue host_copies_;
 
     size_t AcquireContext();
     size_t AcquireCopyContext();
@@ -84,6 +87,8 @@ public:
     // Records into the pending upload list. Completion belongs to the next
     // direct Submit() fence; no independent completed fence exists yet.
     void SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record);
+    void QueueHostCopy(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::byte>>,size_t,size_t,bool unmap=false);
+    void WaitHostCopies(){host_copies_.Wait();}
     void MakeQueueWait(ID3D12CommandQueue* queue, u64 fence) {
         if(!queue||!fence)throw std::invalid_argument("invalid scheduler consumer wait");
         Check(DX12_API_CALL(queue->Wait(timeline_.Fence(),fence)));

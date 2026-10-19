@@ -120,6 +120,9 @@ void Rasterizer::UnmarkGpuOwned(Mapping& mapping,u64 offset,u64 bytes){
     mapping.gpu_owned=!mapping.gpu_owned_ranges.empty();
 }
 Rasterizer::~Rasterizer(){try{DrainPriorityOperations();}catch(...) {}
+    // Upload arenas are members destroyed before the scheduler. Drain CPU
+    // writers even when Finish later throws due to device/submission failure.
+    try{scheduler_.WaitHostCopies();}catch(...){}
     try{Finish();}catch(...) {/* device loss: release resources */}}
 GuestDmaMemory& Rasterizer::DmaMemory(){
     if(!dma_memory_)dma_memory_=std::make_unique<GuestDmaMemory>(device_.Get());
@@ -788,8 +791,18 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         if(range.cpu_snapshot.size()!=range.size)return source;
         // Snapshot the exact upload version in ordinary cached host memory.
         // Never read back a write-combined D3D12 UPLOAD heap on the CPU.
-        memcpy(range.cpu_snapshot.data()+offset,source,size_t(size));
+        if(source==range.cpu_snapshot.data()+offset)return source;
+        memcpy(range.cpu_snapshot.WriteData()+offset,source,size_t(size));
         return range.cpu_snapshot.data()+offset;
+    };
+    const auto copy_to_upload=[&](ID3D12Resource* resource,void* destination){
+        // Only ordinary cached, immutable witnesses are safe for workers.
+        // Guest pointers and short-lived caller buffers retain the synchronous
+        // path. The lease survives replacement, CPU stores and snapshot pools.
+        if(size>=64*1024&&range.cpu_snapshot.size()==range.size&&
+           data==range.cpu_snapshot.data()+offset){
+            scheduler_.QueueHostCopy(resource,destination,range.cpu_snapshot.Share(),size_t(offset),size_t(size));
+        }else memcpy(destination,data,size_t(size));
     };
     // A newly placed DEFAULT buffer starts in COMMON. Copy queues may
     // implicitly promote it to COPY_DEST and it decays back to COMMON when the
@@ -813,7 +826,7 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         else Diagnostics::Count("buffer-staging.reuse");
         auto slice=upload_pages_[page]->Allocate(reserved);
         upload_page_cursor_+=reserved;
-        memcpy(slice.cpu,data,size);
+        copy_to_upload(slice.resource,slice.cpu);
         if(copy_queue_eligible){
             scheduler_.SubmitCopy([&](ID3D12GraphicsCommandList* copy){
                 DX12_API_CALL(copy->CopyBufferRegion(range.gpu.handle.Get(),offset,
@@ -845,7 +858,7 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
         }
         if(best!=large_upload_pool_.end()){
             data=snapshot(data);auto slice=best->arena->Allocate(size);best->used=true;
-            memcpy(slice.cpu,data,size_t(size));
+            copy_to_upload(slice.resource,slice.cpu);
             if(copy_queue_eligible)scheduler_.SubmitCopy([&](ID3D12GraphicsCommandList* copy){
                 DX12_API_CALL(copy->CopyBufferRegion(range.gpu.handle.Get(),offset,slice.resource,slice.offset,size));});
             else{range.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
@@ -856,15 +869,23 @@ void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
     Diagnostics::Count("buffer-staging.large-new");
     Begin();auto upload=Buffer(device_.Get(),size,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
     void* dest=nullptr;D3D12_RANGE empty{0,0};Check(DX12_API_CALL(upload.handle->Map(0,&empty,&dest)));
-    const unsigned jobs=size>=4*1024*1024?std::min(14u,std::max(1u,std::thread::hardware_concurrency()/2)):1u;
-    std::array<unsigned,14> indices{};std::iota(indices.begin(),indices.end(),0u);
-    const auto copy=[&](unsigned job){const auto first=size*job/jobs,last=size*(job+1)/jobs;
-        memcpy(static_cast<std::byte*>(dest)+first,static_cast<const std::byte*>(data)+first,size_t(last-first));};
-    if(jobs==1)copy(0);else std::for_each(std::execution::par,indices.begin(),indices.begin()+jobs,copy);
-    DX12_API_CALL(upload.handle->Unmap(0,nullptr));
+    bool deferred{};
+    SCOPE_EXIT {if(!deferred)DX12_API_CALL(upload.handle->Unmap(0,nullptr));};
+    if(range.cpu_snapshot.size()==range.size&&data==range.cpu_snapshot.data()+offset){
+        // The worker retains the mapped resource and unmaps only after its
+        // last write. Submit waits this same epoch before executing the copy.
+        scheduler_.QueueHostCopy(upload.handle.Get(),dest,range.cpu_snapshot.Share(),size_t(offset),size_t(size),true);
+        deferred=true;
+    }else{
+        const unsigned jobs=std::min(14u,std::max(1u,std::thread::hardware_concurrency()/2));
+        std::array<unsigned,14> indices{};std::iota(indices.begin(),indices.end(),0u);
+        const auto copy=[&](unsigned job){const auto first=size*job/jobs,last=size*(job+1)/jobs;
+            memcpy(static_cast<std::byte*>(dest)+first,static_cast<const std::byte*>(data)+first,size_t(last-first));};
+        if(jobs==1)copy(0);else std::for_each(std::execution::par,indices.begin(),indices.begin()+jobs,copy);
+    }
     // Retain before recording/submitting. Growing the retention vector can
     // throw; after submission that must never release the copy source early.
-    uploads_.push_back(std::move(upload));
+    uploads_.push_back(upload);
     auto* upload_resource=uploads_.back().handle.Get();
     if(copy_queue_eligible){
         scheduler_.SubmitCopy([&](ID3D12GraphicsCommandList* copy){
@@ -1133,7 +1154,7 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
         if(source->cpu_snapshot.size()!=source->size)
             throw std::logic_error("Buffer growth source has no complete CPU snapshot");
         const auto offset=source->base-address;
-        memcpy(target.cpu_snapshot.data()+offset,source->cpu_snapshot.data(),size_t(source->size));
+        memcpy(target.cpu_snapshot.WriteData()+offset,source->cpu_snapshot.data(),size_t(source->size));
         target.gpu_cpu_diverged|=source->gpu_cpu_diverged;
         if(defer_owned)for(const auto& [begin,stop]:source->dirty_ranges)
             RememberSpan(target.dirty_ranges,offset+begin,offset+stop);
@@ -2181,7 +2202,7 @@ void Rasterizer::CommitImageBacking(VAddr address,std::span<const std::byte> byt
         const auto first=std::max(address,mapping.base),last=std::min(address+bytes.size(),mapping.base+mapping.size);
         if(last<=first)continue;
         if(mapping.cpu_snapshot.size()==mapping.size)
-            memcpy(mapping.cpu_snapshot.data()+first-mapping.base,bytes.data()+first-address,size_t(last-first));
+            memcpy(mapping.cpu_snapshot.WriteData()+first-mapping.base,bytes.data()+first-address,size_t(last-first));
         // This GPU image download is not a CPU store. Remember the new CPU
         // baseline without uploading it into the preceding buffer arena.
         // Actual CPU store markers/proof holes and GPU dirty ranges survive.
@@ -2275,8 +2296,8 @@ void Rasterizer::Finish(){
         // outside those spans may still differ; preserve the CPU snapshot and
         // the separate actual-store page markers for subsequent uploads.
         if(r->cpu_snapshot.size()!=r->size){ResizeSnapshot(*r);
-            memcpy(r->cpu_snapshot.data(),reinterpret_cast<const void*>(r->base),size_t(r->size));}
-        for(const auto& [begin,end]:job.ranges)memcpy(r->cpu_snapshot.data()+begin,
+            memcpy(r->cpu_snapshot.WriteData(),reinterpret_cast<const void*>(r->base),size_t(r->size));}
+        for(const auto& [begin,end]:job.ranges)memcpy(r->cpu_snapshot.WriteData()+begin,
             static_cast<const std::byte*>(data)+begin,size_t(end-begin));
         for(const auto& [begin,end]:job.ranges)ForgetSpan(r->dirty_ranges,begin,end);
         r->dirty=!r->dirty_ranges.empty();

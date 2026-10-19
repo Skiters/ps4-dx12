@@ -1,5 +1,6 @@
 #include "video_core/renderer_d3d12/command_scheduler.h"
 #include "scheduler_submission_fixture.h"
+#include "video_core/renderer_d3d12/cpu_buffer_snapshot.h"
 #include <dxgi1_6.h>
 #include <cstdio>
 #include <atomic>
@@ -21,6 +22,30 @@ int main() { try {
     ComPtr<ID3D12Device> device;
     Check(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device)));
     RunSchedulerSubmissionFixture(device.Get());
+    // Deferred host writes must precede both queue types. Expected bytes are
+    // independent of the live snapshot, which changes before GPU submission.
+    for(unsigned mode=0;mode<4;++mode){
+        const bool copy_queue=(mode&1)!=0,unmap=(mode&2)!=0;
+        CommandScheduler uploads(device.Get());
+        constexpr size_t bytes=1024*1024;
+        auto source=CpuBufferSnapshot{};source.resize(bytes);
+        auto* initial=source.WriteData();
+        for(size_t i=0;i<bytes;++i)initial[i]=std::byte((i*29+71)&255);
+        auto staging=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto result=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* mapped{};D3D12_RANGE empty{};Check(staging.handle->Map(0,&empty,&mapped));
+        uploads.QueueHostCopy(staging.handle.Get(),mapped,source.Share(),0,bytes,unmap);
+        std::memset(source.WriteData(),0xee,bytes);
+        const auto record=[&](auto* list){list->CopyBufferRegion(result.handle.Get(),0,staging.handle.Get(),0,bytes);};
+        if(copy_queue)uploads.SubmitCopy(record);else record(uploads.Begin());
+        uploads.Finish();if(!unmap)staging.handle->Unmap(0,nullptr);
+        D3D12_RANGE all{0,bytes};Check(result.handle->Map(0,&all,&mapped));
+        bool equal=true;for(size_t i=0;i<bytes;++i)
+            equal&=static_cast<const std::byte*>(mapped)[i]==std::byte((i*29+71)&255);
+        result.handle->Unmap(0,&empty);
+        Require(equal,"GPU queue read before host upload or consumed a later snapshot version");
+        std::printf("PASS: immutable host upload before %s queue, unmap=%u, exact 1MiB readback\n",copy_queue?"COPY":"DIRECT",unsigned(unmap));
+    }
     CommandScheduler scheduler(device.Get());
     // A recording list has no completion fence, including after context reuse.
     for (unsigned pass = 0; pass != 2; ++pass) {

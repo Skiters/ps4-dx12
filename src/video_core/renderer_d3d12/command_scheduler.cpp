@@ -3,8 +3,22 @@
 #include "device_diagnostics.h"
 #include <algorithm>
 #include <utility>
+#include <cstring>
 
 namespace NativeDX12 {
+
+void CommandScheduler::QueueHostCopy(ID3D12Resource* destination,void* mapped,
+    std::shared_ptr<const std::vector<std::byte>> source,size_t offset,size_t bytes,bool unmap){
+    if(submit_failure_)std::rethrow_exception(submit_failure_);
+    if(!destination||!mapped||!source||!bytes||offset>source->size()||bytes>source->size()-offset)
+        throw std::invalid_argument("Invalid immutable host upload");
+    const auto cost=source->capacity();
+    host_copies_.Enqueue([lease=ComPtr<ID3D12Resource>(destination),mapped,source=std::move(source),offset,bytes,unmap]{
+        std::memcpy(mapped,source->data()+offset,bytes);
+        if(unmap)DX12_API_CALL(lease->Unmap(0,nullptr));
+    },cost);
+    Diagnostics::Count("buffer-upload.host-deferred.bytes",bytes);
+}
 
 CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), timeline_(device), copy_timeline_(device) {
     if (!device) throw std::invalid_argument("null D3D12 scheduler device");
@@ -78,6 +92,7 @@ size_t CommandScheduler::AcquireCopyContext()try{
 }catch(...){ReportDeviceRemoval(device_.Get());throw;}
 
 CommandScheduler::~CommandScheduler() {
+    try{WaitHostCopies();}catch(...){}
     try {
         if(submit_failure_){
             // A failed Signal may follow successful ExecuteCommandLists. Drain
@@ -185,6 +200,9 @@ void CommandScheduler::EndTimestamp(GpuTimestamp token,const char* name){
 u64 CommandScheduler::Submit(std::span<std::function<void(u64)>> retirements,
                              std::span<std::function<void(u64)>> submitted) try {
     if(submit_failure_)std::rethrow_exception(submit_failure_);
+    // Both COPY and DIRECT queues may read upload heaps. CPU copies must
+    // finish before either executes and before publication callbacks/labels.
+    WaitHostCopies();
     if (copy_recording_ && !recording_) Begin();
     // Allocate and COPY every resource lease before either queue executes.
     // deque references survive append/pop of other nodes; UINT64_MAX cannot

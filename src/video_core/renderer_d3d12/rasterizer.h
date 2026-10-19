@@ -3,6 +3,7 @@
 #include "buffer_churn.h"
 #include "memory_perf.h"
 #include "command_scheduler.h"
+#include "cpu_buffer_snapshot.h"
 #include "memory_allocator.h"
 #include "common/fair_recursive_mutex.h"
 #include "video_core/rasterizer_interface.h"
@@ -48,7 +49,7 @@ private:
     struct IndexStreamPage {std::shared_ptr<UploadArena> arena;u64 used{};};
     std::vector<IndexStreamPage> index_stream_pages_;
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
-        std::vector<std::byte> cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
+        CpuBufferSnapshot cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
         // Strong CPU exclusion is page-granular in the pinned RegionManager.
         // One native arena can retain independent GPU-owned pages after a
         // different page has been downloaded for CPU access.
@@ -70,7 +71,7 @@ private:
     MemoryPerfConfig memory_perf_=MemoryPerfConfig::Environment();
     u64 gpu_pool_budget_=128*MemoryMiB;
     bool memory_pressure_{};
-    std::vector<std::vector<std::byte>> snapshot_pool_;
+    std::vector<CpuBufferSnapshot> snapshot_pool_;
     u64 snapshot_pool_bytes_{};
     struct LargeUpload {std::unique_ptr<UploadArena> arena;u64 capacity;bool used;};
     std::vector<LargeUpload> large_upload_pool_;

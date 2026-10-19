@@ -1,6 +1,6 @@
 param([string]$BuildDir,[string]$Mode='base',
     [ValidateSet('gcn_frontend','shader_reload','pipeline_storage','wave64','gcn_arithmetic','gcn_winding','gcn_attachment_alias','address_space_protections','guest_frame_trace','packed_float','emulator_shutdown')][string]$Fixture='gcn_frontend',
-    [switch]$CompileOnly)
+    [switch]$CompileOnly,[ValidateRange(1,64)][int]$Jobs=20)
 $ErrorActionPreference='Stop'
 $build=(Resolve-Path -LiteralPath $BuildDir).Path
 $source=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ($Fixture+'_test.cpp'))).Path.Replace('\','/')
@@ -10,7 +10,7 @@ $compiler='F:\PS4Dev\toolchain\llvm-22.1.3\bin\clang-cl.exe'
 $linker='F:\PS4Dev\toolchain\llvm-22.1.3\bin\lld-link.exe'
 Push-Location $build
 try {
-    & F:\Codex-Shared\devtools\bin\codex-dev.cmd run $ninja shadPS4-DX12-Core.exe -j 20
+    & F:\Codex-Shared\devtools\bin\codex-dev.cmd run $ninja shadPS4-DX12-Core.exe -j $Jobs
     if($LASTEXITCODE){throw 'Core build failed; refusing stale objects'}
     # Reuse the current core's production objects and libraries with a test-only main.
     # All outputs are separate: the core executable, main object and PDB are untouched.
