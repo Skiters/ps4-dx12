@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cmath>
 #include <bit>
+#include <source_location>
 
 using namespace NativeDX12;
 static ComPtr<ID3D12Device> HardwareDevice(DXGI_FORMAT required_format=DXGI_FORMAT_UNKNOWN){
@@ -64,8 +65,10 @@ int main(int argc,char** argv){try{
     const bool cached_writable_word=cached_r11||cached_rg16||cached_word_number!=4||mode=="writable-packed10-cached-word-owned";
     const bool writable_word=cached_writable_word||mode=="writable-packed10-word-owned";
     const bool linear_download=mode=="linear-download-owned";
+    const bool r16_overlap=mode=="r16-overlap-owned";
+    const bool r32_overlap=mode=="r32-overlap-owned";
     const bool linear_attachment=mode=="linear-attachment-owned";
-    const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download;
+    const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download||r16_overlap||r32_overlap;
     using NativeDX12::Tests::Unorm8Color;
     if(separate_versions)NativeDX12::Tests::CheckUnormColorOracleNegatives();
     const bool formatted_cmask=mode=="formatted-cmask-owned";
@@ -308,6 +311,8 @@ int main(int argc,char** argv){try{
         image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
         for(u32 data_format:{1u,2u,3u,4u,5u,6u,7u,9u,10u,11u,12u,13u,14u,16u,17u,18u,19u})for(u32 layers:{1u,2u,4u,6u})
         for(u32 selected_mip:{0u,1u})for(u32 number_format:{0u,1u,4u,5u,7u,9u}){
+        if(r16_overlap&&(data_format!=2||number_format!=0||layers!=1||selected_mip))continue;
+        if(r32_overlap&&(data_format!=4||number_format!=4||layers!=1||selected_mip))continue;
         if(linear_download&&(data_format!=4||number_format!=7||layers>2))continue;
         const bool half_components=data_format==2||data_format==5||data_format==12;
         const bool byte_components=data_format==1||data_format==3||data_format==10;
@@ -392,7 +397,12 @@ int main(int argc,char** argv){try{
             0xf80008cf,0x07060504,0xbf810000});
         initialize(half_vertex,half_words,0x41545444554a0000ULL+shape);
         image_words=vertex_words;image_words.resize(image_words.size()-3);
-        image_words.insert(image_words.end(),{0x7e020280,0x7e040280,0x7e060280,0x7e1002ff,small_integer?half_word:0x3f000000,
+        // Ownership is checked bit-for-bit. UNORM/SNORM .5 lies between two
+        // legal storage codes; choose the normalized value of half_word so
+        // the independent raw-byte oracle has one defined D3D conversion.
+        // Keep float/integer inputs and all expected bytes unchanged.
+        const u32 half_input=small_integer?half_word:normalized?std::bit_cast<u32>(half_value):0x3f000000;
+        image_words.insert(image_words.end(),{0x7e020280,0x7e040280,0x7e060280,0x7e1002ff,half_input,
             0xf0200100U|array_flag,0x00010801,0xf80008cf,0x07060504,0xbf810000});
         initialize(image_vertex,image_words,0x4154544455440000ULL+shape);
         initialize(load_pixel,image_load(0,array_flag,selected_layer,small_integer,signed_components,numeric_scale),0x4154544455450000ULL+shape);
@@ -477,8 +487,9 @@ int main(int argc,char** argv){try{
                 memcpy(memory+16384+GuestPixelOffset(desc,layout,mip,layer,x,y)+component,&initial_bits,
                     std::min(layout.bytes_per_pixel-component,4u));
             std::vector<std::byte> expected(backing,backing+65536);
+            const std::vector<std::byte> initial_image(backing+16384,backing+16384+layout.guest_bytes);
             unsigned color_check{};
-            const auto check_color=[&](Unorm8Color red){
+            const auto check_color=[&](Unorm8Color red,std::source_location caller=std::source_location::current()){
                 ++color_check;
                 const u32 rgba=u32(red.nearest)|0xff000000;std::array<size_t,64> color_red{};
                 for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
@@ -493,6 +504,7 @@ int main(int argc,char** argv){try{
                     fprintf(stderr,"Independent GCN mismatch data=%u number=%u layers=%u mip=%u writer=%llu initial=%g check=%u red=%u range=%u..%u byte=%zu actual=%02x expected=%02x\n",
                         data_format,number_format,layers,selected_mip,(unsigned long long)writer_extent,double(initial),color_check,
                         unsigned(red.nearest),unsigned(red.low),unsigned(red.high),byte,unsigned(backing[byte]),unsigned(expected[byte]));
+                    fprintf(stderr,"Independent GCN failing check caller line=%u\n",caller.line());
                     throw std::runtime_error("Independent GCN buffer/image versions, CPU visibility or full-allocation padding mismatch");
                 }
             };
@@ -733,6 +745,16 @@ int main(int argc,char** argv){try{
                 // Refresh the cached image from its CPU domain before a new
                 // formatted read can synchronize that image into the arena.
                 draw_image(load_pixel,0);draw_formatted(0,extended_bytes);
+            }
+            if(half_components||(data_format==4&&number_format!=7)){
+                // These I versions retain initial texels except IMAGE_STORE's
+                // selected pixel. The formatted read copied that complete I
+                // into B. Pinned ObtainBuffer marks the whole writable sharp
+                // GPU-modified, not just the DWORD executed by the shader.
+                // Its CPU download therefore publishes B's neighbouring texels
+                // too. Build those bytes from independent fixture inputs.
+                memcpy(expected.data()+16384,initial_image.data(),initial_image.size());
+                memset(expected.data()+16384+store_offset,0,std::max(layout.bytes_per_pixel,4u));
             }
             bind_vertex(buffer_vertex,8);bind_pixel(red_pixel);rasterizer.Draw(false);
             read_buffer(0);check_color(255);draw_image(load_pixel,0);
@@ -1130,8 +1152,11 @@ int main(int argc,char** argv){try{
         "PASS: four actual GCN late cached-depth recreations, PS current-B versus native D, interior VS writer, HTILE and full allocation/padding":ordered_formatted?
         "PASS: actual GCN descriptor-ordered formatted read/write, independent domains, image invalidation and physical padding":linear_attachment?
         "PASS: actual GCN queued linear MRT, repeated owned bindings, independent raw arena, CPU store and full padding":formatted_cmask?
-        "PASS: actual GCN CMASK metadata owners, 1/2/4/8 samples, large synthesized arena versus small physical CPU stream and complete padding":separate_versions?
-        "PASS: actual GCN R32 float/uint/sint independent versions and sign bits, formatted GPU retile versus CPU stream, CPU/GPU visibility and padding":readonly_depth?
+        "PASS: actual GCN CMASK metadata owners, 1/2/4/8 samples, large synthesized arena versus small physical CPU stream and complete padding":linear_download?
+        "PASS: actual GCN linear image downloads, independent buffer/image versions, CPU visibility and full padding":r16_overlap?
+        "PASS: actual GCN R16 UNORM independent image/buffer versions, partial writes, full writable-sharp download and padding":r32_overlap?
+        "PASS: actual GCN R32 UINT independent image/buffer versions, partial writes, full writable-sharp download and padding":separate_versions?
+        "PASS: actual GCN independent image/buffer format matrix, formatted GPU retile versus CPU stream, CPU/GPU visibility and padding":readonly_depth?
         "PASS: actual GCN vertex buffer writes with read-only/mixed Z16/Z32/stencil/MSAA, prewrite tests, warm edits, HTILE and competing-writer rejection, exact allocation/padding":
         "PASS: actual Liverpool/GCN/GuestRasterizer Draw, typed signed/unsigned shared MRT layers, MSAA, eager readback, warm permutations and padding");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
