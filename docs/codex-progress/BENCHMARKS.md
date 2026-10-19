@@ -1,3 +1,6 @@
+## Producer capture checkpoint — 2026-10-19 21:32 +05
+
+Authoritative details: SESSION_HANDOFF.md section Actual buffer producer capture / unresolved device failure. Core9249946 EXEe36c2a84 current. First load failed device887a0001; exact validation rerun reached black world/producer capture/exit0, no severity0/1, no FPS measurement. Captured scalar+352 is0.1/0.1/0.1/1, both outputs unchanged in that one draw; no black-image cause proven. NEXT actual private depth SRV t3 capture/contract, not another multiplier or general129-group audit. XInput bounded cached-state verification fixed;3 negatives/delay tests and actual Title/Continue passed. No full acceptance, last timed eb9ba3a0.72997FPS/almost-black FAIL. Exact source/runtime evidence F:/PS4Dev/handoff/physical-backing-proof-20261019/producer-buffer-9249946.
 ## Independent buffer/image fixture contract correction — 2026-10-19 21:09 +05
 
 No renderer behavior changed at this boundary. Previous raw127vs128 was IMAGE_STORE float0.5 -> normalized source memory, not final RTV output. Its code is conversion-ambiguous under the already established Vulkan/D3D contracts. For exact ownership checks the GCN image writer now takes the known normalized value of independent half_word (e.g.128/255); float/integer inputs and that raw-code expectation stay unchanged. No generic byte tolerance or readback-derived oracle.

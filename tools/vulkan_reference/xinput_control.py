@@ -12,6 +12,15 @@ class Report(C.Structure):
     _fields_=[('buttons',C.c_ushort),('lt',C.c_ubyte),('rt',C.c_ubyte)]+[(n,C.c_short) for n in ('lx','ly','rx','ry')]
 class State(C.Structure):
     _fields_=[('packet',C.c_uint32),('gamepad',Report)]
+
+def wait_report(get,index,report,timeout=.25):
+    """Wait for XInput's cached state to reflect an accepted driver update."""
+    deadline=time.monotonic()+timeout;attempts=0
+    while True:
+        state=State();rc=get(index,C.byref(state));attempts+=1
+        if not rc and bytes(state.gamepad)==bytes(report):return rc,state,attempts
+        if time.monotonic()>=deadline:return rc,state,attempts
+        time.sleep(.005)
 def utc():return D.datetime.now(D.timezone.utc).isoformat()
 def sha(path):return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 def save(path,value):
@@ -101,7 +110,8 @@ def serve(a):
                             if not ((0<=v<=255) if n in ('lt','rt') else (-32768<=v<=32767)):raise ValueError('Axis out of range')
                         report=Report(buttons,axes['lt'],axes['rt'],axes['lx'],axes['ly'],axes['rx'],axes['ry'])
                         checked(update(client,pad,report),'input report')
-                        state=State();rc=get(index,C.byref(state))
+                        rc,state,attempts=wait_report(get,index,report)
+                        event['input_readback_attempts']=attempts
                         event['xinput_readback']=dict(result=rc,packet=state.packet,**{n:getattr(state.gamepad,n) for n,_ in Report._fields_})
                         if rc or bytes(state.gamepad)!=bytes(report):raise RuntimeError('XInput readback differs from requested report')
                         end=time.monotonic()+hold/1000
@@ -112,9 +122,13 @@ def serve(a):
                     except Exception as e:event['error']=repr(e)
                     finally:
                         checked(update(client,pad,Report()),'release to neutral')
-                        neutral=State();rc=get(index,C.byref(neutral))
+                        rc,neutral,attempts=wait_report(get,index,Report())
+                        event['neutral_readback_attempts']=attempts
                         event['neutral_readback']=dict(result=rc,packet=neutral.packet,**{n:getattr(neutral.gamepad,n) for n,_ in Report._fields_})
-                        if rc or bytes(neutral.gamepad)!=bytes(Report()):raise RuntimeError('Neutral release verification failed')
+                        if rc or bytes(neutral.gamepad)!=bytes(Report()):
+                            event['release_error']='Neutral release verification failed'
+                            log.write(json.dumps(event)+'\n')
+                            raise RuntimeError(event['release_error'])
                     event['released_utc']=utc();event['released_qpc_s']=time.perf_counter();log.write(json.dumps(event)+'\n')
                     path.rename(path.with_suffix('.handled'))
                 time.sleep(.05)
