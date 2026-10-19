@@ -1,5 +1,10 @@
 # Vulkan / native D3D12 parity audit
 
+## 2026-10-19 - per-sample ordered color
+
+Connected and focused-verified at **e132726c97fa794e9e53e4cc8c9d80866b47ebf2**. Ordered color now uses one ROV binding and one independent storage plane per MRT/sample, with explicit MSAA-to-plane initialization, UAV ordering and plane-to-MSAA writeback. Packed-SNORM sample1/2/4/8 blend/logic passed 104 actual GCN draws. RGBA8 sample1/4 independent logic passed 136 draws. Full attachment contents and 64 KiB padding were compared. Implementation state: connected for these formats/sample counts. Behavior state: focused GPU verified; game/final suite not run. The next attachment-format gap is packed format 19 MSAA when native B4G4R4A4 MSAA RTV support is unavailable.
+
+
 ## 2026-10-19 - RGBA8 independent MRT logic
 
 Connected and focused-verified at **48c9795b6901e94087b1b795ccfeb43bb08e6563**. Single-sample `RGBA8_UNORM` now uses the ordered raw-word path when active MRTs require independent logic write masks. All 17 represented operations, masks `0x1/0xA/0xF`, both disjoint layer orders and the complete 64 KiB allocation passed in 68 real GCN/D3D12 draws. Ordered UAV creation now uses the actual attachment view rather than the merged cache-entry layer range. Existing packed-SNORM, shared SINT/MSAA and graphics-resource checks pass. Implementation state: connected. Behavior state: focused GPU verified; game/final suite not run. Remaining concrete ordered-color gaps are packed-SNORM MSAA per-sample access and other non-castable independent logic formats.

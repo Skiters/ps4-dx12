@@ -1,5 +1,20 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current per-sample ordered color checkpoint - 2026-10-19
+
+Production commit **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** connects ordered color to independent single-sample storage planes for every covered MSAA sample. Fragment specialization carries each target's sample count, forces sample-rate execution through SampleId, assigns a separate ROV binding per target/sample, initializes each plane from the authoritative MSAA image, and writes all planes back after UAV ordering barriers. The same path covers packed 10:10:10:2 SNORM ordered blending/logic and RGBA8 UNORM independent logic at 1x/2x/4x/8x where applicable. Stage persistence is version 31.
+
+Focused GPU behavior verification passed on the production checkout and again from a clean detached checkout at the exact commit. The packed-SNORM fixture executed **104 actual GCN draws**, including sample1/2/4/8 ordered Add blend and all represented logic operations with three independent masks. The RGBA8 fixture executed **136 actual GCN draws** across sample1/4, all represented logic operations, three masks, disjoint layers and complete 64 KiB backing/padding. Signed shared-MRT, graphics-resource and independent MSAA transfer regressions pass. Bloodborne and the final suite were not run for this identity.
+
+The sole application core is C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current, source **e132726c97fa794e9e53e4cc8c9d80866b47ebf2**, EXE SHA256 **96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e**, PDB SHA256 **1106f8206b62c846ce1c946773191bd2f5465bbdc518bfbdb230c227abdf5f2d**. Its manifest, runtime dependencies and preserved isolated profile are installed, and the catalogue contains exactly one core.
+
+Next concrete production gap is packed format 19 MSAA attachment writes when native B4G4R4A4 MSAA RTV support is unavailable. Preserve exact guest 16-bit codes, per-sample contents, write masks, blend/logic ordering, ownership and retile padding; reuse the proven sample-plane lifecycle rather than repeating the completed ordered-color audit.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue fix/mixed-cmask from current HEAD after reading this section and verifying the sole installed dx12-current identity. Resume the packed19-msaa-attachment production gap: adapt exact per-sample packed-16 attachment writes for adapters without a legal native B4G4R4A4 MSAA RTV, preserving guest codes, masks, ordering, ownership, barriers and lifetime. Reuse existing multisample storage/retile infrastructure and the saved Vulkan/DX12 evidence. Run focused GPU/readback checks, reproduce Release from the clean checkout, replace the one current core, update implementation and behavior states separately, and push normally. Defer the full suite and game/XInput/FPS acceptance until the integration boundary.
+
+
 ## Current RGBA8 independent MRT logic checkpoint - 2026-10-19
 
 Production commit **48c9795b6901e94087b1b795ccfeb43bb08e6563** extends the ordered raw-word color path to single-sample `RGBA8_UNORM`. All represented logic operations preserve the guest source conversion, destination bits and each MRT's independently scattered write mask. `OrderedColorUav` now takes the actual attachment view, so simultaneous views of disjoint array layers no longer collapse onto the cache entry's merged layer range. Stage persistence is version 30.

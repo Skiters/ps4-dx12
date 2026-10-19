@@ -1,5 +1,10 @@
 # Native DX12 state
 
+## Per-sample ordered color - 2026-10-19
+
+Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** connects ordered color to independent MSAA sample planes and writes them back into the authoritative attachment. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws. Both verify complete contents and padding, with signed, graphics-resource and transfer regressions passing. Clean Release reproduced both focused GPU checks. The sole installed dx12-current has EXE **96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e** and PDB **1106f8206b62c846ce1c946773191bd2f5465bbdc518bfbdb230c227abdf5f2d**. Game/final-suite behavior is not verified. Next gap: exact packed-format-19 MSAA attachment writes when native B4G4R4A4 MSAA RTV support is absent.
+
+
 ## RGBA8 independent MRT logic - 2026-10-19
 
 Production **48c9795b6901e94087b1b795ccfeb43bb08e6563** connects single-sample `RGBA8_UNORM` independent MRT logic through ordered `R32_UINT` read/modify/write. All 17 operations and masks `0x1/0xA/0xF` passed 68 actual GCN draws with disjoint array layers and full 64 KiB comparison. The fix also makes ordered UAV descriptors use each actual attachment layer view. Packed-SNORM, shared signed logic and graphics-resource regressions pass. Clean Release reproduced the focused GPU result. The sole installed `dx12-current` has EXE **47a3eb7b55311362e42302e075296271b5398647cb018c3529a04654733af3dd** and PDB **340c1ab9d8d316277023c42283e3c170a901842b8e6883f4bfba0fc95d9820fc**. Game/final-suite behavior is not verified for it. Next production gap: packed-SNORM MSAA per-sample ordered blend/logic; other non-castable independent logic formats remain explicit.

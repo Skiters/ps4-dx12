@@ -1,5 +1,10 @@
 # Next session
 
+## Current continuation boundary - per-sample ordered color
+
+Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** is pushed, clean-built and focused GPU verified. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws with complete backing/padding checks. The sole installed dx12-current matches EXE 96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e. Game/full suite remain not run. Continue exact packed-format-19 MSAA attachment writes for adapters without native B4G4R4A4 MSAA RTV support. Do not repeat the completed ordered-color/sample-plane audit.
+
+
 ## Current continuation boundary - RGBA8 independent MRT logic
 
 Production **48c9795b6901e94087b1b795ccfeb43bb08e6563** is pushed, clean-built and narrowly GPU verified: 68 actual GCN draws cover all 17 logic operations, three independent masks, disjoint array layers and full backing/padding. `OrderedColorUav` now preserves the actual attachment view. The one installed `dx12-current` matches that commit and EXE hash `47a3eb7b55311362e42302e075296271b5398647cb018c3529a04654733af3dd`; game/full suite remain not run. Continue packed-SNORM MSAA per-sample ordered blend/logic through the existing storage-plane path. Preserve exact sample bits, masks, ordering, ownership and lifetime. Do not repeat the completed ROV, single-sample SNORM or RGBA8 audits.
