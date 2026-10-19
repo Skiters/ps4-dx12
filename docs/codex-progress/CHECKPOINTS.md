@@ -1281,3 +1281,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 d0f6118: packed10 UNORM ordered color connected;112 CPU shader variants PASS,16 GPU cases prepared only; clean Release identities packed10-unorm-d0f6118.json. App unchanged/GPU-game NOT_RUN.
 
 2026-10-20 81be956: vector FLOAT ordered color/per-MRT types connected;136 CPU compiler cases PASS,32 vector GPU cases prepared only; clean Release identities vector-float-81be956.json. App unchanged/GPU-game NOT_RUN.
+
+2026-10-20 e475638: paired-word RGBA16 ordered color connected;192 CPU compiler variants PASS,48 GPU cases prepared only; clean Release identities rgba16-ordered-e475638.json. App unchanged/GPU-game NOT_RUN.
