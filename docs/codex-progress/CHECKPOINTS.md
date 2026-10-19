@@ -1241,3 +1241,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19 23:04: Versioned compact frame-buffer prefetch connected via optional PatchedFlip hook; CPU publication stays demand-ordered with contents serial/physical epoch/fence guards. Latest production library/frame fixture compile+link PASS7.458s; runtime NOT_RUN. Full details SESSION_HANDOFF and contracts.json. Sole app core6b8104d unchanged.
 
 2026-10-19 23:05: dbf8ac1 reproduced clean Release, identity matches, EXE50912b0b/PDBa3e63a2c, runtime NOT_RUN/not installed. Small frame-buffer-prefetch-dbf8ac1.json report; prior source/runtime evidence is not transferred.
+
+2026-10-19: Immutable decoded texture row/volume uploads connected to existing host-copy epoch. Core+GCN compile/link PASS14.673s; scheduler texture fixture compile/link PASS3.42s. No runtime/GPU/game execution, not installed; see SESSION_HANDOFF/contract immutable_texture_row_upload_20261019.

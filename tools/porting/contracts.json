@@ -6589,6 +6589,15 @@
           "limits": "At most four lazy workers, 64MiB retained-source accounting; submit thread assists. Snapshot copy-on-write costs and real game speedup not measured. Direct guest-to-worker copying, texture upload workers and full asynchronous raw-buffer frame readback remain unimplemented; do not infer game acceptance or close formatted-alias-ordering.",
           "verification_prepared": "native_host_copy_queue: gated immutable source and pool reuse, source/destination lifetime, failure drains and rejection, oversize budget and invalid task. native_scheduler_lifetime: four actual 1MiB GPU readbacks across DIRECT/COPY and persistent/worker-unmapped uploads after snapshot mutation. Compile/link only. Existing buffer-envelope/residency/CPU-window/independent-image regressions require execution before publication."
         },
+        "immutable_texture_row_upload_20261019": {
+          "implementation": "connected_compile_linked",
+          "verification": "runtime_not_run_user_pc_in_use",
+          "upstream_contract": "Pinned ObtainBufferForImage and TextureCache refresh preserve current source bytes, mip/layer/volume layout and upload-before-use. Supermedo Windows de2e38af055f09f819946951075c6bb119e62ae6 overlaps immutable host copies with command recording, waiting before GPU submission.",
+          "native_symbols": "GuestTextureCache::UploadVersion CPU-decoded row path -> SetHostTextureCopy supplied by GuestRasterizer -> Rasterizer::QueueHostTextureCopy -> CommandScheduler::QueueHostTextureCopy. Existing host-copy epoch drains before COPY/DIRECT execution.",
+          "contents_and_lifetime": "Decoded per-depth arrays move into a shared immutable owner without recopying pixel payload. Native row pitch/footprint offsets and every volume slice are validated. Worker retains mapped committed upload resource and unmaps after all writes; caller retains its independent synchronous unmap lease across the upload Resource move. Existing pending-image/fence/pool reuse and conversions remain authoritative. Invalid sources/footprints fail before work is queued.",
+          "limits": "CPU-decoded native footprint64KiB..64MiB; smaller/larger uploads and absent callback remain synchronous. Raw GPU-detiler input copying is unchanged, not claimed deferred. Decode/expansion itself remains synchronous. No game/FPS result or complete renderer parity claim.",
+          "verification_prepared": "native_scheduler_lifetime includes eight actual 2D/3D width3/333 depth1/3 COPY/DIRECT upload/texture/readback cases, independently encoded pixel bytes, full upload padding, moved immutable source lifetime, short-source/out-of-bounds destination negatives and Debug Layer severity checks. Compile/link only; GuestTextureCache cold/warm/replacement/stencil/BC/volume integration runtime remains required."
+        },
         "versioned_frame_buffer_prefetch_20261019": {
           "implementation": "connected_compile_linked",
           "verification": "runtime_not_run_user_pc_in_use",

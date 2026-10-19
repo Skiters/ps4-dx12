@@ -342,6 +342,8 @@ private:
     std::function<bool(const GuestTextureDesc&,const GuestTextureLayout&)> retain_independent_image_;
     std::function<void()> retire_pending_;
     std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
+    std::function<void(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::vector<std::byte>>>,
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT,UINT,UINT64)> host_texture_copy_;
     std::function<ID3D12GraphicsCommandList*()> recording_list_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
 public:
@@ -506,6 +508,7 @@ public:
     void SetRecordingListProvider(std::function<ID3D12GraphicsCommandList*()> current){recording_list_=std::move(current);}
     void SetCopySubmission(std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
         submit_copy_=std::move(submit);}
+    void SetHostTextureCopy(decltype(host_texture_copy_) copy){host_texture_copy_=std::move(copy);}
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}
     const auto& Entries(){return entries_;}

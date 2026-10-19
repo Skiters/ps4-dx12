@@ -13,11 +13,42 @@ void CommandScheduler::QueueHostCopy(ID3D12Resource* destination,void* mapped,
     if(!destination||!mapped||!source||!bytes||offset>source->size()||bytes>source->size()-offset)
         throw std::invalid_argument("Invalid immutable host upload");
     const auto cost=source->capacity();
+    Diagnostics::Count("buffer-upload.host-deferred.bytes",bytes);
     host_copies_.Enqueue([lease=ComPtr<ID3D12Resource>(destination),mapped,source=std::move(source),offset,bytes,unmap]{
         std::memcpy(mapped,source->data()+offset,bytes);
         if(unmap)DX12_API_CALL(lease->Unmap(0,nullptr));
     },cost);
-    Diagnostics::Count("buffer-upload.host-deferred.bytes",bytes);
+}
+
+void CommandScheduler::QueueHostTextureCopy(ID3D12Resource* destination,void* mapped,
+    std::shared_ptr<const std::vector<std::vector<std::byte>>> slices,
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint,UINT rows,UINT64 row_bytes){
+    if(submit_failure_)std::rethrow_exception(submit_failure_);
+    if(!destination||!mapped||!slices||!rows||!row_bytes||!footprint.Footprint.Depth||
+       slices->size()!=footprint.Footprint.Depth||row_bytes>footprint.Footprint.RowPitch)
+        throw std::invalid_argument("Invalid immutable texture upload");
+    const auto desc=destination->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER)
+        throw std::invalid_argument("Texture host upload requires a mapped buffer");
+    const auto width=desc.Width;
+    const auto row_count=uint64_t(rows)*footprint.Footprint.Depth;
+    if(footprint.Offset>width||row_bytes>width-footprint.Offset||
+       row_count-1>(width-footprint.Offset-row_bytes)/footprint.Footprint.RowPitch)
+        throw std::out_of_range("Texture host upload exceeds its native footprint");
+    size_t cost{};
+    for(const auto& slice:*slices){
+        if(slice.size()<uint64_t(rows)*row_bytes||slice.capacity()>SIZE_MAX-cost)
+            throw std::out_of_range("Short or overflowing texture upload source");
+        cost+=slice.capacity();
+    }
+    Diagnostics::Count("image-upload.host-deferred.bytes",row_count*row_bytes);
+    host_copies_.Enqueue([lease=ComPtr<ID3D12Resource>(destination),mapped,slices=std::move(slices),footprint,rows,row_bytes]{
+        for(size_t z=0;z<slices->size();++z)for(UINT row=0;row<rows;++row)
+            std::memcpy(static_cast<std::byte*>(mapped)+footprint.Offset+
+                (uint64_t(z)*rows+row)*footprint.Footprint.RowPitch,
+                (*slices)[z].data()+uint64_t(row)*row_bytes,size_t(row_bytes));
+        DX12_API_CALL(lease->Unmap(0,nullptr));
+    },cost);
 }
 
 CommandScheduler::CommandScheduler(ID3D12Device* device) : device_(device), timeline_(device), copy_timeline_(device) {

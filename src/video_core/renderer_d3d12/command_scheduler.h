@@ -88,6 +88,8 @@ public:
     // direct Submit() fence; no independent completed fence exists yet.
     void SubmitCopy(const std::function<void(ID3D12GraphicsCommandList*)>& record);
     void QueueHostCopy(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::byte>>,size_t,size_t,bool unmap=false);
+    void QueueHostTextureCopy(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::vector<std::byte>>>,
+                              D3D12_PLACED_SUBRESOURCE_FOOTPRINT,UINT rows,UINT64 row_bytes);
     void WaitHostCopies(){host_copies_.Wait();}
     void MakeQueueWait(ID3D12CommandQueue* queue, u64 fence) {
         if(!queue||!fence)throw std::invalid_argument("invalid scheduler consumer wait");

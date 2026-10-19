@@ -323,6 +323,12 @@ public:
     ID3D12GraphicsCommandList* RecordingList(){std::lock_guard lock(execution_mutex_);Begin();return scheduler_.Begin();}
     void SubmitCopyCommands(const std::function<void(ID3D12GraphicsCommandList*)>& record){
         std::lock_guard lock(execution_mutex_);scheduler_.SubmitCopy(record);}
+    void QueueHostTextureCopy(ID3D12Resource* resource,void* mapped,
+        std::shared_ptr<const std::vector<std::vector<std::byte>>> slices,
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint,UINT rows,UINT64 row_bytes){
+        std::lock_guard lock(execution_mutex_);
+        scheduler_.QueueHostTextureCopy(resource,mapped,std::move(slices),footprint,rows,row_bytes);
+    }
     VAddr GdsAddress() const {return reinterpret_cast<VAddr>(gds_.data());}
     u64 CompletedFence() const {return scheduler_.Completed();}
     // Host-only scratch obeys the same placed-buffer budget and retirement

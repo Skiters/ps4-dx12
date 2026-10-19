@@ -1,4 +1,5 @@
 #include "common/api_trace.h"
+#include "common/scope_exit.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_texture_cache.h"
 #include "guest_image_ownership.h"
@@ -3276,13 +3277,23 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         auto upload=entry->upload_pool.at(upload_index++);
         if(DX12_API_CALL(upload.handle->GetDesc()).Width<total)throw std::logic_error("Native upload pool footprint mismatch");
         void* mapped=nullptr;D3D12_RANGE empty{0,0};Check(DX12_API_CALL(upload.handle->Map(0,&empty,&mapped)));
+        bool deferred{};
+        const auto mapped_resource=upload.handle;
+        SCOPE_EXIT {if(!deferred)DX12_API_CALL(mapped_resource->Unmap(0,nullptr));};
+        std::shared_ptr<std::vector<std::vector<std::byte>>> slices;
+        if(host_texture_copy_&&total>=64*1024&&total<=64*1024*1024){
+            slices=std::make_shared<std::vector<std::vector<std::byte>>>();
+            slices->reserve(fp.Footprint.Depth);}
         for(UINT z=0;z<fp.Footprint.Depth;++z){
             if(d.volume_depth&&z){
                 linear=DecodeGuestSubresource(d,layout,bytes,mip,z);
                 linear=expand_sampled(std::move(linear),mip);
             }
-            for(UINT row=0;row<rows;++row)memcpy(static_cast<std::byte*>(mapped)+fp.Offset+(UINT64(z)*rows+row)*fp.Footprint.RowPitch,linear.data()+UINT64(row)*row_bytes,size_t(row_bytes));
-        }DX12_API_CALL(upload.handle->Unmap(0,nullptr));
+            if(slices)slices->push_back(std::move(linear));
+            else for(UINT row=0;row<rows;++row)memcpy(static_cast<std::byte*>(mapped)+fp.Offset+
+                (UINT64(z)*rows+row)*fp.Footprint.RowPitch,linear.data()+UINT64(row)*row_bytes,size_t(row_bytes));
+        }
+        if(slices){host_texture_copy_(upload.handle.Get(),mapped,std::move(slices),fp,rows,row_bytes);deferred=true;}
         D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=upload.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;src.PlacedFootprint=fp;D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=entry->texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dst.SubresourceIndex=sub;
         if(copy_upload)copy_batch.push_back({dst,src});
         else DX12_API_CALL(recording()->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
