@@ -1247,3 +1247,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: 6988ff3 clean Release reproduced; identity matches/EXE67de9e88/PDB59352a60. Runtime NOT_RUN/not installed. Report texture-row-upload-6988ff3.json; sole app6b8104d unchanged.
 
 2026-10-19: readonly GPU-detile CPU inputs reuse existing immutable coherence snapshot and publish only at prior success point. Shared snapshots also retain exact readonly BC readback. Production/resources/host/scheduler compile+link PASS15.323s; runtime NOT_RUN/not installed. See SESSION_HANDOFF and immutable_readonly_detile_input_20261019.
+
+2026-10-19: 5b44a38 clean Release reproduced; identity matches/EXEa39474fe/PDBf2237bfe. Runtime NOT_RUN/not installed. Report readonly-detile-snapshot-5b44a38.json; app6b8104d unchanged; next existing DrawInternal feedback contract.
