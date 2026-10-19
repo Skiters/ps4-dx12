@@ -1,5 +1,9 @@
 # Benchmarks
 
+## Independent packed-SNORM MRT logic verification - 2026-10-19
+
+The exact production GCN fixture completed 44 GPU/readback cases in 5.041 s: all represented logic operations, three simultaneous packed-SNORM MRT masks, every logical pixel, and all 64 KiB including padding. The existing shared SINT logic/MSAA GPU fixture passed. `native_guest_graphics_resources` passed in 4.00 s and the incremental Release core linked. These are mechanism correctness results for **bcc852b**; no game or FPS claim applies.
+
 ## Production ordered packed-SNORM verification - 2026-10-19
 
 The production GCN script completed in 22.905 s including incremental rebuild/relink; its actual GPU fixture completed in 4.836 s and reported 27 passes. `native_dxil_raster_ordered_metadata` passed in 0.04 s, `native_dxil_raster_ordered_gpu` in 0.33 s, and `native_guest_graphics_resources` in 3.86 s. These are correctness timings only. No game was launched and no FPS or performance claim applies to commit **3b886393**.

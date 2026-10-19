@@ -1,5 +1,9 @@
 # Native DX12 state
 
+## Independent packed-SNORM MRT logic - 2026-10-19
+
+Commit **bcc852b** is connected and narrowly verified. Packed 10:10:10:2 SNORM now executes all represented logic operations through ordered raw-word read/modify/write when active MRTs require different scattered write masks. The real GCN/GPU fixture passed 44 cases over three MRTs and complete 64 KiB readback; shared SINT logic/MSAA and graphics-resource regressions also passed. Ordinary/non-castable independent logic masks and packed-SNORM MSAA remain concrete gaps. The installed core remains clean commit **825905c** pending the new clean build.
+
 ## Current production ordered packed-SNORM checkpoint - 2026-10-19
 
 Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** connects single-sample packed 10:10:10:2 SNORM blending end to end through a rasterizer-ordered `R32_UINT` UAV. Blend constants/state, destination read/modify/write, masks, transitions, barriers, ownership and resource lifetime are connected. The production GCN fixture passed 27 cases; ROV metadata, hardware ordering and guest graphics-resource tests also passed. The implementation is connected and mechanism-verified, while game/final-suite behavior is not yet verified. Independent MRT logic/write masks and packed-SNORM MSAA remain concrete gaps. The one installed core is the clean **825905c** build: EXE SHA256 **337da2b09a7dd5ac247b8e8a25d77e9b466438f29ba81731c42de9c6223eefb0**, PDB SHA256 **c211ed28351b14913694385e877630f9cbaa021c1ca2c764b376ca651eb36227**; catalogue and file-identity validation passed.

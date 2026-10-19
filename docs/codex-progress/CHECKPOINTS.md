@@ -1,5 +1,12 @@
 # Checkpoints
 
+## Independent packed-SNORM MRT logic - 2026-10-19
+
+- Source: **bcc852b**.
+- Connected: actual-fragment-MRT specialization, per-target logic metadata, all 17 represented raw-word logic operations, and independent scattered channel merge through ordered UAVs.
+- Verified: 44 production GCN/GPU cases with three simultaneous masks and full 64 KiB comparison; shared SINT logic/MSAA; guest graphics resources; incremental Release core link.
+- Open: clean detached build/publication, final suite and game acceptance; packed-SNORM MSAA; ordinary/non-castable independent MRT logic.
+
 ## Production ordered packed-SNORM checkpoint - 2026-10-19
 
 - Source: **3b886393c6e7d345bbe298763ed4a9e045f60d91**.

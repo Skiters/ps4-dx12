@@ -1,5 +1,13 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current independent packed-SNORM MRT logic checkpoint - 2026-10-19
+
+Production commit **bcc852b** executes packed 10:10:10:2 SNORM logic operations with independent MRT write masks through the ordered `R32_UINT` UAV path. Shader specialization now uses the fragment program's actual MRT mask, carries the guest logic operation per target, applies all 17 represented logic operations to the raw packed source/destination word, and merges each target's scattered channel mask without replaying the guest draw. Pipeline persistence is version 29. Ordinary/non-castable targets with incompatible masks still reject explicitly; packed-SNORM MSAA remains an explicit gap because the current UAV path has no per-sample access.
+
+Focused verification passed: the production GCN/GPU fixture reported **44** cases, including all logic operations over three simultaneous MRTs with masks `0x1`, `0xA` and `0xF`, exact logical pixels and the complete 64 KiB backing/padding after every draw. `native_guest_graphics_resources` passed, the full core compiled and linked, and the existing shared SINT logic/MSAA fixture passed. This mechanism is **connected and narrowly verified**. Bloodborne, the final suite and broad cross-format behavior were not run for this identity.
+
+The application still contains the previous clean **825905c** core until a clean detached build of this checkpoint is complete. Its current EXE SHA256 is **337da2b09a7dd5ac247b8e8a25d77e9b466438f29ba81731c42de9c6223eefb0**. Next complete the clean build, rerun the focused fixture from that checkout, replace the sole `dx12-current` package, and record its exact identity. Then continue the next existing production gap; do not repeat the ordered logic audit without new evidence.
+
 ## Current production ordered packed-SNORM checkpoint - 2026-10-19
 
 Branch `fix/mixed-cmask` is at production commit **3b886393c6e7d345bbe298763ed4a9e045f60d91**. Single-sample packed 10:10:10:2 SNORM destination blending is now connected end to end through a rasterizer-ordered `R32_UINT` UAV: fragment exports preserve their source until the ordered read/modify/write, blend constants and per-target state reach the shader, non-dual-source blend factors and Add/Subtract/ReverseSubtract/Min/Max are implemented, masked lanes are merged, and quantization uses deterministic nearest-even SNORM encoding. Texture creation, UAV descriptors, transitions, barriers, ownership and lifetime are connected to this path. Invalid MSAA and dual-source cases remain explicit rejections.

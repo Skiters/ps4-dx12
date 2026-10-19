@@ -1,5 +1,9 @@
 # Vulkan / native D3D12 parity audit
 
+## 2026-10-19 - independent packed-SNORM MRT logic
+
+Connected and focused-verified at bcc852b: actual fragment MRT specialization, all 17 represented raw-word logic operations, and three independent packed-SNORM write masks through ordered R32_UINT UAVs. The production GCN/GPU fixture passed 44 cases with complete 64 KiB comparisons; shared SINT logic/MSAA also passed. Behavior state: narrow mechanism verified; game/final suite not run. Remaining concrete gaps: packed-SNORM MSAA per-sample access and ordinary/non-castable independent MRT logic masks.
+
 ## Production ordered packed-SNORM checkpoint - 2026-10-19
 
 Single-sample packed 10:10:10:2 SNORM destination blending is implemented and connected at commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** through a rasterizer-ordered R32_UINT UAV. The production GCN fixture passed 27 cases, including real source-plus-destination blend readback. Metadata, hardware ordering and graphics-resource checks passed. Status: implementation connected and mechanism verified; Bloodborne/final suite not verified. Concrete remaining gaps are independent MRT logic operations with per-target write masks and per-sample packed-SNORM MSAA.

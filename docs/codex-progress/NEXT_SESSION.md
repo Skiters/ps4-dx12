@@ -1,5 +1,9 @@
 # Next session
 
+## Current continuation boundary - independent SNORM MRT logic
+
+Production **bcc852b** completed independent write masks for single-sample packed-SNORM logic operations and passed the 44-case real GCN/GPU fixture plus shared SINT/MSAA and graphics-resource regressions. Finish the clean detached Release build and publish it as the sole `dx12-current` core, then continue a recorded open mechanism. Packed-SNORM MSAA lacks per-sample UAV access; ordinary/non-castable independent MRT logic still rejects. Do not repeat this audit or transfer the focused result to a rebuilt executable without running its exact fixture.
+
 ## Current continuation boundary - 2026-10-19
 
 Do not repeat the ROV compiler, resource-binding or single-sample packed-SNORM audit. Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** passed the 27-case production GCN fixture plus focused metadata, hardware-ordering and resource tests. Clean commit **825905c866988dbdc2ee2f57116e3ad93022be75** is installed and identity-validated as the sole `dx12-current` core. Implement independent MRT logic operations and per-target write masks through the ordered path. Keep packed-SNORM MSAA as an explicit gap, and preserve real contents, visibility, ordering, ownership and lifetime in each focused GPU/readback check.
