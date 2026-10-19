@@ -1,3 +1,7 @@
+## Frame-prefetch source reproduced — 2026-10-19 23:05 +05
+
+Committed dbf8ac1e0ab62c0e22569e5d1ce29f4947423e6e successfully built in existing separate tracked-clean Release checkout with pinned dependencies, Jobs4; release-identity.commit matches/runtime_verification not_run. EXE50912b0bdeebad07d6775cf96272bae7e45b26092323ff9dda82769cbeeb7aee; PDBa3e63a2c86fe0365c84e819bee5030914a629b8be33797c14c95df9a849de798. Small report F:/PS4Dev/handoff/native-port-comparison-20261019/frame-buffer-prefetch-dbf8ac1.json. No new archive, install, game or runtime/GPU test. App remains6b8104d. Compilation proves reproducible integration only. Continue next production mechanism from the immediately following checkpoint; preserve the pending exact runtime gates. Goal incomplete.
+
 ## Versioned frame buffer prefetch connected — 2026-10-19 23:04 +05
 
 DriveClub runtime80823216 AsyncReadbackFrame adapted to pinned original CPU-access semantics: D3D12 stages compact GPU-modified/owned raw-buffer spans at Liverpool PatchedFlip through optional OnFrame notification, but DOES NOT publish older bytes in the background. Vulkan default notification is empty; its renderer implementation/reference installation is unchanged. Rasterizer::ResolveGpuBuffers consumes only completed current-version copies; missing/incomplete/budget-excluded/stale spans retain the original Finish/512KiB public CPU-window fallback. No required readback, dirty range or guest signal is dropped.
