@@ -6589,6 +6589,15 @@
           "limits": "At most four lazy workers, 64MiB retained-source accounting; submit thread assists. Snapshot copy-on-write costs and real game speedup not measured. Direct guest-to-worker copying, texture upload workers and full asynchronous raw-buffer frame readback remain unimplemented; do not infer game acceptance or close formatted-alias-ordering.",
           "verification_prepared": "native_host_copy_queue: gated immutable source and pool reuse, source/destination lifetime, failure drains and rejection, oversize budget and invalid task. native_scheduler_lifetime: four actual 1MiB GPU readbacks across DIRECT/COPY and persistent/worker-unmapped uploads after snapshot mutation. Compile/link only. Existing buffer-envelope/residency/CPU-window/independent-image regressions require execution before publication."
         },
+        "immutable_readonly_detile_input_20261019": {
+          "implementation": "connected_compile_linked",
+          "verification": "runtime_not_run_user_pc_in_use",
+          "upstream_contract": "Pinned TextureCache readonly image refresh retains exact original guest bytes/coherence, including stencil and block-compressed snapshots. Native Windows pre-submit host-copy work can consume that existing CPU version instead of another full backup.",
+          "native_symbols": "GuestTextureCache::UploadVersion readonly CPU-source GPU-detile branch prepares the existing coherence snapshot locally, queues raw input via SetHostBufferCopy/QueueHostBufferCopy and publishes its owner at the former RememberSnapshot success point. CpuBufferSnapshot::Assign preserves shared/overlapping versions. GuestImageReadback retains the exact readonly compressed source by shared immutable ownership.",
+          "contents_and_lifetime": "No additional full-source snapshot copy: existing snapshot capacity is reused when unshared. Async and synchronous raw planes both consume the same prepared version; aligned tail zeroing stays exact. Workers never access guest VAs. Moving owners into Entry keeps the underlying vector stable; clear/replace/assignment cannot modify a worker/readback lease. Failed preparation cannot publish an early coherent-I witness.",
+          "limits": "Readonly, non-GPU-snapshot/no-retained-native-stencil source with64KiB..64MiB raw plane. Writable/GPU-resident/other sizes retain existing paths. Decode/tiler/retile algorithms unchanged. No runtime/FPS claim; full original renderer parity remains open.",
+          "verification_prepared": "Host-copy fixture adds immutable snapshot assignment, overlapping self-subspan, retained version and move-publication negatives. Existing production graphics-resources reuse/readback and host/scheduler fixtures compile/link. Actual cold/warm raw GPU detile, mixed-size depth/stencil planes, readonly BC exact-byte readback, refresh/failure/pressure/remap lifetime require runtime execution when PC is available."
+        },
         "immutable_texture_row_upload_20261019": {
           "implementation": "connected_compile_linked",
           "verification": "runtime_not_run_user_pc_in_use",

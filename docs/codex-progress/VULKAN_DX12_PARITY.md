@@ -1327,3 +1327,5 @@ DX12 adaptation added per-layer/per-tile CMASK planning in `guest_texture_cache.
 2026-10-19 23:04: Frame-boundary raw-buffer compact staging connected; completed/version/epoch-valid copies can satisfy exact CPU-owned dirty spans without submitting unrelated GPU work. Ordinary readback remains authoritative on every miss; no stale background physical publication. CONNECTED/COMPILE_LINKED, runtime NOT_RUN; native_frame_buffer_readback prepared. See native-independent-buffer-image-versions/versioned_frame_buffer_prefetch_20261019.
 
 2026-10-19: CPU-decoded texture row/volume upload immutable source -> pre-COPY/DIRECT host completion connected. Footprint64KiB..64MiB; raw GPU-detile input/decode unchanged. CONNECTED/COMPILE_LINKED, GPU_CONTENTS_NOT_RUN; eight scheduler texture cases prepared, cache integration acceptance pending.
+
+2026-10-19: Readonly raw-detile input snapshot owner is retained through host-copy completion and normal image coherence, without another full-source copy. Sampled/stencil/readonly-BC versions now share immutable COW storage. CONNECTED/COMPILE_LINKED, runtime NOT_RUN. Writable/GPU-resident source paths unchanged.

@@ -329,6 +329,11 @@ public:
         std::lock_guard lock(execution_mutex_);
         scheduler_.QueueHostTextureCopy(resource,mapped,std::move(slices),footprint,rows,row_bytes);
     }
+    void QueueHostBufferCopy(ID3D12Resource* resource,void* mapped,
+        std::shared_ptr<const std::vector<std::byte>> source,size_t bytes){
+        std::lock_guard lock(execution_mutex_);
+        scheduler_.QueueHostCopy(resource,mapped,std::move(source),0,bytes,true);
+    }
     VAddr GdsAddress() const {return reinterpret_cast<VAddr>(gds_.data());}
     u64 CompletedFence() const {return scheduler_.Completed();}
     // Host-only scratch obeys the same placed-buffer budget and retirement

@@ -4,6 +4,8 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <span>
+#include <cstdint>
 
 namespace NativeDX12 {
 // CPU equality witnesses can also supply deferred host uploads. A worker only
@@ -27,5 +29,16 @@ public:
         bytes_=std::make_shared<std::vector<std::byte>>(std::move(bytes));return *this;
     }
     std::shared_ptr<const std::vector<std::byte>> Share()const{return bytes_;}
+    void Assign(std::span<const std::byte> source){
+        if(source.data()==data()&&source.size()==size())return;
+        const auto from=reinterpret_cast<uintptr_t>(source.data()),to=reinterpret_cast<uintptr_t>(data());
+        const bool overlap=!source.empty()&&!empty()&&
+            (from>=to?from-to<size():to-from<source.size());
+        // Construct the replacement before releasing old storage, including
+        // subspans of this very snapshot. Unshared external sources reuse capacity.
+        if(!bytes_||bytes_.use_count()!=1||overlap)
+            bytes_=std::make_shared<std::vector<std::byte>>(source.begin(),source.end());
+        else bytes_->assign(source.begin(),source.end());
+    }
 };
 } // namespace NativeDX12

@@ -736,7 +736,7 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     };
     const bool gpu_upload=!target->tiler_input_pool.empty();
     auto* first_upload=gpu_upload?target->tiler_input_pool.at(0).handle.Get():target->upload_pool.at(0).handle.Get();
-    target->sampled_snapshot.assign(color_memory.begin(),color_memory.end());
+    target->sampled_snapshot.Assign(color_memory);
     auto& reused=textures.Upload(color_desc,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
     if(&reused!=target||transfer_pending(reused))throw std::runtime_error("Coherent native render target was uploaded again");
     fence=rasterizer.Flush();textures.Submitted(fence);rasterizer.Finish();

@@ -1245,3 +1245,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: Immutable decoded texture row/volume uploads connected to existing host-copy epoch. Core+GCN compile/link PASS14.673s; scheduler texture fixture compile/link PASS3.42s. No runtime/GPU/game execution, not installed; see SESSION_HANDOFF/contract immutable_texture_row_upload_20261019.
 
 2026-10-19: 6988ff3 clean Release reproduced; identity matches/EXE67de9e88/PDB59352a60. Runtime NOT_RUN/not installed. Report texture-row-upload-6988ff3.json; sole app6b8104d unchanged.
+
+2026-10-19: readonly GPU-detile CPU inputs reuse existing immutable coherence snapshot and publish only at prior success point. Shared snapshots also retain exact readonly BC readback. Production/resources/host/scheduler compile+link PASS15.323s; runtime NOT_RUN/not installed. See SESSION_HANDOFF and immutable_readonly_detile_input_20261019.

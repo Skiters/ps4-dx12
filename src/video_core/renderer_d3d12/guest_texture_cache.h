@@ -1,6 +1,7 @@
 #include <source_location>
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include "cpu_buffer_snapshot.h"
 #include "guest_page_range.h"
 #include "resources.h"
 #include "memory_allocator.h"
@@ -230,8 +231,8 @@ public:
         std::vector<std::shared_ptr<GuestMultisample::ColorDepthLease>> color_depth_leases;
         struct NativePlaneSource {Resource resource;std::shared_ptr<void> binding_pin;};
         std::vector<NativePlaneSource> native_plane_sources;
-        std::vector<std::byte> sampled_snapshot;
-        std::vector<std::byte> stencil_snapshot;
+        CpuBufferSnapshot sampled_snapshot;
+        CpuBufferSnapshot stencil_snapshot;
         GuestTextureLayout stencil_layout;
         std::shared_ptr<std::vector<Resource>> readback_pool;
         uint64_t last_use=0;
@@ -344,6 +345,7 @@ private:
     std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit_copy_;
     std::function<void(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::vector<std::byte>>>,
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT,UINT,UINT64)> host_texture_copy_;
+    std::function<void(ID3D12Resource*,void*,std::shared_ptr<const std::vector<std::byte>>,size_t)> host_buffer_copy_;
     std::function<ID3D12GraphicsCommandList*()> recording_list_;
     std::function<void(Entry&)> watch_immutable_,release_immutable_;
 public:
@@ -509,6 +511,7 @@ public:
     void SetCopySubmission(std::function<void(const std::function<void(ID3D12GraphicsCommandList*)>&)> submit){
         submit_copy_=std::move(submit);}
     void SetHostTextureCopy(decltype(host_texture_copy_) copy){host_texture_copy_=std::move(copy);}
+    void SetHostBufferCopy(decltype(host_buffer_copy_) copy){host_buffer_copy_=std::move(copy);}
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}
     const auto& Entries(){return entries_;}

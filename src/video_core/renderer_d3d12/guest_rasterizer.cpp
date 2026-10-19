@@ -66,6 +66,9 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
     textures_.SetHostTextureCopy([this](auto* resource,void* mapped,auto slices,auto footprint,UINT rows,UINT64 row_bytes){
         QueueHostTextureCopy(resource,mapped,std::move(slices),footprint,rows,row_bytes);
     });
+    textures_.SetHostBufferCopy([this](auto* resource,void* mapped,auto source,size_t bytes){
+        QueueHostBufferCopy(resource,mapped,std::move(source),bytes);
+    });
     textures_.SetPendingRetirement([this]{
         Finish();const auto fence=Flush();if(fence)textures_.Submitted(fence);
         RecordingList();

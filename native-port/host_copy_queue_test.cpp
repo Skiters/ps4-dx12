@@ -16,6 +16,22 @@ struct ReleaseGate {
 };
 int main(){try{
     {
+        CpuBufferSnapshot snapshot;
+        const std::byte initial[]{std::byte{0x11},std::byte{0x22},std::byte{0x33},std::byte{0x44}};
+        snapshot.Assign(initial);auto old=snapshot.Share();
+        snapshot.Assign(std::span(snapshot.data()+1,2));
+        Require(snapshot.size()==2&&snapshot.data()[0]==std::byte{0x22}&&snapshot.data()[1]==std::byte{0x33}&&
+            old->size()==4&&(*old)[0]==std::byte{0x11}&&(*old)[3]==std::byte{0x44},
+            "Snapshot subspan assignment invalidated its own input/immutable version");
+        auto shared=snapshot.Share();snapshot.Assign(initial);
+        Require(shared->size()==2&&(*shared)[0]==std::byte{0x22}&&snapshot.size()==4,
+            "New texture snapshot overwrote an existing immutable lease");
+        auto moved=std::move(snapshot);
+        Require(moved.size()==4&&moved.data()[3]==std::byte{0x44}&&snapshot.empty(),
+            "Publishing a snapshot moved its payload out of immutable shared storage");
+        std::puts("PASS: snapshot assign/self-subspan/version and owner publication");
+    }
+    {
         std::promise<void> gate,started;auto allow=gate.get_future().share();auto running=started.get_future();
         HostCopyQueue queue;ReleaseGate release{gate};
         CpuBufferSnapshot source;source.resize(4096);

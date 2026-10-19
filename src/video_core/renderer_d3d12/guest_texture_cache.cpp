@@ -1304,8 +1304,8 @@ void GuestTextureCache::Entry::RememberSnapshot(std::span<const std::byte> bytes
     if(desc.writable||bytes.size()<layout.guest_bytes||
        (desc.stencil_address&&stencil.size()<stencil_layout.guest_bytes))
         throw std::invalid_argument("Invalid coherent texture snapshot backing");
-    sampled_snapshot.assign(bytes.begin(),bytes.begin()+size_t(layout.guest_bytes));
-    if(desc.stencil_address)stencil_snapshot.assign(stencil.begin(),stencil.begin()+size_t(stencil_layout.guest_bytes));
+    sampled_snapshot.Assign(bytes.first(size_t(layout.guest_bytes)));
+    if(desc.stencil_address)stencil_snapshot.Assign(stencil.first(size_t(stencil_layout.guest_bytes)));
 }
 void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12GraphicsCommandList* list,bool copy){
     if(!list||!entry.texture.handle||!samples||(samples&(samples-1))||samples>16)
@@ -2982,11 +2982,11 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
     if(entry&&immutable_view&&!gpu_snapshot_any&&
        ((!entry->pending&&entry->fence<=completed)||(!d.render_target&&!d.depth_target))&&
        entry->sampled_snapshot.size()==layout.guest_bytes&&
-       std::equal(entry->sampled_snapshot.begin(),entry->sampled_snapshot.end(),bytes.begin())&&
+       !memcmp(entry->sampled_snapshot.data(),bytes.data(),size_t(layout.guest_bytes))&&
         (!d.stencil_address||(retained_stencil.handle?
             entry->texture.handle.Get()==retained_stencil.handle.Get():
             (entry->stencil_snapshot.size()==stencil_layout.guest_bytes&&
-             std::equal(entry->stencil_snapshot.begin(),entry->stencil_snapshot.end(),stencil_bytes.begin()))))){
+             !memcmp(entry->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes)))))){
         entry->last_use=++use_sequence_;entry->pending=true;
         recording_entry=entry;
         entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -3155,6 +3155,19 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         entry->expanded_guest_backing=std::move(original);entry->expanded_written_mask=std::move(written);
         entry->expanded_backing_bytes=expanded_snapshot_bytes;
     }else{entry->expanded_guest_backing={};entry->expanded_written_mask={};entry->expanded_backing_bytes=0;}
+    const auto deferred_size=[](uint64_t size){return size>=64*1024&&size<=64*1024*1024;};
+    const bool prepare_raw_snapshot=immutable_view&&!gpu_snapshot_any&&!retained_stencil.handle&&
+        gpu_detile&&host_buffer_copy_&&(deferred_size(layout.guest_bytes)||
+            (d.stencil_address&&deferred_size(stencil_layout.guest_bytes)));
+    CpuBufferSnapshot raw_snapshot,raw_stencil_snapshot;
+    if(prepare_raw_snapshot){
+        // This is the existing coherence snapshot's one source copy, moved
+        // before staging. Publish it into Entry only at the old success point.
+        raw_snapshot=std::move(entry->sampled_snapshot);
+        raw_stencil_snapshot=std::move(entry->stencil_snapshot);
+        raw_snapshot.Assign(bytes.first(size_t(layout.guest_bytes)));
+        if(d.stencil_address)raw_stencil_snapshot.Assign(stencil_bytes.first(size_t(stencil_layout.guest_bytes)));
+    }
     entry->last_use=++use_sequence_;entry->sampled_snapshot.clear();entry->stencil_snapshot.clear();
     entry->pending_buffer_residency.clear();
     const bool copy_upload=new_resource&&submit_copy_&&!d.depth_target&&!gpu_detile;
@@ -3193,9 +3206,14 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             auto& raw=entry->tiler_input_pool.at(plane);
             if(raw.handle->GetDesc().Width<size)throw std::logic_error("Native raw tiling upload pool mismatch");
             void* mapped{};D3D12_RANGE empty{};Check(DX12_API_CALL(raw.handle->Map(0,&empty,&mapped)));
-            memcpy(mapped,backing.data(),size_t(physical.guest_bytes));
             if(size>physical.guest_bytes)memset(static_cast<std::byte*>(mapped)+physical.guest_bytes,0,size_t(size-physical.guest_bytes));
-            DX12_API_CALL(raw.handle->Unmap(0,nullptr));
+            bool deferred{};const auto mapped_resource=raw.handle;
+            SCOPE_EXIT {if(!deferred)DX12_API_CALL(mapped_resource->Unmap(0,nullptr));};
+            const auto& snapshot=plane?raw_stencil_snapshot:raw_snapshot;
+            if(prepare_raw_snapshot&&deferred_size(physical.guest_bytes)){
+                host_buffer_copy_(raw.handle.Get(),mapped,snapshot.Share(),size_t(physical.guest_bytes));
+                deferred=true;
+            }else memcpy(mapped,prepare_raw_snapshot?snapshot.data():backing.data(),size_t(physical.guest_bytes));
         }
         size_t output_index{};
         for(uint32_t plane=0;plane<planes;++plane)
@@ -3329,7 +3347,10 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         retained_stencil.Transition(recording(),old_state);
     }
     diagnostic.Stage("cpu-coherence-snapshot");
-    if(immutable_view&&!gpu_snapshot_any&&!retained_stencil.handle)entry->RememberSnapshot(bytes,stencil_bytes);
+    if(prepare_raw_snapshot){
+        entry->sampled_snapshot=std::move(raw_snapshot);
+        if(d.stencil_address)entry->stencil_snapshot=std::move(raw_stencil_snapshot);
+    }else if(immutable_view&&!gpu_snapshot_any&&!retained_stencil.handle)entry->RememberSnapshot(bytes,stencil_bytes);
     if(immutable_view&&!guest_snapshot&&!d.render_target&&!d.depth_target&&!d.stencil_address&&watch_immutable_)watch_immutable_(*entry);
     entry->texture.Transition(recording(),D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);entry->pending=true;return finish_refresh(*entry);
 }

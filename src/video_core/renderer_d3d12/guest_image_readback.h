@@ -16,7 +16,7 @@ class GuestImageReadback {
     std::vector<std::shared_ptr<GuestTiler::Lease>> tiler_leases_;
     std::vector<std::shared_ptr<GuestMultisample::Lease>> multisample_leases_;
     std::shared_ptr<std::vector<Resource>> storage_;
-    std::vector<std::byte> readonly_compressed_source_;
+    CpuBufferSnapshot readonly_compressed_source_;
     uint64_t fence_{};
     void RecordTiled(ID3D12Device*,GuestTextureCache::Entry&,ID3D12GraphicsCommandList*);
     void RecordExpandedBacking(ID3D12Device*,GuestTextureCache::Entry&,ID3D12GraphicsCommandList*);
