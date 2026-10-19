@@ -1,3 +1,7 @@
+## Bounded stream capture checkpoint — 2026-10-20
+
+Source e3feab7 adds SO binding after ownership callbacks, extent/alias checks, state/lifetime retention and explicit unbinding; reusable budgeted PrimitiveStreamPass clears GPU counter, calls producer once and builds GPU arguments. CPU checks and core/related fixture compile-link PASS; clean Release e3feab7 PASS30.068s. Prepared contents/BeforeBind-Finish/pass-destruction GPU checks NOT_RUN. Hashes/logs and next buffered original-GS consumer/capacity/partition integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/stream-capture-e3feab7.json. Game/GPU NOT_RUN; app unchanged; guest guard and full-port gaps remain.
+
 ## Serialized primitive writer checkpoint — 2026-10-20
 
 Production dda2004 adds ordered uint4 SO serialization of original DS/ES inputs+patch ID, padded record ABI, frontend prepass construction and reflected SO layout. Five full-native-input topology compiler checks, GCN/HS/DS/writer linkage and buffered consumer signed-DXIL checks PASS; clean Release dda2004 PASS24.438s. Actual writer contents/guards/counter GPU fixture compiled, NOT_RUN. Exact hashes/logs and remaining allocation/amplification/partition/scheduling integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/serialized-stream-dda2004.json. Game/GPU NOT_RUN; app unchanged; EsGs guard retained and full port incomplete.
