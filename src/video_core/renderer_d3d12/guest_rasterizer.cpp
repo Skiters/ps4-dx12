@@ -1416,6 +1416,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // the same command stream; do not infer inputs from compatible RTs.
     struct BoundCapture {std::string name,metadata;TextureTransfer transfer;};
     std::vector<BoundCapture> bound_captures;
+    struct BoundBufferCapture {std::string name,metadata;ResourceBindings::BufferCapture transfer;};
+    std::vector<BoundBufferCapture> bound_buffer_captures;
     uint64_t bound_capture_id{};
     const auto submit_replay=[&](ResourceBindings& bindings) {
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
@@ -1591,6 +1593,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         };
         if(capture_bound){
             captured_bound_draws.insert(fragment->info.pgm_hash);bound_capture_id=capture_id;
+            auto buffer_captures=bindings.CaptureBufferInputs(RecordingList(),4096,
+                std::min<u64>(256*1024,256*1024*1024-capture_bytes),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            for(auto& buffer:buffer_captures){
+                const auto kind=buffer.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV?"uav":"cbv";
+                std::ostringstream metadata;
+                metadata<<"group="<<capture_id<<" role=buffer-input pass_ps="<<std::hex<<fragment->info.pgm_hash
+                    <<" resource="<<buffer.source.Get()<<std::dec<<" type="<<kind<<" reg="<<buffer.reg
+                    <<" space="<<buffer.space<<" index="<<buffer.index<<" offset="<<buffer.offset
+                    <<" view_bytes="<<buffer.view_bytes<<" captured_bytes="<<buffer.bytes;
+                auto name=pass_name+"-buffer-"+kind+"-"+std::to_string(buffer.reg)+"-"+
+                    std::to_string(buffer.space)+"-"+std::to_string(buffer.index);
+                capture_bytes+=buffer.bytes;
+                bound_buffer_captures.push_back({std::move(name),metadata.str(),std::move(buffer)});
+            }
             UINT captured_inputs{};
             for(auto& entry:textures_.Entries())if(const auto planes=bindings.ShaderPlanes(entry->texture.handle.Get());planes&&
                 (entry->desc.levels!=1||entry->desc.layers!=1||
@@ -1621,6 +1637,15 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     <<" writable="<<image.is_written<<" width="<<d.width<<" height="<<d.height
                     <<" pitch="<<d.pitch<<" tile="<<d.tile_mode<<" data="<<d.data_format<<" number="<<d.number_format
                     <<" mip="<<d.first_mip<<" levels="<<d.levels<<" layer="<<d.first_layer<<" view_layers="<<d.view_layers<<"\n";
+            }
+            for(const auto& stage:stages)for(size_t i=0;i<stage.info->buffers.size();++i){
+                const auto& buffer=stage.info->buffers[i];
+                sharps<<"buffer_stage_hash="<<std::hex<<stage.info->pgm_hash<<std::dec<<" slot="<<i
+                    <<" type="<<unsigned(buffer.buffer_type)<<" writable="<<buffer.is_written;
+                if(buffer.buffer_type==Shader::BufferType::Guest){const auto sharp=buffer.GetSharp(*stage.info);
+                    sharps<<" address="<<std::hex<<sharp.base_address<<std::dec<<" bytes="<<sharp.GetSize()
+                        <<" stride="<<sharp.stride<<" records="<<sharp.num_records;}
+                sharps<<"\n";
             }
             DisplayCapture::Save(capture_id,pass_name+"-requested-views",{},sharps.str());
             DisplayCapture::Save(capture_id,pass_name+"-fragment.spv",std::as_bytes(fragment->EffectiveSpirv()),"Effective production fragment SPIR-V");
@@ -1698,6 +1723,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         textures_,r.ta_bc_base.Address(),index_requests);
     if(bound_capture_id){
         Finish();ValidateDebugMessages();
+        for(auto& capture:bound_buffer_captures){
+            auto& transfer=capture.transfer;void* data{};D3D12_RANGE range{0,SIZE_T(transfer.bytes)};
+            Check(transfer.readback.handle->Map(0,&range,&data));
+            SCOPE_EXIT {D3D12_RANGE none{};transfer.readback.handle->Unmap(0,&none);};
+            DisplayCapture::Save(bound_capture_id,capture.name,
+                {static_cast<const std::byte*>(data),size_t(transfer.bytes)},capture.metadata+
+                " completed="+std::to_string(CompletedFence()));
+        }
         for(auto& readback:bound_captures){
             auto& transfer=readback.transfer;
             std::vector<std::byte> bytes(size_t(transfer.row_bytes)*transfer.rows);

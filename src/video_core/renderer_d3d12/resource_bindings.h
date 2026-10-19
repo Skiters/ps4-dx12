@@ -61,6 +61,10 @@ class ResourceBindings {
     struct ShaderTextureRange {UINT mip,mips,layer,layers,planes;SIZE_T descriptor{};};
     std::unordered_map<ID3D12Resource*,std::vector<ShaderTextureRange>> shader_texture_ranges_;
     std::vector<std::shared_ptr<void>> allocation_leases_;
+    struct BufferView {ID3D12Resource* resource;UINT reg,space,index;D3D12_DESCRIPTOR_RANGE_TYPE type;
+        uint64_t offset,bytes;SIZE_T descriptor;};
+    std::vector<BufferView> capture_buffers_;
+    void TrackCaptureBuffer(BufferView);
     bool sealed_{};
     bool recycled_{};
     bool preparing_{},preparation_failed_{};
@@ -86,6 +90,14 @@ public:
     ResourceBindings(const ResourceBindings&)=delete;
     ResourceBindings& operator=(const ResourceBindings&)=delete;
     const ResourceLayout& Layout()const{return layout_;}
+    struct BufferCapture {ComPtr<ID3D12Resource> source;Resource readback;UINT reg,space,index;
+        D3D12_DESCRIPTOR_RANGE_TYPE type;uint64_t offset,view_bytes,bytes;};
+    // Diagnostic copies of the actual bound ranges. Caller supplies the state
+    // of DEFAULT raw UAV buffers; UPLOAD CBVs stay in GENERIC_READ. Normal
+    // idempotent preparation precedes copies; the copies do not resolve guest
+    // ownership and restore source states. Retire with this table.
+    std::vector<BufferCapture> CaptureBufferInputs(ID3D12GraphicsCommandList*,
+        uint64_t per_buffer_bytes,uint64_t total_bytes,D3D12_RESOURCE_STATES raw_state);
     bool References(ID3D12Resource* resource)const {
         for(const auto& held:keep_alive_)if(held.Get()==resource)return true;
         return false;

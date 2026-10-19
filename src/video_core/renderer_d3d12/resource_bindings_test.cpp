@@ -6,10 +6,18 @@
 #include <dxgi1_6.h>
 #include <fstream>
 #include <cstdio>
+#include <cstdlib>
+#include <string_view>
+#include <d3d12sdklayers.h>
 using namespace NativeDX12;
 void Require(bool ok){if(!ok)throw std::runtime_error("compute assertion failed");}
 int wmain(int argc,wchar_t** argv){try{
-    if(argc!=4)throw std::invalid_argument("usage: binding-test fixture.spv converter.dll dxcompiler.dll");
+    const bool capture=argc==5&&std::wstring_view(argv[4])==L"capture";
+    if(argc!=4&&!capture)throw std::invalid_argument("usage: binding-test fixture.spv converter.dll dxcompiler.dll [capture]");
+    if(capture){
+        Require(_putenv_s("SHADPS4_NATIVE_DISPLAY_CAPTURE","binding-fixture")==0);
+        ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
+    }
     std::ifstream f(argv[1],std::ios::binary|std::ios::ate);Require(bool(f));auto size=f.tellg();Require(size>0&&size%4==0);
     std::vector<uint32_t> spirv(size_t(size)/4);f.seekg(0);f.read(reinterpret_cast<char*>(spirv.data()),size);Require(bool(f));
     Shader::Backend::DX12::SpirvConvertOptions options;options.stage=Shader::Backend::DX12::SpirvStage::Compute;
@@ -61,12 +69,52 @@ int wmain(int argc,wchar_t** argv){try{
         Require(rejected);
     });
     bindings.Prepare();bindings.Prepare();Require(preparations==1);
+    output.Transition(list.Get(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     pipeline.Bind(list.Get(),bindings);DX12_API_CALL(list->Dispatch(count/64,1,1));
+    std::vector<ResourceBindings::BufferCapture> captures,offset_captures;
+    std::unique_ptr<ResourceBindings> capture_table;
+    if(capture){
+        Require(bindings.CaptureBufferInputs(list.Get(),64,0,D3D12_RESOURCE_STATE_UNORDERED_ACCESS).empty());
+        captures=bindings.CaptureBufferInputs(list.Get(),64,128,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        Require(captures.size()==2);
+        capture_table=std::make_unique<ResourceBindings>(device.Get(),layout,&pool);fill_descriptors(*capture_table);
+        D3D12_UNORDERED_ACCESS_VIEW_DESC sub{};sub.Format=DXGI_FORMAT_R32_TYPELESS;
+        sub.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;sub.Buffer.FirstElement=16;
+        sub.Buffer.NumElements=32;sub.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
+        capture_table->Uav(0,0,output.handle.Get(),sub);
+        offset_captures=capture_table->CaptureBufferInputs(list.Get(),128,256,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        Require(offset_captures.size()==2);
+        capture_table->Uav(0,0,nullptr,sub);
+        const auto null_captures=capture_table->CaptureBufferInputs(list.Get(),4,4,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        Require(null_captures.size()==1&&null_captures[0].type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV);
+        bool rejected=false;try{(void)capture_table->CaptureBufferInputs(nullptr,4,4,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);}
+        catch(const std::invalid_argument&){rejected=true;}Require(rejected);
+    }
     output.UavBarrier(list.Get());output.Transition(list.Get(),D3D12_RESOURCE_STATE_COPY_SOURCE);
     DX12_API_CALL(list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,count*4));Check(DX12_API_CALL(list->Close()));Timeline timeline(device.Get());timeline.Wait(timeline.Submit(queue.Get(),list.Get()));
     void* data=nullptr;D3D12_RANGE range{0,count*4};Check(DX12_API_CALL(readback.handle->Map(0,&range,&data)));auto words=static_cast<const uint32_t*>(data);
     for(UINT i=0;i<count;++i)if(words[i]!=i*3+7)throw std::runtime_error("GPU result differs at index "+std::to_string(i)+": "+std::to_string(words[i]));
     D3D12_RANGE no_write{0,0};DX12_API_CALL(readback.handle->Unmap(0,&no_write));
+    if(capture){
+        const auto verify_capture=[&](auto& buffers){for(auto& buffer:buffers){
+            Require(buffer.bytes<=128&&buffer.bytes<=buffer.view_bytes);
+            void* data{};D3D12_RANGE used{0,SIZE_T(buffer.bytes)};Check(buffer.readback.handle->Map(0,&used,&data));
+            bool equal=true;for(UINT i=0;i<buffer.bytes/4;++i){
+                const UINT expected=buffer.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV?UINT(buffer.offset/4+i)*3+7:
+                    i==0?count/64:i<=2?1:0;
+                equal&=static_cast<const UINT*>(data)[i]==expected;
+            }
+            buffer.readback.handle->Unmap(0,&no_write);Require(equal);
+        }};
+        verify_capture(captures);verify_capture(offset_captures);
+        capture_table->RecycleRetiredHeaps();
+        ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
+        for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T bytes{};Check(messages->GetMessage(i,nullptr,&bytes));
+            std::vector<std::byte> storage(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+            Check(messages->GetMessage(i,message,&bytes));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
+                throw std::runtime_error(message->pDescription);
+        }
+    }
     bindings.RecycleRetiredHeaps();
     // A realistic PS4 packet retires far more than 32 tables. Reuse every
     // matching heap after retirement instead of recreating driver objects.

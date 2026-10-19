@@ -11,7 +11,47 @@
 #include <map>
 #include <tuple>
 #include <bit>
+#include <cstdlib>
 namespace NativeDX12 {
+namespace {
+bool CaptureBuffersEnabled(){
+    static const bool enabled=std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")!=nullptr;
+    return enabled;
+}
+}
+void ResourceBindings::TrackCaptureBuffer(BufferView view){
+    std::erase_if(capture_buffers_,[&](const auto& old){return old.descriptor==view.descriptor;});
+    if(view.resource&&view.bytes&&capture_buffers_.size()<128)capture_buffers_.push_back(view);
+}
+std::vector<ResourceBindings::BufferCapture> ResourceBindings::CaptureBufferInputs(
+    ID3D12GraphicsCommandList* list,uint64_t per_buffer_bytes,uint64_t total_bytes,D3D12_RESOURCE_STATES raw_state){
+    if(!list||recycled_)throw std::invalid_argument("Invalid bound-buffer capture");
+    Prepare();std::vector<BufferCapture> result;
+    if(!per_buffer_bytes||!total_bytes)return result;
+    result.reserve(capture_buffers_.size());
+    for(const auto& view:capture_buffers_){
+        const auto desc=view.resource->GetDesc();
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||view.offset>desc.Width||view.bytes>desc.Width-view.offset)
+            throw std::out_of_range("Bound-buffer capture exceeds actual resource");
+        D3D12_HEAP_PROPERTIES heap{};Check(view.resource->GetHeapProperties(&heap,nullptr));
+        const bool upload=heap.Type==D3D12_HEAP_TYPE_UPLOAD;
+        if(view.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&!upload)continue;
+        if(view.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&heap.Type!=D3D12_HEAP_TYPE_DEFAULT)continue;
+        const auto bytes=std::min({per_buffer_bytes,total_bytes,view.bytes});if(!bytes)break;
+        auto readback=Buffer(device_.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        Retain(readback.handle.Get());
+        result.push_back({view.resource,std::move(readback),view.reg,view.space,view.index,view.type,view.offset,view.bytes,bytes});
+        D3D12_RESOURCE_BARRIER barrier{};barrier.Type=D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition={view.resource,D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,raw_state,D3D12_RESOURCE_STATE_COPY_SOURCE};
+        if(!upload&&raw_state!=D3D12_RESOURCE_STATE_COPY_SOURCE)list->ResourceBarrier(1,&barrier);
+        list->CopyBufferRegion(result.back().readback.handle.Get(),0,view.resource,view.offset,bytes);
+        if(!upload&&raw_state!=D3D12_RESOURCE_STATE_COPY_SOURCE){
+            std::swap(barrier.Transition.StateBefore,barrier.Transition.StateAfter);list->ResourceBarrier(1,&barrier);
+        }
+        total_bytes-=bytes;
+    }
+    return result;
+}
 DescriptorHeapPool::Slice DescriptorHeapPool::Acquire(UINT count,D3D12_DESCRIPTOR_HEAP_TYPE type) {
     if(!count)return {};
     const UINT maximum=type==D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER?D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE:1000000;
@@ -230,6 +270,10 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
 }
 void ResourceBindings::Uav(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc,UINT index) {
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,reg,space,index);DX12_API_CALL(device_->CreateUnorderedAccessView(resource,nullptr,&desc,slot));Retain(resource);
+    if(CaptureBuffersEnabled())TrackCaptureBuffer({
+        desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER&&(desc.Buffer.Flags&D3D12_BUFFER_UAV_FLAG_RAW)?resource:nullptr,
+        reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_UAV,desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER?desc.Buffer.FirstElement*4:0,
+        desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER?uint64_t(desc.Buffer.NumElements)*4:0,slot.ptr});
     if(resource)shader_planes_[resource]|=3;
     TrackShaderTextureRange(resource,resource&&(DX12_API_CALL(resource->GetDesc()).Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)?
         ShaderTextureRange{0,UINT_MAX,0,UINT_MAX,3}:ShaderTextureRange{},slot.ptr);
@@ -251,7 +295,9 @@ void ResourceBindings::Cbv(UINT reg,UINT space,ID3D12Resource* resource,UINT64 o
         offset>DX12_API_CALL(resource->GetDesc()).Width||bytes>DX12_API_CALL(resource->GetDesc()).Width-offset)
         throw std::invalid_argument("Invalid constant buffer range/alignment");
     D3D12_CONSTANT_BUFFER_VIEW_DESC desc{DX12_API_CALL(resource->GetGPUVirtualAddress())+offset,bytes};
-    DX12_API_CALL(device_->CreateConstantBufferView(&desc,Slot(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,reg,space,index)));Retain(resource);
+    const auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,reg,space,index);
+    DX12_API_CALL(device_->CreateConstantBufferView(&desc,slot));Retain(resource);
+    if(CaptureBuffersEnabled())TrackCaptureBuffer({resource,reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_CBV,offset,bytes,slot.ptr});
 }
 void ResourceBindings::Sampler(UINT reg,UINT space,const D3D12_SAMPLER_DESC& desc,UINT index) {
     DX12_API_CALL(device_->CreateSampler(&desc,Slot(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,reg,space,index)));
