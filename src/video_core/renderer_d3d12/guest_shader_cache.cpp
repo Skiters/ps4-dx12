@@ -72,7 +72,7 @@ DXIL::SpirvStage HostStage(Shader::SwStage stage) {
 }
 GuestShaderCache::GuestShaderCache(std::wstring converter,DXIL::SpirvConvertOptions options)
     :converter_(std::move(converter)),options_(std::move(options)),disk_(CacheDirectory()) {
-    configuration_.Text("native-dxil-cache-20261018-packed-snorm-export-v8");OptionsKey(configuration_,options_);
+    configuration_.Text("native-dxil-cache-20261019-mixed-constant-blend-v9");OptionsKey(configuration_,options_);
     const auto directory=std::filesystem::path(converter_).parent_path();
     for(const auto& path:{std::filesystem::path(converter_),directory/L"dxcompiler.dll",directory/L"dxil.dll"})
         configuration_.Blob(CacheDigest::File(path));

@@ -221,18 +221,26 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
     const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
+    const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
+                       target.number_format == AmdGpu::NumberFormat::Unorm;
     Id destination{};
     if (!logic) {
         std::array<Id, 4> destination_channels{};
-        for (u32 component = 0; component < 4; ++component)
-            destination_channels[component] = OrderedSnormDecode(ctx, old_word,
-                component * 10, component == 3 ? 2 : 10);
+        for (u32 component = 0; component < 4; ++component) {
+            if (rgba8) {
+                const Id code = ctx.OpBitFieldUExtract(ctx.U32[1], old_word,
+                    ctx.ConstU32(component * 8), ctx.ConstU32(8u));
+                destination_channels[component] = ctx.OpFDiv(ctx.F32[1],
+                    ctx.OpConvertUToF(ctx.F32[1], code), ctx.ConstF32(255.f));
+            } else {
+                destination_channels[component] = OrderedSnormDecode(ctx, old_word,
+                    component * 10, component == 3 ? 2 : 10);
+            }
+        }
         destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
     }
     Id packed = ctx.u32_zero_value;
     u32 raw_mask{};
-    const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
-                       target.number_format == AmdGpu::NumberFormat::Unorm;
     for (u32 component = 0; component < 4; ++component) {
         const u32 bits = rgba8 ? 8 : component == 3 ? 2 : 10;
         const u32 shift = rgba8 ? component * 8 : component * 10;

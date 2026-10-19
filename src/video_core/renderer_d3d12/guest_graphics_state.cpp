@@ -175,7 +175,7 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     u32 active_color_mask{};
     for (u32 i = 0; i < targets.size(); ++i)
         if (targets[i] != DXGI_FORMAT_UNKNOWN) active_color_mask |= 1u << i;
-    const u32 ordered_color_mask = GuestOrderedColorMask(regs, active_color_mask);
+    const u32 ordered_color_mask = GuestOrderedColorMask(regs, active_color_mask,native_alpha_factor);
     bool needs_constant_color_rgb=false,needs_constant_alpha_rgb=false;
     for(UINT i=0;i<8;++i) {
         auto& rt=p.BlendState.RenderTarget[i];rt.SrcBlend=rt.SrcBlendAlpha=D3D12_BLEND_ONE;

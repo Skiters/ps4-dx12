@@ -35,7 +35,8 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm);
 }
-inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u) {
+inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u,
+                                bool native_alpha_factor = true) {
     u32 result{};
     if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Normal) return result;
     const bool logic = regs.color_control.rop3 != AmdGpu::ColorControl::LogicOp::Copy;
@@ -55,14 +56,35 @@ inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = 
             }
         }
     }
+    bool mixed_constants{};
+    if (!logic && !native_alpha_factor) {
+        using F = AmdGpu::BlendControl::BlendFactor;
+        const auto is_color = [](F factor) {
+            return factor == F::ConstantColor || factor == F::OneMinusConstantColor;
+        };
+        const auto is_alpha = [](F factor) {
+            return factor == F::ConstantAlpha || factor == F::OneMinusConstantAlpha;
+        };
+        bool color{}, alpha{};
+        for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
+            const auto& target = regs.color_buffers[i];
+            const auto& blend = regs.blend_control[i];
+            if (!target || (active_targets & (1u << i)) == 0 || !blend.enable ||
+                target.info.blend_bypass ||
+                !target.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i))) continue;
+            color |= is_color(blend.color_src_factor) || is_color(blend.color_dst_factor);
+            alpha |= is_alpha(blend.color_src_factor) || is_alpha(blend.color_dst_factor);
+        }
+        mixed_constants = color && alpha;
+    }
     for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
         if ((active_targets & (1u << i)) == 0) continue;
         const auto& color = regs.color_buffers[i];
         const auto& blend = regs.blend_control[i];
         const bool writes = color && color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i));
         const bool ordered_blend = !logic && blend.enable && !color.info.blend_bypass &&
-            color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
-            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm;
+            ((color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
+              color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) || mixed_constants);
         const bool ordered_logic = logic && independent_logic;
         if (writes && (ordered_blend || ordered_logic) && GuestOrderedColorSupported(color))
             result |= 1u << i;

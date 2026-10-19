@@ -46,6 +46,7 @@ int main(int argc,char** argv){try{
     const bool shared_exponent=shared_exponent_msaa_writer||shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_logic=std::string_view(argv[3])=="signed-logic";
     const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
+    const bool mixed_constant_blend=std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool snorm_color=mode=="snorm-color-owned";
@@ -86,7 +87,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -962,6 +963,20 @@ int main(int argc,char** argv){try{
             cb.view.slice_start=cb.view.slice_max=order[i];
             gpu.last_cb_extent[i]={u16(width),u16(height)};descriptions[i]=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[i]);
         }
+        if(mixed_constant_blend){
+            using BF=AmdGpu::BlendControl::BlendFactor;
+            regs.blend_constants={.2f,.4f,.6f,.8f};
+            for(auto& blend:regs.blend_control){
+                blend.enable=1;blend.separate_alpha_blend=1;
+                blend.alpha_src_factor=BF::One;blend.alpha_dst_factor=BF::Zero;
+            }
+            regs.blend_control[0].color_src_factor=BF::ConstantColor;
+            regs.blend_control[0].color_dst_factor=BF::ConstantAlpha;
+            regs.blend_control[1].color_src_factor=BF::OneMinusConstantAlpha;
+            regs.blend_control[1].color_dst_factor=BF::OneMinusConstantColor;
+            regs.blend_control[2].color_src_factor=BF::ConstantAlpha;
+            regs.blend_control[2].color_dst_factor=BF::OneMinusConstantAlpha;
+        }
         MergeGuestColorAttachmentLayers(descriptions);const auto layout=LayoutGuestTexture(descriptions[0]);
         using Logic=AmdGpu::ColorControl::LogicOp;
         constexpr std::array logic_operations{Logic::Clear,Logic::Nor,Logic::AndInverted,Logic::CopyInverted,
@@ -996,6 +1011,10 @@ int main(int argc,char** argv){try{
                 if(independent_unorm_logic){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
                     u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))raw_mask|=0xffu<<(channel*8);
                     word=(0xeeeeeeee&~raw_mask)|(apply_logic(operation,values[i],0xeeeeeeee)&raw_mask);}
+                if(mixed_constant_blend){
+                    constexpr u32 blended[]{0xffbebeF1u,0xff5fc2beu,0xfffc3030u};
+                    word=blended[i];
+                }
                 memcpy(expected.data()+4096+offset,&word,4);
             }
             if(linear_attachment){
@@ -1047,7 +1066,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

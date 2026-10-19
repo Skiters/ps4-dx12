@@ -43,6 +43,10 @@ std::unique_ptr<Backend> CreateGuestBackend(const BackendConfiguration& config,A
     profile.native_coherent_images=true;
     profile.native_buffer_bounds=true;
     profile.native_viewport_clip_conversion=true;
+    D3D12_FEATURE_DATA_D3D12_OPTIONS13 blend_options{};
+    profile.native_alpha_blend_factor=SUCCEEDED(DX12_API_CALL(result->device->CheckFeatureSupport(
+        D3D12_FEATURE_D3D12_OPTIONS13,&blend_options,sizeof(blend_options))))&&
+        blend_options.AlphaBlendFactorSupported;
     D3D12_COMMAND_QUEUE_DESC q{};q.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
     Check(DX12_API_CALL(result->device->CreateCommandQueue(&q,IID_PPV_ARGS(&result->presentation_queue))));
     result->rasterizer=std::make_unique<GuestRasterizer>(result->device.Get(),gpu,profile,std::move(converter),std::move(dxc));

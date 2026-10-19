@@ -59,9 +59,7 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
     const Shader::Profile& profile,std::wstring converter,std::wstring dxc)
     :GuestBufferAccess(device),device_(device),gpu_(gpu),frontend_(profile),shaders_(converter,NativeOptions(profile)),
      pipelines_(device,std::move(dxc),frontend_,shaders_),textures_(device,std::move(converter)) {
-    D3D12_FEATURE_DATA_D3D12_OPTIONS13 blend_options{};
-    native_alpha_factor_=SUCCEEDED(DX12_API_CALL(device->CheckFeatureSupport(
-        D3D12_FEATURE_D3D12_OPTIONS13,&blend_options,sizeof(blend_options))))&&blend_options.AlphaBlendFactorSupported;
+    native_alpha_factor_=profile.native_alpha_blend_factor;
     EnableHostSpanCache(true);
     textures_.SetRecordingListProvider([this]{return RecordingList();});
     textures_.SetCopySubmission([this](const auto& record){SubmitCopyCommands(record);});

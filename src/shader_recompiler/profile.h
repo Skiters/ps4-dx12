@@ -62,6 +62,10 @@ struct Profile {
     bool native_coherent_images{};
     bool native_viewport_clip_conversion{};
     bool native_point_capture{};
+    // D3D12_OPTIONS13 exposes independent constant-alpha RGB blend factors.
+    // Older devices route mixed constant-color/alpha targets through ordered
+    // attachment storage instead of rewriting the global blend constant.
+    bool native_alpha_blend_factor{};
 
     bool operator==(const Profile&) const = default;
 };

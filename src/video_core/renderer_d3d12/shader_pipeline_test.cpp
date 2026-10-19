@@ -335,6 +335,9 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     using BF=AmdGpu::BlendControl::BlendFactor;
     for(UINT slot=0;slot<2;++slot){
         blend_regs.color_target_mask.SetMask(slot,15);blend_regs.color_shader_mask.SetMask(slot,15);
+        blend_regs.color_buffers[slot].base_address=slot+1;
+        blend_regs.color_buffers[slot].info.format=10;
+        blend_regs.color_buffers[slot].info.number_type=u32(AmdGpu::NumberFormat::Unorm);
         auto& bc=blend_regs.blend_control[slot];bc.enable=1;bc.separate_alpha_blend=1;
         bc.alpha_src_factor=BF::One;bc.alpha_dst_factor=BF::Zero;
     }
@@ -351,6 +354,11 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     const auto second_handle=second_rtv.Cpu(second_slot);
     device->CreateRenderTargetView(second_target.handle.Get(),nullptr,second_handle);
     const DXGI_FORMAT blend_formats[]{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM};
+    const auto ordered_fallback=BuildGuestGraphicsState(
+        blend_regs,blend_formats,DXGI_FORMAT_UNKNOWN,0,false);
+    if(ordered_fallback.ordered_color_mask!=3||ordered_fallback.pipeline.NumRenderTargets||
+       ordered_fallback.blend_constant_alpha_rgb)
+        throw std::runtime_error("Mixed constant blend did not select exact ordered RGBA8 fallback");
     const Rasterizer::ColorAttachment blend_targets[]{{&target},{&second_target}};
     const float blend_values[]{.2f,.4f,.6f,.8f},background[]{.25f,.25f,.25f,.25f};
     const auto draw_blend=[&](const GuestGraphicsState& state,const std::array<std::array<float,4>,2>& expected){
