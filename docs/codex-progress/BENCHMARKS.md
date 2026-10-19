@@ -1,3 +1,5 @@
+2026-10-20 source3c66083: CPU layout+host VS/GS compile-only PASS0.728s; clean Release21.490s PASS. No GPU/game/FPS measure; compilation is not emulation performance. Report F:/PS4Dev/handoff/native-port-comparison-20261019/primitive-stream-3c66083.json.
+
 2026-10-20 sourcea46e3e9: CPU624 translations PASS4.092s, clean Release PASS. No GPU/game/FPS measure. Compile timings are not emulation performance. Evidence: F:/PS4Dev/handoff/native-port-comparison-20261019/integer-logic-a46e3e9.json.
 
 2026-10-20 source4516bfe: CPU464 shader validations PASS3.369s, clean Release PASS. No new GPU/game/FPS measure. CPU/pixel compile timings are not game performance. See F:/PS4Dev/handoff/native-port-comparison-20261019/srgb-ordered-4516bfe.json.

@@ -1,3 +1,5 @@
+2026-10-20:3c66083 internal primitive-stream PSO ownership/key/persistence and host GS build integration. CPU layout/VS-GS compile PASS; clean Release PASS. SO GPU test prepared NOT_RUN; tessellation bridge still incomplete. primitive-stream-3c66083.json retains exact identities.
+
 2026-10-20:a46e3e9 independent UINT/SINT MRT logic. CPU624 and clean Release PASS;20 pixel modes compiled only, GPU/game NOT_RUN. See integer-logic-a46e3e9.json for exact identities/scope.
 
 2026-10-20:4516bfe linear-space ordered sRGB and FLOAT/sRGB logical pass-through. CPU464 and clean Release PASS; pixel fixtures compiled, GPU/game NOT_RUN. srgb-ordered-4516bfe.json retains exact identities.
