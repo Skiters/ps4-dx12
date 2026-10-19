@@ -1475,6 +1475,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::vector<BoundBufferCapture> bound_buffer_captures;
     uint64_t bound_capture_id{};
     GuestReplayAttachments replay_attachments;
+    // A logical draw samples its pre-draw feedback contents even when PS
+    // execution is partitioned. Keep the first snapshot, not each slice's
+    // partially updated render target.
+    std::map<ID3D12Resource*,Resource> replay_feedback_snapshots;
     const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true) {
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         std::array<ColorAttachment,8> attachments{};
@@ -1607,12 +1611,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             auto& image=*targets[i];auto& source=image.texture;auto* native=source.handle.Get();
             if(!bindings.HasTextureSrvs(native)||!feedback_copies.insert(native).second)continue;
             if(bindings.HasShaderUav(native))throw std::runtime_error("Color feedback with storage-image access needs separate alias handling");
+            if(const auto saved=replay_feedback_snapshots.find(native);saved!=replay_feedback_snapshots.end()){
+                if(!bindings.RemapTextureSrvs(native,saved->second))
+                    throw std::logic_error("Color feedback lost its continuation shader views");
+                continue;
+            }
+            if(!replay_attachments.Beginning())
+                throw std::logic_error("Color feedback introduced after logical draw began");
             auto copy=textures_.AllocateColorFeedbackCopy(image,CompletedFence());
             // Retain before recording: both source allocation and copy must
             // survive failure/unwinding and the eventual submission fence.
             RetainUntilFinish([source,copy](u64){(void)source;(void)copy;});
             if(!bindings.SnapshotColorSrvs(RecordingList(),source,copy))
                 throw std::logic_error("Color feedback lost its prepared shader views");
+            replay_feedback_snapshots.emplace(native,std::move(copy));
             Diagnostics::Count("image-feedback.gpu-snapshot");
         }
         if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
