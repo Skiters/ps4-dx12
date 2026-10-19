@@ -79,8 +79,11 @@ int main(int argc,char** argv){try{
     const auto artifact_mode=std::string(mode);
     const bool split_replay=mode.starts_with("split-");
     if(split_replay)mode.remove_prefix(6);
+    const bool partition_replay=mode.starts_with("partition-");
+    if(partition_replay)mode.remove_prefix(10);
+    const bool multipart_replay=split_replay||partition_replay;
     const bool automatic_rect=mode.starts_with("rect-");
-    if(split_replay&&!automatic_rect)throw std::invalid_argument("Split replay fixture requires automatic rectangle capture");
+    if(multipart_replay&&!automatic_rect)throw std::invalid_argument("Multipart replay fixture requires automatic rectangle capture");
     const bool captured_inputs=automatic_rect||mode.starts_with("captured-");
     const bool stream_inputs=captured_inputs||mode.starts_with("stream-");
     if(stream_inputs){
@@ -759,12 +762,12 @@ int main(int argc,char** argv){try{
                     ++depth_initializations;
                     // A forced immutable original-depth snapshot would reset
                     // earlier stencil results if uploaded again on slice2.
-                    return textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory,split_replay);});
+                    return textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory,multipart_replay);});
                 bindings.RetainAllocation(replay_attachment_scope.BindingPin(0));
                 bindings.RetainAllocation(replay_attachment_scope.BindingPin(8));
                 const Rasterizer::ColorAttachment attachment[]{ {&target->texture,target->Rtv()} };
                 Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
-                dsv.clear_depth=dsv.clear_stencil=split_replay&&replay_attachment_scope.Beginning();
+                dsv.clear_depth=dsv.clear_stencil=multipart_replay&&replay_attachment_scope.Beginning();
                 dsv.clear_value=0.5f;dsv.stencil_value=7;
                 rasterizer.ExecuteGraphics(*replay_pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false);
                 replay_attachment_scope.Submitted();
@@ -812,15 +815,20 @@ int main(int argc,char** argv){try{
                     memcpy(data,records.data(),records.size()*4);
                     D3D12_RANGE written{0,records.size()*4};stream.handle->Unmap(0,&written);
                 }
-                capture_pass->Execute(rasterizer,plan,output_draw,producer_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
-                    ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
-                        [&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
-                            if(captured_inputs)NativePointCapturePass::BindInputStream(bindings,captured_stream->data,0,
-                                u64(captured_stream->range.stride)*captured_stream->range.capacity_vertices);
+                const auto run_capture=[&](const Shader::NativePointCapture::Plan& active_plan,
+                    const Rasterizer::DrawArguments& input_draw,u32 input_first,ResourceBindings* gs_base,ResourceBindings* ps_base){
+                capture_pass->Execute(rasterizer,active_plan,input_draw,producer_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
+                    const auto record=[&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
+                            if(captured_inputs)NativePointCapturePass::BindInputStream(bindings,captured_stream->data,
+                                u64(input_first)*captured_stream->range.stride,
+                                u64(captured_stream->range.stride)*input_draw.count);
                             else if(stream_inputs)NativePointCapturePass::BindInputStream(bindings,stream,0,stream.handle->GetDesc().Width);
                             const Rasterizer::StreamDrawArguments indirect{captured_inputs?&captured_stream->arguments:nullptr,0};
                             rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
-                                viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false,captured_inputs?&indirect:nullptr);},textures);
+                                viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false,captured_inputs?&indirect:nullptr);};
+                    if(gs_base){
+                        auto bindings=gs_base->ForkForReplay();rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                    }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,record,textures);
                     if(stream_inputs){
                         auto download=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
                         buffer.UavBarrier(rasterizer.RecordingList());
@@ -830,14 +838,14 @@ int main(int argc,char** argv){try{
                         Check(download.handle->Map(0,&range,&data));
                         const auto* records=static_cast<const Shader::NativePointCapture::Record*>(data);
                         bool valid=true;
-                        for(u32 primitive=0;primitive<stream_primitives*(captured_inputs?capture_instances:1u);++primitive)
+                        for(u32 primitive=0;primitive<active_plan.primitive_bound;++primitive)
                             for(u32 invocation=0;invocation<gs.num_invocations;++invocation)
                                 for(u32 emission=0;emission<gs.output_vertices;++emission){
                                     const auto& record=records[(primitive*gs.num_invocations+invocation)*gs.output_vertices+emission];
                                     // The guest loop emits twice; every other
                                     // slot stays invalid. Both primitives must
                                     // survive even though their patch ID agrees.
-                                    const u32 tag=captured_inputs?(primitive/2)%2+1:8;
+                                    const u32 tag=captured_inputs?((input_first/3+primitive)/2)%2+1:8;
                                     valid&=record.valid==(emission<2?tag:0u);
                                     if(emission<2)valid&=memcmp(record.position.data(),memory+(captured_inputs?0:primitive)*input.stride,16)==0;
                                 }
@@ -866,16 +874,34 @@ int main(int argc,char** argv){try{
                             state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=replay_attachment_scope.Beginning()?3:12;
                             replay_pipeline=&pipelines.Graphics(capture->replay,state.pipeline);
                         }
-                        ExecuteGuestGraphicsResources(device.Get(),rasterizer,*replay_pipeline,replay_resources,push,runtime,
-                            [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,bytes,offset);submit(bindings);},textures);
+                        const auto record=[&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,bytes,offset);submit(bindings);};
+                        if(ps_base){
+                            auto bindings=ps_base->ForkForReplay();rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                        }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,*replay_pipeline,replay_resources,push,runtime,record,textures);
                         state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=mask;replay_pipeline=&pipeline;
                     };
                     if(split_replay){
-                        const u64 first_records=plan.records/2;
+                        const u64 first_records=active_plan.records/2;
                         part(0,first_records*Shader::NativePointCapture::RecordBytes);
-                        part(first_records*Shader::NativePointCapture::RecordBytes,(plan.records-first_records)*Shader::NativePointCapture::RecordBytes);
-                    }else part(0,plan.bytes);
+                        part(first_records*Shader::NativePointCapture::RecordBytes,(active_plan.records-first_records)*Shader::NativePointCapture::RecordBytes);
+                    }else part(0,active_plan.bytes);
                 });
+                };
+                if(partition_replay){
+                    // Prepare each stage domain once, fork descriptors per
+                    // slice, and finish guest storage only after all parts.
+                    ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
+                        [&](ResourceBindings& gs_base){
+                            ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,replay_resources,push,runtime,
+                                [&](ResourceBindings& ps_base){
+                                    const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
+                                    serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
+                                        [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
+                                            run_capture(partition.capture,{partition.input.limit,1},partition.input.first,&gs_base,&ps_base);
+                                        });
+                                },textures,0,{},true);
+                        },textures,0,{},true);
+                }else run_capture(plan,output_draw,0,nullptr,nullptr);
             }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,resources,push,runtime,submit,textures);
             rasterizer.Finish();GuestImageReadback cr(device.Get(),*target,rasterizer.RecordingList()),dr(device.Get(),*ds,rasterizer.RecordingList());
             const auto fence=rasterizer.Flush();cr.Submitted(fence);dr.Submitted(fence);textures.Used(*target,fence);textures.Used(*ds,fence);rasterizer.Finish();
