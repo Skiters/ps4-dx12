@@ -6,6 +6,8 @@
 #include "core/emulator_settings.h"
 #include "stream_output_layout_checks.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
+#include "video_core/renderer_d3d12/guest_point_shader.h"
+#include "shader_recompiler/backend/dxil/spirv_converter.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -41,6 +43,18 @@ struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
 })");
     if(!vertex.success||!geometry.success||!reader_vertex.success||!reader_geometry.success)
         throw std::runtime_error(vertex.diagnostics+geometry.diagnostics+reader_vertex.diagnostics+reader_geometry.diagnostics);
+    const auto serialized_vertex=DXIL::CompileDxil(dxc,R"(
+float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
+    return asfloat(uint4(id,instance,0x7fc12345u,0x80000000u));
+})",DXIL::Stage::Vertex);
+    Shader::HwGeometryRuntimeInfo serialized_geometry{};
+    serialized_geometry.in_vertex_data_size=4;serialized_geometry.in_primitive=AmdGpu::PrimitiveType::TriangleList;
+    const auto serialized_words=EmitNativePrimitiveStream(serialized_geometry);
+    DXIL::SpirvConvertOptions serialized_options;serialized_options.stage=DXIL::SpirvStage::Geometry;
+    const auto serialized=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),serialized_words,serialized_options);
+    if(!serialized.success||!serialized_vertex.success)
+        throw std::runtime_error(serialized.diagnostics+serialized_vertex.diagnostics);
+    const auto serialized_layout=ReflectPrimitiveStreamLayout(dxc,serialized.bytecode);
     // This explicit mode is CPU-only. Return before any D3D12 device, adapter,
     // command list, resource or PSO is created; it does not prove stream contents.
     if(std::string_view(argv[3])=="compile-only"){
@@ -160,6 +174,43 @@ struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
                 if(!replay_equal)throw std::runtime_error("GPU primitive count/indirect slice/empty draw/order/lifetime/guard mismatch");
             }
         }
+    }
+    {
+        // Actual production serialized writer. Two triangles, two instances,
+        // exact patch/vertex/word order, float payload bits and padded records.
+        state.pipeline.StreamOutput=serialized_layout.Desc();
+        const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};
+        const float blend[]{1,1,1,1};
+        ShaderPipeline::GraphicsShaders shaders;shaders.vertex=serialized_vertex.bytecode;shaders.geometry=serialized.bytecode;
+        ShaderPipeline pipeline(device.Get(),dxc,shaders,state.pipeline);ResourceBindings bindings(device.Get(),pipeline.Layout());
+        constexpr u32 stream_bytes=12*32,guarded_bytes=16+stream_bytes+16,total=guarded_bytes+8;
+        auto output=Buffer(device.Get(),guarded_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto counter=Buffer(device.Get(),8,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto upload=Buffer(device.Get(),total,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto result=Buffer(device.Get(),total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* mapped{};D3D12_RANGE none{};Check(upload.handle->Map(0,&none,&mapped));
+        memset(mapped,0xcd,total);const u32 initial_counter[]{0,0xa5a5a5a5};
+        memcpy(static_cast<std::byte*>(mapped)+guarded_bytes,initial_counter,8);
+        D3D12_RANGE written{0,total};upload.handle->Unmap(0,&written);
+        auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,upload.handle.Get(),0,guarded_bytes);
+        list->CopyBufferRegion(counter.handle.Get(),0,upload.handle.Get(),guarded_bytes,8);
+        output.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);counter.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);
+        const D3D12_STREAM_OUTPUT_BUFFER_VIEW view{output.handle->GetGPUVirtualAddress()+16,stream_bytes,counter.handle->GetGPUVirtualAddress()};
+        list->SOSetTargets(0,1,&view);
+        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{6,2},{},nullptr,false);
+        list=renderer.RecordingList();list->SOSetTargets(0,0,nullptr);
+        output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,guarded_bytes);
+        list->CopyBufferRegion(result.handle.Get(),guarded_bytes,counter.handle.Get(),0,8);renderer.Finish();
+        std::array<std::byte,total> expected;expected.fill(std::byte{0xcd});
+        for(u32 instance=0;instance<2;++instance)for(u32 primitive=0;primitive<2;++primitive)for(u32 vertex=0;vertex<3;++vertex){
+            const u32 words[]{primitive,primitive*3+vertex,instance,0x7fc12345u,0x80000000u,0,0,0};
+            const u32 record=(instance*2+primitive)*3+vertex;memcpy(expected.data()+16+record*32,words,32);
+        }
+        const u32 final_counter[]{stream_bytes,0xa5a5a5a5};memcpy(expected.data()+guarded_bytes,final_counter,8);
+        D3D12_RANGE all{0,total};Check(result.handle->Map(0,&all,&mapped));const bool equal=!memcmp(mapped,expected.data(),total);
+        result.handle->Unmap(0,&none);
+        if(!equal)throw std::runtime_error("Serialized primitive writer lost patch/vertex/word order, exact bits, padding or32-bit counter guards");
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T bytes{};Check(messages->GetMessage(i,nullptr,&bytes));
         std::vector<std::byte> data(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(data.data());

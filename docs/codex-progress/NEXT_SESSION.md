@@ -1,3 +1,7 @@
+## Serialized primitive writer checkpoint — 2026-10-20
+
+Production dda2004 adds ordered uint4 SO serialization of original DS/ES inputs+patch ID, padded record ABI, frontend prepass construction and reflected SO layout. Five full-native-input topology compiler checks, GCN/HS/DS/writer linkage and buffered consumer signed-DXIL checks PASS; clean Release dda2004 PASS24.438s. Actual writer contents/guards/counter GPU fixture compiled, NOT_RUN. Exact hashes/logs and remaining allocation/amplification/partition/scheduling integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/serialized-stream-dda2004.json. Game/GPU NOT_RUN; app unchanged; EsGs guard retained and full port incomplete.
+
 ## Buffered GS input checkpoint — 2026-10-20
 
 Source df9400e adds buffered GS attribute input and separate guest patch identity/generated primitive address; stage metadata32/domain36. CPU signed-DXIL probe (32 params/adjacency/patch ID), GCN capture variants and624 ordered CPU regressions PASS. Separate clean Release df9400e PASS55.100s; exact hashes/logs and next DS producer integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/buffered-gs-df9400e.json. Prepared two-primitives/same-patch GPU regression compiled, NOT_RUN. Game/GPU NOT_RUN; app unchanged; tessellation bridge/full port still incomplete.
