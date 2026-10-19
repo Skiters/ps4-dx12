@@ -589,8 +589,9 @@ void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
         }
         if(m.cpu_watch_pending){forget();return;}
         if(!m.cpu_watched&&!m.cpu_partial_proof)return;
-        const auto known=m.cpu_dirty_ranges.upper_bound(begin-m.base);
-        if(known!=m.cpu_dirty_ranges.begin()&&std::prev(known)->second>=end-m.base)return;
+        // A dirty marker describes contents, not current OS permissions.
+        // A shared image/buffer proof can rearm this page after the first
+        // invalidation. A real CPU store must retire that current RO guard too.
         if(!release_cpu_pages_||!release_cpu_pages_(begin,end-begin)){
             forget();return;}
         auto a=begin-m.base,b=end-m.base;auto next=m.cpu_dirty_ranges.lower_bound(a);

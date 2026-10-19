@@ -34,6 +34,26 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
     {
         memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
         Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
+        const Rasterizer::ShaderBufferRequest readonly{base,8192,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&readonly,1));
+        renderer.NotifyCpuWrite(base+17,1);
+        require(renderer.TrackReadOnly(base,4096),"Cannot rearm borrowed dirty-page proof");
+        renderer.NotifyCpuWrite(base+17,1);
+        MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(base),&state,sizeof(state));
+        require(state.Protect==PAGE_READWRITE,"Known-dirty CPU page kept a rearmed read-only proof");
+        VirtualQuery(reinterpret_cast<void*>(base+4096),&state,sizeof(state));
+        require(state.Protect==PAGE_READONLY,"Dirty-page release lost its protected neighbour");
+        reinterpret_cast<volatile std::byte*>(base)[17]=std::byte{0x77};
+        renderer.PrepareShaderBuffers(std::span(&readonly,1));
+        const auto result=read(renderer,base,8192);
+        for(size_t offset=0;offset<result.size();++offset)
+            require(result[offset]==(offset==17?std::byte{0x77}:std::byte{0x31}),
+                "Rearmed dirty-page proof lost CPU store or neighbour contents");
+        renderer.ReleaseCpuBufferWatches(base,8192);renderer.ValidateDebugMessages();
+    }
+    {
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
         const Rasterizer::ShaderBufferRequest old{base+4096,4096,false,true,true};
         renderer.PrepareShaderBuffers(std::span(&old,1));
         const Rasterizer::ShaderBufferRequest grown[]{
