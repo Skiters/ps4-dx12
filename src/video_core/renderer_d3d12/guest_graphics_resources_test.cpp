@@ -314,6 +314,7 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
                 throw std::runtime_error("Shader descriptor rewrite/range/access classification mismatch");
             entry.texture.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATES(
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+            Resource saved_feedback;
             if(feedback){
                 bool invalid{};try{table.RemapTextureSrvs(entry.texture.handle.Get(),entry.texture);}
                 catch(const std::invalid_argument&){invalid=true;}
@@ -333,9 +334,24 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
                 for(UINT y=0;y<(8u>>mip);++y)for(UINT x=0;x<(8u>>mip);++x){
                     const float rgba[]{(source_layer?.5f:.25f)+.125f*(warm+1),.5f,0,1};
                     memcpy(expected.data()+GuestPixelOffset(desc,layout,mip,target_layer,x,y),rgba,sizeof(rgba));}
+                saved_feedback=std::move(copy);
             }
             rasterizer.ExecuteGraphics(pipeline,table,state,std::span(&attachment,1),nullptr,
                 std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+            if(feedback){
+                // The first pass changed the source render target. A second
+                // slice must still read the immutable pre-draw contents. A
+                // fresh snapshot here would add .125 twice and fail the
+                // unchanged independent full-image/padding oracle below.
+                ResourceBindings continuation(device,pipeline.Layout());
+                continuation.Srv(0,0,entry.texture.handle.Get(),srv);
+                if(continuation.RemapTextureSrvs(entry.texture.handle.Get(),saved_feedback)!=1||
+                   continuation.HasTextureSrvs(entry.texture.handle.Get())||
+                   !continuation.HasTextureSrvs(saved_feedback.handle.Get()))
+                    throw std::runtime_error("Feedback continuation did not retain the original snapshot");
+                rasterizer.ExecuteGraphics(pipeline,continuation,state,std::span(&attachment,1),nullptr,
+                    std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+            }
             GuestImageReadback readback(device,entry,rasterizer.RecordingList());
             const auto fence=rasterizer.Flush();readback.Submitted(fence);textures.Submitted(fence);rasterizer.Finish();
             auto observed=initial;readback.Resolve(rasterizer.CompletedFence(),observed);
@@ -343,7 +359,7 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
         }
         if(textures.PressureRetirementBytes())throw std::runtime_error("Completed feedback copy retained residency accounting");
     }
-    puts(feedback?"PASS: GPU feedback copies, repeated-draw current contents, SRV remap/fence accounting and exact bytes":
+    puts(feedback?"PASS: GPU feedback copies, immutable continuation, repeated-draw current contents, SRV remap/fence accounting and exact bytes":
         "PASS: disjoint same-resource SRV/RTV layers/mips, descriptor rewrite, overlap negative and exact GPU bytes");
 }
 int wmain(int argc,wchar_t** argv){try {
