@@ -2,7 +2,7 @@
 
 ## 2026-10-19 - per-sample ordered color
 
-Connected and focused-verified at **e132726c97fa794e9e53e4cc8c9d80866b47ebf2**. Ordered color now uses one ROV binding and one independent storage plane per MRT/sample, with explicit MSAA-to-plane initialization, UAV ordering and plane-to-MSAA writeback. Packed-SNORM sample1/2/4/8 blend/logic passed 104 actual GCN draws. RGBA8 sample1/4 independent logic passed 136 draws. Full attachment contents and 64 KiB padding were compared. Implementation state: connected for these formats/sample counts. Behavior state: focused GPU verified; game/final suite not run. The next attachment-format gap is packed format 19 MSAA when native B4G4R4A4 MSAA RTV support is unavailable.
+Connected and focused-verified at **e132726c97fa794e9e53e4cc8c9d80866b47ebf2**. Ordered color now uses one ROV binding and one independent storage plane per MRT/sample, with explicit MSAA-to-plane initialization, UAV ordering and plane-to-MSAA writeback. Packed-SNORM sample1/2/4/8 blend/logic passed 104 actual GCN draws. RGBA8 sample1/4 independent logic passed 136 draws. Full attachment contents and 64 KiB padding were compared. Implementation state: connected for these formats/sample counts. Behavior state: focused GPU verified; game/final suite not run. Packed format 19 MSAA is already connected and focused-verified on an adapter where the pinned Vulkan backend exposes B4 attachment support; a fallback on the current adapter is outside the pinned contract because Vulkan lacks the same capability there. The next production gap is late formatted-alias source envelope reservation.
 
 
 ## 2026-10-19 - RGBA8 independent MRT logic

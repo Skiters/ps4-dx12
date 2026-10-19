@@ -2,7 +2,7 @@
 
 ## Current continuation boundary - per-sample ordered color
 
-Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** is pushed, clean-built and focused GPU verified. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws with complete backing/padding checks. The sole installed dx12-current matches EXE 96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e. Game/full suite remain not run. Continue exact packed-format-19 MSAA attachment writes for adapters without native B4G4R4A4 MSAA RTV support. Do not repeat the completed ordered-color/sample-plane audit.
+Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** is pushed, clean-built and focused GPU verified. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws with complete backing/padding checks. The sole installed dx12-current matches EXE 96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e. Game/full suite remain not run. Packed format 19 MSAA is already connected on an original-capable adapter; do not invent a fallback for an adapter where the pinned Vulkan backend also lacks B4 attachment support. Continue late formatted-alias source envelope reservation without early semantic publication. Do not repeat the completed ordered-color/sample-plane or packed19 capability audits.
 
 
 ## Current continuation boundary - RGBA8 independent MRT logic
