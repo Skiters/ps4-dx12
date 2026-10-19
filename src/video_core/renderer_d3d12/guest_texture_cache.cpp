@@ -1926,7 +1926,24 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
         }
         result=entry;ambiguous=false;
     }
-    if(ambiguous)throw std::runtime_error("Ambiguous clean independent image binding");
+    if(ambiguous){
+        const auto report=[](const char* kind,const GuestTextureDesc& d,uint64_t bytes,
+            const Entry* entry){
+            std::fprintf(stderr,"DX12 independent ambiguity %s address=%llx bytes=%llu geometry=%ux%u pitch=%u layers=%u levels=%u format=%u/%u tile=%u rt=%u depth=%u writable=%u uid=%llu current=%u writer=%llx resource=%p\n",
+                kind,(unsigned long long)d.address,(unsigned long long)bytes,d.width,d.height,d.pitch,
+                d.layers,d.levels,d.data_format,d.number_format,d.tile_mode,unsigned(d.render_target),
+                unsigned(d.depth_target),unsigned(d.writable),entry?(unsigned long long)entry->image_uid:0,
+                entry?unsigned(entry->cached_native_current):0,entry?(unsigned long long)entry->diagnostic_writer:0,
+                entry?static_cast<void*>(entry->texture.handle.Get()):nullptr);
+        };
+        report("request",desc,layout.guest_bytes,nullptr);
+        for(auto indexed=first;indexed!=last;++indexed){const auto* entry=indexed->second;
+            if(entry->gpu_owned&&entry->buffer_alias_version&&!entry->logical_dirty&&
+               MatchesGuestUploadStorage(*entry,desc,layout))report("candidate",entry->desc,entry->layout.guest_bytes,entry);
+        }
+        std::fflush(stderr);
+        throw std::runtime_error("Ambiguous clean independent image binding");
+    }
     return result;
 }
 void GuestTextureCache::RememberNativeImageStorage(Entry& entry){
