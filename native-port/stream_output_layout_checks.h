@@ -2,10 +2,22 @@
 #pragma once
 #include "video_core/renderer_d3d12/stream_output_layout.h"
 #include "video_core/renderer_d3d12/persistent_cache.h"
+#include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include <array>
 
 namespace NativeDX12::Tests {
 inline void CheckStreamOutputLayout(){
+    const auto full=PrimitiveStreamRange::Make(16,24,3,0,24);
+    const auto tail=PrimitiveStreamRange::Make(16,24,3,18,6);
+    if(full.limit!=24||tail.first!=18||tail.limit!=6)
+        throw std::runtime_error("Primitive stream partition changed its exact extent");
+    for(const auto invalid:{std::array<u32,5>{0,24,3,0,24},{16,24,0,0,24},{16,24,3,1,6},
+        {16,24,3,18,9},{16,24,3,0,0},{16,UINT32_MAX,1,0,1}}){
+        bool rejected{};
+        try{(void)PrimitiveStreamRange::Make(invalid[0],invalid[1],invalid[2],invalid[3],invalid[4]);}
+        catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Malformed primitive stream range accepted");
+    }
     const auto key=[](const D3D12_STREAM_OUTPUT_DESC& desc){
         CacheKey result;StreamOutputLayout::AppendKey(result,desc);return result.bytes;
     };

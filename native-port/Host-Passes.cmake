@@ -33,5 +33,15 @@ function(native_host_passes target)
         DEPENDS "${_host_native}/guest_point_capture_clear.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_capture_header}" "${_host_native}/guest_point_capture.cpp")
+    set(_stream_shader "${_host_generated}/primitive_stream_arguments.dxil")
+    set(_stream_header "${_host_generated}/primitive_stream_arguments_shader.h")
+    add_custom_command(OUTPUT "${_stream_header}" "${_stream_shader}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E main -HV 2018 -O3 -WX
+            -Fo "${_stream_shader}" "${_host_native}/primitive_stream_arguments.hlsl"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${_stream_shader}" "-DOUTPUT=${_stream_header}"
+            "-DSYMBOL=NativePrimitiveStreamArguments" -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/primitive_stream_arguments.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_stream_header}" "${_host_native}/primitive_stream_arguments.cpp")
     target_include_directories(${target} PRIVATE "${_host_generated}")
 endfunction()

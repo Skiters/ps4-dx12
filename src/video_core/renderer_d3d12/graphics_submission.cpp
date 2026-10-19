@@ -96,11 +96,30 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
     const GuestGraphicsState& state,std::span<const ColorAttachment> colors,const DepthAttachment* depth,
     std::span<const D3D12_VIEWPORT> viewports,std::span<const D3D12_RECT> scissors,
     std::span<const float,4> blend,const DrawArguments& draw,
-    std::span<const VertexBinding> vertices,const IndexBinding* indices,bool wait) {
+    std::span<const VertexBinding> vertices,const IndexBinding* indices,bool wait,const StreamDrawArguments* stream_draw) {
     std::lock_guard lock(execution_mutex_);
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics submission has compute PSO");
-    if(state.discard||!draw.count||!draw.instances)return;
+    if(state.discard||(!stream_draw&&(!draw.count||!draw.instances)))return;
     bindings.Prepare();
+    if(stream_draw){
+        if(indices||!stream_draw->resource||!stream_draw->resource->handle)
+            throw std::invalid_argument("Invalid internal primitive stream draw arguments");
+        const auto desc=stream_draw->resource->handle->GetDesc();
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||stream_draw->offset%4||
+           stream_draw->offset>desc.Width||sizeof(D3D12_DRAW_ARGUMENTS)>desc.Width-stream_draw->offset)
+            throw std::out_of_range("Internal primitive stream draw arguments exceed their buffer");
+        // This private command buffer is distinct from shader data. Do not
+        // permit a simultaneous UAV binding to change its indirect arguments.
+        if(bindings.References(stream_draw->resource->handle.Get()))
+            throw std::invalid_argument("Internal draw arguments overlap shader bindings");
+        if(!stream_draw_signature_){
+            D3D12_INDIRECT_ARGUMENT_DESC argument{};argument.Type=D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+            const D3D12_COMMAND_SIGNATURE_DESC signature{sizeof(D3D12_DRAW_ARGUMENTS),1,&argument,0};
+            Check(device_->CreateCommandSignature(&signature,nullptr,IID_PPV_ARGS(&stream_draw_signature_)));
+        }
+        RetainUntilFinish([resource=stream_draw->resource->handle,
+            allocation=stream_draw->resource->allocation](u64){});
+    }
     if(state.topology==D3D_PRIMITIVE_TOPOLOGY_UNDEFINED||colors.size()!=pipeline.TargetFormats().size()||
        viewports.empty()||viewports.size()>16||scissors.size()!=viewports.size()||vertices.size()>32)
         throw std::invalid_argument("Native draw topology/attachment/viewport/input count");
@@ -255,6 +274,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         std::map<Resource*,D3D12_RESOURCE_STATES> inputs;
         for(const auto& v:vertices)inputs[v.resource]|=D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
         if(indices)inputs[indices->resource]|=D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        if(stream_draw)inputs[stream_draw->resource]|=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         for(const auto& [resource,input_state]:inputs){
             const auto shader_read=bindings.References(resource->handle.Get())?
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_COMMON;
@@ -272,7 +292,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         // pass UAV restrictions on shaders which the guest allows to write.
         const bool shader_uavs=std::any_of(bindings.Layout().Bindings().begin(),bindings.Layout().Bindings().end(),
             [](const auto& binding){return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;});
-        const bool render_pass=!shader_uavs&&SUCCEEDED(list->QueryInterface(IID_PPV_ARGS(&render_list)))&&
+        const bool render_pass=!state.rasterizer_discard&&!shader_uavs&&SUCCEEDED(list->QueryInterface(IID_PPV_ARGS(&render_list)))&&
             SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5,&render_options,sizeof(render_options)))&&
             SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS18,&render_validity,sizeof(render_validity)))&&
             render_validity.RenderPassesValid&&
@@ -328,7 +348,9 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             DX12_API_CALL(extended->OMSetDepthBounds(state.depth_bounds_min,state.depth_bounds_max));
         }
         if(!vertex_views.empty())DX12_API_CALL(list->IASetVertexBuffers(0,UINT(vertex_views.size()),vertex_views.data()));
-        if(indices){DX12_API_CALL(list->IASetIndexBuffer(&index_view));DX12_API_CALL(list->DrawIndexedInstanced(draw.count,draw.instances,draw.first,draw.base_vertex,draw.first_instance));}
+        if(stream_draw)DX12_API_CALL(list->ExecuteIndirect(stream_draw_signature_.Get(),1,
+            stream_draw->resource->handle.Get(),stream_draw->offset,nullptr,0));
+        else if(indices){DX12_API_CALL(list->IASetIndexBuffer(&index_view));DX12_API_CALL(list->DrawIndexedInstanced(draw.count,draw.instances,draw.first,draw.base_vertex,draw.first_instance));}
         else DX12_API_CALL(list->DrawInstanced(draw.count,draw.instances,draw.first,draw.first_instance));
         if(render_pass)DX12_API_CALL(render_list->EndRenderPass());
         // Keep unrelated UAVs concurrent.  Microsoft recommends the minimum
