@@ -165,14 +165,14 @@ bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
     return IsOrderedColorClass(d)&&d.samples>1;
 }
 std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool supported){
-    static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array packed10_unorm{DXGI_FORMAT_R10G10B10A2_UNORM,
+    static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UNORM,
         DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array rgba8_snorm{DXGI_FORMAT_R8G8B8A8_SNORM,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array rg16{DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array rg16_unorm{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R32_UINT};
-    static constexpr std::array rg16_snorm{DXGI_FORMAT_R16G16_SNORM,DXGI_FORMAT_R32_UINT};
+    // An explicit list replaces the old typeless-family view permissions.
+    // Preserve every ordinary family view, not just this draw's RTV and ROV.
+    static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
+        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array rg16{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,
+        DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rg8{DXGI_FORMAT_R8G8_UNORM,DXGI_FORMAT_R8G8_SNORM,
         DXGI_FORMAT_R8G8_UINT,DXGI_FORMAT_R8G8_SINT,DXGI_FORMAT_R16_UINT};
     static constexpr std::array r11{DXGI_FORMAT_R11G11B10_FLOAT,DXGI_FORMAT_R32_UINT};
@@ -180,13 +180,9 @@ std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool su
         DXGI_FORMAT_R16G16B16A16_FLOAT,DXGI_FORMAT_R16G16B16A16_UINT,DXGI_FORMAT_R16G16B16A16_SINT,
         DXGI_FORMAT_R32G32_UINT};
     if(!supported||!IsOrderedColorClass(d))return {};
-    if(d.data_format==9&&d.number_format==1)return packed10;
-    if(d.data_format==9&&d.number_format==0)return packed10_unorm;
-    if(d.data_format==10&&d.number_format==0)return rgba8;
-    if(d.data_format==10&&d.number_format==1)return rgba8_snorm;
-    if(d.data_format==5&&d.number_format==7)return rg16;
-    if(d.data_format==5&&d.number_format==0)return rg16_unorm;
-    if(d.data_format==5&&d.number_format==1)return rg16_snorm;
+    if(d.data_format==9)return packed10;
+    if(d.data_format==10)return rgba8;
+    if(d.data_format==5)return rg16;
     if(d.data_format==12)return rgba16;
     if(d.data_format==6)return r11;
     if(d.data_format==3)return rg8;
@@ -196,6 +192,7 @@ bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTe
     if(!entry.texture.handle)return false;
     const auto format=LayoutGuestTexture(view).format;
     const auto native=entry.texture.handle->GetDesc().Format;
+    if(entry.texture.castable_formats)return entry.texture.AllowsCast(format);
     if(native==format||entry.texture.AllowsCast(format))return true;
     return native==(view.UsesRaw32()?DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(view.data_format,format));
 }
@@ -232,6 +229,7 @@ bool CanBindReadonlyWordSrv(const GuestTextureCache::Entry& entry,const GuestTex
     if(!CompatibleGuestReadonlyWordStorage(entry.desc,view)||!entry.texture.handle)return false;
     const auto format=LayoutGuestTexture(view).format;
     if(entry.texture.AllowsCast(format))return true;
+    if(entry.texture.castable_formats)return false;
     // A real R32 typeless resource needs no relaxed format-list feature for
     // its R32 views. Fully typed resources without a list retain exact format.
     const auto native=entry.texture.handle->GetDesc().Format;
@@ -241,6 +239,9 @@ bool CanBindReadonlyWordSrv(const GuestTextureCache::Entry& entry,const GuestTex
 std::span<const DXGI_FORMAT> ResourceCasts(const Resource& resource){
     return resource.castable_formats?std::span<const DXGI_FORMAT>(*resource.castable_formats):std::span<const DXGI_FORMAT>{};
 }
+}
+std::span<const DXGI_FORMAT> GuestTextureCache::OrderedColorFormats(const GuestTextureDesc& desc,bool supported){
+    return OrderedColorCasts(desc,supported);
 }
 bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc& d,const GuestTextureLayout& layout){
     if((d.samples!=2&&d.samples!=4&&d.samples!=8)||d.levels!=1||
@@ -1470,7 +1471,7 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
         throw std::invalid_argument("Retired MSAA storage needs matching native sample backing");
     description.SampleDesc={1,0};description.Alignment=0;
     description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    const auto ordered_formats=OrderedColorCasts(entry.desc,texture_allocator_.SupportsFormatCasting());
+    const auto ordered_formats=OrderedColorFormats(entry.desc,texture_allocator_.SupportsFormatCasting());
     const auto formats=ordered_formats.empty()?ResourceCasts(entry.texture):ordered_formats;
     const auto texture_bytes=texture_allocator_.AllocationInfo(description,formats).SizeInBytes;
     const auto linear_bytes=GuestMultisample::LinearBytes(entry.desc,GuestMultisample::Footprint(entry.desc,entry.layout));
@@ -3103,7 +3104,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         writable_formats_.contains(DXGI_FORMAT_R11G11B10_FLOAT)):
         ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
     if(!word_casts.empty())cast_formats=word_casts;
-    const auto ordered_color_casts=OrderedColorCasts(d,texture_allocator_.SupportsFormatCasting());
+    const auto ordered_color_casts=OrderedColorFormats(d,texture_allocator_.SupportsFormatCasting());
     if(!ordered_color_casts.empty()&&d.samples==1)cast_formats=ordered_color_casts;
     const auto storage_cast_formats=!ordered_color_casts.empty()?ordered_color_casts:cast_formats;
     if(d.samples>1&&(d.data_format==6||d.data_format==34)&&!d.UsesRaw32()&&cast_formats.empty())

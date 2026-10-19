@@ -503,6 +503,9 @@ public:
         const bool r32_family=(a.data_format==4||a.UsesRaw32())&&(b.data_format==4||b.UsesRaw32());
         return (texture_allocator_.SupportsFormatCasting()||r32_family)&&CompatibleGuestReadonlyWordStorage(a,b);
     }
+    // Explicit allocation list only. Empty can also mean an ordinary native
+    // typeless family needs no cross-family format-list capability.
+    static std::span<const DXGI_FORMAT> OrderedColorFormats(const GuestTextureDesc&,bool supported);
     bool CanRetainReadonlyWordStorage(const GuestTextureDesc&)const;
     // Actual native view proof is also used to pin the current source before
     // buffer preparation/other image allocations can apply cache pressure.

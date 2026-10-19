@@ -2,6 +2,7 @@
 #include "video_core/renderer_d3d12/guest_shader_frontend.h"
 #include "video_core/renderer_d3d12/guest_shader_cache.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
+#include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "ufloat_attachment_oracle.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
@@ -16,6 +17,26 @@
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and mode");
     NativeDX12::Tests::CheckUfloatBoundaryOracle();
+    using Cache=NativeDX12::GuestTextureCache;
+    const std::set<DXGI_FORMAT> rg16_family{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,
+        DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
+    const std::set<DXGI_FORMAT> rgba8_family{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
+        DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,DXGI_FORMAT_R32_UINT};
+    const std::set<DXGI_FORMAT> packed_family{DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
+    for(const auto shape:{std::array<u32,2>{5,0},{5,1},{5,7},{10,0},{10,1},{9,0},{9,1}}){
+        NativeDX12::GuestTextureDesc desc;desc.render_target=true;desc.data_format=shape[0];desc.number_format=shape[1];
+        const auto formats=Cache::OrderedColorFormats(desc,true);
+        const std::set<DXGI_FORMAT> actual(formats.begin(),formats.end());
+        const auto& expected=shape[0]==5?rg16_family:shape[0]==10?rgba8_family:packed_family;
+        if(actual!=expected||actual.size()!=formats.size()||!Cache::OrderedColorFormats(desc,false).empty())
+            throw std::runtime_error("Ordered allocation narrowed its original typed family or ignored capabilities");
+        auto invalid=desc;invalid.writable=true;
+        if(!Cache::OrderedColorFormats(invalid,true).empty())throw std::runtime_error("Writer admitted as ordered attachment");
+        invalid=desc;invalid.render_target=false;
+        if(!Cache::OrderedColorFormats(invalid,true).empty())throw std::runtime_error("Nonattachment admitted as ordered allocation");
+        invalid=desc;invalid.depth_target=true;
+        if(!Cache::OrderedColorFormats(invalid,true).empty())throw std::runtime_error("Depth admitted as ordered color");
+    }
     using Capture=NativeDX12::NativePointCapturePass;
     const std::pair<D3D_PRIMITIVE_TOPOLOGY,u32> primitive_cases[]{
         {D3D_PRIMITIVE_TOPOLOGY_POINTLIST,7},{D3D_PRIMITIVE_TOPOLOGY_LINELIST,3},
