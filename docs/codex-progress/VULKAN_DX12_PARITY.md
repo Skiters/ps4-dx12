@@ -2,6 +2,8 @@
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
+Hardware D3D12 execution is also verified for the prepared path: 64 overlapping pixel invocations incremented every 4x4 UAV texel to exactly 64 with explicit UAV barriers and readback. Guest color-export lowering and ordered blend/logic selection remain open.
+
 Ordered fragment operations: **compiler path connected and narrowly verified; renderer behavior open**. The DX12 SPIR-V converter can mark one exact pixel UAV range as rasterizer ordered, emits the DXIL metadata/feature flag, scopes the choice across standalone and linked compilation and keys cache variants. Reflection regression passed for positive and negative variants. Remaining concrete production chain is guest fragment export -> read/modify/write UAV lowering -> matching descriptor/root binding -> resource state/visibility/lifetime -> ordered packed-SNORM blend quantization and independent MRT logic masks -> GPU readback. Existing explicit guards remain correct until that chain is complete.
 
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19

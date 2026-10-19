@@ -2,6 +2,8 @@
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
+The authored hardware fixture already proves 64 ordered increments in every 4x4 UAV texel. Reuse it; extend production guest fragment export and blend/logic selection rather than rebuilding another generic ROV probe.
+
 Continue from the ROV compiler selector now present in `SpirvConvertOptions`, the scoped Mesa export and `nir_to_dxil` UAV metadata. The focused reflection test and incremental Release core build pass. Do not reimplement or re-audit that compiler work. Next, lower only the affected pixel export path to the selected UAV, connect the descriptor/root range and resource transitions, and prove ordered destination read/modify/write with GPU readback. Then use it for exact packed-SNORM post-blend quantization and independent MRT logic masks. Keep current guards until those contents/order checks pass.
 
 The single installed core remains 378bda3. Its exact-HWND capture shows a rendered Bloodborne scene and it exited 0, but foreground/XInput/world/FPS acceptance is still open. Do not repeat blind input while another elevated window owns foreground.

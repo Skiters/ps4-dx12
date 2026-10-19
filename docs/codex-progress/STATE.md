@@ -2,6 +2,8 @@
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
+The prepared ROV path passed real D3D12 execution: 64 overlapping pixel invocations produced ordered value 64 in all 16 UAV texels after barriers and readback. Guest color-export lowering and blend/logic selection remain open.
+
 The ROV compiler prerequisite is connected: an explicit pixel UAV binding range is emitted as DXIL rasterizer-ordered metadata, sets the required module feature, is scoped per thread/compile, participates in shader-cache identity and is rejected for invalid stages/ranges. `native_dxil_raster_ordered_metadata` passed, including normal/mismatch/exact/reset/invalid-stage cases, and the Release core links. Renderer behavior is not yet verified or implemented end to end: fragment export lowering, UAV binding/state, blend/logic semantics and GPU ordering/readback remain the next production work.
 
 Installed core 378bda3 still remains the only application core. An exact window capture shows a rendered Bloodborne scene and the controlled run exited 0, but the window could not be foregrounded; active-world input, XInput and completed-frame FPS remain unverified. No controlled process remains running.

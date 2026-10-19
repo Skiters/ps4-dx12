@@ -2,6 +2,8 @@
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
+Hardware D3D12 proof passed: 64 overlapping fragments incremented all 16 UAV texels to 64 with explicit UAV barriers and readback. Guest fragment export and ordered blend/logic integration remain open.
+
 DXIL ROV metadata generation is implemented and connected for an explicitly selected pixel UAV range. The selector is thread-local and restored per conversion; linked compilation marks only its pixel stage. Reflection regression covers normal, mismatched, exact, reset and invalid-stage behavior and passed in 0.20 s. Incremental Release core build/link passed. This closes the compiler prerequisite only; fragment-output UAV lowering, D3D12 bindings/transitions and ordered blend/logic GPU behavior remain open.
 
 Installed core 378bda3 produced an exact captured Bloodborne scene and exited 0 with verified runtimes. Foreground acquisition failed, so active world, XInput and FPS are not accepted. Evidence: `F:/PS4Dev/handoff/gameplay-current-378bda3-20261019`.

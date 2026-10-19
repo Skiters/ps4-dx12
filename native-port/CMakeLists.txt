@@ -194,6 +194,15 @@ add_custom_target(native-raster-ordered-uav-fixture DEPENDS "${_rov_spirv}")
 add_dependencies(shadps4_dxil_spirv_test native-raster-ordered-uav-fixture)
 add_test(NAME native_dxil_raster_ordered_metadata COMMAND shadps4_dxil_spirv_test
     "${SHADPS4_MESA_CONVERTER_DLL}" "${_rov_spirv}" pixel check-rov)
+add_executable(native-raster-ordered-uav-gpu-test raster_ordered_uav_gpu_test.cpp)
+target_link_libraries(native-raster-ordered-uav-gpu-test PRIVATE
+    shadps4_dxil_compiler d3d12 dxgi)
+add_dependencies(native-raster-ordered-uav-gpu-test
+    native-raster-ordered-uav-fixture shadps4_native_compiler_files)
+add_test(NAME native_dxil_raster_ordered_gpu COMMAND native-raster-ordered-uav-gpu-test
+    "${SHADPS4_MESA_CONVERTER_DLL}" "${DXC_DLL}" "${_rov_spirv}")
+set_tests_properties(native_dxil_raster_ordered_gpu PROPERTIES
+    ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 30)
 add_test(NAME native_resources COMMAND shadps4_dx12_resource_test)
 add_test(NAME dxil_compile COMMAND shadps4_dxil_shader_test "${DXC_DLL}")
 set_tests_properties(dxil_compile PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fixtures" FIXTURES_SETUP dxil)

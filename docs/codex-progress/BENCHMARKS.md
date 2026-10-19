@@ -2,6 +2,8 @@
 
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
+`native_dxil_raster_ordered_gpu` PASS, 0.41 s; combined metadata/GPU rerun PASS, 0.36 s. A 4x4 `R32_UINT` UAV received 64 overlapping pixel increments per texel and read back exact value 64 in all 16 texels.
+
 `native_dxil_raster_ordered_metadata` PASS, 0.20 s: baseline no-ROV, mismatched binding no-ROV, exact selected UAV with `D3D_SHADER_REQUIRES_ROVS`, selector reset no-ROV, and non-pixel rejection. Incremental Release `shadps4` core compilation/link PASS. Detached clean committed 2dbca4f Release build PASS with EXE SHA256 **549cfbaf0aca86adb6a072e8447e3d89af494216f12fcbb75d22b75156e981db**, PDB SHA256 **456aea34b83355923974308f1fb0f5996948dfe0e9965caad43ae86987f24a4b** and zero primary-checkout references in CMake/Ninja/compile DB. These are compiler/build results, not GPU blend/logic acceptance.
 
 Installed core 378bda3 controlled run: runtime identities verified, exact Bloodborne HWND rendered and captured twice with identical SHA256 **e8682831bd4025f56375865a6a97d5e6bce174f06beee11dc6bec0e100f3de6e**, graceful exit code 0. The static five-second image and failed foreground acquisition prevent active-world/XInput/FPS claims. `guest-frames.csv` contains no completed-frame rows for this run.
