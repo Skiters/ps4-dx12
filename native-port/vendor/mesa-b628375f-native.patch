@@ -210,7 +210,7 @@ index 0219e54513355a807c12becaf4489947bd38d343..d21a04ba362465fa80fc386cfc139d42
        UNREACHABLE("unsupported system value");
     }
 diff --git a/src/microsoft/compiler/nir_to_dxil.c b/src/microsoft/compiler/nir_to_dxil.c
-index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13bc3ee9eb4 100644
+index eec4b4ce9951e6e39af8e60763709c28382844ef..269dbda74f66cb73fc8870a5023ccc9e4c281ac1 100644
 --- a/src/microsoft/compiler/nir_to_dxil.c
 +++ b/src/microsoft/compiler/nir_to_dxil.c
 @@ -310,6 +310,7 @@ enum dxil_intr {
@@ -221,6 +221,24 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
  
     DXIL_INTR_TEXTURE_SIZE = 72,
     DXIL_INTR_TEXTURE_GATHER = 73,
+@@ -497,7 +498,7 @@ emit_uav_metadata(struct dxil_module *m, const struct dxil_type *struct_type,
+                   const char *name, const resource_array_layout *layout,
+                   enum dxil_component_type comp_type,
+                   enum dxil_resource_kind res_kind,
+-                  enum gl_access_qualifier access)
++                   enum gl_access_qualifier access, bool raster_ordered)
+ {
+    const struct dxil_mdnode *fields[11];
+ 
+@@ -507,7 +508,7 @@ emit_uav_metadata(struct dxil_module *m, const struct dxil_type *struct_type,
+    fields[6] = dxil_get_metadata_int32(m, res_kind); // resource shape
+    fields[7] = dxil_get_metadata_int1(m, (access & ACCESS_COHERENT) != 0); // globally-coherent
+    fields[8] = dxil_get_metadata_int1(m, false); // has counter
+-   fields[9] = dxil_get_metadata_int1(m, false); // is ROV
++   fields[9] = dxil_get_metadata_int1(m, raster_ordered); // is ROV
+    if (res_kind != DXIL_RESOURCE_KIND_RAW_BUFFER &&
+        res_kind != DXIL_RESOURCE_KIND_STRUCTURED_BUFFER) {
+       metadata_tag_nodes[0] = dxil_get_metadata_int32(m, DXIL_TYPED_BUFFER_ELEMENT_TYPE_TAG);
 @@ -575,6 +576,8 @@ struct ntd_context {
     const struct dxil_value *ssbo_handles[MAX_UAVS];
     const struct dxil_value *image_handles[MAX_UAVS];
@@ -261,7 +279,34 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
        uint32_t new_uav_count = ctx->num_uavs + layout->size;
        if (layout->size == 0 || new_uav_count < ctx->num_uavs)
           ctx->num_uavs = UINT_MAX;
-@@ -1366,6 +1372,43 @@ emit_globals(struct ntd_context *ctx, unsigned size)
+@@ -1330,8 +1336,16 @@ emit_uav(struct ntd_context *ctx, unsigned binding, unsigned space, unsigned cou
+ 
+    const struct dxil_type *res_type = dxil_module_get_res_type(&ctx->mod, res_kind, comp_type, num_comps, true /* readwrite */);
+    res_type = dxil_module_get_array_type(&ctx->mod, res_type, count);
++   const uint64_t binding_end = (uint64_t)binding + count;
++   const uint64_t rov_end = (uint64_t)ctx->opts->raster_ordered_uav_base +
++                            ctx->opts->raster_ordered_uav_count;
++   const bool raster_ordered = ctx->mod.shader_kind == DXIL_PIXEL_SHADER &&
++      ctx->opts->raster_ordered_uav_count &&
++      space == ctx->opts->raster_ordered_uav_space &&
++      binding >= ctx->opts->raster_ordered_uav_base && binding_end <= rov_end;
+    const struct dxil_mdnode *uav_meta = emit_uav_metadata(&ctx->mod, res_type, name,
+-                                                          &layout, comp_type, res_kind, access);
++                                                           &layout, comp_type, res_kind, access,
++                                                           raster_ordered);
+ 
+    if (!uav_meta)
+       return false;
+@@ -1344,6 +1358,8 @@ emit_uav(struct ntd_context *ctx, unsigned binding, unsigned space, unsigned cou
+    add_resource(ctx, res_kind == DXIL_RESOURCE_KIND_RAW_BUFFER ? DXIL_RES_UAV_RAW : DXIL_RES_UAV_TYPED, res_kind, &layout);
+    if (res_kind == DXIL_RESOURCE_KIND_RAW_BUFFER)
+       ctx->mod.raw_and_structured_buffers = true;
++   if (raster_ordered)
++      ctx->mod.feats.rovs = true;
+    if (ctx->mod.shader_kind != DXIL_PIXEL_SHADER &&
+        ctx->mod.shader_kind != DXIL_COMPUTE_SHADER)
+       ctx->mod.feats.uavs_at_every_stage = true;
+@@ -1366,6 +1382,43 @@ emit_globals(struct ntd_context *ctx, unsigned size)
     return true;
  }
  
@@ -305,7 +350,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
  static bool
  emit_uav_var(struct ntd_context *ctx, nir_variable *var, unsigned count)
  {
-@@ -3660,6 +3703,12 @@ static bool
+@@ -3660,6 +3713,12 @@ static bool
  emit_load_input_via_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
  {
     bool attr_at_vertex = false;
@@ -318,7 +363,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     if (ctx->mod.shader_kind == DXIL_PIXEL_SHADER &&
        ctx->opts->interpolate_at_vertex &&
        ctx->opts->provoking_vertex != 0 &&
-@@ -3714,6 +3763,13 @@ emit_load_input_via_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr
+@@ -3714,6 +3773,13 @@ emit_load_input_via_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr
     if (!is_patch_constant) {
        if (is_per_vertex) {
           vertex_id = get_src(ctx, &intr->src[0], 0, nir_type_int);
@@ -332,7 +377,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
        } else if (attr_at_vertex) {
           vertex_id = dxil_module_get_int8_const(&ctx->mod, ctx->opts->provoking_vertex);
        } else {
-@@ -4372,9 +4428,33 @@ emit_get_ssbo_size(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+@@ -4372,9 +4438,33 @@ emit_get_ssbo_size(struct ntd_context *ctx, nir_intrinsic_instr *intr)
     return true;
  }
  
@@ -366,7 +411,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     nir_atomic_op nir_op = nir_intrinsic_atomic_op(intr);
     enum dxil_atomic_op dxil_op = nir_atomic_to_dxil_atomic(nir_op);
     nir_alu_type type = nir_atomic_op_type(nir_op);
-@@ -4408,6 +4488,8 @@ emit_ssbo_atomic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+@@ -4408,6 +4498,8 @@ emit_ssbo_atomic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
  static bool
  emit_ssbo_atomic_comp_swap(struct ntd_context *ctx, nir_intrinsic_instr *intr)
  {
@@ -375,7 +420,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     const struct dxil_value* handle = get_resource_handle(ctx, &intr->src[0], DXIL_RESOURCE_CLASS_UAV, DXIL_RESOURCE_KIND_RAW_BUFFER);
     const struct dxil_value *offset =
        get_src(ctx, &intr->src[1], 0, nir_type_uint);
-@@ -4781,10 +4863,77 @@ emit_reduce(struct ntd_context *ctx, nir_intrinsic_instr *intr)
+@@ -4781,10 +4873,77 @@ emit_reduce(struct ntd_context *ctx, nir_intrinsic_instr *intr)
     return true;
  }
  
@@ -453,7 +498,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     case nir_intrinsic_load_global_invocation_id:
        return emit_load_global_invocation_id(ctx, intr);
     case nir_intrinsic_load_local_invocation_id:
-@@ -6106,6 +6255,29 @@ emit_module(struct ntd_context *ctx, const struct nir_to_dxil_options *opts)
+@@ -6106,6 +6265,29 @@ emit_module(struct ntd_context *ctx, const struct nir_to_dxil_options *opts)
           return false;
     }
  
@@ -483,7 +528,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     ctx->mod.info.has_per_sample_input =
        BITSET_TEST(ctx->shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
        ctx->shader->info.fs.uses_sample_shading ||
-@@ -6449,6 +6621,13 @@ add_sysvalue(struct ntd_context *ctx,
+@@ -6449,6 +6631,13 @@ add_sysvalue(struct ntd_context *ctx,
     var->name = name;
     var->data.mode = nir_var_system_value;
     var->data.interpolation = INTERP_MODE_FLAT;
@@ -497,7 +542,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     return var;
  }
  
-@@ -6487,6 +6666,8 @@ struct sysvalue_name {
+@@ -6487,6 +6676,8 @@ struct sysvalue_name {
     {SYSTEM_VALUE_FRONT_FACE, VARYING_SLOT_FACE, "SV_IsFrontFace", MESA_SHADER_NONE},
     {SYSTEM_VALUE_PRIMITIVE_ID, VARYING_SLOT_PRIMITIVE_ID, "SV_PrimitiveID", MESA_SHADER_GEOMETRY},
     {SYSTEM_VALUE_SAMPLE_ID, -1, "SV_SampleIndex", MESA_SHADER_NONE},
@@ -506,7 +551,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
  };
  
  static bool
-@@ -6547,6 +6728,34 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
+@@ -6547,6 +6738,34 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
     return glsl_count_attribute_slots(type, false);
  }
  
@@ -541,7 +586,7 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
  static const unsigned dxil_validator_min_capable_version = DXIL_VALIDATOR_1_4;
  static const unsigned dxil_validator_max_capable_version = DXIL_VALIDATOR_1_8;
  static const unsigned dxil_min_shader_model = SHADER_MODEL_6_0;
-@@ -6632,6 +6841,8 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
+@@ -6632,6 +6851,8 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
     }
  
     NIR_PASS(_, s, dxil_nir_lower_fquantize2f16);
@@ -551,14 +596,17 @@ index eec4b4ce9951e6e39af8e60763709c28382844ef..d8fce04d226abc7e06235f89f7ddb13b
     NIR_PASS(_, s, nir_lower_flrp, 16 | 32 | 64, true);
     NIR_PASS(_, s, nir_lower_io, nir_var_shader_in | nir_var_shader_out, type_size_vec4, nir_lower_io_lower_64bit_to_32);
 diff --git a/src/microsoft/compiler/nir_to_dxil.h b/src/microsoft/compiler/nir_to_dxil.h
-index 98901150b64b1ddbec4dfba75c086b7424b7be69..96f55c83c77b117ce7c34240262fbd9bcf3b8605 100644
+index 98901150b64b1ddbec4dfba75c086b7424b7be69..1889ece008a0a2bc78927ecdd00ff4d493d7ad2a 100644
 --- a/src/microsoft/compiler/nir_to_dxil.h
 +++ b/src/microsoft/compiler/nir_to_dxil.h
-@@ -87,6 +87,7 @@ struct nir_to_dxil_options {
+@@ -87,6 +87,10 @@ struct nir_to_dxil_options {
     enum dxil_environment environment;
     enum dxil_shader_model shader_model_max;
     enum dxil_validator_version validator_version_max;
 +   unsigned native_clock_backend;
++   unsigned raster_ordered_uav_space;
++   unsigned raster_ordered_uav_base;
++   unsigned raster_ordered_uav_count;
  };
  
  typedef void (*dxil_msg_callback)(void *priv, const char *msg);
@@ -761,7 +809,7 @@ index 4763c346a5812013289a2314b08d90cef9c0a56a..1dbd4244a84701872375340a350252b6
        if (nir->info.stage == MESA_SHADER_FRAGMENT) {
           nir->info.clip_distance_array_size = prev_stage_nir->info.clip_distance_array_size;
 diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.c b/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
-index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385d6f82db3 100644
+index b9205aa018f0c0fb3717bb775bf1934e43bc3185..8cde78ae9f6fb2e796e411ef2213f6a87e059169 100644
 --- a/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
 +++ b/src/microsoft/spirv_to_dxil/spirv_to_dxil.c
 @@ -23,14 +23,19 @@
@@ -784,20 +832,23 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
  
  static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_NONE == MESA_SHADER_NONE, "must match");
  static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_VERTEX == MESA_SHADER_VERTEX, "must match");
-@@ -41,8 +46,10 @@ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_FRAGMENT == MESA_SHADER_FRAGM
+@@ -41,8 +46,13 @@ static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_FRAGMENT == MESA_SHADER_FRAGM
  static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_COMPUTE == MESA_SHADER_COMPUTE, "must match");
  static_assert((mesa_shader_stage)DXIL_SPIRV_SHADER_KERNEL == MESA_SHADER_KERNEL, "must match");
  
 -bool
 -spirv_to_dxil(const uint32_t *words, size_t word_count,
 +static thread_local uint32_t native_clock_backend;
++static thread_local uint32_t raster_ordered_uav_space;
++static thread_local uint32_t raster_ordered_uav_base;
++static thread_local uint32_t raster_ordered_uav_count;
 +
 +static bool
 +spirv_to_dxil_impl(const uint32_t *words, size_t word_count,
                struct dxil_spirv_specialization *specializations,
                unsigned int num_specializations, dxil_spirv_shader_stage stage,
                const char *entry_point_name,
-@@ -50,7 +57,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+@@ -50,7 +60,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
                const struct dxil_spirv_debug_options *dgb_opts,
                const struct dxil_spirv_runtime_conf *conf,
                const struct dxil_spirv_logger *logger,
@@ -806,15 +857,18 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
  {
     if (stage == DXIL_SPIRV_SHADER_NONE || stage == DXIL_SPIRV_SHADER_KERNEL)
        return false;
-@@ -61,6 +68,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+@@ -61,6 +71,10 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
        .environment = DXIL_ENVIRONMENT_VULKAN,
        .shader_model_max = conf->shader_model_max,
        .validator_version_max = validator_version_max,
 +      .native_clock_backend = native_clock_backend,
++      .raster_ordered_uav_space = raster_ordered_uav_space,
++      .raster_ordered_uav_base = raster_ordered_uav_base,
++      .raster_ordered_uav_count = raster_ordered_uav_count,
     };
  
     const struct spirv_to_nir_options *spirv_opts = dxil_spirv_nir_get_spirv_options();
-@@ -93,6 +101,16 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+@@ -93,6 +107,16 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
     nir_validate_shader(nir,
                         "Validate before feeding NIR to the DXIL compiler");
  
@@ -831,7 +885,7 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
     dxil_spirv_nir_prep(nir);
  
     dxil_spirv_nir_passes(nir, conf, &out_dxil->metadata);
-@@ -120,6 +138,54 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
+@@ -120,6 +144,54 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
     return true;
  }
  
@@ -886,7 +940,7 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
  void
  spirv_to_dxil_free(struct dxil_spirv_object *dxil)
  {
-@@ -136,3 +202,205 @@ spirv_to_dxil_get_version()
+@@ -136,3 +208,227 @@ spirv_to_dxil_get_version()
     }
     return 0;
  }
@@ -956,6 +1010,25 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
 +   uint32_t previous = native_clock_backend;
 +   native_clock_backend = backend;
 +   return previous;
++}
++
++bool
++spirv_to_dxil_set_raster_ordered_uav(uint32_t space, uint32_t base, uint32_t count,
++                                    uint32_t *previous_space, uint32_t *previous_base,
++                                    uint32_t *previous_count)
++{
++   if ((uint64_t)base + count > (uint64_t)UINT32_MAX + 1)
++      return false;
++   if (previous_space)
++      *previous_space = raster_ordered_uav_space;
++   if (previous_base)
++      *previous_base = raster_ordered_uav_base;
++   if (previous_count)
++      *previous_count = raster_ordered_uav_count;
++   raster_ordered_uav_space = space;
++   raster_ordered_uav_base = base;
++   raster_ordered_uav_count = count;
++   return true;
 +}
 +
 +bool
@@ -1050,6 +1123,9 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
 +      .shader_model_max = conf->shader_model_max,
 +      .validator_version_max = validator_version_max,
 +      .native_clock_backend = native_clock_backend,
++      .raster_ordered_uav_space = raster_ordered_uav_space,
++      .raster_ordered_uav_base = raster_ordered_uav_base,
++      .raster_ordered_uav_count = raster_ordered_uav_count,
 +   };
 +   /* Input distance semantics use the producer clip length, independently
 +    * of the consumer's output clipping. Snapshot before DXIL compilation. */
@@ -1093,10 +1169,10 @@ index b9205aa018f0c0fb3717bb775bf1934e43bc3185..ea43f7fb10c5d31d3a5dd13b63440385
 +   return success;
 +}
 diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.def b/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
-index 62851f2160b7caf1b94dfc0d07e71bee45aadcb7..e555286b7ee9e5503050cac5a1642042999f1428 100644
+index 62851f2160b7caf1b94dfc0d07e71bee45aadcb7..611749c839fe12ae1df4c1570b6737e2cbacd5f4 100644
 --- a/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
 +++ b/src/microsoft/spirv_to_dxil/spirv_to_dxil.def
-@@ -2,3 +2,9 @@ EXPORTS
+@@ -2,3 +2,10 @@ EXPORTS
      spirv_to_dxil
      spirv_to_dxil_free
      spirv_to_dxil_get_version
@@ -1105,6 +1181,7 @@ index 62851f2160b7caf1b94dfc0d07e71bee45aadcb7..e555286b7ee9e5503050cac5a1642042
 +    spirv_to_dxil_compute_waves64
 +    spirv_to_dxil_native_features
 +    spirv_to_dxil_set_native_clock_backend
++    spirv_to_dxil_set_raster_ordered_uav
 +    spirv_to_dxil_decode_bc
 diff --git a/src/microsoft/spirv_to_dxil/spirv_to_dxil.h b/src/microsoft/spirv_to_dxil/spirv_to_dxil.h
 index 8f4684ca58af9a4692e3bb7f55bd82a20fde7f10..198f7c5fe946dfaa1feb87fcde7c989d083295ac 100644

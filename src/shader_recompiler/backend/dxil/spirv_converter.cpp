@@ -76,6 +76,11 @@ SpirvConvertResult ConvertSpirv(const std::wstring& converter_dll,
         if(options.entry_point.empty() || options.entry_point.find('\0') != std::string::npos) throw std::runtime_error("Invalid entry point");
         if(options.shader_model_minor>8 || options.validator_minor>8) throw std::runtime_error("Unsupported SM/validator version request");
         if(options.specializations.size()>std::numeric_limits<unsigned>::max()) throw std::runtime_error("Too many specialization constants");
+        if(options.raster_ordered_uav_count && options.stage!=SpirvStage::Pixel)
+            throw std::invalid_argument("Raster-ordered UAVs require a pixel shader");
+        if(uint64_t(options.raster_ordered_uav_register)+options.raster_ordered_uav_count>
+           uint64_t(std::numeric_limits<uint32_t>::max())+1)
+            throw std::invalid_argument("Raster-ordered UAV binding range overflows");
         // Verify instruction framing before passing untrusted bytecode to the compiler.
         for(size_t offset=5; offset<words.size();) {
             size_t count=words[offset]>>16;
@@ -94,6 +99,9 @@ SpirvConvertResult ConvertSpirv(const std::wstring& converter_dll,
         Module dxc_module{directory+L"dxcompiler.dll"};
         Module converter_module{converter_dll};
         NativeClockCompileScope clock_scope(converter_module.handle,options.native_shader_clock_backend);
+        RasterOrderedCompileScope raster_ordered_scope(converter_module.handle,
+            options.raster_ordered_uav_space,options.raster_ordered_uav_register,
+            options.raster_ordered_uav_count);
         const char* entry=options.stage!=SpirvStage::Compute||!options.compute_wave_size?"spirv_to_dxil":
             options.compute_wave_size==64?"spirv_to_dxil_compute_waves64":"spirv_to_dxil_compute_waves32";
         auto convert=converter_module.Symbol<decltype(&spirv_to_dxil)>(entry);

@@ -1,11 +1,46 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "spirv_converter.h"
+#include <windows.h>
+#include <d3d12shader.h>
+#include <dxcapi.h>
+#include <wrl/client.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
 using namespace Shader::Backend::DX12;
+using Microsoft::WRL::ComPtr;
+
+static uint64_t RequiresFlags(const std::wstring& converter_path,
+                              const std::vector<uint8_t>& bytecode) {
+    const auto separator = converter_path.find_last_of(L"/\\");
+    if (separator == std::wstring::npos)
+        throw std::runtime_error("Converter path must include its directory");
+    const auto compiler_path = converter_path.substr(0, separator + 1) + L"dxcompiler.dll";
+    const HMODULE compiler = LoadLibraryExW(compiler_path.c_str(), nullptr,
+                                            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                                LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    if (!compiler)
+        throw std::runtime_error("Cannot load sibling DXC for reflection");
+    struct CompilerOwner {
+        HMODULE module;
+        ~CompilerOwner() { FreeLibrary(module); }
+    } owner{compiler};
+    const auto create = reinterpret_cast<DxcCreateInstanceProc>(
+        GetProcAddress(compiler, "DxcCreateInstance"));
+    if (!create)
+        throw std::runtime_error("DXC reflection entry point is missing");
+    ComPtr<IDxcUtils> utils;
+    if (FAILED(create(CLSID_DxcUtils, IID_PPV_ARGS(&utils))))
+        throw std::runtime_error("Cannot create DXC reflection utilities");
+    const DxcBuffer buffer{bytecode.data(), bytecode.size(), DXC_CP_ACP};
+    ComPtr<ID3D12ShaderReflection> reflection;
+    if (FAILED(utils->CreateReflection(&buffer, IID_PPV_ARGS(&reflection))))
+        throw std::runtime_error("Cannot reflect converted DXIL");
+    return reflection->GetRequiresFlags();
+}
+
 int wmain(int argc,wchar_t** argv) {
     try {
         if(argc<4 || argc>6) throw std::runtime_error("Usage: test converter.dll shader.spv stage[vertex/pixel/compute/geometry/hull/domain] [output.dxil] [expect-reject]");
@@ -25,6 +60,39 @@ int wmain(int argc,wchar_t** argv) {
         std::vector<uint32_t> words(static_cast<size_t>(size)/4);
         input.seekg(0);input.read(reinterpret_cast<char*>(words.data()),size);
         if(!input) throw std::runtime_error("Cannot read complete SPIR-V fixture");
+        if(argc>=5 && std::wstring_view{argv[4]}==L"check-rov") {
+            if(options.stage!=SpirvStage::Pixel)
+                throw std::runtime_error("ROV metadata fixture must be a pixel shader");
+            const auto converter=std::wstring{argv[1]};
+            const auto normal=ConvertSpirv(converter,words,options);
+            if(!normal.success)throw std::runtime_error("Baseline ROV fixture conversion failed: "+normal.diagnostics);
+            if(RequiresFlags(converter,normal.bytecode)&D3D_SHADER_REQUIRES_ROVS)
+                throw std::runtime_error("Baseline shader unexpectedly requires ROVs");
+            options.raster_ordered_uav_space=0;
+            options.raster_ordered_uav_register=1;
+            options.raster_ordered_uav_count=1;
+            const auto mismatch=ConvertSpirv(converter,words,options);
+            if(!mismatch.success)throw std::runtime_error("Mismatched ROV selector conversion failed: "+mismatch.diagnostics);
+            if(RequiresFlags(converter,mismatch.bytecode)&D3D_SHADER_REQUIRES_ROVS)
+                throw std::runtime_error("Mismatched UAV binding unexpectedly requires ROVs");
+            options.raster_ordered_uav_register=0;
+            const auto ordered=ConvertSpirv(converter,words,options);
+            if(!ordered.success)throw std::runtime_error("Selected ROV conversion failed: "+ordered.diagnostics);
+            if(!(RequiresFlags(converter,ordered.bytecode)&D3D_SHADER_REQUIRES_ROVS))
+                throw std::runtime_error("Selected UAV binding lacks the DXIL ROV requirement");
+            options.raster_ordered_uav_count=0;
+            const auto restored=ConvertSpirv(converter,words,options);
+            if(!restored.success)throw std::runtime_error("Post-ROV baseline conversion failed: "+restored.diagnostics);
+            if(RequiresFlags(converter,restored.bytecode)&D3D_SHADER_REQUIRES_ROVS)
+                throw std::runtime_error("ROV selector leaked into the next compilation");
+            options.raster_ordered_uav_count=1;
+            options.stage=SpirvStage::Vertex;
+            const auto invalid_stage=ConvertSpirv(converter,words,options);
+            if(invalid_stage.success || invalid_stage.diagnostics.find("require a pixel shader")==std::string::npos)
+                throw std::runtime_error("Non-pixel ROV selector was not rejected before compilation");
+            std::cout << "PASS: exact UAV selector controls DXIL ROV metadata and rejects non-pixel use\n";
+            return 0;
+        }
         auto result=ConvertSpirv(argv[1],words,options);
         if(argc==6 && std::wstring{argv[5]}==L"expect-reject") {
             if(result.success || !result.bytecode.empty()) throw std::runtime_error("Unsupported fixture was accepted");

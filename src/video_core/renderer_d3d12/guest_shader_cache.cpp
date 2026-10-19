@@ -15,7 +15,8 @@ void OptionsKey(CacheKey& key,const DXIL::SpirvConvertOptions& o){
     key.Add(o.draw_sysvals);key.Add(o.workgroup_id);key.Add(o.declared_read_only_images_as_srvs);key.Add(o.inferred_read_only_images_as_srvs);
     key.Add(o.force_sample_rate_shading);key.Add(o.lower_view_index);key.Add(o.lower_view_index_to_rt_layer);
     key.Add(o.runtime_viewport_flips);key.Add(o.native_storage_buffer_uavs);key.Add(o.compute_wave_size);
-    key.Add(o.native_shader_clock_backend);
+    key.Add(o.native_shader_clock_backend);key.Add(o.raster_ordered_uav_space);
+    key.Add(o.raster_ordered_uav_register);key.Add(o.raster_ordered_uav_count);
     key.Add(uint64_t(o.specializations.size()));for(const auto& s:o.specializations){key.Add(s.id);key.Add(s.raw_bits);key.Add(s.defined_on_module);}
 }
 void SaveStage(CacheKey& data,const DXIL::SpirvConvertResult& s){

@@ -65,6 +65,9 @@ LinkedSpirvResult ConvertLinkedStages(const std::wstring& converter_dll,
         if(stages.empty() || stages.size()>6) throw std::runtime_error("Linked shader stage count must be 1..6");
         if(options.shader_model_minor>8 || options.validator_minor>8) throw std::runtime_error("Invalid linked SM/validator version");
         if(options.runtime_cbv_space>31 || options.push_cbv_space>31) throw std::runtime_error("Mesa linked CBV descriptor spaces must be 0..31");
+        if(uint64_t(options.raster_ordered_uav_register)+options.raster_ordered_uav_count>
+           uint64_t(std::numeric_limits<uint32_t>::max())+1)
+            throw std::invalid_argument("Raster-ordered UAV binding range overflows");
         std::array<bool,6> seen{};
         std::vector<dxil_spirv_linked_stage> inputs(stages.size());
         std::vector<std::vector<uint32_t>> unified_words(stages.size());
@@ -89,11 +92,16 @@ LinkedSpirvResult ConvertLinkedStages(const std::wstring& converter_dll,
         }
         if(seen[DXIL_SPIRV_SHADER_TESS_CTRL]!=seen[DXIL_SPIRV_SHADER_TESS_EVAL]) throw std::runtime_error("Linked hull/domain stages must be supplied together");
         if(seen[DXIL_SPIRV_SHADER_COMPUTE] && stages.size()!=1) throw std::runtime_error("Compute cannot join a graphics shader chain");
+        if(options.raster_ordered_uav_count&&!seen[DXIL_SPIRV_SHADER_FRAGMENT])
+            throw std::invalid_argument("Raster-ordered UAVs require a linked pixel shader");
         auto slash=converter_dll.find_last_of(L"/\\");
         if(slash==std::wstring::npos) throw std::runtime_error("Linked converter path must include its directory");
         auto directory=converter_dll.substr(0,slash+1);
         Module validator_module{directory+L"dxil.dll"},dxc_module{directory+L"dxcompiler.dll"},converter_module{converter_dll};
         NativeClockCompileScope clock_scope(converter_module.handle,options.native_shader_clock_backend);
+        RasterOrderedCompileScope raster_ordered_scope(converter_module.handle,
+            options.raster_ordered_uav_space,options.raster_ordered_uav_register,
+            options.raster_ordered_uav_count);
         auto convert=converter_module.Symbol<decltype(&spirv_to_dxil_linked)>("spirv_to_dxil_linked");
         auto release=converter_module.Symbol<decltype(&spirv_to_dxil_free)>("spirv_to_dxil_free");
         result.converter_version=converter_module.Symbol<decltype(&spirv_to_dxil_get_version)>("spirv_to_dxil_get_version")();

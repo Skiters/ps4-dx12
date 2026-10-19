@@ -101,6 +101,7 @@ include("${PORT_ROOT}/native-port/AGS-DX12.cmake")
 native_ags_device(shadps4_native_d3d12)
 include("${PORT_ROOT}/native-port/Mesa-DXIL.cmake")
 native_mesa_runtime(shadps4_native_d3d12)
+add_dependencies(shadps4_dxil_spirv_test shadps4_native_compiler_files)
 include("${PORT_ROOT}/native-port/Host-Passes.cmake")
 native_host_passes(shadps4_native_d3d12)
 target_sources(shadps4_native_d3d12 PRIVATE "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_graphics_state.cpp")
@@ -181,6 +182,18 @@ enable_testing()
 set(SHADPS4_DXC_RUNTIME_DLL "${SHADPS4_DXC_RUNTIME_DIR}/dxcompiler.dll" CACHE FILEPATH "Pinned DXC runtime DLL for native checks")
 get_filename_component(DXC_DLL "${SHADPS4_DXC_RUNTIME_DLL}" ABSOLUTE)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
+get_filename_component(_dxc_root "${SHADPS4_DXC_INCLUDE_DIR}" DIRECTORY)
+set(_dxc_executable "${_dxc_root}/bin/x64/dxc.exe")
+set(_rov_spirv "${CMAKE_CURRENT_BINARY_DIR}/fixtures/raster_ordered_uav.spv")
+add_custom_command(OUTPUT "${_rov_spirv}"
+    COMMAND "${_dxc_executable}" -spirv -T ps_6_0 -E main
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raster_ordered_uav.hlsl" -Fo "${_rov_spirv}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/raster_ordered_uav.hlsl"
+    VERBATIM)
+add_custom_target(native-raster-ordered-uav-fixture DEPENDS "${_rov_spirv}")
+add_dependencies(shadps4_dxil_spirv_test native-raster-ordered-uav-fixture)
+add_test(NAME native_dxil_raster_ordered_metadata COMMAND shadps4_dxil_spirv_test
+    "${SHADPS4_MESA_CONVERTER_DLL}" "${_rov_spirv}" pixel check-rov)
 add_test(NAME native_resources COMMAND shadps4_dx12_resource_test)
 add_test(NAME dxil_compile COMMAND shadps4_dxil_shader_test "${DXC_DLL}")
 set_tests_properties(dxil_compile PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fixtures" FIXTURES_SETUP dxil)

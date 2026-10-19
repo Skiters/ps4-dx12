@@ -33,6 +33,12 @@ struct SpirvConvertOptions {
     // buffer. Use one coherent native UAV access class for storage-buffer
     // views, preserving writes observed through another guest sharp.
     bool native_storage_buffer_uavs = false;
+    // Marks one contiguous Vulkan UAV binding range as DXIL rasterizer-ordered
+    // resources. Zero count disables the feature. The caller must still bind
+    // matching D3D12 UAV descriptors and use this only for pixel shaders.
+    uint32_t raster_ordered_uav_space = 0;
+    uint32_t raster_ordered_uav_register = 0;
+    uint32_t raster_ordered_uav_count = 0;
     uint32_t compute_wave_size = 0; // Zero preserves the original intermediate.
     uint32_t native_shader_clock_backend=0;
     std::vector<SpirvSpecialization> specializations;

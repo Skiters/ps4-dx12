@@ -4,7 +4,7 @@
   "reference_submodule": "externals/mesa-kosmickrisp/externals/mesa",
   "reference_shadps4_commit": "e0a466753a1aacbc8db8253be685bf7ab4d9daae",
   "patch": "mesa-b628375f-native.patch",
-  "patch_sha256": "180e873aacadea12976ae3a121e34e7a9194fabaa10b3d5789cb8aaa586ee129",
+  "patch_sha256": "636e3a197f24ea8a263224783b87a072bbdf1298e27eade33946ac7f3d7252d2",
   "linked_header": "mesa-api/spirv_to_dxil_linked.h",
   "linked_header_sha256": "0995dca79faacc4fc592406644b1897282e5ba1925b5df6471f2259390702870",
   "native_feature_export": "spirv_to_dxil_native_features",
