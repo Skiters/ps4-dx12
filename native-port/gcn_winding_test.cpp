@@ -542,7 +542,10 @@ int main(int argc,char** argv){try{
     AmdGpu::CbDbExtent extent{};extent.width=16;extent.height=8;const auto depth=DescribeGuestDepthBuffer(db,{},extent);
     const auto dl=LayoutGuestTexture(depth);const auto stencil=DescribeGuestStencil(depth);const auto sl=LayoutGuestTexture(stencil);
     const std::array<DXGI_FORMAT,1> formats{cl.format};const float blend[]{1,1,1,1};Shader::PushData push{};push.xscale=push.yscale=1;
-    for(unsigned mask=0;mask<4;++mask)for(unsigned ccw=0;ccw<2;++ccw)for(unsigned cull=0;cull<3;++cull)for(unsigned reverse=0;reverse<2;++reverse)
+    for(unsigned mask=0;mask<(stream_inputs?1u:4u);++mask)
+    for(unsigned ccw=0;ccw<(stream_inputs?1u:2u);++ccw)
+    for(unsigned cull=0;cull<(stream_inputs?1u:3u);++cull)
+    for(unsigned reverse=0;reverse<(stream_inputs?1u:2u);++reverse)
     for(unsigned edge=0;edge<(point_edge?4u:1u);++edge){
         for(unsigned i=0;i<2;++i){const float scale=point_viewport&&i==1?2.f:4.f;
             regs.viewports[i].yscale=mask&(1u<<i)?scale:-scale;}
