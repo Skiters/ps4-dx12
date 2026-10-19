@@ -1,3 +1,9 @@
+## Runtime integration delta — 2026-10-19
+
+- Pinned TextureCache::ResolveOverlap / ImageInfo::MipOf -> HasPossibleReferenceSubresourceBase + GuestTextureCache::UploadVersion (7f32403): provably unaligned unequal-base chance overlaps preserve independent I and initialize the separate image from current B. Connected; four depth/color left/right GPU readback cases and related transfer/recreation cases pass. Real slice-boundary mapping remains explicitly rejected; full PageWatch/padding/game proof is not implied by these adapters.
+- Pinned AJM BatchCancel/BatchWait cancellation contract -> AjmBatch::Execute + AjmContext::WorkerThread (797aaeb): canceled dequeued batches release completion so the existing API can return CANCELLED. Connected; focused production-executor/MPSC completion regression fails before and passes after, including no codec execution, result visibility and exception propagation. Full API/codec acceptance and causal link to user8068 are OPEN; this closes no graphics parity group by itself.
+- Exact clean797aaeb EXE2c7d6aca startup-only frame capture:1701 new GPU-complete flips/56.841809s, invalid0, exit0. World/control/image/performance parity remains OPEN because window observation failed. Sole installed core is this exact experimental hash; do not transfer earlier main607f world/input evidence to it.
+
 # Vulkan / native D3D12 parity audit
 
 ## BC prefix alias transaction parity - 2026-10-19
@@ -1052,7 +1058,7 @@ Do not blame PS8c08444c solely: its almost-black bloom input can preserve pre-ex
 
 Current source3f1249b, Stage24/metadata33. Unfiltered packed16–18 normalization:9/9 GPU cases pass. Sampled packed19 MSAA GPU expansion:7/7 sampled/backing cases pass. All remain partial groups: filtered precision, full RT quantization/blending, ownership and complete-game acceptance remain open. EmitImageWrite assertion was fixture misuse, not a proven missing production LOD path. Full suite324/344, native209/227; strengthened packed12/12 PASS. Bloodborne source/output black in engine captures, no gameplay acceptance. See SESSION_HANDOFF.md for current results; older black-window and Stage23 descriptions are historical.
 
-## Current verified boundary � 2026-10-13
+## Current verified boundary � 2026-10-13
 
 Latest source/state/evidence are in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
 Old emergency GPU/game prohibition is superseded by the human's resumed development request.

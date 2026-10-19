@@ -1,3 +1,9 @@
+## Runtime integration delta — 2026-10-19
+
+- Pinned TextureCache::ResolveOverlap / ImageInfo::MipOf -> HasPossibleReferenceSubresourceBase + GuestTextureCache::UploadVersion (7f32403): provably unaligned unequal-base chance overlaps preserve independent I and initialize the separate image from current B. Connected; four depth/color left/right GPU readback cases and related transfer/recreation cases pass. Real slice-boundary mapping remains explicitly rejected; full PageWatch/padding/game proof is not implied by these adapters.
+- Pinned AJM BatchCancel/BatchWait cancellation contract -> AjmBatch::Execute + AjmContext::WorkerThread (797aaeb): canceled dequeued batches release completion so the existing API can return CANCELLED. Connected; focused production-executor/MPSC completion regression fails before and passes after, including no codec execution, result visibility and exception propagation. Full API/codec acceptance and causal link to user8068 are OPEN; this closes no graphics parity group by itself.
+- Exact clean797aaeb EXE2c7d6aca startup-only frame capture:1701 new GPU-complete flips/56.841809s, invalid0, exit0. World/control/image/performance parity remains OPEN because window observation failed. Sole installed core is this exact experimental hash; do not transfer earlier main607f world/input evidence to it.
+
 # Implementation and verification registry — 2026-10-17
 
 ## Registry delta - BC prefix alias transactions - 2026-10-19
