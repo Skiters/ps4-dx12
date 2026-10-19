@@ -85,9 +85,13 @@ inline void RunOrderedDisjointGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Li
                 ImageOffsets[0] + layout.guest_bytes > ImageOffsets[1] ||
                 ImageOffsets[1] + layout.guest_bytes > ObservationOffset)
                 throw std::runtime_error("Disjoint GCN fixture needs two disjoint aligned padded 4-KiB images");
-            for (u32 x = 0; x < 4; ++x)
-                if (GuestPixelOffset(desc, layout, 0, 0, x, 0) != x * 4)
+            constexpr std::array<std::array<u32, 2>, 4> ObservationCoordinates{{
+                {0, 0}, {1, 0}, {0, 1}, {1, 1}}};
+            for (u32 index = 0; index < ObservationCoordinates.size(); ++index) {
+                const auto [x, y] = ObservationCoordinates[index];
+                if (GuestPixelOffset(desc, layout, 0, 0, x, y) != index * 4)
                     throw std::runtime_error("Disjoint GCN fixture's fixed observation texels changed");
+            }
             far_offsets[domain] = GuestPixelOffset(desc, layout, 0, 0, 0, 8);
             if (far_offsets[domain] < 16 || far_offsets[domain] + 4 > layout.guest_bytes)
                 throw std::runtime_error("Disjoint GCN fixture lost its untouched image-tail texel");
@@ -129,6 +133,20 @@ inline void RunOrderedDisjointGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Li
             std::memcpy(program.user_data.data() + 4, &images[domain], sizeof(AmdGpu::Image));
             rasterizer.DispatchDirect();
         }
+        const auto require_target_ownership = [&](const char* phase) {
+            for (u32 domain = 0; domain < 2; ++domain) {
+                const Rasterizer::ShaderBufferRequest request{
+                    targets[domain].base_address, targets[domain].GetSize(), true, true};
+                const bool dirty = rasterizer.IsGpuBufferModified(request.address, request.size);
+                const bool owned = rasterizer.BuffersMayDefer(std::span(&request, 1));
+                if (!dirty || !owned) {
+                    std::fprintf(stderr, "Disjoint %s domain=%u dirty=%u owned=%u\n", phase,
+                                 domain, dirty, owned);
+                    throw std::runtime_error("Disjoint GCN target lost dirty ownership");
+                }
+            }
+        };
+        require_target_ownership("after-seed");
         for (u32 domain = 0; domain < 2; ++domain) {
             // Read B raw and I through actual image instructions, publishing only
             // to the separate observation page. No target CPU readback occurs.
@@ -149,6 +167,7 @@ inline void RunOrderedDisjointGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Li
             std::memcpy(program.user_data.data() + 4, &images[domain], sizeof(AmdGpu::Image));
             std::memcpy(program.user_data.data() + 12, &observation, sizeof(observation));
             rasterizer.DispatchDirect();
+            require_target_ownership(domain ? "after-probe-1" : "after-probe-0");
             expect_word(ObservationOffset + output, BufferValues[domain]);
             expect_word(ObservationOffset + output + 4, ImageValues[domain]);
             expect_word(ObservationOffset + output + 8, ImageNext[domain]);
@@ -156,10 +175,24 @@ inline void RunOrderedDisjointGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Li
         }
         rasterizer.ReadMemory(observation.base_address, observation.GetSize());
         rasterizer.Finish();
-        if (std::memcmp(backing, expected.data(), AllocationBytes) ||
-            !rasterizer.IsGpuBufferModified(targets[0].base_address, targets[0].GetSize()) ||
-            !rasterizer.IsGpuBufferModified(targets[1].base_address, targets[1].GetSize()))
+        const bool physical_match = std::memcmp(backing, expected.data(), AllocationBytes) == 0;
+        const bool first_dirty =
+            rasterizer.IsGpuBufferModified(targets[0].base_address, targets[0].GetSize());
+        const bool second_dirty =
+            rasterizer.IsGpuBufferModified(targets[1].base_address, targets[1].GetSize());
+        if (!physical_match || !first_dirty || !second_dirty) {
+            size_t mismatch = 0;
+            while (mismatch < AllocationBytes && backing[mismatch] == expected[mismatch]) ++mismatch;
+            std::fprintf(stderr,
+                         "Disjoint seed physical=%u first_dirty=%u second_dirty=%u mismatch=%zu "
+                         "actual=%02x expected=%02x\n",
+                         physical_match, first_dirty, second_dirty, mismatch,
+                         mismatch < AllocationBytes ? std::to_integer<unsigned>(backing[mismatch]) : 0,
+                         mismatch < AllocationBytes
+                             ? std::to_integer<unsigned>(expected[mismatch])
+                             : 0);
             throw std::runtime_error("Disjoint GCN seed lost independent dirty B/I or physical/padding preconditions");
+        }
 
         // SGPR groups deliberately differ from first-use order: RA=s[4:7],
         // WA=s[0:3], RB=s[12:15], WB=s[8:11]. Only four guest sharps (16 SGPRs).
@@ -230,8 +263,8 @@ inline void RunOrderedDisjointGcnFixture(GuestRasterizer& rasterizer, AmdGpu::Li
             initialize(after_probe[domain], {
                 0x7e000280, 0x7e020280, 0xf0000100, 0x00000400,
                 0x7e000281, 0xf0000100, 0x00000500,
-                0x7e000282, 0xf0000100, 0x00000600,
-                0x7e000283, 0xf0000100, 0x00000700,
+                0x7e000280, 0x7e020281, 0xf0000100, 0x00000600,
+                0x7e000281, 0xf0000100, 0x00000700,
                 0x7e000280, 0x7e020288, 0xf0000100, 0x00000800,
                 0xbf8c0000,
                 0xe0700000 | output, 0x80020400,

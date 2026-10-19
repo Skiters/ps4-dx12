@@ -309,20 +309,42 @@ public:
     // The renderer holds its execution lock; pending faults resolve the new
     // generation after acquiring that lock. Retired history is untouched.
     bool ChangeMode(uint64_t address,uint64_t size,bool read_only){
-        if(!size||address>UINT64_MAX-size)return false;
-        std::lock_guard lock(mutex);
-        auto first=ranges.find(address);if(first==ranges.end())return false;
+        if(!size||address%4096||size%4096||address>UINT64_MAX-size)return false;
+        std::lock_guard lock(mutex);const auto end=address+size;
+        auto first=ranges.lower_bound(address);
+        if(first!=ranges.begin()&&std::prev(first)->second.end>address)--first;
         auto last=first;auto cursor=address;
-        while(last!=ranges.end()&&last->first==cursor&&last->second.end<=address+size){
-            cursor=last->second.end;++last;if(cursor==address+size)break;}
-        if(cursor!=address+size)return false;
+        for(;last!=ranges.end()&&last->first<end;++last){
+            if(last->second.end<=address)continue;
+            if(std::max(address,last->first)!=cursor)return false;
+            cursor=std::min(end,last->second.end);
+        }
+        if(cursor!=end)return false;
+        const auto slice=[](const Range& source,uint64_t begin,uint64_t stop){
+            Range result{stop,{},source.read_only,source.generation};
+            for(const auto& p:source.protection){const auto a=std::max(begin,p.begin),b=std::min(stop,p.begin+p.size);
+                if(a<b)result.protection.push_back({a,b-a,p.original,p.watched});}
+            return result;
+        };
+        std::map<uint64_t,Range> replacement;
+        for(auto it=first;it!=last;++it){
+            const auto begin=it->first,stop=it->second.end;
+            const auto selected_begin=std::max(begin,address),selected_end=std::min(stop,end);
+            if(begin<selected_begin)replacement.emplace(begin,slice(it->second,begin,selected_begin));
+            auto selected=slice(it->second,selected_begin,selected_end);
+            selected.read_only=read_only;selected.generation=++next_generation;
+            replacement.emplace(selected_begin,std::move(selected));
+            if(selected_end<stop)replacement.emplace(selected_end,slice(it->second,selected_end,stop));
+        }
         std::vector<Protection*> protections;
-        for(auto it=first;it!=last;++it)for(auto& p:it->second.protection){
+        for(auto& [begin,range]:replacement)if(begin>=address&&begin<end)for(auto& p:range.protection){
             for(auto current=p.begin;current<p.begin+p.size;){
                 MEMORY_BASIC_INFORMATION region{};
                 if(!VirtualQuery(reinterpret_cast<void*>(current),&region,sizeof(region))||
                    region.State!=MEM_COMMIT||region.Protect!=p.watched)return false;
-                current=std::min(p.begin+p.size,uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+                const auto next=std::min(p.begin+p.size,
+                    uint64_t(reinterpret_cast<uintptr_t>(region.BaseAddress))+region.RegionSize);
+                if(next<=current)return false;current=next;
             }
             protections.push_back(&p);
         }
@@ -337,7 +359,7 @@ public:
             }
         }
         for(auto* p:protections)p->watched=desired;
-        for(auto it=first;it!=last;++it){it->second.read_only=read_only;it->second.generation=++next_generation;}
+        ranges.erase(first,last);ranges.merge(replacement);
         return true;
     }
     // Acquire exact buffer pages over existing image read-only witnesses and

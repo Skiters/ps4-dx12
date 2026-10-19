@@ -24,6 +24,15 @@ void RememberSpan(std::map<VAddr,VAddr>& spans,VAddr begin,VAddr end){
 bool CoversSpan(const std::map<VAddr,VAddr>& spans,VAddr begin,VAddr end){
     auto it=spans.upper_bound(begin);return it!=spans.begin()&&std::prev(it)->second>=end;
 }
+void ForgetSpan(std::map<VAddr,VAddr>& spans,VAddr begin,VAddr end){
+    auto it=spans.lower_bound(begin);
+    if(it!=spans.begin()&&std::prev(it)->second>begin)it=std::prev(it);
+    while(it!=spans.end()&&it->first<end){
+        const auto first=it->first,last=it->second;it=spans.erase(it);
+        if(first<begin)spans.emplace(first,begin);
+        if(last>end){spans.emplace(end,last);break;}
+    }
+}
 // Mapping coverage is not proof of committed CPU backing (notably PS4 PRT).
 // Until sparse-copy callbacks are wired, fail explicitly instead of dereferencing holes.
 void CheckHostSpan(VAddr address, u64 size, bool writing) {
@@ -94,6 +103,22 @@ Rasterizer::Rasterizer(ID3D12Device* device):device_(device),scheduler_(device),
     RefreshBufferBudget();
     MapMemory(reinterpret_cast<VAddr>(gds_.data()),gds_.size());
 }
+bool Rasterizer::OwnsGpuRange(const Mapping& mapping,u64 offset,u64 bytes){
+    return bytes&&offset<=mapping.size&&bytes<=mapping.size-offset&&
+        CoversSpan(mapping.gpu_owned_ranges,offset,offset+bytes);
+}
+void Rasterizer::MarkGpuOwned(Mapping& mapping,u64 offset,u64 bytes){
+    if(!bytes||offset>mapping.size||bytes>mapping.size-offset)
+        throw std::out_of_range("GPU ownership range exceeds its buffer envelope");
+    RememberSpan(mapping.gpu_owned_ranges,offset,offset+bytes);
+    ForgetSpan(mapping.cpu_dirty_ranges,offset,offset+bytes);mapping.gpu_owned=true;
+}
+void Rasterizer::UnmarkGpuOwned(Mapping& mapping,u64 offset,u64 bytes){
+    if(!bytes||offset>mapping.size||bytes>mapping.size-offset)
+        throw std::out_of_range("GPU ownership release exceeds its buffer envelope");
+    ForgetSpan(mapping.gpu_owned_ranges,offset,offset+bytes);
+    mapping.gpu_owned=!mapping.gpu_owned_ranges.empty();
+}
 Rasterizer::~Rasterizer(){try{DrainPriorityOperations();}catch(...) {}
     try{Finish();}catch(...) {/* device loss: release resources */}}
 GuestDmaMemory& Rasterizer::DmaMemory(){
@@ -105,7 +130,7 @@ bool Rasterizer::IsDmaReadable(VAddr address,u64 size){
     if(!address||!size||address>UINT64_MAX-size||!IsMapped(address,size))return false;
     if(CoversSpan(committed_readable_,address,address+size))return true;
     auto found=mappings_.upper_bound(address);
-    if(found!=mappings_.begin()){--found;if(found->second.gpu_owned&&address-found->first<=found->second.size&&
+    if(found!=mappings_.begin()){--found;if(OwnsGpuRange(found->second,address-found->first,size)&&
         size<=found->second.size-(address-found->first))return true;}
     try{CheckHostSpan(address,size,false);return true;}
     catch(const std::runtime_error&){return false;}
@@ -473,8 +498,21 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
     // unrelated guest CPU access scan the whole resident cache.
     for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
         ++memory_reuse_.watch_candidates;auto& mapping=it->second;
-        if(mapping.cpu_watched||mapping.cpu_watch_pending||mapping.cpu_partial_proof){release_buffer_(it->first,mapping.size);
-            mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();}
+        if(!(mapping.cpu_watched||mapping.cpu_watch_pending||mapping.cpu_partial_proof))continue;
+        if(mapping.gpu_owned&&release_cpu_pages_){
+            // Partial GPU ownership shares one arena with read-only CPU proof.
+            // Retire only proof gaps; strong NOACCESS pages keep their owner.
+            u64 cursor{};
+            for(const auto& [begin,end]:mapping.gpu_owned_ranges){
+                if(cursor<begin&&!release_cpu_pages_(mapping.base+cursor,begin-cursor))
+                    throw std::runtime_error("Cannot retire partial buffer proof before GPU-owned pages");
+                cursor=end;
+            }
+            if(cursor<mapping.size&&!release_cpu_pages_(mapping.base+cursor,mapping.size-cursor))
+                throw std::runtime_error("Cannot retire partial buffer proof after GPU-owned pages");
+        }else release_buffer_(it->first,mapping.size);
+        mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;
+        mapping.cpu_dirty_ranges.clear();
     }
 }
 void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<const std::pair<VAddr,u64>> retained,
@@ -533,7 +571,7 @@ void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
         const auto begin=std::max(m.base,address&~VAddr(4095));
         const auto last=std::min(m.base+m.size,address+size);
         const auto end=last+std::min((-last)&u64(4095),m.base+m.size-last);
-        if(m.gpu_cpu_diverged||HasPendingImageCommit(begin,end-begin)){
+        if(m.gpu_owned||m.gpu_cpu_diverged||HasPendingImageCommit(begin,end-begin)){
             // A real store changes CPU ownership even when its value matches
             // the snapshot. Retiring an image watch must not erase this fact.
             auto a=begin-m.base,b=end-m.base;auto next=m.cpu_upload_ranges.lower_bound(a);
@@ -587,13 +625,28 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     }
     std::vector<VAddr> requested;
     SCOPE_EXIT {
-        for(const auto base:requested)resolving_buffers_.erase(base);
+        for(const auto base:requested){resolving_buffer_ranges_.erase(base);resolving_buffers_.erase(base);}
     };
-    for(auto it=first;it!=mappings_.end()&&it->first<address+size;++it)
-        if(it->second.gpu_owned&&!resolving_buffers_.contains(it->first)){
-            requested.push_back(it->first);
-            resolving_buffers_.insert(it->first);
+    for(auto it=first;it!=mappings_.end()&&it->first<address+size;++it){
+        auto& mapping=it->second;
+        if(!mapping.gpu_owned||resolving_buffers_.contains(it->first))continue;
+        const auto wanted=IsGdsRange(mapping.base,mapping.size)?
+            std::optional<GuestProtectionRange>{GuestProtectionRange{address,size}}:
+            GuestProtectionPages(address,size);
+        if(!wanted)throw std::invalid_argument("Invalid GPU buffer resolution pages");
+        const auto begin=std::max(mapping.base,wanted->address);
+        const auto end=std::min(mapping.base+mapping.size,wanted->address+wanted->size);
+        if(begin>=end)continue;
+        std::map<u64,u64> owned;
+        for(const auto& [owned_begin,owned_end]:mapping.gpu_owned_ranges){
+            const auto selected_begin=std::max(begin-mapping.base,owned_begin);
+            const auto selected_end=std::min(end-mapping.base,owned_end);
+            if(selected_begin<selected_end)RememberSpan(owned,selected_begin,selected_end);
         }
+        if(owned.empty())continue;
+        requested.push_back(it->first);resolving_buffers_.insert(it->first);
+        resolving_buffer_ranges_.emplace(it->first,std::move(owned));
+    }
     // Finish also writes CPU-visible dirty mappings. Their virtual CheckBacking
     // calls return here while an unrelated owned mapping is still resolving.
     // Only this request's new GPU-owned overlaps may start a reconciliation;
@@ -601,21 +654,30 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
     // Retain outer ownership, and unwind only our additions even on failure.
     if(requested.empty())return;
     Finish();
-    // A reserved writer can own pages before any actual guest write has been
-    // declared. There is then no dirty readback for Finish to downgrade. CPU
-    // resolution must still release that ownership without dropping its proof.
+    // Downloaded pages become a read-only CPU equality proof. Other protected
+    // pages in the same native arena remain GPU-owned, matching Vulkan's
+    // page-granular RegionManager instead of draining the whole allocation.
     for(const auto base:requested){
         auto found=mappings_.find(base);if(found==mappings_.end())continue;
         auto& mapping=found->second;
-        if(!mapping.gpu_owned||mapping.dirty)continue;
-        if(!IsGdsRange(base,mapping.size)){
-            if(mapping.cpu_snapshot.size()==mapping.size&&transfer_buffer_watch_&&
-               transfer_buffer_watch_(base,mapping.size,true)){
-                mapping.cpu_watched=true;mapping.cpu_partial_proof=false;mapping.cpu_dirty_ranges.clear();
+        const auto ranges=resolving_buffer_ranges_.at(base);
+        for(const auto& [begin,end]:ranges){
+            if(!IsGdsRange(base,mapping.size)){
+                const auto protected_address=base+begin,protected_size=end-begin;
+                if(transfer_buffer_watch_&&transfer_buffer_watch_(protected_address,protected_size,true)){
+                    mapping.cpu_partial_proof=true;
+                    Diagnostics::Count("buffer-watch.partially-downgraded.bytes",protected_size);
+                }else if(release_buffer_){
+                    release_buffer_(protected_address,protected_size);
+                    RememberSpan(mapping.cpu_dirty_ranges,begin,end);mapping.cpu_partial_proof=true;
+                }
             }
-            else if(release_buffer_)release_buffer_(base,mapping.size);
+            UnmarkGpuOwned(mapping,begin,end-begin);
         }
-        mapping.gpu_owned=false;
+        if(!mapping.gpu_owned&&mapping.cpu_partial_proof&&mapping.cpu_dirty_ranges.empty()){
+            mapping.cpu_watched=true;mapping.cpu_partial_proof=false;
+            Diagnostics::Count("buffer-watch.downgraded");
+        }
     }
 }
 void Rasterizer::MarkShaderBufferWrites(std::span<const ShaderBufferRequest> requests){
@@ -631,7 +693,13 @@ void Rasterizer::MarkShaderBufferWrites(std::span<const ShaderBufferRequest> req
         if(request.address-mapping.base>mapping.size||request.size>mapping.size-(request.address-mapping.base))
             throw std::logic_error("Shader write lost its selected buffer envelope");
         (void)request.WriteRange();
-        needs_restore|=!mapping.gpu_owned&&bool(own_buffer_)&&!IsGdsRange(mapping.base,mapping.size);
+        const auto pages=GuestProtectionPages(request.address,request.size);
+        const bool page_range=pages&&pages->address>=mapping.base&&pages->address-mapping.base<=mapping.size&&
+            pages->size<=mapping.size-(pages->address-mapping.base);
+        const auto owned_offset=page_range?pages->address-mapping.base:request.address-mapping.base;
+        const auto owned_size=page_range?pages->size:request.size;
+        needs_restore|=bool(own_buffer_)&&!IsGdsRange(mapping.base,mapping.size)&&
+            !OwnsGpuRange(mapping,owned_offset,owned_size);
     }
     if(needs_restore){
     std::set<VAddr> prepared;std::vector<Mapping*> mappings;
@@ -644,7 +712,7 @@ void Rasterizer::MarkShaderBufferWrites(std::span<const ShaderBufferRequest> req
     SCOPE_EXIT {preparing_buffer_contents_.resize(previous_preparations);};
     for(auto* mapping:mappings)preparing_buffer_contents_.push_back(mapping);
     for(auto* entry:mappings){auto& mapping=*entry;
-        if(mapping.gpu_owned||!own_buffer_||IsGdsRange(mapping.base,mapping.size))continue;
+        if(!own_buffer_||IsGdsRange(mapping.base,mapping.size))continue;
         const bool uav=std::ranges::any_of(requests,[&](const auto& r){return r.unordered_access&&
             r.address>=mapping.base&&r.address-mapping.base<=mapping.size&&r.size<=mapping.size-(r.address-mapping.base);});
         PrepareBufferContents(mapping,true,uav,false,requests,std::span<const BufferWrite>{},diagnostic);
@@ -661,17 +729,23 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     for(const auto& request:requests)if(request.written){
         auto it=mappings_.upper_bound(request.address);
         if(it==mappings_.begin()){Diagnostics::Count("buffer-defer.no-mapping");return false;}--it;
-        if(!it->second.gpu_owned){
+        if(request.address-it->first>it->second.size||
+           request.size>it->second.size-(request.address-it->first)){
+            Diagnostics::Count("buffer-defer.not-covered");return false;
+        }
+        const auto pages=GuestProtectionPages(request.address,request.size);
+        const bool page_range=pages&&pages->address>=it->first&&pages->address-it->first<=it->second.size&&
+            pages->size<=it->second.size-(pages->address-it->first);
+        const auto owned_offset=page_range?pages->address-it->first:request.address-it->first;
+        const auto owned_size=page_range?pages->size:request.size;
+        const auto owned=OwnsGpuRange(it->second,owned_offset,owned_size);
+        if(!owned){
             Diagnostics::Count("buffer-defer.not-owned");
             fprintf(stderr,"DX12 buffer ownership rejected: sharp=%llx+%llu mapping=%llx+%llu watched=%u dirty=%u\n",
                 (unsigned long long)request.address,(unsigned long long)request.size,
                 (unsigned long long)it->first,(unsigned long long)it->second.size,
                 unsigned(it->second.cpu_watched),unsigned(it->second.dirty));fflush(stderr);
             return false;
-        }
-        if(request.address-it->first>it->second.size||
-           request.size>it->second.size-(request.address-it->first)){
-            Diagnostics::Count("buffer-defer.not-covered");return false;
         }
     }
     Diagnostics::Count("buffer-defer.accepted");
@@ -787,7 +861,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     bool cpu_proven_unchanged=mapping.cpu_watched;
     if(written&&mapping.cpu_watched){
         if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
-            mapping.cpu_watched=false;mapping.gpu_owned=true;
+            mapping.cpu_watched=false;MarkGpuOwned(mapping,0,mapping.size);
             Diagnostics::Count("buffer-watch.upgraded");
         }else{
             // No proof survives a release of protection. Use the snapshot
@@ -814,7 +888,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
         }
     };
     std::vector<std::byte> physical_cpu;
-    if(HasGpuImageOverlap(base,mapping.size)&&!mapping.gpu_owned&&
+    if(HasGpuImageOverlap(base,mapping.size)&&(!mapping.gpu_owned||!mapping.cpu_upload_ranges.empty())&&
        (!mapping.cpu_upload_ranges.empty()||(!mapping.cpu_watched&&!cpu_proven_unchanged))){
         // A host buffer envelope may include an unrelated exclusive I outside
         // the original sharp. Reading its protected guest VA would fault and
@@ -827,7 +901,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
         Diagnostics::Count("buffer-snapshot.physical-image-overlap.bytes",mapping.size);
     }
     diagnostic.Stage("snapshot-compare");
-    if(!mapping.gpu_owned&&!mapping.cpu_upload_ranges.empty()){
+    if(!mapping.cpu_upload_ranges.empty()){
         // Original CPU dirty tracking uploads whole touched pages. The
         // GPU-only formatted version is not a CPU equality proof; a
         // same-value store must restore its CPU page without replacing
@@ -898,14 +972,25 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     diagnostic.Stage("ownership-and-transition");
     if(written&&mapping.cpu_watched&&!mapping.gpu_owned){
         if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
-            mapping.cpu_watched=false;mapping.gpu_owned=true;Diagnostics::Count("buffer-watch.upgraded");
+            mapping.cpu_watched=false;MarkGpuOwned(mapping,0,mapping.size);Diagnostics::Count("buffer-watch.upgraded");
         }else{ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");}
     }
     if(mapping.cpu_watch_pending)ReleaseCpuBufferWatches(base,mapping.size);
-    if(written){if(!mapping.gpu_owned&&own_buffer_){
-        mapping.gpu_owned=own_buffer_(mapping.base,mapping.size);
-        Diagnostics::Count(mapping.gpu_owned?"buffer-own.success":"buffer-own.failure");
-    }
+    if(written){
+        for(const auto& request:requests)if(request.written&&request.address>=mapping.base&&
+            request.address-mapping.base<=mapping.size&&request.size<=mapping.size-(request.address-mapping.base)){
+            const auto pages=GuestProtectionPages(request.address,request.size);
+            const bool page_range=pages&&pages->address>=mapping.base&&pages->address-mapping.base<=mapping.size&&
+                pages->size<=mapping.size-(pages->address-mapping.base);
+            const auto owned_address=page_range?pages->address:mapping.base;
+            const auto owned_size=page_range?pages->size:mapping.size;
+            const auto offset=owned_address-mapping.base;
+            if(!OwnsGpuRange(mapping,offset,owned_size)&&own_buffer_){
+                const bool owned=own_buffer_(owned_address,owned_size);
+                if(owned)MarkGpuOwned(mapping,offset,owned_size);
+                Diagnostics::Count(owned?"buffer-own.success":"buffer-own.failure");
+            }
+        }
         if(known_writes){
             for(const auto& write:*known_writes)if(write.address>=mapping.base&&write.address+write.size<=mapping.base+mapping.size)
                 MarkDirty(mapping,true,write.address-mapping.base,write.size);
@@ -1066,12 +1151,12 @@ bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physica
             if(owned&&next<end)owned=acquire(next,end);
             // A backing callback can reconcile a preceding source. Never
             // publish stale write ownership after such a reentrant operation.
-            for(auto* source:sources)owned&=source->gpu_owned&&source->cpu_upload_ranges.empty();
+            for(auto* source:sources)owned&=OwnsGpuRange(*source,0,source->size)&&source->cpu_upload_ranges.empty();
             owned&=target.cpu_upload_ranges.empty();
-            target.gpu_owned=owned;
+            if(owned)MarkGpuOwned(target,0,target.size);
         }else protected_all=watch_buffer_&&watch_buffer_(address,size);
     }
-    if(defer_owned&&!target.gpu_owned){
+    if(defer_owned&&!OwnsGpuRange(target,0,target.size)){
         release_acquired();
         return RematerializeBufferEnvelope(address,size,physical_dma,false);
     }
@@ -1556,9 +1641,11 @@ std::vector<std::pair<VAddr,u64>> Rasterizer::GpuOwnedBufferProtectionRanges(VAd
     for(;it!=mappings_.end()&&it->first<pages->address+pages->size;++it){
         const auto& mapping=it->second;
         if(!mapping.gpu_owned||IsGdsRange(mapping.base,mapping.size))continue;
-        const auto guarded=GuestProtectionPages(mapping.base,mapping.size);
-        if(!guarded)throw std::logic_error("Invalid GPU-owned buffer protection extent");
-        result.emplace_back(guarded->address,guarded->size);
+        for(const auto& [begin,end]:mapping.gpu_owned_ranges){
+            const auto first=mapping.base+begin,last=mapping.base+end;
+            if(!result.empty()&&result.back().first+result.back().second==first)result.back().second=last-result.back().first;
+            else result.emplace_back(first,last-first);
+        }
     }
     return result;
 }
@@ -2048,38 +2135,45 @@ void Rasterizer::Finish(){
     std::lock_guard lock(execution_mutex_);
     read_only_batches_=0;
     diagnostic.Stage("record-buffer-readbacks");
-    std::vector<std::pair<Mapping*,Resource>> readbacks;
+    struct Readback {Mapping* mapping;Resource resource;std::vector<std::pair<u64,u64>> ranges;bool owned;};
+    std::vector<Readback> readbacks;
     for(const auto base:dirty_mappings_){auto& r=mappings_.at(base);
         if(r.gpu_owned&&!resolving_buffers_.contains(base))continue;
+        std::vector<std::pair<u64,u64>> selected;
+        if(r.gpu_owned){
+            const auto ranges=resolving_buffer_ranges_.find(base);
+            if(ranges==resolving_buffer_ranges_.end())continue;
+            for(const auto& [dirty_begin,dirty_end]:r.dirty_ranges)
+                for(const auto& [wanted_begin,wanted_end]:ranges->second){
+                    const auto begin=std::max(dirty_begin,wanted_begin),end=std::min(dirty_end,wanted_end);
+                    if(begin<end)selected.emplace_back(begin,end);
+                }
+        }else selected.assign(r.dirty_ranges.begin(),r.dirty_ranges.end());
+        if(selected.empty())continue;
         Begin();
         if(!r.readback.handle)r.readback=Buffer(device_.Get(),r.size,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         r.gpu.Transition(scheduler_.Begin(),D3D12_RESOURCE_STATE_COPY_SOURCE);
-        for(const auto& [begin,end]:r.dirty_ranges)
+        for(const auto& [begin,end]:selected)
             {Diagnostics::Count("buffer-readback.bytes",end-begin);
             DX12_API_CALL(scheduler_.Begin()->CopyBufferRegion(r.readback.handle.Get(),begin,r.gpu.handle.Get(),begin,end-begin));}
-        readbacks.emplace_back(&r,r.readback);}
+        readbacks.push_back({&r,r.readback,std::move(selected),r.gpu_owned});}
     diagnostic.Detail("cached_buffers=%zu dirty_buffers=%zu",mappings_.size(),readbacks.size());
     diagnostic.Stage("submit-and-wait");
     auto token=Flush();if(token)scheduler_.Wait(token);
     diagnostic.Stage("cpu-buffer-writeback");
-    for(auto& [r,rb]:readbacks){
-        const auto first_dirty=r->dirty_ranges.begin()->first,last_dirty=r->dirty_ranges.rbegin()->second;
+    for(auto& job:readbacks){auto* r=job.mapping;auto& rb=job.resource;
+        const auto first_dirty=job.ranges.front().first,last_dirty=job.ranges.back().second;
         void* data=nullptr;D3D12_RANGE all{SIZE_T(first_dirty),SIZE_T(last_dirty)};Check(DX12_API_CALL(rb.handle->Map(0,&all,&data)));
         SCOPE_EXIT {D3D12_RANGE no_write{0,0};DX12_API_CALL(rb.handle->Unmap(0,&no_write));};
-        if(r->gpu_owned){
+        if(job.owned){
             const bool gds=IsGdsRange(r->base,r->size);
-            for(const auto& [begin,end]:r->dirty_ranges){
+            for(const auto& [begin,end]:job.ranges){
                 if(gds)memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,size_t(end-begin));
                 else if(!commit_buffer_(r->base+begin,std::span(static_cast<const std::byte*>(data)+begin,size_t(end-begin))))
                     throw std::runtime_error("Cannot commit GPU buffer through PS4 physical backing");
                 Diagnostics::Count("buffer-commit.bytes",end-begin);
             }
-            if(!gds&&r->cpu_snapshot.size()==r->size&&transfer_buffer_watch_&&transfer_buffer_watch_(r->base,r->size,true)){
-                r->cpu_watched=true;r->cpu_partial_proof=false;r->cpu_dirty_ranges.clear();
-                Diagnostics::Count("buffer-watch.downgraded");
-            }else if(!gds)release_buffer_(r->base,r->size);
-            r->gpu_owned=false;
-        }else{for(const auto& [begin,end]:r->dirty_ranges){CheckBacking(r->base+begin,end-begin,true);
+        }else{for(const auto& [begin,end]:job.ranges){CheckBacking(r->base+begin,end-begin,true);
             Diagnostics::Count("buffer-commit.bytes",end-begin);
             memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,end-begin);}}
         // Finish reconciles exact GPU-written spans. GPU-only formatted bytes
@@ -2087,13 +2181,15 @@ void Rasterizer::Finish(){
         // the separate actual-store page markers for subsequent uploads.
         if(r->cpu_snapshot.size()!=r->size){ResizeSnapshot(*r);
             memcpy(r->cpu_snapshot.data(),reinterpret_cast<const void*>(r->base),size_t(r->size));}
-        for(const auto& [begin,end]:r->dirty_ranges)memcpy(r->cpu_snapshot.data()+begin,
+        for(const auto& [begin,end]:job.ranges)memcpy(r->cpu_snapshot.data()+begin,
             static_cast<const std::byte*>(data)+begin,size_t(end-begin));
-        MarkDirty(*r,false);
+        for(const auto& [begin,end]:job.ranges)ForgetSpan(r->dirty_ranges,begin,end);
+        r->dirty=!r->dirty_ranges.empty();
+        if(!r->dirty)dirty_mappings_.erase(r->base);
         // The snapshot matches CPU backing. A write-watch proves that backing
         // stayed unchanged, without claiming equality of GPU-only formatted
         // bytes. Real stores invalidate this proof and record any forced pages.
-        InstallCpuWatch(*r);
+        if(!job.owned)InstallCpuWatch(*r);
     }
     scheduler_.Collect();
     uploads_.clear();

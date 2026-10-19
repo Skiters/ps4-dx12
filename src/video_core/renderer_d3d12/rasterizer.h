@@ -48,6 +48,10 @@ private:
     std::vector<IndexStreamPage> index_stream_pages_;
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
         std::vector<std::byte> cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
+        // Strong CPU exclusion is page-granular in the pinned RegionManager.
+        // One native arena can retain independent GPU-owned pages after a
+        // different page has been downloaded for CPU access.
+        std::map<u64,u64> gpu_owned_ranges;
         bool cpu_watch_pending=false; // Protected while comparing; not yet a CPU/GPU equality proof.
         bool cpu_partial_proof=false;
         std::map<u64,u64> cpu_dirty_ranges; // Unprotected CPU pages; the remaining snapshot is proved.
@@ -74,6 +78,10 @@ private:
     void ResizeSnapshot(Mapping&);
     void TraceMapping(Mapping&,const char*);
     std::set<VAddr> resolving_buffers_;
+    std::map<VAddr,std::map<u64,u64>> resolving_buffer_ranges_;
+    static bool OwnsGpuRange(const Mapping&,u64,u64);
+    static void MarkGpuOwned(Mapping&,u64,u64);
+    static void UnmarkGpuOwned(Mapping&,u64,u64);
     std::function<bool(VAddr,u64)> own_buffer_;
     std::function<bool(VAddr,std::span<const std::byte>)> commit_buffer_;
     std::function<void(VAddr,u64)> release_buffer_;
@@ -111,8 +119,11 @@ private:
         return it;
     }
     bool HasGpuOwnedOverlap(VAddr address,u64 size){
-        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it)
-            if(it->second.gpu_owned)return true;
+        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
+            const auto first=std::max(address,it->first),last=std::min(address+size,it->first+it->second.size);
+            for(const auto& [begin,end]:it->second.gpu_owned_ranges)
+                if(first<it->first+end&&it->first+begin<last)return true;
+        }
         return false;
     }
     // Short metadata lock, independent of draw/dispatch submission. A fresh
@@ -166,7 +177,7 @@ private:
         bytes=std::min(bytes,mapping.size-offset);if(!bytes)return;
         // GDS has no direct guest CPU alias. Its internal host array is read
         // only through the CP readback path, so it needs no page protection.
-        if(IsGdsRange(mapping.base,mapping.size))mapping.gpu_owned=true;
+        if(IsGdsRange(mapping.base,mapping.size)&&!mapping.gpu_owned)MarkGpuOwned(mapping,0,mapping.size);
         u64 newly_dirty=bytes;
         u64 begin=offset,end=offset+bytes;auto it=mapping.dirty_ranges.lower_bound(begin);
         if(it!=mapping.dirty_ranges.begin()&&std::prev(it)->second>=begin)it=std::prev(it);

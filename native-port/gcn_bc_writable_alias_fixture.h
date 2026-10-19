@@ -243,8 +243,12 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             rasterizer.RetainUntilFinish([snapshot,readback](u64){(void)snapshot;(void)readback;});auto* list=rasterizer.RecordingList();snapshot.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
             list->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,OutputBytes);rasterizer.Finish();rasterizer.ValidateDebugMessages();void* mapped{};
             D3D12_RANGE range{0,SIZE_T(OutputBytes)};Check(readback.handle->Map(0,&range,&mapped));const bool valid=std::memcmp(mapped,expected.data()+OutputOffset,OutputBytes)==0;
-            D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);if(!valid||!rasterizer.IsGpuBufferModified(target.base_address,image_bytes)||
-                std::memcmp(backing,physical_before.data(),Bytes))throw std::runtime_error("Writable BC GPU observations or unpublished B/P dirty witness changed");};
+            size_t output_mismatch{};while(output_mismatch<OutputBytes&&static_cast<const std::byte*>(mapped)[output_mismatch]==expected[OutputOffset+output_mismatch])++output_mismatch;
+            D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);const bool dirty=rasterizer.IsGpuBufferModified(target.base_address,image_bytes);
+            const bool physical=std::memcmp(backing,physical_before.data(),Bytes)==0;
+            if(!valid||!dirty||!physical){std::fprintf(stderr,"Writable BC variant=%u output=%u mismatch=%zu dirty=%u physical=%u\n",
+                    variant,valid,output_mismatch,dirty,physical);
+                throw std::runtime_error("Writable BC GPU observations or unpublished B/P dirty witness changed");}};
         read_gpu();
         if(one_level){
             // UserData contains only16 DWORDs. Keep both T#s there and build

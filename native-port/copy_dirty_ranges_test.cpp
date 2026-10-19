@@ -2,6 +2,45 @@
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include <cstdio>
 using namespace NativeDX12;
+void RunDisjointOwnedPages(ID3D12Device* device){
+    constexpr u64 Bytes=65536,First=16384,Second=32768,Page=4096;
+    auto* memory=static_cast<std::byte*>(VirtualAlloc(nullptr,Bytes,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    if(!memory)throw std::runtime_error("disjoint owned pages VirtualAlloc");
+    const auto base=reinterpret_cast<VAddr>(memory);memset(memory,0x31,Bytes);
+    try{
+        Rasterizer renderer(device);renderer.MapMemory(base,Bytes);
+        u64 committed{};std::vector<std::pair<VAddr,u64>> released;
+        renderer.SetBufferOwnership([](VAddr,u64){return true;},
+            [&](VAddr dst,std::span<const std::byte> data){committed+=data.size();
+                memcpy(reinterpret_cast<void*>(dst),data.data(),data.size());return true;},
+            [&](VAddr address,u64 size){released.emplace_back(address,size);});
+        const Rasterizer::ShaderBufferRequest request{base,Bytes,true,true};
+        const Rasterizer::BufferWrite writes[]{{base+First,Page},{base+Second,Page}};
+        auto view=renderer.PrepareShaderBuffers(std::span(&request,1),writes).front();
+        auto upload=Buffer(device,Page*2,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        void* mapped{};D3D12_RANGE empty{};Check(upload.handle->Map(0,&empty,&mapped));
+        memset(mapped,0x52,Page);memset(static_cast<std::byte*>(mapped)+Page,0x73,Page);upload.handle->Unmap(0,nullptr);
+        Resource destination;destination.handle=view.resource;destination.state=D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        destination.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+        renderer.RecordingList()->CopyBufferRegion(destination.handle.Get(),view.offset+First,upload.handle.Get(),0,Page);
+        renderer.RecordingList()->CopyBufferRegion(destination.handle.Get(),view.offset+Second,upload.handle.Get(),Page,Page);
+        destination.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.ResolveGpuBuffers(base+Second,Page);
+        const Rasterizer::ShaderBufferRequest first{base+First,Page,true,true};
+        const Rasterizer::ShaderBufferRequest second{base+Second,Page,true,true};
+        if(committed!=Page||memory[First]!=std::byte{0x31}||memory[Second]!=std::byte{0x73}||
+           !renderer.IsGpuBufferModified(first.address,first.size)||
+           renderer.IsGpuBufferModified(second.address,second.size)||
+           !renderer.BuffersMayDefer(std::span(&first,1))||renderer.BuffersMayDefer(std::span(&second,1)))
+            throw std::runtime_error("disjoint resolve drained or exposed an unrelated GPU-owned page");
+        renderer.ResolveGpuBuffers(base+First,Page);
+        if(committed!=Page*2||memory[First]!=std::byte{0x52}||released.size()!=2||
+           renderer.IsGpuBufferModified(first.address,first.size))
+            throw std::runtime_error("disjoint resolve did not retire the remaining exact page");
+        renderer.ValidateDebugMessages();
+    }catch(...){VirtualFree(memory,0,MEM_RELEASE);throw;}
+    VirtualFree(memory,0,MEM_RELEASE);
+}
 void Run(ID3D12Device* device,bool overlap,bool retry,bool prior=false){
     auto* memory=static_cast<std::byte*>(VirtualAlloc(nullptr,32768,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     if(!memory)throw std::runtime_error("VirtualAlloc");
@@ -93,6 +132,7 @@ void RunLargePacket(ID3D12Device* device) {
 int main(){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
+    RunDisjointOwnedPages(device.Get());
     Run(device.Get(),false,false);Run(device.Get(),true,false);Run(device.Get(),false,true);
     Run(device.Get(),false,false,true);
     RunLargePacket(device.Get());
