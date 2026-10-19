@@ -169,8 +169,10 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
         use_static_windows_guest_red_zone_protection ? static_protection_exception : true;
     if (report_unhandled) {
         const auto* native_diagnostics = std::getenv("SHADPS4_NATIVE_DIAGNOSTICS");
+        const auto* native_fault_snapshot = std::getenv("SHADPS4_NATIVE_FAULT_SNAPSHOT");
         // One bounded fault snapshot is useful even when full API tracing is off.
-        if (!native_diagnostics || native_diagnostics[0] != '0') {
+        if ((native_fault_snapshot && native_fault_snapshot[0] == '1') ||
+            !native_diagnostics || native_diagnostics[0] != '0') {
             char fault_path[160]{};
             std::snprintf(fault_path,sizeof(fault_path),"user/log/native-fault-%lu.txt",GetCurrentProcessId());
             FILE* fault_file=std::fopen(fault_path,"wb");
@@ -185,6 +187,7 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
             };
             const auto& c = *pExp->ContextRecord;
             const auto& e = *pExp->ExceptionRecord;
+            print_fault("Native exception thread=%lu\n",GetCurrentThreadId());
             print_fault( "Native exception code=%08lx rip=%llx rsp=%llx fault=%llx access=%llu rax=%llx rbx=%llx rcx=%llx rdx=%llx rsi=%llx rdi=%llx rbp=%llx r8=%llx r9=%llx r10=%llx r11=%llx r12=%llx r13=%llx r14=%llx r15=%llx\n",
                 e.ExceptionCode, c.Rip, c.Rsp,
                 e.NumberParameters > 1 ? static_cast<unsigned long long>(e.ExceptionInformation[1]) : 0ULL,
@@ -204,6 +207,10 @@ static LONG WINAPI SignalHandler(EXCEPTION_POINTERS* pExp) noexcept {
                     region.BaseAddress, region.AllocationBase,
                     static_cast<unsigned long long>(region.RegionSize), region.Protect,
                     region.State, region.Type);
+            if(e.NumberParameters>1&&VirtualQuery(reinterpret_cast<void*>(e.ExceptionInformation[1]),&region,sizeof(region)))
+                print_fault("Native exception target base=%p allocation=%p size=%llx protection=%lx state=%lx type=%lx\n",
+                    region.BaseAddress,region.AllocationBase,static_cast<unsigned long long>(region.RegionSize),
+                    region.Protect,region.State,region.Type);
             // One bounded snapshot on an unhandled fault only. ReadProcessMemory
             // cannot recursively fault on an invalid guest stack pointer.
             unsigned long long stack[24]{}; SIZE_T bytes{};
