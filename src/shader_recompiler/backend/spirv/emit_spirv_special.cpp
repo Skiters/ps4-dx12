@@ -343,7 +343,9 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
         ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],after));
         return;
     }
-    const bool half_word = target.data_format == AmdGpu::DataFormat::Format16_16 ||
+    const bool rg8=target.data_format==AmdGpu::DataFormat::Format8_8;
+    const u32 channel_bits=rg8?8:16;
+    const bool half_word = rg8 || target.data_format == AmdGpu::DataFormat::Format16_16 ||
                            target.data_format == AmdGpu::DataFormat::Format16_16_16_16;
     const u32 half_components = target.data_format == AmdGpu::DataFormat::Format16_16_16_16 ? 4 : 2;
     const bool rg16_float = half_word &&
@@ -356,16 +358,16 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
         std::array<Id, 2> words{old_word,ctx.OpCompositeExtract(ctx.U32[1],old_texel,1)};
         std::array<Id, 4> old_channels{ctx.f32_zero_value,ctx.f32_zero_value,ctx.f32_zero_value,ctx.ConstF32(1.f)};
         for (u32 component = 0; component < half_components; ++component) {
-            const auto word=words[component/2];const auto shift=(component%2)*16;
+            const auto word=words[component*channel_bits/32];const auto shift=component*channel_bits%32;
             if(rg16_float){
                 const Id unpacked=ctx.OpUnpackHalf2x16(ctx.F32[2],word);
                 old_channels[component]=ctx.OpCompositeExtract(ctx.F32[1],unpacked,component%2);
                 continue;
             }
-            old_channels[component] = rg16_snorm ? OrderedSnormDecode(ctx, word, shift, 16) :
+            old_channels[component] = rg16_snorm ? OrderedSnormDecode(ctx, word, shift, channel_bits) :
                 ctx.OpFDiv(ctx.F32[1], ctx.OpConvertUToF(ctx.F32[1],
-                    ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(shift), ctx.ConstU32(16u))),
-                    ctx.ConstF32(65535.f));
+                    ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(shift), ctx.ConstU32(channel_bits))),
+                    ctx.ConstF32(float((1u<<channel_bits)-1)));
         }
         const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],old_channels);
         std::array<Id, 4> channels{};
@@ -375,19 +377,22 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
             channels[component] = !written ? ctx.f32_zero_value : logic ?
                 ctx.OpCompositeExtract(ctx.F32[1], source, component) :
                 OrderedBlendChannel(ctx, target, source, destination, constants, component);
-            if (written) raw_masks[component/2] |= 0xffffu << ((component%2) * 16);
+            if (written) raw_masks[component*channel_bits/32] |= ((1u<<channel_bits)-1) << (component*channel_bits%32);
         }
         // Quantize after each ordered fragment, just as the attachment store
         // does. Merge untouched raw halves rather than round-tripping NaNs or
         // signed zero through float arithmetic and half conversion.
         const auto encode = [&](Id channel) {
             return rg16_float ? OrderedHalfCode(ctx, channel) : rg16_unorm ?
-                OrderedUnormCode(ctx, channel, 16) : OrderedSnormCode(ctx, channel, 16);
+                OrderedUnormCode(ctx, channel, channel_bits) : OrderedSnormCode(ctx, channel, channel_bits);
         };
         std::array<Id,4> result{ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value};
-        for(u32 word=0;word<half_components/2;++word){
-            Id packed=ctx.OpBitwiseOr(ctx.U32[1],encode(channels[word*2]),
-                ctx.OpShiftLeftLogical(ctx.U32[1],encode(channels[word*2+1]),ctx.ConstU32(16u)));
+        for(u32 word=0;word<(half_components*channel_bits+31)/32;++word){
+            Id packed=ctx.u32_zero_value;
+            for(u32 component=0;component<half_components;++component)if(component*channel_bits/32==word){
+                const u32 shift=component*channel_bits%32;const Id code=encode(channels[component]);
+                packed=ctx.OpBitwiseOr(ctx.U32[1],packed,shift?ctx.OpShiftLeftLogical(ctx.U32[1],code,ctx.ConstU32(shift)):code);
+            }
             if(logic)packed=OrderedLogicWord(ctx,target.logic_op,packed,words[word]);
             result[word]=ctx.OpBitwiseOr(ctx.U32[1],
                 ctx.OpBitwiseAnd(ctx.U32[1],words[word],ctx.ConstU32(~raw_masks[word])),

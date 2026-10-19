@@ -142,12 +142,12 @@ bool IsOrderedFloatWordClass(const GuestTextureDesc& d){
     return d.number_format==7&&(d.data_format==4||d.data_format==11||d.data_format==14);
 }
 DXGI_FORMAT OrderedColorWordFormat(const GuestTextureDesc& d){
-    return d.data_format==1?DXGI_FORMAT_R8_UINT:d.data_format==2?DXGI_FORMAT_R16_UINT:
+    return d.data_format==1?DXGI_FORMAT_R8_UINT:(d.data_format==2||d.data_format==3)?DXGI_FORMAT_R16_UINT:
         (d.data_format==11||d.data_format==12)?DXGI_FORMAT_R32G32_UINT:
         d.data_format==14?DXGI_FORMAT_R32G32B32A32_UINT:DXGI_FORMAT_R32_UINT;
 }
 DXGI_FORMAT OrderedColorWordStorage(const GuestTextureDesc& d){
-    return d.data_format==1?DXGI_FORMAT_R8_TYPELESS:d.data_format==2?DXGI_FORMAT_R16_TYPELESS:
+    return d.data_format==1?DXGI_FORMAT_R8_TYPELESS:(d.data_format==2||d.data_format==3)?DXGI_FORMAT_R16_TYPELESS:
         (d.data_format==11||d.data_format==12)?DXGI_FORMAT_R32G32_TYPELESS:
         d.data_format==14?DXGI_FORMAT_R32G32B32A32_TYPELESS:DXGI_FORMAT_R32_TYPELESS;
 }
@@ -156,6 +156,7 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
         !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
         std::has_single_bit(d.samples)&&d.samples<=8&&
         (IsOrderedScalarClass(d)||(d.data_format==9&&(d.number_format==0||d.number_format==1))||
+         (d.data_format==3&&(d.number_format==0||d.number_format==1))||
          (d.data_format==10&&(d.number_format==0||d.number_format==1))||
          ((d.data_format==5||d.data_format==12)&&(d.number_format==0||d.number_format==1||d.number_format==7))||
          IsOrderedFloatWordClass(d)||(d.data_format==6&&d.number_format==7));
@@ -172,6 +173,8 @@ std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool su
     static constexpr std::array rg16{DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rg16_unorm{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rg16_snorm{DXGI_FORMAT_R16G16_SNORM,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array rg8{DXGI_FORMAT_R8G8_UNORM,DXGI_FORMAT_R8G8_SNORM,
+        DXGI_FORMAT_R8G8_UINT,DXGI_FORMAT_R8G8_SINT,DXGI_FORMAT_R16_UINT};
     static constexpr std::array r11{DXGI_FORMAT_R11G11B10_FLOAT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rgba16{DXGI_FORMAT_R16G16B16A16_UNORM,DXGI_FORMAT_R16G16B16A16_SNORM,
         DXGI_FORMAT_R16G16B16A16_FLOAT,DXGI_FORMAT_R16G16B16A16_UINT,DXGI_FORMAT_R16G16B16A16_SINT,
@@ -186,6 +189,7 @@ std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool su
     if(d.data_format==5&&d.number_format==1)return rg16_snorm;
     if(d.data_format==12)return rgba16;
     if(d.data_format==6)return r11;
+    if(d.data_format==3)return rg8;
     return {};
 }
 bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
@@ -1259,6 +1263,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
         !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !(IsOrderedScalarClass(attachment)||(attachment.data_format==9&&(attachment.number_format==0||attachment.number_format==1))||
+         (attachment.data_format==3&&(attachment.number_format==0||attachment.number_format==1))||
          (attachment.data_format==10&&(attachment.number_format==0||attachment.number_format==1))||
          ((attachment.data_format==5||attachment.data_format==12)&&
           (attachment.number_format==0||attachment.number_format==1||attachment.number_format==7))||
@@ -1455,7 +1460,7 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
     // Float word attachments normally use native blending. Allocate sample
     // UAVs only when ordered blending is actually requested, not for every RT.
     const bool initial_ordered=IsOrderedMultisampleColorClass(entry.desc)&&
-        (IsOrderedScalarClass(entry.desc)||IsOrderedFloatWordClass(entry.desc)||entry.desc.data_format==5||entry.desc.data_format==6||entry.desc.data_format==12)&&
+        (IsOrderedScalarClass(entry.desc)||IsOrderedFloatWordClass(entry.desc)||entry.desc.data_format==3||entry.desc.data_format==5||entry.desc.data_format==6||entry.desc.data_format==12)&&
         !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
     if((!entry.storage_retired&&!initial_readonly&&!initial_ordered)||!entry.storage_samples.empty()||entry.storage_linear.handle||
        !CanTransferIndependentMultisample(entry.desc,entry.layout))
@@ -3184,7 +3189,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         storage_description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         uint64_t storage_linear_bytes{};
         const bool multisample_storage=d.samples>1&&(d.writable||
-            (IsOrderedMultisampleColorClass(d)&&!IsOrderedScalarClass(d)&&!IsOrderedFloatWordClass(d)&&d.data_format!=5&&d.data_format!=6&&d.data_format!=12));
+            (IsOrderedMultisampleColorClass(d)&&!IsOrderedScalarClass(d)&&!IsOrderedFloatWordClass(d)&&d.data_format!=3&&d.data_format!=5&&d.data_format!=6&&d.data_format!=12));
         if(multisample_storage){
             const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,storage_cast_formats);
             storage_linear_bytes=GuestMultisample::LinearBytes(d,GuestMultisample::Footprint(d,layout));
