@@ -33,6 +33,34 @@ static_assert(Liverpool::NumComputeRings <= MAX_NAMES);
 
 static const char* acb_task_name[] = NAME_ARRAY(ACB_TASK, MAX_NAMES);
 
+void Liverpool::TraceGuestWrite(void* address, u32 size, u32 kind, u64 value) {
+    const u64 serial = guest_write_serial++;
+    guest_write_traces[serial % GuestWriteTraceCount] = {
+        .address = reinterpret_cast<uintptr_t>(address),
+        .size = size,
+        .kind = kind,
+        .value = value,
+        .serial = serial + 1,
+    };
+}
+
+void Liverpool::DumpGuestWritesAt(uintptr_t address) const {
+    std::string matches = fmt::format("Recent PM4 guest writes covering {:#x}:", address);
+    u32 count{};
+    for (const auto& trace : guest_write_traces) {
+        if (trace.serial == 0 || address < trace.address || address - trace.address >= trace.size) {
+            continue;
+        }
+        matches += fmt::format("\nwrite serial={} kind={:#x} target={:#x} bytes={} value={:#x}",
+                               trace.serial - 1, trace.kind, trace.address, trace.size, trace.value);
+        ++count;
+    }
+    if (count == 0) {
+        matches += " none in retained history";
+    }
+    LOG_ERROR(Lib_GnmDriver, "{}", matches);
+}
+
 #define YIELD(name)                                                                                \
     FIBER_EXIT;                                                                                    \
     co_yield {};                                                                                   \
@@ -257,6 +285,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                                          word == current_word ? "*" : " ", submission[word]);
         }
         LOG_ERROR(Lib_GnmDriver, "{}", packet_window);
+        DumpGuestWritesAt(source_base_addr + current_word * sizeof(u32));
         Common::Log::Flush();
     };
     std::array<u32, 3> packet_history{};
@@ -724,7 +753,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }
-                event_eos.SignalFence([](void* address, u64 data, u32 num_bytes) {
+                event_eos.SignalFence([this](void* address, u64 data, u32 num_bytes) {
+                    TraceGuestWrite(address, num_bytes,
+                                    static_cast<u32>(PM4ItOpcode::EventWriteEos), data);
                     auto* memory = Core::Memory::Instance();
                     ASSERT(memory->TryWriteBacking(address, &data, num_bytes));
                 });
@@ -756,6 +787,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 }
                 event_eop.SignalFence(
                     [&](void* address, u64 data, u32 num_bytes) {
+                        TraceGuestWrite(address, num_bytes,
+                                        static_cast<u32>(PM4ItOpcode::EventWriteEop), data);
                         auto* memory = Core::Memory::Instance();
                         ASSERT_MSG(memory->TryWriteBacking(address, &data, num_bytes),
                                    "EOP write failed: address={:#x} bytes={} value={:#x} "
@@ -784,17 +817,26 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 } else if (dma_data->src_sel == DmaDataSrc::Data &&
                            (dma_data->dst_sel == DmaDataDst::Memory ||
                             dma_data->dst_sel == DmaDataDst::MemoryUsingL2)) {
+                    TraceGuestWrite(reinterpret_cast<void*>(dma_data->DstAddress<VAddr>()),
+                                    dma_data->NumBytes(),
+                                    static_cast<u32>(PM4ItOpcode::DmaData), dma_data->data);
                     rasterizer->FillBuffer(dma_data->DstAddress<VAddr>(), dma_data->NumBytes(),
                                            dma_data->data, false);
                 } else if (dma_data->src_sel == DmaDataSrc::Gds &&
                            (dma_data->dst_sel == DmaDataDst::Memory ||
                             dma_data->dst_sel == DmaDataDst::MemoryUsingL2)) {
+                    TraceGuestWrite(reinterpret_cast<void*>(dma_data->DstAddress<VAddr>()),
+                                    dma_data->NumBytes(),
+                                    static_cast<u32>(PM4ItOpcode::DmaData));
                     rasterizer->CopyBuffer(dma_data->DstAddress<VAddr>(), dma_data->src_addr_lo,
                                            dma_data->NumBytes(), false, true);
                 } else if ((dma_data->src_sel == DmaDataSrc::Memory ||
                             dma_data->src_sel == DmaDataSrc::MemoryUsingL2) &&
                            (dma_data->dst_sel == DmaDataDst::Memory ||
                             dma_data->dst_sel == DmaDataDst::MemoryUsingL2)) {
+                    TraceGuestWrite(reinterpret_cast<void*>(dma_data->DstAddress<VAddr>()),
+                                    dma_data->NumBytes(),
+                                    static_cast<u32>(PM4ItOpcode::DmaData));
                     rasterizer->CopyBuffer(dma_data->DstAddress<VAddr>(),
                                            dma_data->SrcAddress<VAddr>(), dma_data->NumBytes(),
                                            false, false);
@@ -815,6 +857,8 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                     if (rasterizer) {
                         rasterizer->OnFence();
                     }
+                    TraceGuestWrite(address, data_size,
+                                    static_cast<u32>(PM4ItOpcode::WriteData));
                     std::memcpy(address, payload.data(), data_size);
                 } else {
                     UNREACHABLE();

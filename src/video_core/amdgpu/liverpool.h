@@ -185,6 +185,19 @@ private:
     void ProcessCommands();
     void Process(std::stop_token stoken);
 
+    struct GuestWriteTrace {
+        uintptr_t address{};
+        u32 size{};
+        u32 kind{};
+        u64 value{};
+        u64 serial{};
+    };
+    void TraceGuestWrite(void* address, u32 size, u32 kind, u64 value = 0);
+    void DumpGuestWritesAt(uintptr_t address) const;
+    static constexpr size_t GuestWriteTraceCount = 65536;
+    std::array<GuestWriteTrace, GuestWriteTraceCount> guest_write_traces{};
+    u64 guest_write_serial{};
+
     struct GpuQueue {
         std::mutex m_access{};
         std::queue<Task::Handle> submits{};
