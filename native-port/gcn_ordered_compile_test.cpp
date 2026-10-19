@@ -25,11 +25,13 @@ int main(int argc,char** argv){try{
     const std::set<DXGI_FORMAT> rgba8_family{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
         DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,DXGI_FORMAT_R32_UINT};
     const std::set<DXGI_FORMAT> packed_family{DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
-    for(const auto shape:{std::array<u32,2>{5,0},{5,1},{5,7},{10,0},{10,1},{9,0},{9,1}}){
+    for(const auto shape:{std::array<u32,2>{5,0},{5,1},{5,7},{10,0},{10,1},{9,0},{9,1},{16,0},{17,0},{18,0},{19,0}}){
         NativeDX12::GuestTextureDesc desc;desc.render_target=true;desc.data_format=shape[0];desc.number_format=shape[1];
         const auto formats=Cache::OrderedColorFormats(desc,true);
         const std::set<DXGI_FORMAT> actual(formats.begin(),formats.end());
-        const auto& expected=shape[0]==5?rg16_family:shape[0]==10?rgba8_family:packed_family;
+        const std::set<DXGI_FORMAT> packed16_family{shape[0]==16?DXGI_FORMAT_B5G6R5_UNORM:
+            shape[0]==19?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_B5G5R5A1_UNORM,DXGI_FORMAT_R16_UINT};
+        const auto& expected=shape[0]>=16?packed16_family:shape[0]==5?rg16_family:shape[0]==10?rgba8_family:packed_family;
         if(actual!=expected||actual.size()!=formats.size()||!Cache::OrderedColorFormats(desc,false).empty())
             throw std::runtime_error("Ordered allocation narrowed its original typed family or ignored capabilities");
         auto invalid=desc;invalid.writable=true;
@@ -90,7 +92,7 @@ int main(int argc,char** argv){try{
     unsigned cases{};
     std::set<u64> fragment_variants;
     for(unsigned boundary=0;boundary<=NativeDX12::Tests::NormalizedBlendBoundaries.size();++boundary)
-    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7},{1,0},{1,1},{2,0},{2,1},{2,7},{0,1},{3,0},{3,1}})
+    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7},{1,0},{1,1},{2,0},{2,1},{2,7},{0,1},{3,0},{3,1},{16,0},{17,0},{18,0},{19,0}})
     for(u32 sample_log:{0u,1u,2u,3u})for(u32 mask:{0xfffu,0xfa1u})for(u32 operation:{0u,1u,2u}){
         if(boundary&&(shape[0]!=10||shape[1]>1||operation))continue;
         if(operation&&(shape[1]==7||mask==0xfff))continue;
@@ -144,7 +146,8 @@ int main(int argc,char** argv){try{
         for(u32 i=0;i<3;++i){const auto& target=fragment->runtime.hw.fs.ordered_color_targets[i];
             const u32 mixed_formats[]{shape[1]==7?4u:shape[1]==1?1u:10u,
                 shape[1]==7?11u:shape[1]==1?2u:5u,shape[1]==7?14u:shape[1]==1?10u:12u};
-            if(!target.enabled||u32(target.data_format)!=(shape[0]?shape[0]:mixed_formats[i])||u32(target.number_format)!=shape[1]||
+            const u32 expected_format=shape[0]?shape[0]:mixed_formats[i];
+            if(!target.enabled||u32(target.data_format)!=(expected_format==18?17:expected_format)||u32(target.number_format)!=shape[1]||
                target.num_samples!=(1u<<sample_log)||target.logic_op!=regs.color_control.rop3)
                 throw std::runtime_error("Ordered shader runtime does not match the requested specialization");
         }

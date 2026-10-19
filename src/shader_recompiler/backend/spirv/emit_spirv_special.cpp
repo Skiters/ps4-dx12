@@ -293,6 +293,41 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const bool unorm = target.number_format == AmdGpu::NumberFormat::Unorm;
     const bool scalar8=target.data_format==AmdGpu::DataFormat::Format8;
     const bool scalar16=target.data_format==AmdGpu::DataFormat::Format16;
+    const bool rgb565=target.data_format==AmdGpu::DataFormat::Format5_6_5;
+    const bool rgba5551=target.data_format==AmdGpu::DataFormat::Format1_5_5_5;
+    const bool rgba4444=target.data_format==AmdGpu::DataFormat::Format4_4_4_4;
+    if(unorm&&(rgb565||rgba5551||rgba4444)){
+        // Decode the existing native BGR attachment representation. Guest5551's
+        // rotation and4444's nibble order stay in the tiler, and export swizzles
+        // have already selected the native component order before this point.
+        const std::array<u32,4> bits=rgb565?std::array<u32,4>{5,6,5,0}:
+            rgba5551?std::array<u32,4>{5,5,5,1}:std::array<u32,4>{4,4,4,4};
+        const std::array<u32,4> shifts=rgb565?std::array<u32,4>{11,5,0,0}:
+            rgba5551?std::array<u32,4>{10,5,0,15}:std::array<u32,4>{8,4,0,12};
+        std::array<Id,4> channels{};
+        for(u32 component=0;component<4;++component){
+            channels[component]=!bits[component]?ctx.ConstF32(1.f):ctx.OpFDiv(ctx.F32[1],
+                ctx.OpConvertUToF(ctx.F32[1],ctx.OpBitFieldUExtract(ctx.U32[1],old_word,
+                    ctx.ConstU32(shifts[component]),ctx.ConstU32(bits[component]))),
+                ctx.ConstF32(float((1u<<bits[component])-1)));
+        }
+        const Id destination=ctx.OpCompositeConstruct(ctx.F32[4],channels);
+        Id packed=ctx.u32_zero_value;u32 raw_mask{};
+        for(u32 component=0;component<4;++component)if(bits[component]&&(target.write_mask&(1u<<component))){
+            const Id value=logic?ctx.OpCompositeExtract(ctx.F32[1],source,component):
+                OrderedBlendChannel(ctx,target,source,destination,constants,component);
+            packed=ctx.OpBitFieldInsert(ctx.U32[1],packed,OrderedUnormCode(ctx,value,bits[component]),
+                ctx.ConstU32(shifts[component]),ctx.ConstU32(bits[component]));
+            raw_mask|=((1u<<bits[component])-1)<<shifts[component];
+        }
+        if(logic)packed=OrderedLogicWord(ctx,target.logic_op,packed,old_word);
+        const Id result=ctx.OpBitwiseOr(ctx.U32[1],
+            ctx.OpBitwiseAnd(ctx.U32[1],old_word,ctx.ConstU32(65535u&~raw_mask)),
+            ctx.OpBitwiseAnd(ctx.U32[1],packed,ctx.ConstU32(raw_mask)));
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],result,
+            ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value));
+        return;
+    }
     if(scalar8||scalar16){
         const u32 bits=scalar8?8:16;
         const bool floating=target.number_format==AmdGpu::NumberFormat::Float;
