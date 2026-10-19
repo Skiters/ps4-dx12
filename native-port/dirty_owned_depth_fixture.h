@@ -7,13 +7,14 @@
 #include <cstring>
 
 namespace NativeDX12 {
-inline void RunDirtyOwnedDepthFixture(ID3D12Device* device,bool color_source=false) {
+inline void RunDirtyOwnedDepthFixture(ID3D12Device* device,bool color_source=false,int chance_overlap=0) {
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     GuestTextureCache cache(device);Rasterizer renderer(device);
     SCOPE_EXIT { renderer.Finish(); };
     GuestTextureDesc depth;depth.address=0x40000;depth.width=13;depth.height=11;depth.pitch=16;
     depth.depth_target=!color_source;depth.render_target=color_source;
     depth.data_format=4;depth.number_format=7;depth.tile_mode=0;
+    if(chance_overlap==2)depth.layers=depth.view_layers=2;
     const auto layout=LayoutGuestTexture(depth);
     std::vector<std::byte> old(size_t(layout.guest_bytes),std::byte{0xa3}),current=old;
     const u32 old_word=std::bit_cast<u32>(0.25f),new_word=std::bit_cast<u32>(0.75f);
@@ -37,12 +38,33 @@ inline void RunDirtyOwnedDepthFixture(ID3D12Device* device,bool color_source=fal
     auto& source=cache.Upload(depth,old,renderer.RecordingList(),renderer.CompletedFence());
     require(cache.Own(source),"Dirty source ownership failed");
     auto pin=cache.PinBinding(source);
-    source.MarkLogicalDirty(); // Same retained-allocation state as a real B write invalidation.
+    if(!chance_overlap)source.MarkLogicalDirty(); // Same retained-allocation state as a real B write invalidation.
     auto sampled=depth;sampled.depth_target=false;sampled.render_target=false;sampled.number_format=4;
+    if(chance_overlap)sampled.address=chance_overlap>0?depth.address+256:depth.address-256;
+    if(chance_overlap==2){
+        // A real slice boundary must NOT enter the chance-overlap fast path.
+        // Shifted native-depth slices still require their explicit mapping;
+        // until connected, retain the existing rejection rather than silently
+        // accepting independent B as the required subresource contents.
+        sampled.address=depth.address+layout.mips[0].slice_bytes;
+        sampled.layers=sampled.view_layers=1;bool rejected=false;
+        try{(void)cache.Upload(sampled,current,renderer.RecordingList(),renderer.CompletedFence());}
+        catch(const std::runtime_error& e){rejected=std::string(e.what())==
+            "Independent depth/color overlap needs an exact physical transfer plan";}
+        require(rejected&&!retired&&!captured&&source.gpu_owned&&!source.logical_dirty,
+            "Real shifted depth slice bypassed required mapping or changed its source");
+        renderer.Finish();renderer.ValidateDebugMessages();
+        puts("PASS: known shifted-depth-slice mapping gap remains explicitly rejected, never misclassified as chance overlap");
+        return;
+    }
     auto& target=cache.Upload(sampled,current,renderer.RecordingList(),renderer.CompletedFence());
     // Publishing a current same-class refresh supersedes cached_native_current;
     // the old pinned allocation must still retain its original GPU contents.
-    require(retired==1&&!captured&&!source.gpu_owned&&source.logical_dirty&&
+    if(chance_overlap){
+        require(!retired&&!captured&&source.gpu_owned&&source.buffer_alias_version&&
+            !source.logical_dirty&&source.cached_native_current&&target.cached_native_current,
+            "Chance overlap copied/retired independent I or lost the separate current-B image");
+    }else require(retired==1&&!captured&&!source.gpu_owned&&source.logical_dirty&&
         !source.cached_native_current&&target.cached_native_current,
         "Dirty source was copied, remained owned, or superseded current refresh");
     const auto read=[&](Resource& image){
@@ -67,6 +89,8 @@ inline void RunDirtyOwnedDepthFixture(ID3D12Device* device,bool color_source=fal
         plane->first.handle->Unmap(0,&empty);require(exact,"Dirty native history/current B GPU contents mismatch");
     }
     renderer.ValidateDebugMessages();
-    puts("PASS: dirty owned depth retires stale I without capture/download, preserves old native history and samples current B");
+    if(chance_overlap)printf("PASS: %s %s chance overlap preserves current I and samples independent B, without copy/retirement\n",
+        color_source?"color":"depth",chance_overlap>0?"right":"left");
+    else puts("PASS: dirty owned image retires stale I without capture/download, preserves old native contents and samples current B");
 }
 } // namespace NativeDX12

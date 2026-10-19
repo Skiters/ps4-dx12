@@ -1681,6 +1681,23 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
     return true;
 }
 namespace {
+bool HasPossibleReferenceSubresourceBase(const GuestTextureDesc& child,
+    const GuestTextureDesc& parent,const GuestTextureLayout& physical){
+    // A necessary condition from pinned ImageInfo::MipOf: a one-level
+    // subresource starts exactly at a physical mip/slice boundary. Keep
+    // unclassified volume/1D domains on the existing explicit transfer path.
+    if(child.volume_depth||parent.volume_depth||child.one_dimensional||parent.one_dimensional||
+       physical.block_extent!=1||physical.mips.size()!=parent.levels)return true;
+    if(child.levels!=1||child.address<parent.address)return false;
+    const auto delta=child.address-parent.address;
+    for(size_t mip=0;mip<physical.mips.size();++mip){
+        const auto& part=physical.mips[mip];
+        if(!part.slice_bytes)return true;
+        const auto end=mip+1<physical.mips.size()?physical.mips[mip+1].offset:physical.guest_bytes;
+        if(delta>=part.offset&&delta<end&&(delta-part.offset)%part.slice_bytes==0)return true;
+    }
+    return false;
+}
 bool IsDirectDepthWordClass(const GuestTextureDesc& d,const GuestTextureLayout& l){
     // CopyColorAndDepth preserves texel bits. These native color layouts have
     // guest 16/32-bit words after explicitly reversing any SOURCE native
@@ -2680,6 +2697,17 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 retire_independent_(*existing);
                 if(existing->gpu_owned||existing->buffer_alias_version)
                     throw std::runtime_error("Dirty independent image remains owned after retirement");
+                continue;
+            }
+            if(existing->desc.address!=d.address&&
+               overlaps(d.address,layout.guest_bytes,existing->desc.address,existing->layout.guest_bytes)&&
+               !(d.address>existing->desc.address?
+                 HasPossibleReferenceSubresourceBase(d,existing->desc,existing->layout):
+                 HasPossibleReferenceSubresourceBase(existing->desc,d,layout))){
+                // ResolveOverlap leaves chance overlaps independent. The new
+                // image refreshes from B; a recent/pinned old I stays intact.
+                // A possible mip/slice is NOT ignored: its mapping must still
+                // be handled/proved by the normal subresource/transfer path.
                 continue;
             }
             if(existing->desc.address==d.address&&(existing->desc.depth_target||d.depth_target)&&
