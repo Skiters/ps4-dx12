@@ -1,4 +1,9 @@
 
+## Clear descriptor reuse published — 2026-10-19 22:02 +05
+
+Source5c6174f17f66469ff8b068271c113b21f3c42aa6 clean Release built in separate committed checkout with pinned dependencies; tracked clean and release-identity.commit matches. Sole app dx12-current safely replaced; EXE950103d6db5e6a25fd614299b068de1a162b8e624429ddc5fb0931225d3eabba; PDB8e0ae1b9dd4c80e89c60a26fefdc95e17ea6f979c2bcda2bc19a73144b7c543c. Exact new binary GAME_NOT_RUN. Narrow source-scoped GPU clear descriptor and page-ownership checks pass; black image/sub1FPS still unresolved. No new game or runtime archive. Next: resume remaining independent image/buffer GCN contract cases after corrected R16/R32 oracles; actual t3 not captured, do not claim depth corruption. Do not restart generic capture work or repeat passing clear/page fixtures without a new reason.
+
+
 ## Actual SRV subresources — 2026-10-19 21:47 +05
 
 TextureTransfer mip/layer/plane copy and actual private-SRV capture connected. GPU4/4, selected depth sampling/lifetime and stencil-plane isolation passed; full core built. See SESSION_HANDOFF.md for exact scope/logs. NEXT clean Release and actual world t3 capture; black image and prior device887a0001 remain unresolved, no FPS claim.

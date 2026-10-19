@@ -1,3 +1,8 @@
+
+## Clear descriptor reuse published — 2026-10-19 22:02 +05
+
+Source5c6174f17f66469ff8b068271c113b21f3c42aa6 clean Release built in separate committed checkout with pinned dependencies; tracked clean and release-identity.commit matches. Sole app dx12-current safely replaced; EXE950103d6db5e6a25fd614299b068de1a162b8e624429ddc5fb0931225d3eabba; PDB8e0ae1b9dd4c80e89c60a26fefdc95e17ea6f979c2bcda2bc19a73144b7c543c. Exact new binary GAME_NOT_RUN. Narrow source-scoped GPU clear descriptor and page-ownership checks pass; black image/sub1FPS still unresolved. No new game or runtime archive. Next: resume remaining independent image/buffer GCN contract cases after corrected R16/R32 oracles; actual t3 not captured, do not claim depth corruption. Do not restart generic capture work or repeat passing clear/page fixtures without a new reason.
+
 ## Production clear descriptor reuse — 2026-10-19 22:00 +05
 
 Pinned IsComputeImageClear/ClearImage clears all logical mips/layers of the cached image, preserving distinct physical B and padding. Native RecordGuestImageClear/RecordGuestStorageImageClear previously allocated RTV or paired CPU/shader-visible UAV heaps on every recognized clear. f7c9d82 loading logged over6144 clears; this proves frequency, not their time cost or the black-image cause. Entry now retains one immutable descriptor lease per clear family. Reuse requires matching native resource, complete clear-view identity and format; SetBackingSamples drops caches on resource replacement. Prior in-flight leases survive independently. Actual clear commands, UAV ordering barriers, ownership, pending fences, texel range and input values remain unchanged. No renderer path skipped.
