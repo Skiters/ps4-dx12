@@ -3322,7 +3322,12 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     ID3D12GraphicsCommandList* list,uint64_t completed,
     const std::function<Resource(uint64_t,uint64_t)>& capture_buffer){
     const auto owner=DescribeGuestImageOwnership(image);
-    if(image.cache!=this||!image.gpu_owned||!image.buffer_alias_version||!image.HasValidLogicalImage()||
+    // RefreshImage can initialize current native I from B without setting the
+    // original GpuModified flag. Depth reinterpretation copies those contents
+    // too; it must not require a guest GPU write or invent one to permit copy.
+    // Registered current allocation, dirty/boundary and ownership guards still
+    // reject stale I before capturing any target initialization bytes.
+    if(!HasCurrentNativeContents(image)||!image.buffer_alias_version||
        image.HasUnprotectedCpuPages()||!owner||!CanRetainGuestImageOwnership(*this,*owner)||
        !list||!capture_buffer||!CanUploadGpuSnapshot(target,physical,target.writable)||
        !CanMapIndependentDepthImage(image.desc,image.layout,target,physical)){
