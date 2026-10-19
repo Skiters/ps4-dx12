@@ -13,6 +13,7 @@
 #include "gcn_mixed_samples_fixture.h"
 #include "gcn_snorm_attachment_fixture.h"
 #include "gcn_cached_depth_storage_fixture.h"
+#include "gcn_color_feedback_fixture.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -55,6 +56,7 @@ int main(int argc,char** argv){try{
     const bool mixed_constant_blend=float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
+    const bool color_feedback=mode=="color-feedback-owned";
     const bool snorm_color=mode=="snorm-color-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
@@ -99,7 +101,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!color_feedback&&!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -160,7 +162,9 @@ int main(int argc,char** argv){try{
             memcpy(backing+(address-base),data.data(),data.size());return true;
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
-    if(snorm_color){
+    if(color_feedback){
+        RunColorFeedbackGcnFixture(rasterizer,gpu,plain_vertex,memory,backing,base,initialize);
+    }else if(snorm_color){
         RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
     }else if(mixed_samples){
         RunMixedSamplesGcnFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="mixed-samples-matrix-owned");
@@ -1216,7 +1220,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(color_feedback?"PASS: actual GCN GPU feedback current pixels, disjoint rectangles and physical CPU preservation":half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
