@@ -106,6 +106,8 @@ add_test(NAME native_guest_buffer_gpu_chain COMMAND native-guest-buffer-access-t
 add_test(NAME native_protected_physical_backing_epoch COMMAND native-guest-buffer-access-test physical-proof)
 add_test(NAME native_unaligned_buffer_page_witness COMMAND native-guest-buffer-access-test unaligned-proof)
 add_test(NAME native_cpu_buffer_download_window COMMAND native-guest-buffer-access-test cpu-window)
+add_test(NAME native_frame_buffer_readback COMMAND native-guest-buffer-access-test frame-readback)
+set_tests_properties(native_frame_buffer_readback PROPERTIES TIMEOUT 30)
 add_executable(native-scheduler-lifetime-test scheduler_lifetime_test.cpp)
 add_executable(native-host-copy-queue-test host_copy_queue_test.cpp)
 target_include_directories(native-host-copy-queue-test PRIVATE "${PORT_ROOT}/src")

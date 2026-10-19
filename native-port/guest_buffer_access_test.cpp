@@ -51,6 +51,92 @@ public:
 };
 static u64 Counter(const char* name){auto& hub=Diagnostics::Hub::Get();std::lock_guard lock(hub.mutex);
     for(const auto& c:hub.counters)if(c.name&&std::string_view(c.name)==name)return c.value;return 0;}
+static void FrameBufferReadback(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
+    constexpr u64 total=65536,page=4096;
+    Fixture renderer(device);renderer.MapMemory(base,total);renderer.NotifyHostMapping(base,total,true,true);
+    renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=total&&n<=total-(a-base);},
+        [&](VAddr a,std::span<const std::byte> data){memcpy(physical+a-base,data.data(),data.size());return true;});
+    const Rasterizer::ShaderBufferRequest requests[]{{base,total,false,true,true},
+        {base+page,page,true,true,true},{base+8*page,page,true,true,true}};
+    const auto arm=[&]{
+        renderer.ResolveGpuBuffers(base,total);renderer.NotifyCpuWrite(base,total);memset(physical,0x4d,total);
+        (void)renderer.PrepareShaderBuffers(requests);
+        renderer.FillPreparedShaderBuffer(base+page,page,0x11111111,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.FillPreparedShaderBuffer(base+8*page,page,0x22222222,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.MarkShaderBufferWrites(std::span(requests+1,2));
+    };
+    const auto wait_copy=[&]{
+        const auto fence=renderer.SubmittedFence();Require(fence!=0,"Frame copy did not submit");
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while(renderer.CompletedFence()<fence){
+            Require(std::chrono::steady_clock::now()<deadline,"Frame copy did not complete");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    };
+    const auto check=[&](unsigned first,unsigned second){
+        for(u64 i=0;i<total;++i){const auto expected=i>=page&&i<2*page?first:
+            i>=8*page&&i<9*page?second:0x4d;
+            Require(physical[i]==std::byte(expected),"Frame readback lost current bytes or physical padding");}
+    };
+    arm();const auto before_bytes=Counter("buffer-readback.frame-prefetched.bytes");
+    const auto before_consumed=Counter("buffer-readback.frame-consumed");
+    renderer.OnFrame();wait_copy();check(0x4d,0x4d);
+    Require(Counter("buffer-readback.frame-prefetched.bytes")==before_bytes+2*page,
+        "Frame prefetch did not compact exactly the two GPU-modified islands");
+    auto submitted=std::make_shared<bool>(false);renderer.NotifyOnSubmission([submitted](u64){*submitted=true;});
+    renderer.ResolveGpuBuffers(base+page,page);check(0x11,0x4d);
+    Require(!*submitted&&renderer.IsGpuBufferModified(base+8*page,page),
+        "Ready prefetch submitted/waited unrelated GPU work or retired the other island");
+    renderer.ResolveGpuBuffers(base+8*page,page);check(0x11,0x22);
+    // The first trusted commit may invalidate a coarser physical watch node.
+    // A later page then conservatively follows the ordinary current readback.
+    Require(Counter("buffer-readback.frame-consumed")>=before_consumed+1&&
+        Counter("buffer-readback.frame-consumed")<=before_consumed+2,
+        "Ready compact readback was not consumed");
+    renderer.Finish(); // Drain the unused submission observer before its stack lifetime ends.
+    arm();renderer.OnFrame();wait_copy();const auto second_first=Counter("buffer-readback.frame-consumed");
+    renderer.ResolveGpuBuffers(base+8*page,page);check(0x4d,0x22);
+    Require(Counter("buffer-readback.frame-consumed")==second_first+1,"Second compact staging offset did not retain exact bytes");
+    arm();renderer.OnFrame();wait_copy();
+    renderer.FillPreparedShaderBuffer(base+page,page,0x33333333,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.MarkShaderBufferWrites(std::span(requests+1,1));
+    auto consumed=Counter("buffer-readback.frame-consumed");
+    renderer.ResolveGpuBuffers(base+page,page);check(0x33,0x4d);
+    Require(Counter("buffer-readback.frame-consumed")==consumed,"Late same-range GPU write consumed a stale frame copy");
+    arm();renderer.OnFrame();wait_copy();renderer.ResolveGpuBuffers(base+page,page);
+    *reinterpret_cast<volatile unsigned char*>(guest+page)=0x7f;
+    consumed=Counter("buffer-readback.frame-consumed");renderer.ResolveGpuBuffers(base+8*page,page);
+    Require(physical[page]==std::byte{0x7f}&&physical[8*page]==std::byte{0x22}&&
+        Counter("buffer-readback.frame-consumed")==consumed,"CPU winner retained stale frame staging or was overwritten");
+    arm();renderer.OnFrame();wait_copy();physical[page]=std::byte{0x99};
+    renderer.PhysicalBackingChanged(base+page,1);consumed=Counter("buffer-readback.frame-consumed");
+    renderer.ResolveGpuBuffers(base+page,page);check(0x11,0x4d);
+    Require(Counter("buffer-readback.frame-consumed")==consumed,"Changed physical backing epoch retained stale staging");
+    arm();renderer.OnFrame();wait_copy();
+    const std::vector<std::byte> image(page,std::byte{0x66});
+    renderer.CommitImageBacking(base+page,image,
+        [&](VAddr a,std::span<std::byte> out){memcpy(out.data(),physical+a-base,out.size());return true;},
+        [&](VAddr a,std::span<const std::byte> in){memcpy(physical+a-base,in.data(),in.size());return true;});
+    consumed=Counter("buffer-readback.frame-consumed");renderer.ResolveGpuBuffers(base+8*page,page);check(0x66,0x22);
+    Require(Counter("buffer-readback.frame-consumed")==consumed,"Physical image publication retained stale buffer staging");
+    arm();renderer.OnFrame();wait_copy();const auto captured=Counter("buffer-readback.frame-prefetched.bytes");
+    renderer.OnFrame();renderer.OnFrame();renderer.OnFrame();
+    Require(Counter("buffer-readback.frame-prefetched.bytes")==captured,"Aged unused staging recopied an unchanged version");
+    consumed=Counter("buffer-readback.frame-consumed");renderer.ResolveGpuBuffers(base+page,page);check(0x11,0x4d);
+    Require(Counter("buffer-readback.frame-consumed")==consumed,"Expired frame staging bypassed the ordinary readback");
+    arm();ComPtr<ID3D12Fence> gate;Check(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate)));
+    SCOPE_EXIT {gate->Signal(1);};
+    renderer.WaitExternalFence(gate.Get(),1);renderer.OnFrame();
+    Require(renderer.CompletedFence()<renderer.SubmittedFence(),"Pending-copy negative lost its GPU gate");
+    consumed=Counter("buffer-readback.frame-consumed");
+    // Only the ordinary fallback submission may release this GPU gate; no
+    // timing assumption about worker/desktop scheduling can turn it ready.
+    renderer.NotifyOnSubmission([gate](u64){Check(gate->Signal(1));});
+    renderer.ResolveGpuBuffers(base+page,page);check(0x11,0x4d);
+    Require(Counter("buffer-readback.frame-consumed")==consumed,"Incomplete frame copy was mapped as completed data");
+    renderer.ResolveGpuBuffers(base,total);renderer.ValidateDebugMessages();
+    std::puts("PASS: compact frame readback, demand publication, no ready-copy submit, GPU/CPU/image winners, expiry and pending fallback");
+}
 static void ProtectedDmaBacking(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
     constexpr u64 bytes=4096;std::vector<std::byte> original(physical,physical+bytes);
     Fixture renderer(device);renderer.MapMemory(base,bytes);renderer.NotifyHostMapping(base,bytes,true,true);
@@ -634,7 +720,8 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
-    if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof"||std::string_view(argv[1])=="cpu-window")){
+    if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof"||
+        std::string_view(argv[1])=="cpu-window"||std::string_view(argv[1])=="frame-readback")){
         const bool cpu_window=std::string_view(argv[1])=="cpu-window";const u64 allocation_bytes=cpu_window?1024*1024:65536;
         HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,DWORD(allocation_bytes),nullptr);
         Require(section,"Physical proof section");SCOPE_EXIT {CloseHandle(section);};
@@ -643,7 +730,8 @@ int main(int argc,char** argv){try{
         auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(allocation_bytes)));
         Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
         memset(physical,0x4d,SIZE_T(allocation_bytes));
-        if(cpu_window)CpuDownloadWindow(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        if(std::string_view(argv[1])=="frame-readback")FrameBufferReadback(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        else if(cpu_window)CpuDownloadWindow(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
     }

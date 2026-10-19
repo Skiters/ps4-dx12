@@ -48,7 +48,17 @@ private:
     u64 shader_read_copy_pool_bytes_{};
     struct IndexStreamPage {std::shared_ptr<UploadArena> arena;u64 used{};};
     std::vector<IndexStreamPage> index_stream_pages_;
+    struct ReadbackSpan {u64 begin,end,offset;u64 backing_epoch{};};
+    struct FrameReadback {
+        Resource source,readback;
+        std::vector<ReadbackSpan> spans;
+        u64 fence{},serial{},epoch{},allocation_bytes{};
+        std::shared_ptr<std::atomic<u64>> accounting;
+        ~FrameReadback(){if(accounting)accounting->fetch_sub(allocation_bytes);}
+    };
     struct Mapping {VAddr base;u64 size;Resource gpu;bool dirty=false;std::map<u64,u64> dirty_ranges;
+        u64 contents_serial{1},last_prefetched_serial{};
+        std::shared_ptr<FrameReadback> frame_readback;
         CpuBufferSnapshot cpu_snapshot;Resource readback;bool gpu_owned=false;bool cpu_watched=false;
         // Strong CPU exclusion is page-granular in the pinned RegionManager.
         // One native arena can retain independent GPU-owned pages after a
@@ -136,6 +146,14 @@ private:
     std::map<VAddr,VAddr> indexed_ranges_, indexed_buffers_;
     void RemoveBufferIndex(VAddr address){std::lock_guard lock(memory_index_mutex_);indexed_buffers_.erase(address);}
     std::set<VAddr> dirty_mappings_;
+    u64 frame_readback_epoch_{};
+    std::shared_ptr<std::atomic<u64>> frame_readback_bytes_=std::make_shared<std::atomic<u64>>(0);
+    static void InvalidateFrameReadback(Mapping& mapping){
+        if(mapping.contents_serial==UINT64_MAX)throw std::overflow_error("Buffer contents serial overflow");
+        ++mapping.contents_serial;mapping.frame_readback.reset();
+    }
+    void CommitBufferReadback(Mapping&,Resource&,std::span<const ReadbackSpan>,bool owned);
+    void ConsumeFrameReadback(Mapping&,const std::map<u64,u64>&);
     u64 cached_buffer_bytes_{};
     u64 buffer_cache_budget_=512ull*1024*1024;
     std::unique_ptr<BufferBudgetObserver> buffer_budget_observer_;
@@ -176,9 +194,11 @@ private:
         return address>=base&&address-base<=gds_.size()&&size<=gds_.size()-(address-base);
     }
     void MarkDirty(Mapping& mapping,bool dirty,u64 offset=0,u64 bytes=UINT64_MAX){
-        if(!dirty){dirty_mappings_.erase(mapping.base);mapping.dirty_ranges.clear();mapping.dirty=false;return;}
+        if(!dirty){dirty_mappings_.erase(mapping.base);mapping.dirty_ranges.clear();mapping.dirty=false;
+            mapping.frame_readback.reset();return;}
         if(offset>mapping.size)throw std::out_of_range("dirty buffer offset");
         bytes=std::min(bytes,mapping.size-offset);if(!bytes)return;
+        InvalidateFrameReadback(mapping);
         // GDS has no direct guest CPU alias. Its internal host array is read
         // only through the CP readback path, so it needs no page protection.
         if(IsGdsRange(mapping.base,mapping.size)&&!mapping.gpu_owned)MarkGpuOwned(mapping,0,mapping.size);
@@ -415,6 +435,7 @@ public:
     void Finish() override;
     void OnSubmit() override {Flush();}
     void OnFence() override {Finish();}
+    void OnFrame() override;
     u64 CachedBufferBytes() const {std::lock_guard lock(execution_mutex_);return cached_buffer_bytes_;}
     u64 BufferCacheBudget() const {std::lock_guard lock(execution_mutex_);return buffer_cache_budget_;}
 };

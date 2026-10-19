@@ -578,6 +578,7 @@ void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
     if(!size)return;
     if(address>UINT64_MAX-size)throw std::out_of_range("CPU dirty page range overflow");
     const auto invalidate=[&](Mapping& m){
+        InvalidateFrameReadback(m);
         m.protected_backing_epoch=0;
         const auto forget=[&]{
             if(&m!=preparing_buffer_envelope_){ReleaseCpuBufferWatches(m.base,m.size);return;}
@@ -667,11 +668,12 @@ void Rasterizer::ResolveGpuBuffers(VAddr address,u64 size){
             if(selected_begin<selected_end)RememberSpan(owned,selected_begin,selected_end);
         }
         if(owned.empty())continue;
+        requested.push_back(it->first);resolving_buffers_.insert(it->first);
+        resolving_buffer_ranges_.emplace(it->first,owned);
+        ConsumeFrameReadback(mapping,owned);
         for(const auto& [selected_begin,selected_end]:owned)
             for(const auto& [dirty_begin,dirty_end]:mapping.dirty_ranges)
                 needs_download|=selected_begin<dirty_end&&dirty_begin<selected_end;
-        requested.push_back(it->first);resolving_buffers_.insert(it->first);
-        resolving_buffer_ranges_.emplace(it->first,std::move(owned));
     }
     // Finish also writes CPU-visible dirty mappings. Their virtual CheckBacking
     // calls return here while an unrelated owned mapping is still resolving.
@@ -782,6 +784,7 @@ bool Rasterizer::BuffersMayDefer(std::span<const ShaderBufferRequest> requests){
     return true;
 }
 void Rasterizer::Upload(Mapping& range,u64 offset,u64 size,const void* data){
+    InvalidateFrameReadback(range);
     Diagnostics::Count("buffer-upload.calls");Diagnostics::Count("buffer-upload.bytes",size);
     churn_.Record(range.base,size,range.base,range.size,range.allocation_id,false,range.dirty,range.gpu_owned,scheduler_.Completed(),nullptr,size);
     const auto exceptions=std::uncaught_exceptions();
@@ -1825,6 +1828,7 @@ void Rasterizer::CopyToPreparedShaderBuffer(VAddr address,u64 bytes,Resource& so
     const auto spans=resident_only?DmaMemory().ResidentIntersections(address,bytes):
         std::vector<std::pair<VAddr,u64>>{{address,bytes}};
     if(!spans.empty()){
+        InvalidateFrameReadback(mapping);
         RetainUntilFinish([backing=mapping.gpu,source](u64){(void)backing;(void)source;});
         source.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         mapping.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
@@ -1846,6 +1850,7 @@ void Rasterizer::FillPreparedShaderBuffer(VAddr address,u64 bytes,u32 value,D3D1
     auto& mapping=found->second;
     if(address-mapping.base>mapping.size||bytes>mapping.size-(address-mapping.base))
         throw std::logic_error("Prepared metadata buffer envelope was replaced");
+    InvalidateFrameReadback(mapping);
     struct FillLease{Resource backing;Descriptors visible,cpu;
         FillLease(ID3D12Device* device,Resource resource):backing(std::move(resource)),
             visible(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,true),
@@ -2201,6 +2206,7 @@ void Rasterizer::CommitImageBacking(VAddr address,std::span<const std::byte> byt
         auto& mapping=it->second;
         const auto first=std::max(address,mapping.base),last=std::min(address+bytes.size(),mapping.base+mapping.size);
         if(last<=first)continue;
+        InvalidateFrameReadback(mapping);
         if(mapping.cpu_snapshot.size()==mapping.size)
             memcpy(mapping.cpu_snapshot.WriteData()+first-mapping.base,bytes.data()+first-address,size_t(last-first));
         // This GPU image download is not a CPU store. Remember the new CPU
@@ -2246,6 +2252,119 @@ void Rasterizer::DeferImageBacking(u64 fence,VAddr address,u64 bytes,u64 retaine
     scheduler_.Defer(fence,[commit=std::move(commit),lease=std::move(lease)](u64 completed){commit(completed);},true);
     handed_off=true;Diagnostics::Count("image-download.priority-queued");
 }
+void Rasterizer::CommitBufferReadback(Mapping& mapping,Resource& resource,
+    std::span<const ReadbackSpan> ranges,bool owned){
+    if(ranges.empty())return;
+    u64 first=UINT64_MAX,last{};
+    for(const auto& range:ranges){first=std::min(first,range.offset);
+        last=std::max(last,range.offset+range.end-range.begin);}
+    void* data{};const D3D12_RANGE all{SIZE_T(first),SIZE_T(last)};
+    Check(DX12_API_CALL(resource.handle->Map(0,&all,&data)));
+    SCOPE_EXIT {const D3D12_RANGE none{};DX12_API_CALL(resource.handle->Unmap(0,&none));};
+    const bool gds=IsGdsRange(mapping.base,mapping.size);
+    for(const auto& range:ranges){
+        const auto* source=static_cast<const std::byte*>(data)+range.offset;
+        if(owned&&!gds){
+            if(!commit_buffer_(mapping.base+range.begin,std::span(source,size_t(range.end-range.begin))))
+                throw std::runtime_error("Cannot commit GPU buffer through PS4 physical backing");
+        }else{
+            if(!owned)CheckBacking(mapping.base+range.begin,range.end-range.begin,true);
+            memcpy(reinterpret_cast<void*>(mapping.base+range.begin),source,size_t(range.end-range.begin));
+        }
+        Diagnostics::Count("buffer-commit.bytes",range.end-range.begin);
+    }
+    // Preserve exact physical equality witnesses, forced CPU-store markers
+    // and GPU-only formatted bytes outside the downloaded spans.
+    if(mapping.cpu_snapshot.size()!=mapping.size){ResizeSnapshot(mapping);
+        memcpy(mapping.cpu_snapshot.WriteData(),reinterpret_cast<const void*>(mapping.base),size_t(mapping.size));}
+    for(const auto& range:ranges)memcpy(mapping.cpu_snapshot.WriteData()+range.begin,
+        static_cast<const std::byte*>(data)+range.offset,size_t(range.end-range.begin));
+    for(const auto& range:ranges)ForgetSpan(mapping.dirty_ranges,range.begin,range.end);
+    mapping.dirty=!mapping.dirty_ranges.empty();
+    if(!mapping.dirty){dirty_mappings_.erase(mapping.base);mapping.frame_readback.reset();}
+    if(!owned)InstallCpuWatch(mapping);
+}
+void Rasterizer::ConsumeFrameReadback(Mapping& mapping,const std::map<u64,u64>& wanted){
+    auto copy=mapping.frame_readback;
+    if(!protected_backing_epoch_||!copy||!copy->fence||copy->fence>scheduler_.Completed()||
+       copy->serial!=mapping.contents_serial||mapping.cpu_snapshot.size()!=mapping.size)return;
+    std::vector<ReadbackSpan> selected;
+    for(const auto& [dirty_begin,dirty_end]:mapping.dirty_ranges)
+        for(const auto& [wanted_begin,wanted_end]:wanted){
+            const auto begin=std::max(dirty_begin,wanted_begin),end=std::min(dirty_end,wanted_end);
+            if(begin>=end)continue;
+            const auto captured=std::find_if(copy->spans.begin(),copy->spans.end(),[&](const auto& span){
+                return span.begin<=begin&&span.end>=end;});
+            // Do not retire a partially captured request: the ordinary Finish
+            // path must obtain every missing current byte, with its own wait.
+            if(captured==copy->spans.end())return;
+            if(protected_backing_epoch_&&(!captured->backing_epoch||captured->backing_epoch!=
+                protected_backing_epoch_(mapping.base+captured->begin,captured->end-captured->begin)))return;
+            selected.push_back({begin,end,captured->offset+begin-captured->begin});
+        }
+    if(selected.empty())return;
+    CommitBufferReadback(mapping,copy->readback,selected,true);
+    Diagnostics::Count("buffer-readback.frame-consumed");
+}
+void Rasterizer::OnFrame(){
+    std::lock_guard lock(execution_mutex_);
+    if(!protected_backing_epoch_)return;
+    if(frame_readback_epoch_==UINT64_MAX)throw std::overflow_error("Frame readback epoch overflow");
+    ++frame_readback_epoch_;scheduler_.Collect();
+    constexpr u64 budget=16*1024*1024;
+    struct Candidate {Mapping* mapping;std::vector<ReadbackSpan> spans;u64 bytes;};
+    std::vector<Candidate> candidates;
+    for(const auto base:dirty_mappings_){auto& mapping=mappings_.at(base);
+        // Unused completed staging ages out without recopying the same version.
+        if(mapping.frame_readback&&mapping.frame_readback->fence&&
+           mapping.frame_readback->fence<=scheduler_.Completed()&&
+           frame_readback_epoch_-mapping.frame_readback->epoch>2)mapping.frame_readback.reset();
+        if(!mapping.gpu_owned||IsGdsRange(base,mapping.size)||mapping.frame_readback||
+           mapping.last_prefetched_serial==mapping.contents_serial)continue;
+        Candidate candidate{&mapping,{},0};
+        for(const auto& [dirty_begin,dirty_end]:mapping.dirty_ranges){
+            for(const auto& [owned_begin,owned_end]:mapping.gpu_owned_ranges){
+                const auto begin=std::max(dirty_begin,owned_begin),end=std::min(dirty_end,owned_end);
+                if(begin>=end)continue;
+                if(end-begin>budget-candidate.bytes){candidate.bytes=budget+1;break;}
+                const auto epoch=protected_backing_epoch_?protected_backing_epoch_(base+begin,end-begin):0;
+                if(protected_backing_epoch_&&!epoch){candidate.bytes=budget+1;break;}
+                candidate.spans.push_back({begin,end,candidate.bytes,epoch});
+                candidate.bytes=(candidate.bytes+end-begin+63)&~u64(63);
+            }
+            if(candidate.bytes>budget)break;
+        }
+        if(candidate.bytes&&candidate.bytes<=budget)candidates.push_back(std::move(candidate));
+    }
+    // CPU-facing scalar/small outputs retain a chance when a large rendering
+    // buffer exceeds the optional staging budget. Required reads never drop.
+    std::stable_sort(candidates.begin(),candidates.end(),[](const auto& a,const auto& b){return a.bytes<b.bytes;});
+    bool recorded{};
+    for(auto& candidate:candidates){
+        D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width=candidate.bytes;desc.Height=1;desc.DepthOrArraySize=1;desc.MipLevels=1;
+        desc.SampleDesc.Count=1;desc.Layout=D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        const auto allocation=device_->GetResourceAllocationInfo(0,1,&desc).SizeInBytes;
+        if(!allocation||allocation==UINT64_MAX)throw std::runtime_error("Invalid frame readback allocation");
+        if(allocation>budget||frame_readback_bytes_->load()>budget-allocation)continue;
+        auto& mapping=*candidate.mapping;
+        auto copy=std::make_shared<FrameReadback>();copy->source=mapping.gpu;
+        copy->readback=Buffer(device_.Get(),candidate.bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        copy->spans=std::move(candidate.spans);copy->serial=mapping.contents_serial;copy->epoch=frame_readback_epoch_;
+        copy->accounting=frame_readback_bytes_;copy->allocation_bytes=allocation;
+        frame_readback_bytes_->fetch_add(allocation);
+        // Own both placed source and staging BEFORE recording. The submission
+        // callback gives the copy its actual fence even if the mapping retires.
+        RetainUntilFinish([copy](u64){(void)copy;});
+        NotifyOnSubmission([copy](u64 fence){copy->fence=fence;});
+        mapping.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        for(const auto& span:copy->spans)DX12_API_CALL(RecordingList()->CopyBufferRegion(
+            copy->readback.handle.Get(),span.offset,mapping.gpu.handle.Get(),span.begin,span.end-span.begin));
+        mapping.frame_readback=std::move(copy);mapping.last_prefetched_serial=mapping.contents_serial;
+        recorded=true;Diagnostics::Count("buffer-readback.frame-prefetched.bytes",candidate.bytes);
+    }
+    if(recorded)Flush();
+}
 void Rasterizer::Finish(){
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Reconcile,"execution-lock");
     std::lock_guard lock(execution_mutex_);
@@ -2277,35 +2396,10 @@ void Rasterizer::Finish(){
     diagnostic.Stage("submit-and-wait");
     auto token=Flush();if(token)scheduler_.Wait(token);
     diagnostic.Stage("cpu-buffer-writeback");
-    for(auto& job:readbacks){auto* r=job.mapping;auto& rb=job.resource;
-        const auto first_dirty=job.ranges.front().first,last_dirty=job.ranges.back().second;
-        void* data=nullptr;D3D12_RANGE all{SIZE_T(first_dirty),SIZE_T(last_dirty)};Check(DX12_API_CALL(rb.handle->Map(0,&all,&data)));
-        SCOPE_EXIT {D3D12_RANGE no_write{0,0};DX12_API_CALL(rb.handle->Unmap(0,&no_write));};
-        if(job.owned){
-            const bool gds=IsGdsRange(r->base,r->size);
-            for(const auto& [begin,end]:job.ranges){
-                if(gds)memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,size_t(end-begin));
-                else if(!commit_buffer_(r->base+begin,std::span(static_cast<const std::byte*>(data)+begin,size_t(end-begin))))
-                    throw std::runtime_error("Cannot commit GPU buffer through PS4 physical backing");
-                Diagnostics::Count("buffer-commit.bytes",end-begin);
-            }
-        }else{for(const auto& [begin,end]:job.ranges){CheckBacking(r->base+begin,end-begin,true);
-            Diagnostics::Count("buffer-commit.bytes",end-begin);
-            memcpy(reinterpret_cast<void*>(r->base+begin),static_cast<const std::byte*>(data)+begin,end-begin);}}
-        // Finish reconciles exact GPU-written spans. GPU-only formatted bytes
-        // outside those spans may still differ; preserve the CPU snapshot and
-        // the separate actual-store page markers for subsequent uploads.
-        if(r->cpu_snapshot.size()!=r->size){ResizeSnapshot(*r);
-            memcpy(r->cpu_snapshot.WriteData(),reinterpret_cast<const void*>(r->base),size_t(r->size));}
-        for(const auto& [begin,end]:job.ranges)memcpy(r->cpu_snapshot.WriteData()+begin,
-            static_cast<const std::byte*>(data)+begin,size_t(end-begin));
-        for(const auto& [begin,end]:job.ranges)ForgetSpan(r->dirty_ranges,begin,end);
-        r->dirty=!r->dirty_ranges.empty();
-        if(!r->dirty)dirty_mappings_.erase(r->base);
-        // The snapshot matches CPU backing. A write-watch proves that backing
-        // stayed unchanged, without claiming equality of GPU-only formatted
-        // bytes. Real stores invalidate this proof and record any forced pages.
-        if(!job.owned)InstallCpuWatch(*r);
+    for(auto& job:readbacks){
+        std::vector<ReadbackSpan> ranges;ranges.reserve(job.ranges.size());
+        for(const auto& [begin,end]:job.ranges)ranges.push_back({begin,end,begin});
+        CommitBufferReadback(*job.mapping,job.resource,ranges,job.owned);
     }
     scheduler_.Collect();
     uploads_.clear();

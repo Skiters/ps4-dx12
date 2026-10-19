@@ -46,5 +46,6 @@ public:
     virtual void Finish() = 0;
     virtual void OnSubmit() = 0;
     virtual void OnFence() = 0;
+    virtual void OnFrame() {}
 };
 } // namespace VideoCore
