@@ -1,3 +1,5 @@
+Latest:ab449e4 adds merged reflected GS/PS layout and one logical preparation/completion, wired in partition fixture. CPU merge/projection/shader checks and clean Release PASS; GPU/game NOT_RUN. Original SO producer context and main integration remain pending. See SESSION_HANDOFF.md.
+
 Latest:c60debe projects prepared descriptors into per-pass reflected layouts; CPU plan/shader checks and clean Release PASS. GPU/game NOT_RUN. Merged GS/PS logical resource preparation/completion remains pending; see SESSION_HANDOFF.md.
 
 Latest:1460b0b recognizes real buffered-GS t1/space33 as callback-owned. CPU classification/shader checks and clean Release PASS; GPU/game NOT_RUN. Shared cross-layout GS/PS resource context remains pending. See SESSION_HANDOFF.md.
