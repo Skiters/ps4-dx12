@@ -1057,7 +1057,15 @@ int main(int argc,char** argv){try{
                 rasterizer.PrepareShaderBuffers(raw);check_raw(true);
                 continue;
             }
-            rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
+            rasterizer.Draw(false);
+            if(mode=="base")rasterizer.Draw(false); // Rebind current GPU attachments before CPU access.
+            rasterizer.ReadMemory(base,65536);rasterizer.Finish();
+            if(mode=="base"){
+                // A real CPU store to allocation padding must remain the winner.
+                *reinterpret_cast<volatile unsigned char*>(memory+65535)=0x5a;
+                expected[65535]=std::byte{0x5a};
+                rasterizer.ReadMemory(base,65536);rasterizer.Finish();
+            }
             if(memcmp(memory,expected.data(),65536)){size_t byte{};while(byte<65536&&memory[byte]==expected[byte])++byte;
                 u32 actual_word{},expected_word{};if(byte<65536){const auto word=byte&~size_t(3);
                     memcpy(&actual_word,memory+word,4);memcpy(&expected_word,expected.data()+word,4);}
