@@ -20,7 +20,7 @@ public:
     static GuestGraphicsState ProducerState(const GuestGraphicsState&);
     static GuestGraphicsState StreamConsumerState(const GuestGraphicsState&,u32 vertices_per_primitive);
     static void BindProducer(ResourceBindings&,Resource&,u64 offset,u64 bytes);
-    static void BindReplay(ResourceBindings&,Resource&,u64 bytes);
+    static void BindReplay(ResourceBindings&,Resource&,u64 bytes,u64 offset=0);
     // SRV view starts at a complete primitive boundary; GS PrimitiveId is
     // relative to this slice, while record word zero retains the guest ID.
     static void BindInputStream(ResourceBindings&,Resource&,u64 offset,u64 bytes);

@@ -6,6 +6,7 @@
 #include "video_core/renderer_d3d12/guest_viewports.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
+#include "video_core/renderer_d3d12/guest_attachment_retirement.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
@@ -76,7 +77,10 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    const bool split_replay=mode.starts_with("split-");
+    if(split_replay)mode.remove_prefix(6);
     const bool automatic_rect=mode.starts_with("rect-");
+    if(split_replay&&!automatic_rect)throw std::invalid_argument("Split replay fixture requires automatic rectangle capture");
     const bool captured_inputs=automatic_rect||mode.starts_with("captured-");
     const bool stream_inputs=captured_inputs||mode.starts_with("stream-");
     if(stream_inputs){
@@ -744,12 +748,26 @@ int main(int argc,char** argv){try{
             GuestTextureCache::Entry* target{};GuestTextureCache::Entry* ds{};
             auto color_memory=std::span(memory+4096,size_t(cl.guest_bytes)),depth_memory=std::span(memory+8192,size_t(dl.guest_bytes)),stencil_memory=std::span(memory+12288,size_t(sl.guest_bytes));
             Rasterizer::DrawArguments output_draw{captured_inputs?12u*capture_instances:sized_points?stream_primitives:6u,captured_inputs?1u:capture_instances};
+            GuestReplayAttachments replay_attachment_scope;
+            const ShaderPipeline* replay_pipeline=&pipeline;
+            u32 color_initializations{},depth_initializations{};
             const auto submit=[&](ResourceBindings& bindings){
-                target=&textures.Upload(color,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());
-                ds=&textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory);
+                target=&replay_attachment_scope.Select(textures,0,[&]() -> GuestTextureCache::Entry& {
+                    ++color_initializations;
+                    return textures.Upload(color,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());});
+                ds=&replay_attachment_scope.Select(textures,8,[&]() -> GuestTextureCache::Entry& {
+                    ++depth_initializations;
+                    // A forced immutable original-depth snapshot would reset
+                    // earlier stencil results if uploaded again on slice2.
+                    return textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory,split_replay);});
+                bindings.RetainAllocation(replay_attachment_scope.BindingPin(0));
+                bindings.RetainAllocation(replay_attachment_scope.BindingPin(8));
                 const Rasterizer::ColorAttachment attachment[]{ {&target->texture,target->Rtv()} };
-                const Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
-                rasterizer.ExecuteGraphics(pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false);
+                Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
+                dsv.clear_depth=dsv.clear_stencil=split_replay&&replay_attachment_scope.Beginning();
+                dsv.clear_value=0.5f;dsv.stencil_value=7;
+                rasterizer.ExecuteGraphics(*replay_pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false);
+                replay_attachment_scope.Submitted();
             };
             if(capture){
                 const auto& gs=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
@@ -838,13 +856,33 @@ int main(int argc,char** argv){try{
                         buffer.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                     }
                 },[&](Resource& buffer,const Rasterizer::DrawArguments& draw){
-                    output_draw=draw;ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,replay_resources,push,runtime,
-                        [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit(bindings);},textures);
+                    const auto part=[&](u64 offset,u64 bytes){
+                        output_draw=draw;output_draw.count=u32(bytes/Shader::NativePointCapture::RecordBytes);
+                        const auto mask=state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask;
+                        if(split_replay){
+                            // RG then BA retains the unchanged full-color
+                            // oracle, but re-uploading the original color on
+                            // slice2 would lose RG and fail that oracle.
+                            state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=replay_attachment_scope.Beginning()?3:12;
+                            replay_pipeline=&pipelines.Graphics(capture->replay,state.pipeline);
+                        }
+                        ExecuteGuestGraphicsResources(device.Get(),rasterizer,*replay_pipeline,replay_resources,push,runtime,
+                            [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,bytes,offset);submit(bindings);},textures);
+                        state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=mask;replay_pipeline=&pipeline;
+                    };
+                    if(split_replay){
+                        const u64 first_records=plan.records/2;
+                        part(0,first_records*Shader::NativePointCapture::RecordBytes);
+                        part(first_records*Shader::NativePointCapture::RecordBytes,(plan.records-first_records)*Shader::NativePointCapture::RecordBytes);
+                    }else part(0,plan.bytes);
                 });
             }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,resources,push,runtime,submit,textures);
             rasterizer.Finish();GuestImageReadback cr(device.Get(),*target,rasterizer.RecordingList()),dr(device.Get(),*ds,rasterizer.RecordingList());
             const auto fence=rasterizer.Flush();cr.Submitted(fence);dr.Submitted(fence);textures.Used(*target,fence);textures.Used(*ds,fence);rasterizer.Finish();
             cr.Resolve(rasterizer.CompletedFence(),color_memory);dr.Resolve(rasterizer.CompletedFence(),depth_memory,stencil_memory);
+            if(color_initializations!=1||depth_initializations!=1)
+                throw std::runtime_error("Logical replay reinitialized an attachment between slices");
+            replay_attachment_scope.ReleasePins();
             textures.Collect(rasterizer.CompletedFence());
             bool mismatch=false;
             for(size_t byte=0;byte<65536;++byte)if(memory[byte]!=expected[byte]&&

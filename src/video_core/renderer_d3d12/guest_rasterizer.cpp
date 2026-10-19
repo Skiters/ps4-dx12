@@ -1474,7 +1474,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     struct BoundBufferCapture {std::string name,metadata;ResourceBindings::BufferCapture transfer;};
     std::vector<BoundBufferCapture> bound_buffer_captures;
     uint64_t bound_capture_id{};
-    const auto submit_replay=[&](ResourceBindings& bindings) {
+    GuestReplayAttachments replay_attachments;
+    const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true) {
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         std::array<ColorAttachment,8> attachments{};
         struct OrderedMultisampleTransfer {
@@ -1483,23 +1484,26 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         };
         std::vector<OrderedMultisampleTransfer> ordered_multisample;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
-            auto& entry=textures_.Upload(descriptions[i],
+            auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return textures_.Upload(descriptions[i],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
-                RecordingList(),CompletedFence());
-            bindings.RetainAllocation(textures_.PinBinding(entry));bindings.RetainAllocation(entry.texture.allocation);
+                RecordingList(),CompletedFence());});
+            bindings.RetainAllocation(replay_attachments.BindingPin(i));bindings.RetainAllocation(entry.texture.allocation);
             const auto& buffer=r.color_buffers[i];
-            if(deferred_color_clear[i]){
+            if(replay_attachments.Beginning()&&deferred_color_clear[i]){
                 if(!OwnIndependentImage(entry))throw std::runtime_error("Recreated color target cannot retain native clear ownership");
                 MaterializeColorClear(buffer,descriptions[i],layouts[i],true);
             }
             // CMASK bytes are materialized before upload. Keep their owner in
             // the same image cache while preserving the physical clear path.
-            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::CMask,
-                buffer.info.fast_clear?buffer.CmaskAddress():0,0);
-            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::FMask,
-                buffer.info.compression?buffer.FmaskAddress():0);
-            textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
-            OwnImage(entry);textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
+            if(replay_attachments.Beginning()){
+                textures_.RegisterMeta(entry,GuestTextureCache::MetaType::CMask,
+                    buffer.info.fast_clear?buffer.CmaskAddress():0,0);
+                textures_.RegisterMeta(entry,GuestTextureCache::MetaType::FMask,
+                    buffer.info.compression?buffer.FmaskAddress():0);
+                textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
+            }
+            OwnImage(entry);
+            if(replay_attachments.Beginning())textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
             if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
                 throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
             targets[i]=&entry;
@@ -1539,12 +1543,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes));
             const auto stencil_bytes=depth_attachment_snapshot?std::span<const std::byte>(stencil_guest_snapshot):
                 std::span<const std::byte>(stencil_memory);
-            auto& entry=depth_binding_plan?textures_.BindPlannedImage(*depth_binding_plan,RecordingList(),CompletedFence()):
+            auto& entry=replay_attachments.Select(textures_,8,[&]() -> GuestTextureCache::Entry& {return depth_binding_plan?textures_.BindPlannedImage(*depth_binding_plan,RecordingList(),CompletedFence()):
                 feedback_depth?*feedback_depth:textures_.Upload(descriptions[8],
                 depth_bytes,RecordingList(),CompletedFence(),stencil_bytes,
                 depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr,
                 false,false,GuestTextureCache::UploadPurpose::Binding,
-                stencil_gpu_snapshot.handle?&stencil_gpu_snapshot:nullptr);
+                stencil_gpu_snapshot.handle?&stencil_gpu_snapshot:nullptr);});
             if(depth_binding_plan){
                 const auto requested=descriptions[8];descriptions[8]=entry.desc;
                 descriptions[8].first_mip=requested.first_mip;descriptions[8].first_layer=requested.first_layer;
@@ -1561,19 +1565,21 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 DmaMemory().ObserveResidentSharps(std::span(&resident,1));
             }
             textures_.PublishBufferResidency(entry);
-            bindings.RetainAllocation(textures_.PinBinding(entry));bindings.RetainAllocation(entry.texture.allocation);
+            bindings.RetainAllocation(replay_attachments.BindingPin(8));bindings.RetainAllocation(entry.texture.allocation);
             const auto meta=r.depth_buffer.z_info.tile_surface_enable?
                 r.depth_htile_data_base.GetAddress():0;
-            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::HTile,meta,
+            if(replay_attachments.Beginning())textures_.RegisterMeta(entry,GuestTextureCache::MetaType::HTile,meta,
                 depth_meta_snapshot.value_or(entry.htile_initial_mask));
-            const bool metadata_clear=textures_.ConsumeMeta(meta,r.depth_view.slice_start);
-            const bool clear_depth=depth_tests.depth&&((r.depth_render_control.depth_clear_enable&&
+            const bool metadata_clear=replay_attachments.Beginning()&&textures_.ConsumeMeta(meta,r.depth_view.slice_start);
+            const bool clear_depth=replay_attachments.Beginning()&&depth_tests.depth&&((r.depth_render_control.depth_clear_enable&&
                 r.depth_control.depth_write_enable)||metadata_clear);
-            write_depth_stencil=state.WritesDepthStencil(clear_depth,clear_stencil);
-            depth_write_planes=u32(state.WritesDepth(clear_depth))|u32(state.WritesStencil(clear_stencil))*2;
+            const bool draw_clear_stencil=replay_attachments.Beginning()&&clear_stencil;
+            write_depth_stencil|=state.WritesDepthStencil(clear_depth,draw_clear_stencil);
+            const u32 draw_write_planes=u32(state.WritesDepth(clear_depth))|u32(state.WritesStencil(draw_clear_stencil))*2;
+            depth_write_planes|=draw_write_planes;
             if(clear_depth&&!explicit_depth_clear)
                 ValidateGpuBacking(descriptions[8].address,layouts[8].guest_bytes,true);
-            if((shader_depth_overlap&&(depth_write_planes&1))||(shader_stencil_overlap&&(depth_write_planes&2)))
+            if((shader_depth_overlap&&(draw_write_planes&1))||(shader_stencil_overlap&&(draw_write_planes&2)))
                 throw std::logic_error("Native depth snapshot acquired a competing attachment writer");
             if(metadata_clear&&Diagnostics::Enabled()){
                 static unsigned reported{};
@@ -1590,7 +1596,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             const bool read_only_stencil=!state.WritesStencil();
             targets[8]=&entry;depth={&entry.texture,entry.Dsv(descriptions[8],read_only_depth,read_only_stencil),
                 read_only_depth,read_only_stencil,
-                clear_depth,r.depth_clear,clear_stencil,UINT8(r.stencil_clear)};
+                clear_depth,r.depth_clear,draw_clear_stencil,UINT8(r.stencil_clear)};
         }
         for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
@@ -1750,6 +1756,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             std::span(attachments.data(),pipeline.TargetFormats().size()),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
+        replay_attachments.Submitted();
         for(UINT i=0;i<target_count;++i)if(targets[i]&&(state.ordered_color_mask&(1u<<i))&&
             descriptions[i].samples==1)targets[i]->texture.UavBarrier(RecordingList());
         for(const auto& transfer:ordered_multisample){
@@ -1777,11 +1784,16 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_result.handle.Get(),0);
         }
-        std::set<GuestTextureCache::Entry*> downloaded_targets;
-        for(UINT i=0;i<targets.size();++i)if(targets[i]&&!targets[i]->gpu_owned&&(i!=8||write_depth_stencil)&&
-            downloaded_targets.insert(targets[i]).second){
-            readbacks.push_back(std::make_unique<GuestImageReadback>(device_.Get(),*targets[i],RecordingList()));
-            readback_rows[i]=true;
+        // Keep readback recording inside the resource callback, before its
+        // post-draw ownership finalization, as in the original single draw.
+        // A multipart caller records only the final attachment contents.
+        if(final_submission){
+            std::set<GuestTextureCache::Entry*> downloaded_targets;
+            for(UINT i=0;i<targets.size();++i)if(targets[i]&&!targets[i]->gpu_owned&&(i!=8||write_depth_stencil)&&
+                downloaded_targets.insert(targets[i]).second){
+                readbacks.push_back(std::make_unique<GuestImageReadback>(device_.Get(),*targets[i],RecordingList()));
+                readback_rows[i]=true;
+            }
         }
     };
     if(capture&&capture->stream_patch_vertices){
@@ -1919,6 +1931,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(!readbacks.empty()) {
             const auto fence=Flush();for(auto& rb:readbacks)rb->Submitted(fence);
             RetireGuestAttachmentReadbacks(*this,textures_,fence,targets);
+            replay_attachments.ReleasePins();
             if(readback_rows[8]&&depth_attachment_snapshot){
                 // Resolve preceding buffer owners before padding-preserving
                 // plane commits. The unselected plane is neither read nor written
@@ -1942,6 +1955,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             }
         }
     }catch(...){try{Finish();}catch(...){}throw;}
+    replay_attachments.ReleasePins();
     if(trace){fprintf(stderr,"DX12 startup draw %u: guest memory reconciled\n",traced_draws);fflush(stderr);}
 }
 void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 stride,

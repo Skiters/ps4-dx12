@@ -95,11 +95,15 @@ void NativePointCapturePass::BindProducer(ResourceBindings& table,Resource& buff
     view.Buffer.NumElements=UINT(bytes/4);view.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;
     table.RetainAllocation(buffer.allocation);table.Uav(0,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
 }
-void NativePointCapturePass::BindReplay(ResourceBindings& table,Resource& buffer,u64 bytes){
+void NativePointCapturePass::BindReplay(ResourceBindings& table,Resource& buffer,u64 bytes,u64 offset){
     if(!HasBinding(table,D3D12_DESCRIPTOR_RANGE_TYPE_SRV))throw std::logic_error("Point replay lost capture SRV");
-    if(bytes%4||bytes>buffer.handle->GetDesc().Width)throw std::out_of_range("Native point replay view exceeds capture allocation");
+    if(!buffer.handle)throw std::invalid_argument("Missing native point replay buffer");
+    const auto desc=buffer.handle->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||!bytes||offset%Shader::NativePointCapture::RecordBytes||bytes%Shader::NativePointCapture::RecordBytes||
+       bytes>UINT32_MAX||offset>desc.Width||bytes>desc.Width-offset)
+        throw std::out_of_range("Native point replay view exceeds complete capture records");
     D3D12_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;view.ViewDimension=D3D12_SRV_DIMENSION_BUFFER;
-    view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;view.Buffer.NumElements=UINT(bytes/4);
+    view.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;view.Buffer.FirstElement=offset/4;view.Buffer.NumElements=UINT(bytes/4);
     table.RetainAllocation(buffer.allocation);table.Srv(0,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
 }
 void NativePointCapturePass::BindInputStream(ResourceBindings& table,Resource& buffer,u64 offset,u64 bytes){
