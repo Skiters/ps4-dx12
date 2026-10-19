@@ -198,6 +198,20 @@ private:
     std::array<GuestWriteTrace, GuestWriteTraceCount> guest_write_traces{};
     u64 guest_write_serial{};
 
+    struct DcbSnapshot {
+        uintptr_t source_addr{};
+        std::vector<u32> previous;
+        std::vector<u32> current;
+        u64 previous_serial{};
+        u64 current_serial{};
+    };
+    void RecordDcbSnapshot(std::span<const u32> dcb);
+    void DumpPreviousDcbWord(uintptr_t source_addr, size_t word) const;
+    static constexpr size_t DcbSnapshotCount = 64;
+    mutable std::mutex dcb_snapshot_mutex;
+    std::array<DcbSnapshot, DcbSnapshotCount> dcb_snapshots{};
+    u64 dcb_snapshot_serial{};
+
     struct GpuQueue {
         std::mutex m_access{};
         std::queue<Task::Handle> submits{};

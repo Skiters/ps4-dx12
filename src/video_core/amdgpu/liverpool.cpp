@@ -61,6 +61,41 @@ void Liverpool::DumpGuestWritesAt(uintptr_t address) const {
     LOG_ERROR(Lib_GnmDriver, "{}", matches);
 }
 
+void Liverpool::RecordDcbSnapshot(std::span<const u32> dcb) {
+    const auto source_addr = reinterpret_cast<uintptr_t>(dcb.data());
+    std::scoped_lock lock{dcb_snapshot_mutex};
+    auto slot = std::ranges::find(dcb_snapshots, source_addr, &DcbSnapshot::source_addr);
+    if (slot == dcb_snapshots.end()) {
+        slot = dcb_snapshots.begin() + dcb_snapshot_serial % DcbSnapshotCount;
+        *slot = {};
+        slot->source_addr = source_addr;
+    } else {
+        slot->previous = std::move(slot->current);
+        slot->previous_serial = slot->current_serial;
+    }
+    slot->current.assign(dcb.begin(), dcb.end());
+    slot->current_serial = ++dcb_snapshot_serial;
+}
+
+void Liverpool::DumpPreviousDcbWord(uintptr_t source_addr, size_t word) const {
+    std::scoped_lock lock{dcb_snapshot_mutex};
+    const auto slot = std::ranges::find(dcb_snapshots, source_addr, &DcbSnapshot::source_addr);
+    if (slot == dcb_snapshots.end()) {
+        LOG_ERROR(Lib_GnmDriver, "No retained DCB snapshot for source={:#x}", source_addr);
+        return;
+    }
+    if (word >= slot->previous.size()) {
+        LOG_ERROR(Lib_GnmDriver,
+                  "DCB source={:#x} first retained submit={} or previous size={} excludes word={}",
+                  source_addr, slot->current_serial, slot->previous.size(), word);
+        return;
+    }
+    LOG_ERROR(Lib_GnmDriver,
+              "Previous DCB source={:#x} submit={} word={} value={:#010x}; current submit={}",
+              source_addr, slot->previous_serial, word, slot->previous[word],
+              slot->current_serial);
+}
+
 #define YIELD(name)                                                                                \
     FIBER_EXIT;                                                                                    \
     co_yield {};                                                                                   \
@@ -286,6 +321,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         }
         LOG_ERROR(Lib_GnmDriver, "{}", packet_window);
         DumpGuestWritesAt(source_base_addr + current_word * sizeof(u32));
+        DumpPreviousDcbWord(source_base_addr, current_word);
         Common::Log::Flush();
     };
     std::array<u32, 3> packet_history{};
@@ -1286,6 +1322,7 @@ void Liverpool::SubmitGfx(std::span<const u32> dcb, std::span<const u32> ccb) {
     std::shared_ptr<OwnedCmdBufferStorage> owned_buffers;
 
     if (EmulatorSettings.IsCopyGpuBuffers()) {
+        RecordDcbSnapshot(dcb);
         auto owned = OwnCmdBuffers(dcb, ccb);
         dcb = owned.dcb;
         ccb = owned.ccb;
