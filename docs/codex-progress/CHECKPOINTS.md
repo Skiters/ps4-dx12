@@ -1231,3 +1231,5 @@ duration and executable SHA256. This addendum changes documentation only.
 - GXWORKER_PAGEWATCH.md documents evidence and the final committed-build dev launcher.
   External release/verification manifests capture exact binary hash and launch result.
 - Local commit only; no push. Original application and saves unchanged.
+
+2026-10-19 22:38: Native port references pinned/read; compact independent-image readbacks batched in production, core/GCN fixture compile+link PASS28.039s, runtime NOT_RUN per user no-game steering. See SESSION_HANDOFF top for exact identities/next checks. App sole core remains clean6b8104d (GAME_NOT_RUN); no runtime archives.

@@ -28,6 +28,7 @@ class GuestRasterizer : public GuestBufferAccess {
     bool OwnImageClear(GuestTextureCache::Entry&);
     void QueueLinearImageDownload(GuestTextureCache::Entry&);
     void DownloadIndependentImage(GuestTextureCache::Entry&);
+    void DownloadIndependentImages(std::span<GuestTextureCache::Entry*>);
     void RetireImageForPressure(GuestTextureCache::Entry&);
     void ReleaseIndependentImageWatches(GuestTextureCache::Entry&);
     void ReleaseImageProtection(GuestTextureCache::Entry&);

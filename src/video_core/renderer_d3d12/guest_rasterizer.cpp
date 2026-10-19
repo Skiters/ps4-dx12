@@ -325,25 +325,59 @@ void GuestRasterizer::QueueLinearImageDownload(GuestTextureCache::Entry& image){
 #endif
 }
 void GuestRasterizer::DownloadIndependentImage(GuestTextureCache::Entry& image){
+    GuestTextureCache::Entry* selected[]{&image};
+    DownloadIndependentImages(selected);
+}
+void GuestRasterizer::DownloadIndependentImages(std::span<GuestTextureCache::Entry*> images){
+    if(images.empty())return;
+    // Settle preceding physical-buffer publications once, then record the
+    // independent image copies together. Their CPU visibility boundary is
+    // still this call: no guest fence/label can pass an unfinished download.
     Rasterizer::Finish();
-    GuestLinearImageReadback readback(device_.Get(),image,RecordingList());
-    const auto fence=Flush();textures_.Submitted(fence);readback.Submitted(fence);Rasterizer::Finish();
-    std::vector<std::byte> bytes(size_t(readback.Bytes()));
-    if(!read_backing_(image.desc.address,bytes))throw std::runtime_error("Linear image download lost its physical backing");
-    readback.Resolve(CompletedFence(),bytes);
-    CommitImageBacking(image.desc.address,bytes,read_backing_,write_backing_);
-    image.linear_download_pending=false;
-    Diagnostics::Count("image-download.linear-independent");
+    struct Download {GuestTextureCache::Entry* image;std::unique_ptr<GuestLinearImageReadback> readback;};
+    std::vector<Download> pending;
+    constexpr u64 budget=64*1024*1024;
+    u64 retained{};
+    const auto complete=[&]{
+        if(pending.empty())return;
+        const auto fence=Flush();textures_.Submitted(fence);
+        for(auto& download:pending)download.readback->Submitted(fence);
+        Rasterizer::Finish();
+        // Keep cache iteration order, including overlapping compact spans.
+        // Seed each result after the preceding commit so padding and physical
+        // buffer witnesses retain exactly the former sequential semantics.
+        for(auto& [image,readback]:pending){
+            std::vector<std::byte> bytes(size_t(readback->Bytes()));
+            if(!read_backing_(image->desc.address,bytes))
+                throw std::runtime_error("Linear image download lost its physical backing");
+            readback->Resolve(CompletedFence(),bytes);
+            CommitImageBacking(image->desc.address,bytes,read_backing_,write_backing_);
+            image->linear_download_pending=false;
+            Diagnostics::Count("image-download.linear-independent");
+        }
+        pending.clear();retained=0;
+    };
+    for(auto* image:images){
+        auto readback=std::make_unique<GuestLinearImageReadback>(device_.Get(),*image,RecordingList());
+        // A single download already has its own size checks. Bound additional
+        // batching to one budget plus that final individual allocation.
+        retained=std::min(budget,retained+std::min(budget,readback->AllocationBytes()));
+        pending.push_back({image,std::move(readback)});
+        if(retained==budget)complete();
+    }
+    complete();
 }
 void GuestRasterizer::ProcessDownloadImages(){
     std::lock_guard lock(execution_mutex_);
     ValidateIndependentImageWatches();
+    std::vector<GuestTextureCache::Entry*> pending;
     for(auto& image:textures_.Entries())if(image->linear_download_pending){
         if(!image->gpu_owned||!image->buffer_alias_version){image->linear_download_pending=false;continue;}
         // Submission/fence downloads expose physical CPU bytes while the
         // image and the preceding resident buffer keep their own versions.
-        DownloadIndependentImage(*image);
+        pending.push_back(image.get());
     }
+    DownloadIndependentImages(pending);
 }
 void GuestRasterizer::ReleaseIndependentImageWatches(GuestTextureCache::Entry& image){
     ReleaseGuestImageOwnership(textures_,image,[this](u64 address,u64 bytes,const auto& retained){
