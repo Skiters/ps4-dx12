@@ -6,6 +6,7 @@
 
 #include "common/assert.h"
 #include "common/debug.h"
+#include "common/logging/log.h"
 #include "common/polyfill_thread.h"
 #include "common/thread.h"
 #include "core/debug_state.h"
@@ -241,12 +242,15 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         constexpr size_t WindowRadius = 16;
         const size_t first_word = current_word > WindowRadius ? current_word - WindowRadius : 0;
         const size_t last_word = std::min(submission.size(), current_word + WindowRadius + 1);
-        LOG_ERROR(Lib_GnmDriver, "PM4 raw dword window: current={} range=[{},{}) total={}",
-                  current_word, first_word, last_word, submission.size());
+        std::string packet_window =
+            fmt::format("PM4 raw dword window: current={} range=[{},{}) total={}", current_word,
+                        first_word, last_word, submission.size());
         for (size_t word = first_word; word < last_word; ++word) {
-            LOG_ERROR(Lib_GnmDriver, "PM4[{}]{}={:#010x}", word,
-                         word == current_word ? "*" : " ", submission[word]);
+            packet_window += fmt::format("\nPM4[{}]{}={:#010x}", word,
+                                         word == current_word ? "*" : " ", submission[word]);
         }
+        LOG_ERROR(Lib_GnmDriver, "{}", packet_window);
+        Common::Log::Flush();
     };
     std::array<u32, 3> packet_history{};
     while (!dcb.empty()) {
