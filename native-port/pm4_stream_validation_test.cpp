@@ -80,5 +80,18 @@ int main() {
     const auto bounded = Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
         reinterpret_cast<uintptr_t>(writer_buffer.data() + 5));
     Require(bounded.size() == 1 && bounded[0].size_dw == 1);
+    {
+        // A rejected writer must not claim capacity or dereference its invalid input.
+        Libraries::GnmDriver::CommandWriterTrace::Scope rejected_scope{
+            "rejected-writer", reinterpret_cast<const u32*>(uintptr_t{1}), 100000};
+    }
+    Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(1).empty());
+    {
+        Libraries::GnmDriver::CommandWriterTrace::Scope zero_scope{
+            "zero-writer", writer_buffer.data() + 7, 1};
+        zero_scope.MarkWritten(0);
+    }
+    Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
+                reinterpret_cast<uintptr_t>(writer_buffer.data() + 7)).empty());
     return 0;
 }
