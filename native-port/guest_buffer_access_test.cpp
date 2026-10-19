@@ -8,6 +8,8 @@
 using namespace NativeDX12;
 static void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 class Fixture final : public GuestBufferAccess {
+    std::vector<std::pair<VAddr,u64>> retained_images_;
+    std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const override{return retained_images_;}
     std::function<void()> before_read_;
     bool opaque_{};
     std::function<bool(VAddr,std::span<std::byte>)> physical_;
@@ -19,6 +21,7 @@ class Fixture final : public GuestBufferAccess {
         ++guard_releases;GuestBufferAccess::ReleaseBufferPageWatch(address,bytes);
     }
 public:
+    void RetainedImages(std::vector<std::pair<VAddr,u64>> ranges){retained_images_=std::move(ranges);}
     unsigned guard_releases{};
     using GuestBufferAccess::GuestBufferAccess;
     using GuestBufferAccess::SetBufferBackingAccess;

@@ -28,6 +28,7 @@ struct GuestGraphicsState;
 class Rasterizer : public VideoCore::RasterizerInterface {
 protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
+    virtual std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const{return {};}
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
     struct MemoryReuseStats {u64 snapshots{},staging{},watch_candidates{};};

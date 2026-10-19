@@ -32,6 +32,7 @@ class GuestRasterizer : public GuestBufferAccess {
     void ReleaseIndependentImageWatches(GuestTextureCache::Entry&);
     void ReleaseImageProtection(GuestTextureCache::Entry&);
     std::vector<std::pair<VAddr,u64>> ImageProtectionRanges(const GuestTextureCache::Entry* exclude=nullptr)const;
+    std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const override{return ImageProtectionRanges();}
     void ValidateIndependentImageWatches();
     void RememberImageBoundary(GuestTextureCache::Entry&,VAddr,u64);
     void ProcessDownloadImages();

@@ -32,6 +32,31 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         D3D12_RANGE empty{};rb.handle->Unmap(0,&empty);return result;
     };
     {
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
+        const Rasterizer::ShaderBufferRequest old{base+4096,4096,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&old,1));
+        const Rasterizer::ShaderBufferRequest grown[]{
+            {base+16,16384-32,false,true,true},{base+8192,4096,true,true,true}};
+        renderer.PrepareShaderBuffers(grown);
+        renderer.FillPreparedShaderBuffer(base+8192,4096,0x71727374,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        // This page's existing RO protection is also retained by an image
+        // owner. Dropping this buffer proof must not open a CPU-store window.
+        renderer.RetainedImages({{base+4096,4096}});
+        renderer.ReleaseCpuBufferWatches(base+16,16384-32);
+        MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(base+8192),&state,sizeof(state));
+        require(state.Protect==PAGE_NOACCESS,"Partial CPU proof retirement released GPU ownership");
+        VirtualQuery(reinterpret_cast<void*>(base+4096),&state,sizeof(state));
+        require(state.Protect==PAGE_READONLY,"Partial CPU proof retirement released a retained image page");
+        renderer.RetainedImages({});renderer.Untrack(base+4096,4096);
+        require(renderer.ReadMemory(base+8192,4096),"Partial proof GPU contents could not resolve");renderer.Finish();
+        require(committed==4096,"Partial proof retirement changed committed write extent");
+        for(size_t offset=0;offset<bytes;offset+=4){u32 word{};memcpy(&word,physical+offset,4);
+            require(word==(offset>=8192&&offset<12288?0x71727374U:0x31313131U),
+                "Partial proof retirement lost GPU data or changed physical padding");}
+        renderer.ValidateDebugMessages();
+    }
+    {
         u64 commits{},committed{};Adapter renderer(device);attach(renderer,commits,committed);
         renderer.NotifyHostMapping(base,bytes,true,false);
         const Rasterizer::ShaderBufferRequest writer{base+0x810,1024,true,true,true};

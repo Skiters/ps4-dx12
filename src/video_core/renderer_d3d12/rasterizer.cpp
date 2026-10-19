@@ -502,14 +502,14 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
         if(mapping.gpu_owned&&release_cpu_pages_){
             // Partial GPU ownership shares one arena with read-only CPU proof.
             // Retire only proof gaps; strong NOACCESS pages keep their owner.
-            u64 cursor{};
+            auto retained=RetainedImageProtectionRanges();
             for(const auto& [begin,end]:mapping.gpu_owned_ranges){
-                if(cursor<begin&&!release_cpu_pages_(mapping.base+cursor,begin-cursor))
-                    throw std::runtime_error("Cannot retire partial buffer proof before GPU-owned pages");
-                cursor=end;
+                retained.emplace_back(mapping.base+begin,end-begin);
             }
-            if(cursor<mapping.size&&!release_cpu_pages_(mapping.base+cursor,mapping.size-cursor))
-                throw std::runtime_error("Cannot retire partial buffer proof after GPU-owned pages");
+            // Logical arena boundaries need not be page aligned after growth.
+            // Retire the OS-page envelope, retaining every strong GPU/image
+            // page and every other buffer's proof without a restore window.
+            ReleaseUnusedReadOnlyWatches(mapping.base,mapping.size,retained,mapping.base);
         }else release_buffer_(it->first,mapping.size);
         mapping.cpu_watched=false;mapping.cpu_watch_pending=false;mapping.cpu_partial_proof=false;
         mapping.cpu_dirty_ranges.clear();
@@ -523,6 +523,12 @@ void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<c
         throw std::invalid_argument("Invalid image-only read-only watch retirement");
     address=pages->address;size=pages->size;
     const auto end=address+size;std::vector<std::pair<VAddr,VAddr>> keep;
+    const auto retain_pages=[&](VAddr first,VAddr last){
+        if(first>=last)return;
+        const auto pages=GuestProtectionPages(first,last-first);
+        if(!pages)throw std::invalid_argument("Invalid retained buffer proof range");
+        keep.emplace_back(std::max(address,pages->address),std::min(end,pages->address+pages->size));
+    };
     for(const auto& [base,bytes]:retained){
         const auto protected_range=GuestProtectionPages(base,bytes);
         if(!protected_range)
@@ -534,16 +540,16 @@ void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<c
         const auto& mapping=it->second;
         if(retiring_buffer&&mapping.base==*retiring_buffer)continue;
         const auto first=std::max(address,mapping.base),last=std::min(end,mapping.base+mapping.size);
-        if(mapping.gpu_owned||mapping.cpu_watched||mapping.cpu_watch_pending){keep.emplace_back(first,last);continue;}
+        if(mapping.gpu_owned||mapping.cpu_watched||mapping.cpu_watch_pending){retain_pages(first,last);continue;}
         if(!mapping.cpu_partial_proof)continue;
         auto cursor=first;
         for(const auto& [begin,finish]:mapping.cpu_dirty_ranges){
             const auto dirty_first=std::clamp(mapping.base+begin,first,last);
             const auto dirty_last=std::clamp(mapping.base+finish,first,last);
-            if(cursor<dirty_first)keep.emplace_back(cursor,dirty_first);
+            if(cursor<dirty_first)retain_pages(cursor,dirty_first);
             cursor=std::max(cursor,dirty_last);
         }
-        if(cursor<last)keep.emplace_back(cursor,last);
+        if(cursor<last)retain_pages(cursor,last);
     }
     // Unprotect only image-only gaps. Existing buffer proofs/ownership keep
     // their OS protection continuously, without a restore/rearm store window.
