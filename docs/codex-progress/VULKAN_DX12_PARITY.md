@@ -1335,3 +1335,5 @@ DX12 adaptation added per-layer/per-tile CMASK planning in `guest_texture_cache.
 2026-10-19: Shader texture roles/ranges and legal disjoint same-storage color views now CONNECTED/COMPILE_LINKED (native + guest draw). Overlapping same-subresource live feedback remains OPEN; exact GPU color/depth/UAV acceptance not run. See shader_subresource_access_20261019 and SESSION_HANDOFF.
 
 2026-10-19 scope correction: Feedback layout does not itself provide ROAA/fragment interlock. Pinned original has no such path; do not require stronger per-fragment communication. Feedback acceptance must prove original-defined contents/sampling/barriers and independent physical B/I. GPU-native replacement for CPU publication is still open. Official refs and concrete integration in SESSION_HANDOFF.
+
+2026-10-19: Exact-mapping readonly color feedback can form private GPU I copies and remap SRVs without early physical CPU publication. CONNECTED_WITH_FALLBACKS/COMPILE_LINKED, GPU_CONTENTS_NOT_RUN. No blanket feedback closure; native same-subresource fixture authored, full GCN B/I/filter/MSAA/CPU-winner coverage pending.

@@ -1259,3 +1259,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: 90bf5d6 clean Release reproduced; identity matches/EXEf524a9df/PDB11feeca1. Runtime NOT_RUN/not installed. Report shader-subresource-access-90bf5d6.json. Full same-subresource live feedback remains open; app6b8104d unchanged.
 
 2026-10-19: Targeted normative/pinned comparison corrects over-expanded fragment-ordering requirement. No interlock/ROAA added to agreed scope; current GPU-native feedback/physical B-I gap remains open. Source comment corrected; next concrete descriptor remap + retained GPU I copy integration saved. No runtime/build repeated.
+
+2026-10-19: GPU color feedback copy/SRV remap connected with native residency+fence retention and exact-mapping fallback gate. Core/GCN compile/link30.915s, resources16.249s, final fixture5.092s PASS; GPU/game NOT_RUN. Actual GuestRasterizer B/I sentinel integration next.

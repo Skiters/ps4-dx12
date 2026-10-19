@@ -321,13 +321,36 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
             capture_textures_.push_back({*capture_source,desc,reg,space,index,slot.ptr});
         }
     }
-    TrackShaderTextureRange(resource,range,slot.ptr);
+    range.srv=desc;TrackShaderTextureRange(resource,range,slot.ptr);
     if(resource){
         UINT planes=3; // Unknown views conservatively reference both DS planes.
         if(desc.Format==DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS||desc.Format==DXGI_FORMAT_R24_UNORM_X8_TYPELESS)planes=1;
         else if(desc.Format==DXGI_FORMAT_X32_TYPELESS_G8X24_UINT||desc.Format==DXGI_FORMAT_X24_TYPELESS_G8_UINT)planes=2;
         shader_planes_[resource]|=planes;
     }
+}
+UINT ResourceBindings::RemapTextureSrvs(ID3D12Resource* original,const Resource& replacement){
+    if(sealed_||recycled_||preparing_||!original||!replacement.handle||original==replacement.handle.Get())
+        throw std::invalid_argument("Invalid immutable texture descriptor remap");
+    const auto found=shader_texture_ranges_.find(original);if(found==shader_texture_ranges_.end())return 0;
+    std::vector<ShaderTextureRange> moved;
+    for(const auto& range:found->second)if(!(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS))moved.push_back(range);
+    if(moved.empty())return 0;
+    // Allocate/retain before changing descriptors. The table must keep the
+    // placed copy alive even if the caller releases its temporary Resource.
+    auto lease=std::make_shared<Resource>(replacement);RetainAllocation(lease);Retain(replacement.handle.Get());
+    auto& destination=shader_texture_ranges_[replacement.handle.Get()];
+    destination.reserve(destination.size()+moved.size());
+    for(const auto& range:moved){
+        DX12_API_CALL(device_->CreateShaderResourceView(replacement.handle.Get(),&range.srv,{range.descriptor}));
+        destination.push_back(range);
+        for(auto& capture:capture_textures_)if(capture.descriptor==range.descriptor)capture.source=replacement;
+    }
+    // Inserting the replacement can rehash the unordered map.
+    auto& previous=shader_texture_ranges_.at(original);
+    std::erase_if(previous,[](const auto& range){return !(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS);});
+    shader_planes_[replacement.handle.Get()]|=shader_planes_[original];
+    return UINT(moved.size());
 }
 void ResourceBindings::Uav(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc,UINT index) {
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,reg,space,index);DX12_API_CALL(device_->CreateUnorderedAccessView(resource,nullptr,&desc,slot));Retain(resource);

@@ -100,6 +100,8 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& desc,
 bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc sampled);
 bool DisjointGuestColorSampledViews(const GuestTextureDesc&,const GuestTextureLayout&,
                                    const GuestTextureDesc&,const GuestTextureLayout&);
+bool CompatibleGuestColorSampledMapping(const GuestTextureDesc&,const GuestTextureLayout&,
+                                       const GuestTextureDesc&,const GuestTextureLayout&);
 // Logical readonly BC view compatibility, including numeric variants/prefixes.
 // Actual native resource casting and ownership must be proved by the cache.
 bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTextureLayout&,
@@ -514,6 +516,7 @@ public:
         submit_copy_=std::move(submit);}
     void SetHostTextureCopy(decltype(host_texture_copy_) copy){host_texture_copy_=std::move(copy);}
     void SetHostBufferCopy(decltype(host_buffer_copy_) copy){host_buffer_copy_=std::move(copy);}
+    Resource AllocateColorFeedbackCopy(Entry&,uint64_t completed);
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}
     const auto& Entries(){return entries_;}

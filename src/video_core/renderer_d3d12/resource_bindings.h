@@ -60,7 +60,8 @@ class ResourceBindings {
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
     std::unordered_map<ID3D12Resource*,UINT> shader_planes_;
     struct ShaderTextureRange {UINT mip,mips,layer,layers,planes;SIZE_T descriptor{};
-        D3D12_RESOURCE_STATES access=D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);};
+        D3D12_RESOURCE_STATES access=D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv{};};
     std::unordered_map<ID3D12Resource*,std::vector<ShaderTextureRange>> shader_texture_ranges_;
     std::vector<std::shared_ptr<void>> allocation_leases_;
     struct BufferView {ID3D12Resource* resource;UINT reg,space,index;D3D12_DESCRIPTOR_RANGE_TYPE type;
@@ -128,6 +129,12 @@ public:
     bool HasShaderUav(ID3D12Resource* resource)const {
         const auto found=shader_texture_ranges_.find(resource);if(found==shader_texture_ranges_.end())return false;
         for(const auto& range:found->second)if(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)return true;
+        return false;
+    }
+    UINT RemapTextureSrvs(ID3D12Resource*,const Resource&);
+    bool HasTextureSrvs(ID3D12Resource* resource)const {
+        const auto found=shader_texture_ranges_.find(resource);if(found==shader_texture_ranges_.end())return false;
+        for(const auto& range:found->second)if(!(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS))return true;
         return false;
     }
     void Srv(UINT reg,UINT space,ID3D12Resource*,const D3D12_SHADER_RESOURCE_VIEW_DESC&,UINT index=0,const Resource* capture_source=nullptr);

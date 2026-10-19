@@ -1097,6 +1097,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<GuestTextureLayout,9> layouts{};
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
+    std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
     for(UINT i=0;i<8;++i)if(r.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable&&
         r.color_buffers[i]&&r.color_target_mask.GetMask(i)&&(guest.mrt_mask&(1u<<i))) {
@@ -1121,8 +1122,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const auto d=DescribeGuestTexture(image.GetSharp(*stage.info));const auto l=LayoutGuestTexture(d);
                 const auto ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
                 const bool disjoint=!(ordered_mask&(1u<<i))&&DisjointGuestColorSampledViews(descriptions[i],layouts[i],d,l);
-                if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
+                if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_feedback[i]=true;
+                    gpu_color_feedback[i]=gpu_color_feedback[i]&&!(ordered_mask&(1u<<i))&&
+                        CompatibleGuestColorSampledMapping(descriptions[i],layouts[i],d,l);
+                }
             }
         }
     }
@@ -1325,7 +1329,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // publication changes the physical-memory path and is not full parity.
     // Replace that publication with retained GPU contents; preserve the pinned
     // renderer's actual synchronization instead of inventing stronger ordering.
-    for(UINT i=0;i<target_count;++i)if(color_feedback[i]){
+    for(UINT i=0;i<target_count;++i)if(color_feedback[i]&&!gpu_color_feedback[i]){
         ResolveMemory(descriptions[i].address,layouts[i].guest_bytes);
         DiscardImages(descriptions[i].address,layouts[i].guest_bytes);
     }
@@ -1587,6 +1591,24 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
         }
         bindings.Prepare();
+        std::set<ID3D12Resource*> feedback_copies;
+        for(UINT i=0;i<target_count;++i)if(color_feedback[i]&&gpu_color_feedback[i]&&targets[i]){
+            auto& image=*targets[i];auto& source=image.texture;auto* native=source.handle.Get();
+            if(!bindings.HasTextureSrvs(native)||!feedback_copies.insert(native).second)continue;
+            if(bindings.HasShaderUav(native))throw std::runtime_error("Color feedback with storage-image access needs separate alias handling");
+            auto copy=textures_.AllocateColorFeedbackCopy(image,CompletedFence());
+            // Retain before recording: both source allocation and copy must
+            // survive failure/unwinding and the eventual submission fence.
+            RetainUntilFinish([source,copy](u64){(void)source;(void)copy;});
+            const auto old_state=source.state;const auto old_subresources=source.subresource_states;
+            auto* list=RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            DX12_API_CALL(list->CopyResource(copy.handle.Get(),native));
+            if(old_subresources.empty())source.Transition(list,old_state);
+            else for(UINT sub=0;sub<old_subresources.size();++sub)source.Transition(list,old_subresources[sub],sub);
+            copy.Transition(list,D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+            if(!bindings.RemapTextureSrvs(native,copy))throw std::logic_error("Color feedback lost its prepared shader views");
+            Diagnostics::Count("image-feedback.gpu-snapshot");
+        }
         if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
         static std::set<u64> captured_bound_draws,capture_producers;

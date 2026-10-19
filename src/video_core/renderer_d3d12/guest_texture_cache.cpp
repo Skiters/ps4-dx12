@@ -547,7 +547,7 @@ bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc a,const GuestTextureLayou
     a.levels=b.levels=std::max(a.levels,b.levels);
     return CompatibleGuestShaderStorage(a,b);
 }
-bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTextureLayout& physical,
+bool CompatibleGuestColorSampledMapping(const GuestTextureDesc& target,const GuestTextureLayout& physical,
     const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
     if(!target.render_target||target.depth_target||!CompatibleGuestSampledStorage(target,sampled)||
        target.first_mip>=target.levels||sampled.first_mip>=sampled.levels||
@@ -561,6 +561,11 @@ bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTe
     for(size_t i=0;i<physical.mips.size();++i){const auto& a=physical.mips[i];const auto& b=sampled_layout.mips[i];
         if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
            a.macro!=b.macro||a.thickness!=b.thickness)return false;}
+    return true;
+}
+bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTextureLayout& physical,
+    const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
+    if(!CompatibleGuestColorSampledMapping(target,physical,sampled,sampled_layout))return false;
     return target.first_mip<sampled.first_mip||target.first_mip>=sampled.levels||
         target.first_layer>=sampled.first_layer+sampled.view_layers||
         sampled.first_layer>=target.first_layer+target.view_layers;
@@ -1631,6 +1636,28 @@ bool GuestTextureCache::EvictPressureVictim(uint64_t completed,Entry* preserve){
     victim_pin.reset();
     if(chosen->BindingPinned())throw std::runtime_error("Pressure victim acquired another binding during retirement");
     entries_.erase(victim);RebuildIndex();return true;
+}
+Resource GuestTextureCache::AllocateColorFeedbackCopy(Entry& entry,uint64_t completed){
+    if(entry.cache!=this||!entry.texture.handle||entry.desc.depth_target)
+        throw std::invalid_argument("Invalid native color feedback source");
+    auto pin=PinBinding(entry);const auto desc=entry.texture.handle->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||!(desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
+        throw std::invalid_argument("Feedback source is not a color attachment");
+    const auto formats=entry.texture.castable_formats?std::span<const DXGI_FORMAT>(*entry.texture.castable_formats):std::span<const DXGI_FORMAT>{};
+    const auto bytes=texture_allocator_.AllocationInfo(desc,formats).SizeInBytes;
+    if(!bytes||bytes==UINT64_MAX)throw std::runtime_error("Invalid color feedback allocation");
+    ReserveMemory(bytes,completed,&entry);
+    auto copy=AllocateTexture(&entry,desc,D3D12_RESOURCE_STATE_COPY_DEST,nullptr,formats);
+    struct Account {
+        std::shared_ptr<void> allocation;
+        std::shared_ptr<std::atomic<uint64_t>> counter;uint64_t bytes{};
+        ~Account(){if(counter)counter->fetch_sub(bytes);}
+    };
+    auto owner=std::make_shared<Account>();owner->allocation=copy.allocation;
+    if(bytes>UINT64_MAX-pressure_retirement_bytes_->load())throw std::overflow_error("Feedback accounting overflow");
+    owner->counter=pressure_retirement_bytes_;owner->bytes=bytes;
+    pressure_retirement_bytes_->fetch_add(bytes);copy.allocation=std::move(owner);
+    return copy;
 }
 Resource GuestTextureCache::AllocateTexture(Entry* preserve,const D3D12_RESOURCE_DESC& description,
     D3D12_RESOURCE_STATES initial,const D3D12_CLEAR_VALUE* clear,std::span<const DXGI_FORMAT> formats){
