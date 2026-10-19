@@ -342,6 +342,20 @@ int wmain(int argc,wchar_t** argv){try {
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware device");
+    if(argc==5&&std::wstring_view(argv[4])==L"single-interior-reads"){
+        Shader::Info empty;empty.hw_stage=Shader::HwStage::Compute;empty.sw_stage=Shader::SwStage::Compute;
+        Shader::Profile profile{};profile.supported_spirv=0x00010500;
+        Shader::RuntimeInfo runtime{};runtime.sw_stage=Shader::SwStage::Compute;Shader::Backend::Bindings bindings{};
+        Shader::Backend::SPIRV::EmitContext context(profile,runtime,empty,bindings);
+        const auto fn=context.OpFunction(context.void_id,spv::FunctionControlMask::MaskNone,context.TypeFunction(context.void_id));
+        context.AddLabel();context.OpReturn();context.OpFunctionEnd();
+        context.AddEntryPoint(spv::ExecutionModel::GLCompute,fn,"main",context.interfaces);
+        context.AddExecutionMode(fn,spv::ExecutionMode::LocalSize,1U,1U,1U);
+        auto converted=Shader::Backend::DX12::ConvertSpirv(argv[2],context.Assemble(),options);
+        if(!converted.success)throw std::runtime_error(converted.diagnostics);
+        ShaderPipeline pipeline(device.Get(),argv[3],converted.bytecode);
+        return RunOrderedInteriorFormattedReads(device.Get(),&pipeline);
+    }
     if(argc==5&&std::wstring_view(argv[4])==L"ordered-interior-reads")return RunOrderedInteriorFormattedReads(device.Get());
     if(argc==5&&std::wstring_view(argv[4])==L"ordered-bc-word"){
         RunOrderedBcWordStages(device.Get());

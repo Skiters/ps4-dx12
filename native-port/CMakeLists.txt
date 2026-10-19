@@ -546,6 +546,8 @@ add_test(NAME native_ordered_stage_image_buffer_bindings COMMAND native-writable
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-stages)
 add_test(NAME native_ordered_interior_formatted_reads COMMAND native-writable-image-alias-test
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-interior-reads)
+add_test(NAME native_single_stage_interior_formatted_reads COMMAND native-writable-image-alias-test
+    "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" single-interior-reads)
 add_test(NAME native_ordered_bc_word_stage_bindings COMMAND native-writable-image-alias-test
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-bc-word)
 # Each of the 48 independent cache cases compiles its native tiler. Retain the

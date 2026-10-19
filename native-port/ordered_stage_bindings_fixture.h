@@ -8,10 +8,12 @@
 #include <string>
 
 namespace NativeDX12 {
-inline int RunOrderedInteriorFormattedReads(ID3D12Device* device){
+inline int RunOrderedInteriorFormattedReads(ID3D12Device* device,const ShaderPipeline* single_stage=nullptr){
     const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
-    for(const UINT offset:{0u,1u,256u,257u}){
-        struct Allocation {void* p=VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
+    for(const bool gpu_modified:{true,false})for(const UINT offset:{0u,1u,256u,257u}){
+        if(!single_stage&&!gpu_modified)continue;
+        printf("CASE: %s formatted sharp offset=%u GpuModified=%u\n",single_stage?"single":"ordered",offset,unsigned(gpu_modified));fflush(stdout);
+        struct Allocation {void* p=VirtualAlloc(reinterpret_cast<void*>(0x1000000000ULL),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
             ~Allocation(){if(p)VirtualFree(p,0,MEM_RELEASE);}} memory;
         require(memory.p,"Interior formatted fixture allocation");
         const auto base=reinterpret_cast<VAddr>(memory.p);memset(memory.p,0x4d,65536);
@@ -26,38 +28,59 @@ inline int RunOrderedInteriorFormattedReads(ID3D12Device* device){
         const auto acquire=[](auto& image){image.buffer_alias_version=image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;};
         cache.SetOwnershipAcquirer(acquire);cache.SetIndependentVersionTransfer({},acquire,{});
         GuestTextureDesc desc;desc.address=base;desc.width=desc.height=desc.pitch=16;
-        desc.data_format=4;desc.number_format=4;desc.tile_mode=13;desc.writable=true;
+        desc.data_format=4;desc.number_format=4;desc.tile_mode=13;desc.writable=gpu_modified;
         const auto layout=LayoutGuestTexture(desc);require(layout.guest_bytes>offset+16,"Fixture sharp outside image");
         std::vector<std::byte> image_bytes(layout.guest_bytes,std::byte{0x6e});
         auto& image=cache.Upload(desc,image_bytes,renderer.RecordingList(),renderer.CompletedFence());
-        require(cache.Own(image),"Interior formatted fixture ownership");auto pin=cache.PinBinding(image);
-        const u8 adjust=offset&3;const u64 native_bytes=(16+adjust+3)&~u64(3);
-        std::vector<Rasterizer::ShaderBufferRequest> requests{{base+(offset&~3u),native_bytes,false,true,true,adjust,16}};
-        const OrderedGuestBuffer buffers[]{{true,true,false,adjust,1,16}};
+        require(gpu_modified?cache.Own(image):cache.RevalidateReadonly(image),"Interior formatted fixture ownership");auto pin=cache.PinBinding(image);
+        require(image.logical_gpu_modified==gpu_modified,"Readonly fixture invented GPU write history");
+        const u64 sharp_bytes=single_stage?32768:16;
+        const u8 adjust=offset&3;const u64 native_bytes=(sharp_bytes+adjust+3)&~u64(3);
+        std::vector<Rasterizer::ShaderBufferRequest> requests{{base+(offset&~3u),native_bytes,false,true,true,adjust,sharp_bytes}};
+        const OrderedGuestBuffer buffers[]{{true,true,false,adjust,1,sharp_bytes}};
         const GuestStageBindingSpan stages[]{{0,1,0,0}};
         bool rejected=false;
-        try{(void)PrepareOrderedGuestStages(device,renderer,cache,stages,requests,buffers,{},true,
-            [](VAddr,u64)->VAddr{throw std::runtime_error("Unexpected private CPU stream");});}
+        try{
+            if(single_stage){
+                Shader::Info info;info.hw_stage=Shader::HwStage::Compute;info.sw_stage=Shader::SwStage::Compute;
+                info.flattened_ud_buf.resize(4);AmdGpu::Buffer sharp{};
+                sharp.base_address=base+offset;sharp.stride=1;sharp.num_records=u32(sharp_bytes);
+                memcpy(info.flattened_ud_buf.data(),&sharp,sizeof(sharp));
+                Shader::BufferResource buffer;buffer.buffer_type=Shader::BufferType::Guest;
+                buffer.is_formatted=true;buffer.used_types=Shader::IR::Type::U32;
+                buffer.sharp_fetch.summary=Shader::SharpFetch<AmdGpu::Buffer>::Summary::SingleLoad;
+                info.buffers.push_back(buffer);
+                // Optimized-away descriptors still run original BindBuffers
+                // effects; the empty GPU dispatch must retain those effects.
+                ExecuteGuestBufferCompute(device,renderer,*single_stage,info,{},ComputeInvocation{},&cache);
+            }else (void)PrepareOrderedGuestStages(device,renderer,cache,stages,requests,buffers,{},true,
+                [](VAddr,u64)->VAddr{throw std::runtime_error("Unexpected private CPU stream");});
+        }
         catch(const std::runtime_error& e){
-            if(std::string_view(e.what())!="Ordered formatted readers retain the original exact-base image contract")throw;
+            if(std::string_view(e.what())!=(single_stage?
+                "Independent formatted image/buffer partial or simultaneous-write ordering is not adapted":
+                "Ordered formatted readers retain the original exact-base image contract"))throw;
             rejected=true;
         }
-        require(rejected==(offset==1),"Formatted image address-bucket admission differs from original");
+        require(rejected==(offset==1&&gpu_modified),"Formatted image address-bucket admission differs from original");
         if(rejected){renderer.Finish();continue;}
-        auto snapshot=renderer.CapturePreparedShaderBuffer(base,layout.guest_bytes);
+        // An interior single-stage sharp need not prepare the image's leading
+        // bytes. Materialize that readback envelope through ordinary B only.
+        auto snapshot=single_stage?renderer.CaptureShaderBuffer(base,layout.guest_bytes):
+            renderer.CapturePreparedShaderBuffer(base,layout.guest_bytes);
         auto readback=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         snapshot.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,layout.guest_bytes);
         GuestImageReadback image_readback(device,image,renderer.RecordingList());
         const auto fence=renderer.Flush();cache.Submitted(fence);image_readback.Submitted(fence);renderer.Finish();
         std::vector<std::byte> expected(layout.guest_bytes,std::byte{0x4d});
-        if(!offset){std::vector<std::byte> pixels(size_t(desc.width)*desc.height*4,std::byte{0x6e});
+        if(!offset&&gpu_modified){std::vector<std::byte> pixels(size_t(desc.width)*desc.height*4,std::byte{0x6e});
             EncodeGuestSubresource(desc,layout,expected,pixels,0,0);}
         void* mapped{};D3D12_RANGE all{0,SIZE_T(layout.guest_bytes)};Check(readback.handle->Map(0,&all,&mapped));
         const bool equal=!memcmp(mapped,expected.data(),expected.size());D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);
         require(equal,"Interior formatted reader changed independent B or exact reader missed I");
         auto observed=image_bytes;image_readback.Resolve(renderer.CompletedFence(),observed);
-        require(observed==image_bytes&&image.HasValidLogicalImage()&&image.gpu_owned,"Formatted reader changed independent I");
+        require(observed==image_bytes&&image.logical_gpu_modified==gpu_modified&&!image.logical_dirty&&image.gpu_owned,"Formatted reader changed independent I");
         require(std::ranges::all_of(std::span(static_cast<const std::byte*>(memory.p),65536),
             [](std::byte value){return value==std::byte{0x4d};}),"Formatted read reconciled physical CPU bytes");
         renderer.ValidateDebugMessages();

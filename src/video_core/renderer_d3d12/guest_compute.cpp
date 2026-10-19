@@ -596,14 +596,24 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             if(!needs_sync&&!overlaps_writer)continue;
             GuestTextureCache::Entry* version{};size_t candidates{};
             if(textures)for(const auto& entry:textures->Entries())if(entry->gpu_owned&&entry->buffer_alias_version&&
-                entry->desc.address==requests[i].address){
+                // FindImageFromRange uses the original sharp's 256-byte
+                // address bucket and SafeToDownload, not interval overlap.
+                // A retained clean readonly allocation is not GpuModified.
+                (overlaps_writer?entry->desc.address==requests[i].address:
+                    entry->HasValidLogicalImage()&&
+                    (entry->desc.address>>8)==((requests[i].address+pending[i].byte_adjust)>>8))){
                 ++candidates;
                 if(!version||(version->layout.guest_bytes!=pending[i].original_bytes&&entry->layout.guest_bytes==pending[i].original_bytes))
                     version=entry.get();
             }
+            // No downloadable address-class image (or no size match among
+            // several) leaves the ordinary B binding intact in the original.
+            // The simultaneous-writer path still requires its explicit plan.
+            if(!overlaps_writer&&(!version||
+               (candidates>1&&version->layout.guest_bytes!=pending[i].original_bytes)))continue;
             if(candidates>1&&version->layout.guest_bytes!=pending[i].original_bytes)
                 throw std::runtime_error("Formatted buffer has ambiguous independent image versions");
-            if(!version||pending[i].byte_adjust)
+            if(!version||version->desc.address!=requests[i].address+pending[i].byte_adjust)
                 throw std::runtime_error("Independent formatted image/buffer partial or simultaneous-write ordering is not adapted");
             if(version->logical_dirty)
                 throw std::runtime_error("Formatted buffer cannot read an invalidated independent image version");
