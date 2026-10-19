@@ -256,17 +256,15 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 packet_word(1), packet_word(2), packet_word(3));
             break;
         case 0: {
-            const u32 type0_words = ApplyType0RegisterWrite(regs.reg_array, dcb);
-            ASSERT_MSG(type0_words != 0,
-                       "Invalid PM4 type 0 packet at dword {}: raw={:#010x} base={:#x} size={} "
-                       "available={} prior=[{:#010x},{:#010x},{:#010x}] next=[{:#010x},"
-                       "{:#010x},{:#010x}]",
-                       (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32), header->raw,
-                       header->type0.base.Value(), header->type0.NumWords(), dcb.size(),
-                       previous_headers[0], previous_headers[1], previous_headers[2], packet_word(1),
-                       packet_word(2), packet_word(3));
-            dcb = NextPacket(dcb, type0_words);
-            continue;
+            UNREACHABLE_MSG(
+                "Unimplemented PM4 type 0 at dword {}: raw={:#010x} base={:#x} size={} "
+                "available={} prior=[{:#010x},{:#010x},{:#010x}] next=[{:#010x},"
+                "{:#010x},{:#010x}]",
+                (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32), header->raw,
+                header->type0.base.Value(), header->type0.NumWords(), dcb.size(),
+                previous_headers[0], previous_headers[1], previous_headers[2], packet_word(1),
+                packet_word(2), packet_word(3));
+            break;
         }
         case 2:
             // Type-2 packet are used for padding purposes
