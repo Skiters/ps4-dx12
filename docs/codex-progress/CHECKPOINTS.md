@@ -1289,3 +1289,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 32f89ea: independent56-code UF11/UF10 CPU oracle PASS,448 actual GCN boundary draws prepared/compiled, GPU NOT_RUN; identities ufloat-boundary-32f89ea.json. Production00ded3c/app unchanged.
 
 2026-10-20 d16a4a7: compact scalar ordered color connected;288 CPU compiler cases PASS,120 GPU cases prepared only; clean Release identities scalar-ordered-d16a4a7.json. App unchanged/GPU-game NOT_RUN.
+
+2026-10-20 bb0e119: packed RG8 ordered color connected;320 CPU compiler cases PASS,48 GPU cases prepared only; clean Release identities rg8-ordered-bb0e119.json. App unchanged/GPU-game NOT_RUN.
