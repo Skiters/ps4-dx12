@@ -73,13 +73,17 @@ protected:
             page_watch_->InvalidateBackingEpoch(address,bytes.size());
             return write(address,bytes);
         },[this](VAddr address,u64 size){ReleaseBufferPageWatch(address,size);});
-        SetBufferWriteWatch([this](VAddr address,u64 size){
-            if(address%4096||size%4096||!has_backing_(address,size))return false;
-            return page_watch_->TrackReadOnly(address,size);
-        });
-        SetBufferPageRewatch([this](VAddr address,u64 size){
-            return has_backing_(address,size)&&page_watch_->TrackReadOnly(address,size);
-        });
+        const auto watch_cpu_pages=[this](VAddr address,u64 size){
+            // Original MemoryTracker watches physical pages, not the sharp or
+            // native allocation bounds. Validate the complete page envelope:
+            // neighbours may fault too and must invalidate every B witness on
+            // that page. Never expand shader/resource bounds or demote I.
+            const auto pages=GuestProtectionPages(address,size);
+            return pages&&has_backing_(pages->address,pages->size)&&
+                page_watch_->TrackReadOnly(pages->address,pages->size);
+        };
+        SetBufferWriteWatch(watch_cpu_pages);
+        SetBufferPageRewatch(watch_cpu_pages);
         SetCpuPageRelease([this](VAddr address,u64 size){return page_watch_->UntrackReadOnly(address,size);});
         SetBufferWatchTransfer([this](VAddr address,u64 size,bool read_only){
             return has_backing_(address,size)&&page_watch_->ChangeMode(address,size,read_only);

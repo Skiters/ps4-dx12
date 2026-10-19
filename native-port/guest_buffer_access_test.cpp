@@ -99,6 +99,73 @@ static void ProtectedDmaBacking(ID3D12Device* device,std::byte* guest,std::byte*
     puts("PASS: opaque-I physical B epoch, warm direct/DMA zero rereads, independent GPU contents, host publication, same-value store and guard rearm");
     renderer.ValidateDebugMessages();
 }
+static void UnalignedPageWitness(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
+    constexpr u64 offset=64,bytes=8192-128;memset(physical,0x4d,65536);
+    {
+    Fixture renderer(device);renderer.MapMemory(base,65536);renderer.NotifyHostMapping(base,65536,true,true);
+    renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=65536&&n<=65536-(a-base);},
+        [&](VAddr a,std::span<const std::byte> data){memcpy(physical+a-base,data.data(),data.size());return true;});
+    const Rasterizer::ShaderBufferRequest request[]{{base+offset,bytes,false,true,true}};
+    (void)renderer.PrepareShaderBuffers(request);MEMORY_BASIC_INFORMATION state{};VirtualQuery(guest,&state,sizeof(state));
+    Require(state.Protect==PAGE_READONLY,"Unaligned B did not establish its complete physical-page CPU witness");
+    const auto comparisons=Counter("buffer-snapshot.bytes");
+    (void)renderer.PrepareShaderBuffers(request);
+    Require(Counter("buffer-snapshot.bytes")==comparisons,"Warm unaligned B compared its full logical envelope");
+    renderer.FillPreparedShaderBuffer(base+offset,bytes,0x6b6b6b6b,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    const auto verify=[&](bool tail){
+        (void)renderer.PrepareShaderBuffers(request);
+        auto buffer=renderer.CapturePreparedShaderBuffer(base+offset,bytes);
+        auto readback=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        buffer.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,buffer.handle.Get(),0,bytes);
+        renderer.Finish();void* data{};Check(readback.handle->Map(0,nullptr,&data));
+        bool equal=true;for(u64 i=0;i<bytes;++i)equal&=static_cast<const std::byte*>(data)[i]==
+            (tail||i<4096-offset?std::byte{0x4d}:std::byte{0x6b});
+        readback.handle->Unmap(0,nullptr);Require(equal,"Neighbour CPU store lost page-granular B ownership or untouched GPU bytes");
+    };
+    // These are genuine CPU stores OUTSIDE the logical mapping but inside its
+    // watched pages. Both must fault, dirty the page and retire the right proof.
+    *reinterpret_cast<volatile unsigned char*>(guest+17)=0xe7;verify(false);
+    *reinterpret_cast<volatile unsigned char*>(guest+8192-17)=0x92;verify(true);
+    renderer.ReleaseCpuBufferWatches(base+17,1);VirtualQuery(guest,&state,sizeof(state));
+    Require(state.Protect==PAGE_READWRITE,"Neighbour watch retirement left an unowned protected page");
+    renderer.ValidateDebugMessages();
+    }
+    {
+        memset(physical,0x4d,65536);Fixture renderer(device);renderer.MapMemory(base,65536);
+        renderer.NotifyHostMapping(base,65536,true,true);
+        renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=65536&&n<=65536-(a-base);},
+            [&](VAddr a,std::span<const std::byte> data){memcpy(physical+a-base,data.data(),data.size());return true;});
+        const Rasterizer::ShaderBufferRequest requests[]{{base+64,512,false,true,true},{base+2048,512,false,true,true}};
+        auto views=renderer.PrepareShaderBuffers(requests);
+        Require(views[0].resource.Get()!=views[1].resource.Get(),"Shared-page fixture needs two separate logical B mappings");
+        for(const auto& request:requests)renderer.FillPreparedShaderBuffer(request.address,request.size,
+            0x6b6b6b6b,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        *reinterpret_cast<volatile unsigned char*>(guest+1024)=0xa9;
+        (void)renderer.PrepareShaderBuffers(requests);
+        auto readback=Buffer(device,1024,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        for(unsigned i=0;i<2;++i){auto buffer=renderer.CapturePreparedShaderBuffer(requests[i].address,512);
+            buffer.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),i*512,buffer.handle.Get(),0,512);}
+        renderer.Finish();void* data{};Check(readback.handle->Map(0,nullptr,&data));
+        bool equal=true;for(unsigned i=0;i<1024;++i)equal&=static_cast<const std::byte*>(data)[i]==std::byte{0x4d};
+        readback.handle->Unmap(0,nullptr);Require(equal,"One neighbour store did not dirty both logical B witnesses on its physical page");
+        renderer.ReleaseCpuBufferWatches(base+1024,1);MEMORY_BASIC_INFORMATION state{};VirtualQuery(guest,&state,sizeof(state));
+        Require(state.Protect==PAGE_READWRITE,"Shared-page retirement retained a stale neighbour proof");
+        renderer.ValidateDebugMessages();
+    }
+    {
+        Fixture renderer(device);renderer.MapMemory(base+64,512);renderer.NotifyHostMapping(base+64,512,true,true);
+        renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base+64&&a-(base+64)<=512&&n<=512-(a-(base+64));},
+            [](VAddr,std::span<const std::byte>){return false;});
+        const Rasterizer::ShaderBufferRequest request{base+64,512,false,true,true};
+        (void)renderer.PrepareShaderBuffers(std::span(&request,1));MEMORY_BASIC_INFORMATION state{};
+        VirtualQuery(guest,&state,sizeof(state));Require(state.Protect==PAGE_READWRITE,
+            "Rounded witness claimed physical neighbours outside authorized guest backing");
+        renderer.Finish();renderer.ValidateDebugMessages();
+    }
+    puts("PASS: unaligned readonly B, zero warm full comparisons, real neighbouring CPU stores, page winners and untouched GPU bytes");
+}
 void Run(ID3D12Device* device,bool f2){
     constexpr u64 bytes=65536;
     HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,bytes,nullptr);
@@ -479,13 +546,15 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
-    if(argc>1&&std::string_view(argv[1])=="physical-proof"){
+    if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof")){
         HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,65536,nullptr);
         Require(section,"Physical proof section");SCOPE_EXIT {CloseHandle(section);};
         auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
         auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
         Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
-        memset(physical,0x4d,65536);ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
+        memset(physical,0x4d,65536);
+        if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        else ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
     }
     Run(device.Get(),argc>1&&std::string_view(argv[1])=="f2");puts("PASS: production guest buffer access");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

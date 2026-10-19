@@ -494,10 +494,12 @@ void Rasterizer::ReleaseCpuBufferWatches(VAddr address,u64 size){
     std::lock_guard lock(execution_mutex_);
     if(!size)return;
     if(address>UINT64_MAX-size)throw std::out_of_range("CPU buffer watch range overflow");
-    // Mappings are disjoint. Include a containing predecessor, then only the
-    // actual intersections; retaining more GPU buffers must not make every
-    // unrelated guest CPU access scan the whole resident cache.
-    for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it){
+    // Logical mappings are disjoint, but unaligned mappings share OS pages.
+    // Retire every affected page witness, including a neighbouring sharp.
+    const auto pages=GuestProtectionPages(address,size);
+    const auto watch_begin=pages?pages->address:address;
+    const auto watch_end=pages?pages->address+pages->size:address+size;
+    for(auto it=FirstOverlapping(watch_begin);it!=mappings_.end()&&it->first<watch_end;++it){
         ++memory_reuse_.watch_candidates;auto& mapping=it->second;
         if(!(mapping.cpu_watched||mapping.cpu_watch_pending||mapping.cpu_partial_proof))continue;
         if(mapping.gpu_owned&&release_cpu_pages_){
@@ -609,9 +611,12 @@ void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
         Diagnostics::Count("buffer-watch.cpu-page-invalidations");
         Diagnostics::Count("buffer-watch.cpu-page-invalidated.bytes",end-begin);
     };
-    for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+size;++it)invalidate(it->second);
-    if(preparing_buffer_envelope_&&preparing_buffer_envelope_->base<address+size&&
-       address<preparing_buffer_envelope_->base+preparing_buffer_envelope_->size)invalidate(*preparing_buffer_envelope_);
+    const auto pages=GuestProtectionPages(address,size);
+    const auto dirty_begin=pages?pages->address:address;
+    const auto dirty_end=pages?pages->address+pages->size:address+size;
+    for(auto it=FirstOverlapping(dirty_begin);it!=mappings_.end()&&it->first<dirty_end;++it)invalidate(it->second);
+    if(preparing_buffer_envelope_&&preparing_buffer_envelope_->base<dirty_end&&
+       dirty_begin<preparing_buffer_envelope_->base+preparing_buffer_envelope_->size)invalidate(*preparing_buffer_envelope_);
 }
 void Rasterizer::InstallCpuWatch(Mapping& mapping){
     if(mapping.cpu_watched||!watch_buffer_||mapping.cpu_snapshot.size()!=mapping.size)return;
@@ -872,16 +877,29 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
         (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
     ValidateGpuBacking(base,mapping.size,written);
-    auto backing_epoch=protected_backing_epoch_?protected_backing_epoch_(base,mapping.size):0;
+    // Ordinary readable watches and strong B ownership already exclude CPU
+    // writes. Do not walk PageWatch or count their existing wins as borrowed
+    // image-proof hits. This path is only for otherwise-unproved physical B.
+    auto backing_epoch=protected_backing_epoch_&&!mapping.cpu_watched&&!mapping.gpu_owned&&
+        HasGpuImageOverlap(base,mapping.size)?protected_backing_epoch_(base,mapping.size):0;
     bool borrowed_proof=backing_epoch&&backing_epoch==mapping.protected_backing_epoch&&
         mapping.cpu_snapshot.size()==mapping.size&&mapping.cpu_upload_ranges.empty();
     mapping.protected_backing_epoch=0; // Failed/reentrant preparation cannot publish an unfinished proof.
     bool cpu_proven_unchanged=mapping.cpu_watched||borrowed_proof;
+    const auto retain_partial_cpu_watch=[&]{
+        if(!((base|mapping.size)&4095))return false;
+        // A rounded readonly witness cannot be upgraded as one logical B
+        // owner. Retain its RO gaps; the exact writable page ranges below
+        // acquire strong ownership individually. Releasing the envelope here
+        // would also discard retained image/neighbour witnesses.
+        mapping.cpu_watched=false;mapping.cpu_partial_proof=true;
+        Diagnostics::Count("buffer-watch.partial-upgrade");return true;
+    };
     if(written&&mapping.cpu_watched){
         if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
             mapping.cpu_watched=false;MarkGpuOwned(mapping,0,mapping.size);
             Diagnostics::Count("buffer-watch.upgraded");
-        }else{
+        }else if(!retain_partial_cpu_watch()){
             // No proof survives a release of protection. Use the snapshot
             // fallback after a rejected or unavailable atomic transfer.
             ReleaseCpuBufferWatches(base,mapping.size);cpu_proven_unchanged=false;
@@ -1002,7 +1020,9 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     if(written&&mapping.cpu_watched&&!mapping.gpu_owned){
         if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
             mapping.cpu_watched=false;MarkGpuOwned(mapping,0,mapping.size);Diagnostics::Count("buffer-watch.upgraded");
-        }else{ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");}
+        }else if(!retain_partial_cpu_watch()){
+            ReleaseCpuBufferWatches(base,mapping.size);Diagnostics::Count("buffer-watch.transfer-fallback");
+        }
     }
     if(mapping.cpu_watch_pending)ReleaseCpuBufferWatches(base,mapping.size);
     if(written){
@@ -1029,7 +1049,7 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
     mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    if(backing_epoch&&!mapping.gpu_owned&&mapping.cpu_snapshot.size()==mapping.size&&
+    if(backing_epoch&&!mapping.gpu_owned&&!mapping.cpu_watched&&mapping.cpu_snapshot.size()==mapping.size&&
        mapping.cpu_upload_ranges.empty()&&protected_backing_epoch_(base,mapping.size)==backing_epoch)
         mapping.protected_backing_epoch=backing_epoch;
     proof_published=true;
