@@ -209,7 +209,12 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             continue;
         }
         const bool logic=regs.color_control.rop3!=AmdGpu::ColorControl::LogicOp::Copy;
-        rt.LogicOpEnable=logic;rt.LogicOp=LogicOp(regs.color_control.rop3);
+        // Vulkan disables blending globally with logicOpEnable, but applies
+        // the bit operation only to integer/normalized attachments. FLOAT and
+        // sRGB still store their original fragment output with native conversion.
+        const auto number=regs.color_buffers[i].GetNumberFmt();
+        rt.LogicOpEnable=logic&&number!=AmdGpu::NumberFormat::Float&&number!=AmdGpu::NumberFormat::Srgb;
+        rt.LogicOp=LogicOp(regs.color_control.rop3);
         const auto& source=regs.blend_control[i];rt.BlendEnable=!logic&&source.enable&&!regs.color_buffers[i].info.blend_bypass;
         if(rt.BlendEnable) {
             using BF=AmdGpu::BlendControl::BlendFactor;

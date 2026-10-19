@@ -45,6 +45,7 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
              color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
             (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
+             color.GetNumberFmt() == AmdGpu::NumberFormat::Srgb ||
              color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||
            ((color.GetDataFmt() == AmdGpu::DataFormat::Format8_8 ||
              color.GetDataFmt() == AmdGpu::DataFormat::Format16_16 ||
@@ -67,16 +68,19 @@ inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = 
     bool independent_logic{};
     if (logic) {
         u32 shared_mask{};
-        bool found{};
+        bool found{}, shared_logic{};
         for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
             const auto& color = regs.color_buffers[i];
             if (!color || (active_targets & (1u << i)) == 0) continue;
             const u32 mask = color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i));
+            const bool applies=color.GetNumberFmt()!=AmdGpu::NumberFormat::Float&&
+                color.GetNumberFmt()!=AmdGpu::NumberFormat::Srgb;
             if (!found) {
                 shared_mask = mask;
+                shared_logic = applies;
                 found = true;
             } else {
-                independent_logic |= mask != shared_mask;
+                independent_logic |= mask != shared_mask || applies != shared_logic;
             }
         }
     }
@@ -110,7 +114,8 @@ inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = 
             ((color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
               color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) || mixed_constants);
         const bool ordered_logic = logic && independent_logic &&
-            color.GetNumberFmt() != AmdGpu::NumberFormat::Float;
+            color.GetNumberFmt() != AmdGpu::NumberFormat::Float &&
+            color.GetNumberFmt() != AmdGpu::NumberFormat::Srgb;
         if (writes && (ordered_blend || ordered_logic) && GuestOrderedColorSupported(color))
             result |= 1u << i;
     }

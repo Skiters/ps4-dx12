@@ -4,6 +4,7 @@
 #include <boost/container/static_vector.hpp>
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
+#include "shader_recompiler/backend/spirv/spirv_emit_srgb.h"
 #include "shader_recompiler/ir/microinstruction.h"
 
 namespace Shader::Backend::SPIRV {
@@ -623,12 +624,7 @@ Id EmitImageRead(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id lod
         for (u32 i = 0; i < 4; ++i) {
             const auto value = ctx.OpCompositeExtract(ctx.F32[1], texel, i);
             if (i == 3) { channels[i] = value; continue; }
-            const auto low = ctx.OpFDiv(ctx.F32[1], value, ctx.ConstF32(12.92f));
-            const auto high = ctx.OpPow(ctx.F32[1],
-                ctx.OpFDiv(ctx.F32[1], ctx.OpFAdd(ctx.F32[1], value, ctx.ConstF32(0.055f)),
-                           ctx.ConstF32(1.055f)), ctx.ConstF32(2.4f));
-            channels[i] = ctx.OpSelect(ctx.F32[1],
-                ctx.OpFOrdLessThanEqual(ctx.U1[1], value, ctx.ConstF32(0.04045f)), low, high);
+            channels[i] = DecodeSrgb(ctx, value);
         }
         texel = ctx.OpCompositeConstruct(ctx.F32[4], channels[0], channels[1], channels[2], channels[3]);
     }

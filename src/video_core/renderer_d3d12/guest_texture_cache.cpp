@@ -144,6 +144,9 @@ bool IsOrderedFloatWordClass(const GuestTextureDesc& d){
 bool IsOrderedPacked16Class(const GuestTextureDesc& d){
     return d.number_format==0&&d.data_format>=16&&d.data_format<=19;
 }
+bool IsOrderedSrgbClass(const GuestTextureDesc& d){
+    return d.data_format==10&&d.number_format==9;
+}
 DXGI_FORMAT OrderedColorWordFormat(const GuestTextureDesc& d){
     return d.data_format==1?DXGI_FORMAT_R8_UINT:(d.data_format==2||d.data_format==3||IsOrderedPacked16Class(d))?DXGI_FORMAT_R16_UINT:
         (d.data_format==11||d.data_format==12)?DXGI_FORMAT_R32G32_UINT:
@@ -160,7 +163,7 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
         std::has_single_bit(d.samples)&&d.samples<=8&&
         (IsOrderedScalarClass(d)||IsOrderedPacked16Class(d)||(d.data_format==9&&(d.number_format==0||d.number_format==1))||
          (d.data_format==3&&(d.number_format==0||d.number_format==1))||
-         (d.data_format==10&&(d.number_format==0||d.number_format==1))||
+         (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==9))||
          ((d.data_format==5||d.data_format==12)&&(d.number_format==0||d.number_format==1||d.number_format==7))||
          IsOrderedFloatWordClass(d)||(d.data_format==6&&d.number_format==7));
 }
@@ -1274,7 +1277,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !(IsOrderedScalarClass(attachment)||IsOrderedPacked16Class(attachment)||(attachment.data_format==9&&(attachment.number_format==0||attachment.number_format==1))||
          (attachment.data_format==3&&(attachment.number_format==0||attachment.number_format==1))||
-         (attachment.data_format==10&&(attachment.number_format==0||attachment.number_format==1))||
+         (attachment.data_format==10&&(attachment.number_format==0||attachment.number_format==1||attachment.number_format==9))||
          ((attachment.data_format==5||attachment.data_format==12)&&
           (attachment.number_format==0||attachment.number_format==1||attachment.number_format==7))||
          IsOrderedFloatWordClass(attachment)||(attachment.data_format==6&&attachment.number_format==7))||
@@ -1470,7 +1473,7 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
     // Float word attachments normally use native blending. Allocate sample
     // UAVs only when ordered blending is actually requested, not for every RT.
     const bool initial_ordered=IsOrderedMultisampleColorClass(entry.desc)&&
-        (IsOrderedScalarClass(entry.desc)||IsOrderedFloatWordClass(entry.desc)||IsOrderedPacked16Class(entry.desc)||entry.desc.data_format==3||entry.desc.data_format==5||entry.desc.data_format==6||entry.desc.data_format==12)&&
+        (IsOrderedScalarClass(entry.desc)||IsOrderedFloatWordClass(entry.desc)||IsOrderedPacked16Class(entry.desc)||IsOrderedSrgbClass(entry.desc)||entry.desc.data_format==3||entry.desc.data_format==5||entry.desc.data_format==6||entry.desc.data_format==12)&&
         !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
     if((!entry.storage_retired&&!initial_readonly&&!initial_ordered)||!entry.storage_samples.empty()||entry.storage_linear.handle||
        !CanTransferIndependentMultisample(entry.desc,entry.layout))
@@ -3199,7 +3202,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         storage_description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         uint64_t storage_linear_bytes{};
         const bool multisample_storage=d.samples>1&&(d.writable||
-            (IsOrderedMultisampleColorClass(d)&&!IsOrderedScalarClass(d)&&!IsOrderedFloatWordClass(d)&&!IsOrderedPacked16Class(d)&&d.data_format!=3&&d.data_format!=5&&d.data_format!=6&&d.data_format!=12));
+            (IsOrderedMultisampleColorClass(d)&&!IsOrderedScalarClass(d)&&!IsOrderedFloatWordClass(d)&&!IsOrderedPacked16Class(d)&&!IsOrderedSrgbClass(d)&&d.data_format!=3&&d.data_format!=5&&d.data_format!=6&&d.data_format!=12));
         if(multisample_storage){
             const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,storage_cast_formats);
             storage_linear_bytes=GuestMultisample::LinearBytes(d,GuestMultisample::Footprint(d,layout));
