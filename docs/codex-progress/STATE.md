@@ -1,3 +1,5 @@
+Latest:0990d55 connects complete auxiliary GS/PS partitions and one logical source/GS/PS context in GuestRasterizer. Attachment prep precedes final views; one output arena reused; native probe parts aggregate. Core/fixtures and clean Release PASS; GPU/game NOT_RUN. Generic stage/capacity and other explicit gaps remain. See SESSION_HANDOFF.md.
+
 Latest:ad38ee6 caches full source/GS/PS logical layouts;1559575 preserves immutable replay constants across Finish/arena reset. Core/fixture and clean Release PASS; GPU/game NOT_RUN. Main GuestRasterizer partition integration remains pending. See SESSION_HANDOFF.md.
 
 Latest:ab449e4 adds merged reflected GS/PS layout and one logical preparation/completion, wired in partition fixture. CPU merge/projection/shader checks and clean Release PASS; GPU/game NOT_RUN. Original SO producer context and main integration remain pending. See SESSION_HANDOFF.md.
