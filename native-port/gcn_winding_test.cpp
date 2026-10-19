@@ -76,10 +76,11 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
-    const bool captured_inputs=mode.starts_with("captured-");
+    const bool automatic_rect=mode.starts_with("rect-");
+    const bool captured_inputs=automatic_rect||mode.starts_with("captured-");
     const bool stream_inputs=captured_inputs||mode.starts_with("stream-");
     if(stream_inputs){
-        mode.remove_prefix(captured_inputs?9:7);
+        mode.remove_prefix(automatic_rect?5:captured_inputs?9:7);
     }
     const bool point_capture_two=mode.starts_with("capture2-");
     const bool point_capture_three=mode.starts_with("capture3-");
@@ -209,7 +210,8 @@ int main(int argc,char** argv){try{
     }
     initialize(pixel_code,pixel_words,0x57494e44494e4702ULL);
     AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
-    regs.primitive_type=sized_points&&!captured_inputs?AmdGpu::PrimitiveType::PointList:AmdGpu::PrimitiveType::TriangleList;
+    regs.primitive_type=automatic_rect?AmdGpu::PrimitiveType::RectList:
+        sized_points&&!captured_inputs?AmdGpu::PrimitiveType::PointList:AmdGpu::PrimitiveType::TriangleList;
     regs.vs_program.address=reinterpret_cast<u64>(vertex_code.data())>>8;regs.vs_program.settings.num_user_regs=4;
     regs.vs_program.settings.num_vgprs=native_dual_distances?4:point_clip?3:2;regs.ps_program.address=reinterpret_cast<u64>(pixel_code.data())>>8;
     if(point_saturated){regs.vs_program.settings.num_user_regs=8;regs.vs_program.settings.num_vgprs=4;}
@@ -427,6 +429,16 @@ int main(int argc,char** argv){try{
     Shader::Backend::DX12::SpirvConvertOptions options;options.native_storage_buffer_uavs=true;options.runtime_viewport_flips=true;
     if(compile_shaders){
         using namespace Shader::Backend::DX12;
+        const auto stage_kind=[](Shader::SwStage stage){
+            switch(stage){
+            case Shader::SwStage::Vertex:return SpirvStage::Vertex;
+            case Shader::SwStage::TessellationControl:return SpirvStage::TessellationControl;
+            case Shader::SwStage::TessellationEval:return SpirvStage::TessellationEvaluation;
+            case Shader::SwStage::Geometry:return SpirvStage::Geometry;
+            case Shader::SwStage::Fragment:return SpirvStage::Pixel;
+            default:throw std::invalid_argument("Invalid graphics fixture stage");
+            }
+        };
         if(stream_inputs){
             {
                 auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
@@ -487,7 +499,7 @@ int main(int argc,char** argv){try{
             for(u32 stage=0;stage<Shader::MaxStageTypes;++stage)if(const auto* shader=stream.stages[stage]){
                 if(stage!=u32(Shader::SwStage::Geometry)&&shader!=guest.stages[stage])
                     throw std::runtime_error("Primitive stream replaced an original producer stage");
-                stream_inputs.push_back({shader->info.sw_stage==Shader::SwStage::Geometry?SpirvStage::Geometry:SpirvStage::Vertex,shader->spirv});
+                stream_inputs.push_back({stage_kind(shader->info.sw_stage),shader->spirv});
             }
             const auto stream_result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),stream_inputs,options);
             if(!stream_result.success)throw std::runtime_error("Original producer/primitive writer linkage failed: "+stream_result.diagnostics);
@@ -564,8 +576,7 @@ int main(int argc,char** argv){try{
         std::vector<LinkedSpirvStage> inputs;
         for(const auto* stage:guest.stages)if(stage){
             if(point_capture&&stage->info.sw_stage==Shader::SwStage::Fragment)continue;
-            const auto kind=stage->info.sw_stage==Shader::SwStage::Vertex?SpirvStage::Vertex:
-                stage->info.sw_stage==Shader::SwStage::Geometry?SpirvStage::Geometry:SpirvStage::Pixel;
+            const auto kind=stage_kind(stage->info.sw_stage);
             inputs.push_back({kind,stage->spirv});
         }
         const auto directory=std::filesystem::current_path()/("compiled-point-"+artifact_mode);
@@ -635,15 +646,20 @@ int main(int argc,char** argv){try{
         capture=frontend.BuildPointCaptureGraphics(regs);
         if(captured_inputs){
             using Shader::SwStage;using namespace Shader::Backend::SPIRV;
-            serialized_producer=frontend.BuildPrimitiveStream(capture->producer);
-            Shader::HwFragmentRuntimeInfo fragment{};
-            const auto auxiliary=[&](GuestShaderStage& stage,SwStage logical,AuxShaderType type){
-                stage.id=frontend.ReserveStageId();stage.auxiliary=true;stage.info.sw_stage=logical;
-                stage.spirv=EmitAuxilaryTessShader(type,fragment,3);serialized_producer.stages[u32(logical)]=&stage;
-            };
-            auxiliary(serialized_hull,SwStage::TessellationControl,AuxShaderType::RectListTCS);
-            auxiliary(serialized_domain,SwStage::TessellationEval,AuxShaderType::PassthroughTES);
-            capture->producer=frontend.BuildBufferedPointCapture(capture->producer);
+            if(automatic_rect){
+                if(capture->stream_patch_vertices!=3)throw std::runtime_error("Automatic rectangle capture route not selected");
+                serialized_producer=capture->stream_producer;
+            }else{
+                serialized_producer=frontend.BuildPrimitiveStream(capture->producer);
+                Shader::HwFragmentRuntimeInfo fragment{};
+                const auto auxiliary=[&](GuestShaderStage& stage,SwStage logical,AuxShaderType type){
+                    stage.id=frontend.ReserveStageId();stage.auxiliary=true;stage.info.sw_stage=logical;
+                    stage.spirv=EmitAuxilaryTessShader(type,fragment,3);serialized_producer.stages[u32(logical)]=&stage;
+                };
+                auxiliary(serialized_hull,SwStage::TessellationControl,AuxShaderType::RectListTCS);
+                auxiliary(serialized_domain,SwStage::TessellationEval,AuxShaderType::PassthroughTES);
+                capture->producer=frontend.BuildBufferedPointCapture(capture->producer);
+            }
             serialized_pass=std::make_unique<PrimitiveStreamPass>(device.Get());
             for(const auto* stage:serialized_producer.stages)if(stage)serialized_resources.push_back({&stage->info,stage->bindings_start});
         }
@@ -737,9 +753,10 @@ int main(int argc,char** argv){try{
             };
             if(capture){
                 const auto& gs=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
-                const auto primitives=std::max(1u,NativePointCapturePass::PrimitiveBound(original_state.topology,output_draw.count));
+                const auto producer_state=captured_inputs?NativePointCapturePass::StreamConsumerState(original_state,3):
+                    NativePointCapturePass::ProducerState(original_state);
+                const auto primitives=std::max(1u,NativePointCapturePass::PrimitiveBound(producer_state.topology,output_draw.count));
                 const auto plan=Shader::NativePointCapture::Plan::Make(primitives,gs.num_invocations,gs.output_vertices,output_draw.instances);
-                const auto producer_state=NativePointCapturePass::ProducerState(original_state);
                 const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
                 Resource stream;
                 std::shared_ptr<PrimitiveStreamLease> captured_stream;
@@ -777,7 +794,7 @@ int main(int argc,char** argv){try{
                     memcpy(data,records.data(),records.size()*4);
                     D3D12_RANGE written{0,records.size()*4};stream.handle->Unmap(0,&written);
                 }
-                capture_pass->Execute(rasterizer,plan,output_draw,original_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
+                capture_pass->Execute(rasterizer,plan,output_draw,producer_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
                     ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
                         [&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
                             if(captured_inputs)NativePointCapturePass::BindInputStream(bindings,captured_stream->data,0,

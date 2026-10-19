@@ -18,6 +18,7 @@ public:
     explicit NativePointCapturePass(ID3D12Device*);
     static u32 PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY,u32 vertices);
     static GuestGraphicsState ProducerState(const GuestGraphicsState&);
+    static GuestGraphicsState StreamConsumerState(const GuestGraphicsState&,u32 vertices_per_primitive);
     static void BindProducer(ResourceBindings&,Resource&,u64 offset,u64 bytes);
     static void BindReplay(ResourceBindings&,Resource&,u64 bytes);
     // SRV view starts at a complete primitive boundary; GS PrimitiveId is

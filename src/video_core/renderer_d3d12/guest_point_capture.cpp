@@ -72,6 +72,20 @@ GuestGraphicsState NativePointCapturePass::ProducerState(const GuestGraphicsStat
     pipeline.BlendState.AlphaToCoverageEnable=FALSE;pipeline.SampleDesc={1,0};
     return state;
 }
+GuestGraphicsState NativePointCapturePass::StreamConsumerState(const GuestGraphicsState& original,u32 vertices){
+    auto state=ProducerState(original);
+    // Serialized input duplicates strip/patch vertices per complete primitive;
+    // feeding the records back as strips or patches changes GS invocations.
+    switch(vertices){
+    case 1:state.topology=D3D_PRIMITIVE_TOPOLOGY_POINTLIST;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;break;
+    case 2:state.topology=D3D_PRIMITIVE_TOPOLOGY_LINELIST;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;break;
+    case 3:state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;break;
+    case 4:state.topology=D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;break;
+    case 6:state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ;state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;break;
+    default:throw std::invalid_argument("Invalid original primitive width in buffered GS consumer");
+    }
+    state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;return state;
+}
 void NativePointCapturePass::BindProducer(ResourceBindings& table,Resource& buffer,u64 offset,u64 bytes){
     if(!HasBinding(table,D3D12_DESCRIPTOR_RANGE_TYPE_UAV))return; // No original emissions: no UAV survives DCE.
     if(offset%4||bytes%4||offset>buffer.handle->GetDesc().Width||bytes>buffer.handle->GetDesc().Width-offset)

@@ -1797,10 +1797,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         auto stream_state=NativePointCapturePass::ProducerState(source_state);
         stream_state.pipeline.StreamOutput=stream_layout.Desc();
         const auto& stream_pipeline=pipelines_.Graphics(capture->stream_producer,stream_state.pipeline);
-        auto consumer_state=NativePointCapturePass::ProducerState(source_state);
-        consumer_state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-        consumer_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        consumer_state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+        const auto consumer_state=NativePointCapturePass::StreamConsumerState(source_state,range.vertices_per_primitive);
         const auto& consumer_pipeline=pipelines_.Graphics(capture->producer,consumer_state.pipeline);
         std::vector<GuestResourceStage> stream_stages,consumer_stages,replay_stages;
         for(const auto* stage:capture->stream_producer.stages)if(stage)stream_stages.push_back({&stage->info,stage->bindings_start});

@@ -7,6 +7,7 @@
 #include "stream_output_layout_checks.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
+#include "video_core/renderer_d3d12/guest_point_capture.h"
 #include "shader_recompiler/backend/dxil/spirv_converter.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
@@ -18,6 +19,19 @@ namespace DXIL=Shader::Backend::DX12;
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and primitive stream mode");
     Tests::CheckStreamOutputLayout();
+    GuestGraphicsState patch_state;patch_state.topology=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+    patch_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+    patch_state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF;
+    for(const u32 width:std::array<u32,5>{1,2,3,4,6}){
+        const auto consumer=NativePointCapturePass::StreamConsumerState(patch_state,width);
+        if(NativePointCapturePass::PrimitiveBound(consumer.topology,width*2)!=2||
+           consumer.pipeline.PrimitiveTopologyType==D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH||
+           consumer.pipeline.IBStripCutValue!=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED||!consumer.rasterizer_discard)
+            throw std::runtime_error("Buffered GS state/primitive-bound contract changed the original invocation count");
+    }
+    bool rejected_width{};try{(void)NativePointCapturePass::StreamConsumerState(patch_state,5);}
+    catch(const std::invalid_argument&){rejected_width=true;}
+    if(!rejected_width)throw std::runtime_error("Invalid buffered GS primitive width accepted");
     EmulatorSettings.SetPipelineCacheEnabled(false);_putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
     const auto dxc=std::filesystem::path(argv[2]).wstring();
     const auto vertex=DXIL::CompileDxil(dxc,R"(
