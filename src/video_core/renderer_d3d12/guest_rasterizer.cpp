@@ -586,6 +586,7 @@ void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
         GuestBufferAccess::ResolveCpuFault(address,writing);return;
     }
     if(!writing||IsGpuBufferModified(address,1))Rasterizer::ReadMemory(address,1);
+    else ResolveGpuBuffers(address,1);
     if(writing){DiscardBufferImageVersions(address,1,false);InvalidateCpuBufferPages(address,1);ReleaseImageWatches(address,1);}
     ResolveMemory(address,1);if(!writing)WatchBufferImageVersions(address,1);
 }

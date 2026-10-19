@@ -202,6 +202,20 @@ static void CpuDownloadWindow(ID3D12Device* device,std::byte* guest,std::byte* p
             Require(state.Protect==(i>=2?PAGE_NOACCESS:PAGE_READONLY),"CPU window changed an unrelated protection owner");
         }
     };
+    // Whole native envelopes may be strongly owned although only one sharp's
+    // pages are GPU-modified. A CPU store to a clean guarded page still has
+    // to retire that page's owner, without downloading the dirty neighbour.
+    const Rasterizer::ShaderBufferRequest envelope[]{{base,total,false,true,true},{base,page,true,true,true}};
+    (void)renderer.PrepareShaderBuffers(envelope);
+    renderer.FillPreparedShaderBuffer(base,page,0x55555555,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.MarkShaderBufferWrites(std::span(envelope+1,1));
+    const auto clean=base+window+17;MEMORY_BASIC_INFORMATION guard{};
+    VirtualQuery(reinterpret_cast<void*>(clean),&guard,sizeof(guard));
+    Require(guard.Protect==PAGE_NOACCESS&&!renderer.IsGpuBufferModified(clean,1),
+        "Clean-page regression did not establish a strong unmodified owner");
+    committed=0;*reinterpret_cast<volatile unsigned char*>(guest+window+17)=0x91;
+    Require(physical[window+17]==std::byte{0x91}&&committed==0&&renderer.IsGpuBufferModified(base,page),
+        "Clean-page CPU store failed to retire its exact guard or drained unrelated GPU data");
     arm();Require(renderer.ReadMemory(requests[0].address,4),"Explicit CPU read failed");check_first_window();
     renderer.ResolveGpuBuffers(requests[2].address,4);
     Require(renderer.IsGpuBufferModified(requests[3].address,page),"Internal exact-page GPU resolution was widened");

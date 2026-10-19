@@ -31,6 +31,7 @@ protected:
         // A real read or pre-store fault follows the original CPU download
         // window. A clean-page write must not download unrelated GPU islands.
         if(!writing||IsGpuBufferModified(address,1))Rasterizer::ReadMemory(address,1);
+        else ResolveGpuBuffers(address,1); // Clean bytes may still have a strong envelope owner.
         if(writing)InvalidateCpuBufferPages(address,1);
         ReleaseImageWatches(address,1);ResolveImages(address,1);
     }
