@@ -1255,3 +1255,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: Typed SRV/UAV subresource graph + native disjoint color states + guest proven-disjoint snapshot bypass connected. Core/GCN compile+link PASS23.694s; final checks compile/link PASS12.645s; GPU/game NOT_RUN. Full live feedback remains open.
 
 2026-10-19: Disjoint guest color route now requires exact physical mip mapping in addition to native compatibility; mismatched-map negative prepared. Final checks compile/link11.625s, GPU/game NOT_RUN.
+
+2026-10-19: 90bf5d6 clean Release reproduced; identity matches/EXEf524a9df/PDB11feeca1. Runtime NOT_RUN/not installed. Report shader-subresource-access-90bf5d6.json. Full same-subresource live feedback remains open; app6b8104d unchanged.
