@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstring>
+#include <span>
 #include "common/assert.h"
 #include "common/bit_field.h"
 #include "common/types.h"
@@ -67,6 +68,30 @@ union PM4Header {
     PM4Type3Header type3;
     BitField<30, 2, u32> type;
 };
+
+// Type-0 packets write consecutive MMIO register words beginning at the
+// absolute register index encoded by the header. Return the complete packet
+// size so callers advance past both the header and its payload.
+inline u32 ApplyType0RegisterWrite(std::span<u32> registers,
+                                   std::span<const u32> packet) {
+    if (packet.empty()) {
+        return 0;
+    }
+    const auto& header = *reinterpret_cast<const PM4Header*>(packet.data());
+    if (header.type.Value() != 0) {
+        return 0;
+    }
+    const u32 payload_words = header.type0.NumWords();
+    const u32 packet_words = payload_words + 1;
+    const u32 base = header.type0.base.Value();
+    if (packet.size() < packet_words || base > registers.size() ||
+        payload_words > registers.size() - base) {
+        return 0;
+    }
+    std::memcpy(registers.data() + base, packet.data() + 1,
+                size_t(payload_words) * sizeof(u32));
+    return packet_words;
+}
 
 // Write the PM4 header
 template <PM4ItOpcode opcode>

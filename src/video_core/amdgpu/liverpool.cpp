@@ -246,10 +246,14 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         default:
             UNREACHABLE_MSG("Wrong PM4 type {}", type);
             break;
-        case 0:
-            UNREACHABLE_MSG("Unimplemented PM4 type 0, base reg: {}, size: {}",
-                            header->type0.base.Value(), header->type0.NumWords());
-            break;
+        case 0: {
+            const u32 type0_words = ApplyType0RegisterWrite(regs.reg_array, dcb);
+            ASSERT_MSG(type0_words != 0,
+                       "Invalid PM4 type 0 packet, base reg: {}, size: {}, available: {}",
+                       header->type0.base.Value(), header->type0.NumWords(), dcb.size());
+            dcb = NextPacket(dcb, type0_words);
+            continue;
+        }
         case 2:
             // Type-2 packet are used for padding purposes
             dcb = NextPacket(dcb, 1);
