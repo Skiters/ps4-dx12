@@ -5,6 +5,7 @@
 #include "guest_image_readback.h"
 #include "guest_image_ownership.h"
 #include "guest_stage_bindings.h"
+#include "guest_point_capture.h"
 #include "diagnostics.h"
 #include "guest_dma.h"
 #include "shader_recompiler/native_dma.h"
@@ -761,8 +762,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(binding.nv_clock||binding.amd_clock)continue;
         // Native capture/replay storage is supplied by the graphics callback,
         // never interpreted as a guest sharp or mapped into PageWatch.
-        if(!pipeline.IsCompute()&&binding.space==33&&binding.reg==0&&binding.count==1&&
-           (binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV||binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV))continue;
+        if(!pipeline.IsCompute()&&NativePointCapturePass::IsInternalDescriptor(
+            binding.type,binding.reg,binding.space,binding.count))continue;
         if(!pipeline.IsCompute()&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV&&
            binding.space==Shader::NativeOrderedColor::DescriptorSet&&
            binding.reg>=Shader::NativeOrderedColor::Binding&&

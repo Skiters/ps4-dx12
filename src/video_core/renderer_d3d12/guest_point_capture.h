@@ -16,6 +16,13 @@ class NativePointCapturePass {
 public:
     using DrawArguments=Rasterizer::DrawArguments;
     explicit NativePointCapturePass(ID3D12Device*);
+    // These descriptors belong to the host capture graph, not guest sharps.
+    static constexpr bool IsInternalDescriptor(D3D12_DESCRIPTOR_RANGE_TYPE type,u32 reg,u32 space,u32 count){
+        if(space!=Shader::NativePointCapture::DescriptorSet||count!=1)return false;
+        if(reg==Shader::NativePointCapture::Binding)
+            return type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV||type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        return reg==Shader::NativePointCapture::StreamBinding&&type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    }
     static u32 PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY,u32 vertices);
     static GuestGraphicsState ProducerState(const GuestGraphicsState&);
     static GuestGraphicsState StreamConsumerState(const GuestGraphicsState&,u32 vertices_per_primitive);

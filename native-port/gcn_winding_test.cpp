@@ -77,6 +77,20 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    // A buffered GS needs t1/space33 in addition to the capture u0. The
+    // resource executor must leave precisely these host-owned slots to the
+    // callback, rather than reject the stream as missing guest metadata.
+    const auto internal=NativePointCapturePass::IsInternalDescriptor;
+    if(!internal(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,0,33,1)||
+       !internal(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,0,33,1)||
+       !internal(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,33,1)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,1,33,1)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,2,33,1)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,1)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,33,2)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,0,33,1)||
+       internal(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,0,33,1))
+        throw std::runtime_error("Internal point capture/stream descriptor classification mismatch");
     const bool split_replay=mode.starts_with("split-");
     if(split_replay)mode.remove_prefix(6);
     const bool partition_replay=mode.starts_with("partition-");
