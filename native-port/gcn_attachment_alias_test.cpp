@@ -49,7 +49,8 @@ int main(int argc,char** argv){try{
     const bool shared_exponent=shared_exponent_msaa_writer||shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_logic=std::string_view(argv[3])=="signed-logic";
     const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
-    const bool mixed_constant_blend=std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const bool float_mixed_constants=std::string_view(argv[3])=="float-mixed-constants-owned";
+    const bool mixed_constant_blend=float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool snorm_color=mode=="snorm-color-owned";
@@ -67,8 +68,9 @@ int main(int argc,char** argv){try{
     const bool linear_download=mode=="linear-download-owned";
     const bool r16_overlap=mode=="r16-overlap-owned";
     const bool r32_overlap=mode=="r32-overlap-owned";
+    const bool r32_matrix=mode=="r32-matrix-owned";
     const bool linear_attachment=mode=="linear-attachment-owned";
-    const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download||r16_overlap||r32_overlap;
+    const bool separate_versions=mode=="separate-buffer-image-owned"||linear_download||r16_overlap||r32_overlap||r32_matrix;
     using NativeDX12::Tests::Unorm8Color;
     if(separate_versions)NativeDX12::Tests::CheckUnormColorOracleNegatives();
     const bool formatted_cmask=mode=="formatted-cmask-owned";
@@ -313,6 +315,7 @@ int main(int argc,char** argv){try{
         for(u32 selected_mip:{0u,1u})for(u32 number_format:{0u,1u,4u,5u,7u,9u}){
         if(r16_overlap&&(data_format!=2||number_format!=0||layers!=1||selected_mip))continue;
         if(r32_overlap&&(data_format!=4||number_format!=4||layers!=1||selected_mip))continue;
+        if(r32_matrix&&data_format!=4)continue;
         if(linear_download&&(data_format!=4||number_format!=7||layers>2))continue;
         const bool half_components=data_format==2||data_format==5||data_format==12;
         const bool byte_components=data_format==1||data_format==3||data_format==10;
@@ -746,7 +749,7 @@ int main(int argc,char** argv){try{
                 // formatted read can synchronize that image into the arena.
                 draw_image(load_pixel,0);draw_formatted(0,extended_bytes);
             }
-            if(half_components||(data_format==4&&number_format!=7)){
+            if(half_components||data_format==4){
                 // These I versions retain initial texels except IMAGE_STORE's
                 // selected pixel. The formatted read copied that complete I
                 // into B. Pinned ObtainBuffer marks the whole writable sharp
@@ -999,7 +1002,8 @@ int main(int argc,char** argv){try{
                     throw std::runtime_error("HTILE clear alias was not rejected before guest writes");
             }
         }
-    }else for(uint32_t log2_samples:{0u,2u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
+    }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
+        if(!float_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1024,8 +1028,8 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=signed_color?9:10;
-            cb.info.number_type=signed_color?5:0;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=float_mixed_constants?4:signed_color?9:10;
+            cb.info.number_type=float_mixed_constants?7:signed_color?5:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
@@ -1034,7 +1038,8 @@ int main(int argc,char** argv){try{
         }
         if(mixed_constant_blend){
             using BF=AmdGpu::BlendControl::BlendFactor;
-            regs.blend_constants={.2f,.4f,.6f,.8f};
+            regs.blend_constants=float_mixed_constants?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
+                decltype(regs.blend_constants){.2f,.4f,.6f,.8f};
             for(auto& blend:regs.blend_control){
                 blend.enable=1;blend.separate_alpha_blend=1;
                 blend.alpha_src_factor=BF::One;blend.alpha_dst_factor=BF::Zero;
@@ -1061,13 +1066,23 @@ int main(int argc,char** argv){try{
             case Logic::OrInverted:return(~source)|destination;case Logic::Copy:return source;
             case Logic::OrReverse:return source|(~destination);case Logic::Or:return source|destination;
             case Logic::Set:return~0u;}throw std::runtime_error("Invalid fixture logic operation");};
-        const unsigned iterations=independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        const unsigned iterations=float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
+            if(float_mixed_constants){
+                regs.color_target_mask.raw=warm==2?0x001:warm==3?0x011:0xfff;
+                regs.num_indices=warm>=4?6:3;
+                input.num_records=regs.num_indices;
+                memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
+                // Missing destination alpha of R32 is one. This final case
+                // must produce1.25, without normalized-output clamping.
+                regs.blend_control[0].color_src_factor=warm==3?
+                    AmdGpu::BlendControl::BlendFactor::DstAlpha:AmdGpu::BlendControl::BlendFactor::ConstantColor;
+            }
             const auto operation=independent_unorm_logic?logic_operations[warm/2]:regs.color_control.rop3;
             regs.color_control.rop3=operation;
             rasterizer.ReadMemory(base,65536);rasterizer.InvalidateMemory(base,65536);memset(memory,0xee,65536);
             const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
-            for(unsigned i=0;i<3;++i){const float position[]{xy[i][0],xy[i][1],0.5f,1.f};memcpy(memory+i*32,position,sizeof(position));}
+            for(unsigned i=0;i<regs.num_indices;++i){const float position[]{xy[i%3][0],xy[i%3][1],0.5f,1.f};memcpy(memory+i*32,position,sizeof(position));}
             std::vector<std::byte> expected(memory,memory+65536);
             const auto pack=[](s32 r,s32 g,s32 b,s32 a){return(u32(r)&1023)|((u32(g)&1023)<<10)|((u32(b)&1023)<<20)|((u32(a)&3)<<30);};
             const u32 values[]{signed_color?pack(-512,-1,0,1):0xff0000ff,
@@ -1083,6 +1098,17 @@ int main(int argc,char** argv){try{
                 if(mixed_constant_blend){
                     constexpr u32 blended[]{0xffbebeF1u,0xff5fc2beu,0xfffc3030u};
                     word=blended[i];
+                    if(float_mixed_constants){
+                        const float sign=warm==5?-1.f:1.f;
+                        const float before[]{.5f,.25f*sign,.75f*sign};
+                        const float after[]{.5f,(warm>=4?.140625f:.1875f)*sign,
+                            (warm>=4?.1875f:.375f)*sign};
+                        const auto initial=std::bit_cast<u32>(before[i]);
+                        memcpy(memory+4096+offset,&initial,4);
+                        const float result=warm==3&&i==0?1.25f:
+                            (regs.color_target_mask.GetMask(i)&1)?after[i]:before[i];
+                        word=std::bit_cast<u32>(result);
+                    }
                 }
                 memcpy(expected.data()+4096+offset,&word,4);
             }
@@ -1143,7 +1169,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
@@ -1155,7 +1181,8 @@ int main(int argc,char** argv){try{
         "PASS: actual GCN CMASK metadata owners, 1/2/4/8 samples, large synthesized arena versus small physical CPU stream and complete padding":linear_download?
         "PASS: actual GCN linear image downloads, independent buffer/image versions, CPU visibility and full padding":r16_overlap?
         "PASS: actual GCN R16 UNORM independent image/buffer versions, partial writes, full writable-sharp download and padding":r32_overlap?
-        "PASS: actual GCN R32 UINT independent image/buffer versions, partial writes, full writable-sharp download and padding":separate_versions?
+        "PASS: actual GCN R32 UINT independent image/buffer versions, partial writes, full writable-sharp download and padding":r32_matrix?
+        "PASS: actual GCN R32 UINT/SINT/FLOAT independent image/buffer versions, array/volume/cube/mip shapes, writable-sharp downloads and padding":separate_versions?
         "PASS: actual GCN independent image/buffer format matrix, formatted GPU retile versus CPU stream, CPU/GPU visibility and padding":readonly_depth?
         "PASS: actual GCN vertex buffer writes with read-only/mixed Z16/Z32/stencil/MSAA, prewrite tests, warm edits, HTILE and competing-writer rejection, exact allocation/padding":
         "PASS: actual Liverpool/GCN/GuestRasterizer Draw, typed signed/unsigned shared MRT layers, MSAA, eager readback, warm permutations and padding");return 0;

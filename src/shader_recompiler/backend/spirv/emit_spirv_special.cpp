@@ -223,6 +223,22 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
     const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
                        target.number_format == AmdGpu::NumberFormat::Unorm;
+    const bool r32_float = target.data_format == AmdGpu::DataFormat::Format32 &&
+                           target.number_format == AmdGpu::NumberFormat::Float;
+    if (r32_float) {
+        // The ordinary R32 typeless family exposes the same bits through a
+        // rasterizer-ordered UINT view. Blend in floating point, without the
+        // normalized encoders used by the packed targets below. Missing RGB/A
+        // channels retain the format-defined (0,0,1) destination values.
+        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],
+            ctx.OpBitcast(ctx.F32[1], old_word), ctx.f32_zero_value,
+            ctx.f32_zero_value, ctx.ConstF32(1.f));
+        const Id result = (target.write_mask & 1u) ? ctx.OpBitcast(ctx.U32[1],
+            OrderedBlendChannel(ctx, target, source, destination, constants, 0)) : old_word;
+        ctx.OpImageWrite(image, coordinates, ctx.OpCompositeConstruct(ctx.U32[4],
+            result, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value));
+        return;
+    }
     Id destination{};
     if (!logic) {
         std::array<Id, 4> destination_channels{};

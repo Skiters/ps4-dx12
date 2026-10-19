@@ -33,7 +33,9 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
     return (color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
-            color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm);
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm) ||
+           (color.GetDataFmt() == AmdGpu::DataFormat::Format32 &&
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Float);
 }
 inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u,
                                 bool native_alpha_factor = true) {
@@ -85,7 +87,8 @@ inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = 
         const bool ordered_blend = !logic && blend.enable && !color.info.blend_bypass &&
             ((color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
               color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) || mixed_constants);
-        const bool ordered_logic = logic && independent_logic;
+        const bool ordered_logic = logic && independent_logic &&
+            color.GetNumberFmt() != AmdGpu::NumberFormat::Float;
         if (writes && (ordered_blend || ordered_logic) && GuestOrderedColorSupported(color))
             result |= 1u << i;
     }

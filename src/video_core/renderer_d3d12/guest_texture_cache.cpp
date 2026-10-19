@@ -138,7 +138,8 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
         !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
         std::has_single_bit(d.samples)&&d.samples<=8&&
         ((d.data_format==9&&d.number_format==1)||
-         (d.data_format==10&&d.number_format==0));
+         (d.data_format==10&&d.number_format==0)||
+         (d.data_format==4&&d.number_format==7));
 }
 bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
     return IsOrderedColorClass(d)&&d.samples>1;
@@ -1199,13 +1200,14 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
         !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !((attachment.data_format==9&&attachment.number_format==1)||
-         (attachment.data_format==10&&attachment.number_format==0))||
+         (attachment.data_format==10&&attachment.number_format==0)||
+         (attachment.data_format==4&&attachment.number_format==7))||
        attachment.first_mip||attachment.levels!=1||!attachment.view_layers||
        attachment.first_layer>=attachment.layers||
        attachment.view_layers>attachment.layers-attachment.first_layer)
         throw std::invalid_argument("Invalid native ordered color view");
     if(!texture.handle||!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)||
-       !texture.AllowsCast(DXGI_FORMAT_R32_UINT))
+       (!texture.AllowsCast(DXGI_FORMAT_R32_UINT)&&texture.handle->GetDesc().Format!=DXGI_FORMAT_R32_TYPELESS))
         throw std::runtime_error("Native ordered color requires R32_UINT format casting");
     D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;
     view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
@@ -1225,7 +1227,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::StorageUav(const Gues
        native.DepthOrArraySize!=desc.layers||!(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
         throw std::invalid_argument("Native MSAA storage plane lacks its exact writable geometry");
     if(IsOrderedMultisampleColorClass(writable_view)){
-        if(!storage.AllowsCast(DXGI_FORMAT_R32_UINT))
+        if(!storage.AllowsCast(DXGI_FORMAT_R32_UINT)&&native.Format!=DXGI_FORMAT_R32_TYPELESS)
             throw std::invalid_argument("Native ordered MSAA plane lacks R32_UINT format casting");
         D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;
         view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
@@ -1387,7 +1389,11 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
     }
     const bool initial_readonly=IsReadonlyMultisampleWordClass(entry.desc)&&
         !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
-    if((!entry.storage_retired&&!initial_readonly)||!entry.storage_samples.empty()||entry.storage_linear.handle||
+    // R32 float attachments normally use native blending. Allocate sample
+    // UAVs only when ordered blending is actually requested, not for every RT.
+    const bool initial_ordered=IsOrderedMultisampleColorClass(entry.desc)&&entry.desc.data_format==4&&
+        !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
+    if((!entry.storage_retired&&!initial_readonly&&!initial_ordered)||!entry.storage_samples.empty()||entry.storage_linear.handle||
        !CanTransferIndependentMultisample(entry.desc,entry.layout))
         throw std::invalid_argument("Native MSAA shader storage is not reconstructible");
     auto description=entry.texture.handle->GetDesc();
@@ -3066,7 +3072,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // able to restore THIS original allocation, without recreating I.
             if(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET)r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         }
-        if(!ordered_color_casts.empty()&&d.samples==1)
+        if((!ordered_color_casts.empty()||(IsOrderedColorClass(d)&&d.data_format==4))&&d.samples==1)
             r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         if(d.samples>1){
             const auto typed=d.depth_target?(d.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
@@ -3091,7 +3097,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         auto storage_description=r;storage_description.SampleDesc={1,0};storage_description.Alignment=0;
         storage_description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         uint64_t storage_linear_bytes{};
-        const bool multisample_storage=d.samples>1&&(d.writable||IsOrderedMultisampleColorClass(d));
+        const bool multisample_storage=d.samples>1&&(d.writable||
+            (IsOrderedMultisampleColorClass(d)&&d.data_format!=4));
         if(multisample_storage){
             const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,storage_cast_formats);
             storage_linear_bytes=GuestMultisample::LinearBytes(d,GuestMultisample::Footprint(d,layout));
