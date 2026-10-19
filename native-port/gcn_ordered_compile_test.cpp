@@ -4,6 +4,7 @@
 #include "video_core/renderer_d3d12/guest_point_capture.h"
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "ufloat_attachment_oracle.h"
+#include "normalized_blend_oracle.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
@@ -17,6 +18,7 @@
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and mode");
     NativeDX12::Tests::CheckUfloatBoundaryOracle();
+    NativeDX12::Tests::CheckNormalizedBlendOracle();
     using Cache=NativeDX12::GuestTextureCache;
     const std::set<DXGI_FORMAT> rg16_family{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,
         DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
@@ -87,8 +89,10 @@ int main(int argc,char** argv){try{
     input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
     unsigned cases{};
     std::set<u64> fragment_variants;
+    for(unsigned boundary=0;boundary<=NativeDX12::Tests::NormalizedBlendBoundaries.size();++boundary)
     for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7},{1,0},{1,1},{2,0},{2,1},{2,7},{0,1},{3,0},{3,1}})
     for(u32 sample_log:{0u,1u,2u,3u})for(u32 mask:{0xfffu,0xfa1u})for(u32 operation:{0u,1u,2u}){
+        if(boundary&&(shape[0]!=10||shape[1]>1||operation))continue;
         if(operation&&(shape[1]==7||mask==0xfff))continue;
         AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
@@ -119,7 +123,19 @@ int main(int argc,char** argv){try{
         regs.blend_control[1].color_dst_factor=F::OneMinusConstantColor;
         regs.blend_control[2].color_src_factor=F::ConstantAlpha;
         regs.blend_control[2].color_dst_factor=F::OneMinusConstantAlpha;
-        printf("COMPILE format=%u number=%u samples=%u mask=%03x operation=%u\n",shape[0],shape[1],1u<<sample_log,mask,operation);
+        if(boundary){
+            const auto& point=NativeDX12::Tests::NormalizedBlendBoundaries[boundary-1];
+            std::copy(point.constants.begin(),point.constants.end(),regs.blend_constants.begin());
+            regs.blend_control[1].color_src_factor=point.color_factors?F::OneMinusSrcColor:F::OneMinusConstantAlpha;
+            regs.blend_control[1].color_dst_factor=point.color_factors?F::ConstantAlpha:F::OneMinusConstantColor;
+            regs.blend_control[2].color_src_factor=point.color_factors?F::SrcAlpha:F::ConstantAlpha;
+            regs.blend_control[2].color_dst_factor=point.color_factors?F::OneMinusSrcAlpha:F::OneMinusConstantAlpha;
+            initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,std::bit_cast<u32>(point.source[0]),
+                0x7e0202ff,std::bit_cast<u32>(point.source[1]),0x7e0402ff,std::bit_cast<u32>(point.source[2]),
+                0x7e0602ff,std::bit_cast<u32>(point.source[3]),0xf800000f,0x03020100,
+                0xf800001f,0x03020100,0xf800082f,0x03020100,0xbf810000},0x4e4f524d45440000ULL+boundary-1);
+        }
+        printf("COMPILE format=%u number=%u samples=%u mask=%03x operation=%u boundary=%u\n",shape[0],shape[1],1u<<sample_log,mask,operation,boundary);
         const auto stages=frontend.BuildGraphics(regs);
         if(stages.ordered_color_mask!=7)throw std::runtime_error("Ordered compiler case missed an active target");
         const auto* fragment=stages.stages[u32(Shader::SwStage::Fragment)];

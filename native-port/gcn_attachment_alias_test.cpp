@@ -15,6 +15,7 @@
 #include "gcn_cached_depth_storage_fixture.h"
 #include "gcn_color_feedback_fixture.h"
 #include "ufloat_attachment_oracle.h"
+#include "normalized_blend_oracle.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -52,7 +53,9 @@ int main(int argc,char** argv){try{
     const bool signed_logic=std::string_view(argv[3])=="signed-logic";
     const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
     const bool half_edges=std::string_view(argv[3])=="half-mixed-edges-owned";
-    const bool snorm_mixed_constants=std::string_view(argv[3])=="snorm8-mixed-constants-owned";
+    const u32 normalized_edges=std::string_view(argv[3])=="unorm8-mixed-edges-owned"?1:
+        std::string_view(argv[3])=="snorm8-mixed-edges-owned"?2:0;
+    const bool snorm_mixed_constants=normalized_edges==2||std::string_view(argv[3])=="snorm8-mixed-constants-owned";
     const bool unorm10_mixed_constants=std::string_view(argv[3])=="unorm10-mixed-constants-owned";
     const bool rg8_snorm_constants=std::string_view(argv[3])=="rg8-snorm-mixed-constants-owned";
     const bool rg8_normalized_constants=rg8_snorm_constants||std::string_view(argv[3])=="rg8-unorm-mixed-constants-owned";
@@ -72,7 +75,7 @@ int main(int argc,char** argv){try{
         std::string_view(argv[3])=="r16-snorm-mixed-constants-owned"?4:
         std::string_view(argv[3])=="r16-float-mixed-constants-owned"?5:0;
     const bool float_mixed_constants=scalar_kind==5||r11_mixed_constants||rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
-    const bool mixed_constant_blend=scalar_kind||rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const bool mixed_constant_blend=normalized_edges||scalar_kind||rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
@@ -124,6 +127,7 @@ int main(int argc,char** argv){try{
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     if(r11_edges)NativeDX12::Tests::CheckUfloatBoundaryOracle();
+    if(normalized_edges)NativeDX12::Tests::CheckNormalizedBlendOracle();
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     if(linear_download)EmulatorSettings.SetReadbackLinearImagesEnabled(false);
     if(linear_attachment){EmulatorSettings.SetReadbackLinearImagesEnabled(true);
@@ -1030,7 +1034,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(!scalar_kind&&!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
+        if(!normalized_edges&&!scalar_kind&&!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1098,7 +1102,8 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=(rg8_normalized_constants||scalar_kind)?3:r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
+        const unsigned iterations=normalized_edges?unsigned(NativeDX12::Tests::NormalizedBlendBoundaries.size()*2):
+            (rg8_normalized_constants||scalar_kind)?3:r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
             (r11_mixed_constants||rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
             if(scalar_kind){regs.color_target_mask.raw=warm==1?0xfa1:0xfff;
@@ -1119,6 +1124,20 @@ int main(int argc,char** argv){try{
             if(rg8_normalized_constants){regs.color_target_mask.raw=warm==1?0xfa1:0xfff;
                 regs.blend_control[0].color_src_factor=warm==2?AmdGpu::BlendControl::BlendFactor::DstAlpha:
                     AmdGpu::BlendControl::BlendFactor::ConstantColor;}
+            if(normalized_edges){
+                const auto& point=NativeDX12::Tests::NormalizedBlendBoundaries[warm/2];
+                regs.color_target_mask.raw=(warm&1)?0xfa1:0xfff;
+                std::copy(point.constants.begin(),point.constants.end(),regs.blend_constants.begin());
+                using BF=AmdGpu::BlendControl::BlendFactor;
+                regs.blend_control[1].color_src_factor=point.color_factors?BF::OneMinusSrcColor:BF::OneMinusConstantAlpha;
+                regs.blend_control[1].color_dst_factor=point.color_factors?BF::ConstantAlpha:BF::OneMinusConstantColor;
+                regs.blend_control[2].color_src_factor=point.color_factors?BF::SrcAlpha:BF::ConstantAlpha;
+                regs.blend_control[2].color_dst_factor=point.color_factors?BF::OneMinusSrcAlpha:BF::OneMinusConstantAlpha;
+                initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,std::bit_cast<u32>(point.source[0]),
+                    0x7e0202ff,std::bit_cast<u32>(point.source[1]),0x7e0402ff,std::bit_cast<u32>(point.source[2]),
+                    0x7e0602ff,std::bit_cast<u32>(point.source[3]),0xf800000f,0x03020100,
+                    0xf800001f,0x03020100,0xf800082f,0x03020100,0xbf810000},0x4e4f524d45440000ULL+warm/2);
+            }
             if(float_mixed_constants&&!wide_float_format&&!rgba16_kind&&!r11_mixed_constants&&!scalar_kind){
                 regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
                 regs.num_indices=!half_edges&&warm>=4?6:3;
@@ -1151,6 +1170,19 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
+                if(normalized_edges){
+                    const auto& point=NativeDX12::Tests::NormalizedBlendBoundaries[warm/2];
+                    const auto& before=normalized_edges==2?point.snorm_before:point.unorm_before;
+                    const auto& after=normalized_edges==2?point.snorm_after[i]:point.unorm_after[i];
+                    for(u32 channel=0;channel<4;++channel){
+                        const auto initial=std::byte(u8(before[channel]));
+                        const auto result=(regs.color_target_mask.GetMask(i)&(1u<<channel))?
+                            std::byte(u8(after[channel])):initial;
+                        memory[4096+offset+channel]=initial;
+                        expected[4096+offset+channel]=result;
+                    }
+                    continue;
+                }
                 if(rg8_normalized_constants){
                     const auto pair=[](s32 r,s32 g){return u16(u16(u8(r))|(u16(u8(g))<<8));};
                     const s32 sign=rg8_snorm_constants?-1:1;
@@ -1375,7 +1407,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(color_feedback?"PASS: actual GCN GPU feedback current pixels, disjoint rectangles and physical CPU preservation":half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(normalized_edges?"PASS: 48 actual GCN normalized blend boundary draws, source/factor clamp and selection, MSAA1/2/4/8, masked channels, layers and physical padding":color_feedback?"PASS: actual GCN GPU feedback current pixels, disjoint rectangles and physical CPU preservation":half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?
