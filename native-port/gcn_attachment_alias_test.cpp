@@ -4,6 +4,7 @@
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "core/emulator_settings.h"
 #include "common/elf_info.h"
+#include "common/scope_exit.h"
 #include "gcn_ordered_formatted_fixture.h"
 #include "gcn_readonly_numeric_fixture.h"
 #include "gcn_writable_word_fixture.h"
@@ -523,7 +524,7 @@ int main(int argc,char** argv){try{
             const auto clear_image=[&](const float (&values)[4]){
                 rasterizer.NotifyCpuWrite(base+8192,16);memcpy(memory+8192,values,16);
                 memcpy(expected.data()+8192,values,16);
-                auto& program=gpu.GetCsRegs();program={};
+                AmdGpu::ComputeProgram program{};
                 program.address=reinterpret_cast<u64>(zero_clear_compute.data())>>8;
                 program.num_thread_x.full=64;program.num_thread_y.full=program.num_thread_z.full=1;
                 program.dim_x=u32(layout.guest_bytes/(128*layout.bytes_per_pixel));program.dim_y=program.dim_z=1;
@@ -535,7 +536,20 @@ int main(int argc,char** argv){try{
                 if(data_format==13){destination.data_format=13;destination.stride=12;
                     destination.num_records=u32(layout.guest_bytes/12);}
                 memcpy(program.user_data.data(),&source,sizeof(source));
-                memcpy(program.user_data.data()+4,&destination,sizeof(destination));rasterizer.DispatchDirect();
+                memcpy(program.user_data.data()+4,&destination,sizeof(destination));
+                // Use the existing PM4 queue contract, as other GCN fixtures
+                // do. GetCsRegs/DispatchDirect require that active queue; an
+                // out-of-queue direct call cannot model guest compute state.
+                constexpr u32 count=sizeof(program)/4;
+                std::vector<u32> packets{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::SetShReg,count,
+                    AmdGpu::PM4ShaderType::ShaderCompute}.raw,0x200};
+                const auto registers=std::bit_cast<std::array<u32,count>>(program);
+                packets.insert(packets.end(),registers.begin(),registers.end());
+                packets.insert(packets.end(),{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::DispatchDirect,3,
+                    AmdGpu::PM4ShaderType::ShaderCompute}.raw,program.dim_x,program.dim_y,program.dim_z,1});
+                gpu.BindRasterizer(&rasterizer);
+                SCOPE_EXIT {gpu.WaitGpuIdle();gpu.BindRasterizer(nullptr);};
+                gpu.SubmitGfx(packets,{});gpu.WaitGpuIdle();
             };
             if(linear_download){
                 EmulatorSettings.SetReadbackLinearImagesEnabled(true);
@@ -556,8 +570,13 @@ int main(int argc,char** argv){try{
                 };
                 const float half_clear[]{0.5f,0.f,0.f,0.f};const auto first=downloaded();
                 clear_image(half_clear);rasterizer.OnFence();expect_compact(0x3f000000);
-                if(downloaded()!=first+1||memcmp(backing,expected.data(),65536))
+                if(downloaded()!=first+1||memcmp(backing,expected.data(),65536)){
+                    size_t byte{};while(byte<65536&&backing[byte]==expected[byte])++byte;
+                    fprintf(stderr,"Compact GCN mismatch layers=%u mip=%u initial=%g downloads=%llu expected_downloads=%llu byte=%zu actual=%02x expected=%02x\n",
+                        layers,selected_mip,double(initial),(unsigned long long)downloaded(),(unsigned long long)(first+1),byte,
+                        byte<65536?unsigned(backing[byte]):0,byte<65536?unsigned(expected[byte]):0);
                     throw std::runtime_error("Fence compact download or full physical padding mismatch");
+                }
                 draw_raw_float(0);draw_image(load_pixel,128);draw_image(next_pixel,128);
                 rasterizer.OnFence();
                 if(downloaded()!=first+1)throw std::runtime_error("Empty fence repeated a stale image download");
