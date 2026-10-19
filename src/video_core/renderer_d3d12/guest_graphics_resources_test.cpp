@@ -320,15 +320,16 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
                 if(!invalid)throw std::runtime_error("In-place feedback descriptor remap was accepted");
                 auto copy=textures.AllocateColorFeedbackCopy(entry,rasterizer.CompletedFence());
                 rasterizer.RetainUntilFinish([source=entry.texture,copy](u64){(void)source;(void)copy;});
-                entry.texture.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
-                rasterizer.RecordingList()->CopyResource(copy.handle.Get(),entry.texture.handle.Get());
-                entry.texture.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATES(
-                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-                copy.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATES(
-                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-                if(table.RemapTextureSrvs(entry.texture.handle.Get(),copy)!=1||
+                if(table.SnapshotColorSrvs(rasterizer.RecordingList(),entry.texture,copy)!=1||
                    table.HasTextureSrvs(entry.texture.handle.Get())||!table.HasTextureSrvs(copy.handle.Get())||
                    !textures.PressureRetirementBytes())throw std::runtime_error("Feedback SRV identity/accounting was not transferred");
+                for(UINT layer=0;layer<2;++layer)for(UINT level=0;level<2;++level){
+                    const auto read=D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|
+                        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                    if(entry.texture.State(level+layer*2)!=read||copy.State(level+layer*2)!=
+                       (level==mip&&layer==source_layer?read:D3D12_RESOURCE_STATE_COPY_DEST))
+                        throw std::runtime_error("Feedback snapshot changed an unbound mip/layer or source state");
+                }
                 for(UINT y=0;y<(8u>>mip);++y)for(UINT x=0;x<(8u>>mip);++x){
                     const float rgba[]{(source_layer?.5f:.25f)+.125f*(warm+1),.5f,0,1};
                     memcpy(expected.data()+GuestPixelOffset(desc,layout,mip,target_layer,x,y),rgba,sizeof(rgba));}

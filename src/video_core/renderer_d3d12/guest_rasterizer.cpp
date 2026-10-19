@@ -1600,13 +1600,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             // Retain before recording: both source allocation and copy must
             // survive failure/unwinding and the eventual submission fence.
             RetainUntilFinish([source,copy](u64){(void)source;(void)copy;});
-            const auto old_state=source.state;const auto old_subresources=source.subresource_states;
-            auto* list=RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
-            DX12_API_CALL(list->CopyResource(copy.handle.Get(),native));
-            if(old_subresources.empty())source.Transition(list,old_state);
-            else for(UINT sub=0;sub<old_subresources.size();++sub)source.Transition(list,old_subresources[sub],sub);
-            copy.Transition(list,D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-            if(!bindings.RemapTextureSrvs(native,copy))throw std::logic_error("Color feedback lost its prepared shader views");
+            if(!bindings.SnapshotColorSrvs(RecordingList(),source,copy))
+                throw std::logic_error("Color feedback lost its prepared shader views");
             Diagnostics::Count("image-feedback.gpu-snapshot");
         }
         if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
