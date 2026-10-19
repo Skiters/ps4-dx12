@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <bit>
+#include <cmath>
 
 namespace Shader::Backend::SPIRV {
 
@@ -214,26 +215,27 @@ Id OrderedLogicWord(EmitContext& ctx, AmdGpu::ColorControl::LogicOp operation,
     throw std::runtime_error("Ordered color reached invalid logic operation");
 }
 
-Id OrderedHalfCode(EmitContext& ctx, Id value) {
+Id OrderedFloatCode(EmitContext& ctx, Id value,u32 mantissa,bool signed_result) {
     // Attachment conversion is RNE. Do not use the general PackHalf2x16
     // intrinsic here: its native lowering need not use attachment rounding.
     const auto u = [&](u32 bits) { return ctx.ConstU32(bits); };
+    const u32 drop=23-mantissa,mask=(1u<<mantissa)-1,inf=31u<<mantissa;
     const Id raw = ctx.OpBitcast(ctx.U32[1], value);
     const Id magnitude = ctx.OpBitwiseAnd(ctx.U32[1], raw, u(0x7fffffffu));
     const Id sign = ctx.OpBitwiseAnd(ctx.U32[1],
         ctx.OpShiftRightLogical(ctx.U32[1], raw, u(16)), u(0x8000));
     const Id retained_lsb = ctx.OpBitwiseAnd(ctx.U32[1],
-        ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(13)), u(1));
+        ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(drop)), u(1));
     const Id rounded = ctx.OpIAdd(ctx.U32[1], magnitude,
-        ctx.OpIAdd(ctx.U32[1], u(0xfff), retained_lsb));
+        ctx.OpIAdd(ctx.U32[1], u((1u<<(drop-1))-1), retained_lsb));
     Id normal = ctx.OpISub(ctx.U32[1],
-        ctx.OpShiftRightLogical(ctx.U32[1], rounded, u(13)), u(0x1c000));
+        ctx.OpShiftRightLogical(ctx.U32[1], rounded, u(drop)), u(112u<<mantissa));
     normal = ctx.OpSelect(ctx.U32[1],
-        ctx.OpUGreaterThanEqual(ctx.U1[1], magnitude, u(0x477ff000)), u(0x7c00), normal);
+        ctx.OpUGreaterThanEqual(ctx.U1[1], magnitude, u(0x47800000u-(1u<<(drop-1)))), u(inf), normal);
     const Id exponent = ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(23));
     // Every speculative shift is defined, including for zero/NaN inputs.
-    const Id shift = ctx.OpUMax(ctx.U32[1], u(14), ctx.OpUMin(ctx.U32[1], u(24),
-        ctx.OpISub(ctx.U32[1], u(126), exponent)));
+    const Id shift = ctx.OpUMax(ctx.U32[1], u(drop+1), ctx.OpUMin(ctx.U32[1], u(24),
+        ctx.OpISub(ctx.U32[1], u(136-mantissa), exponent)));
     const Id significand = ctx.OpBitwiseOr(ctx.U32[1], u(0x800000),
         ctx.OpBitwiseAnd(ctx.U32[1], magnitude, u(0x7fffff)));
     const Id bias = ctx.OpISub(ctx.U32[1],
@@ -243,14 +245,29 @@ Id OrderedHalfCode(EmitContext& ctx, Id value) {
     Id subnormal = ctx.OpShiftRightLogical(ctx.U32[1],
         ctx.OpIAdd(ctx.U32[1], significand, ctx.OpIAdd(ctx.U32[1], bias, sub_lsb)), shift);
     subnormal = ctx.OpSelect(ctx.U32[1],
-        ctx.OpULessThan(ctx.U1[1], magnitude, u(0x33000000)), u(0), subnormal);
+        ctx.OpULessThan(ctx.U1[1], magnitude, u((112-mantissa)<<23)), u(0), subnormal);
     Id code = ctx.OpSelect(ctx.U32[1],
         ctx.OpUGreaterThanEqual(ctx.U1[1], magnitude, u(0x38800000)), normal, subnormal);
-    const Id nan = ctx.OpBitwiseOr(ctx.U32[1], u(0x7e00),
-        ctx.OpBitwiseAnd(ctx.U32[1], ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(13)), u(0x3ff)));
+    if(!signed_result)code=ctx.OpSelect(ctx.U32[1],ctx.OpINotEqual(ctx.U1[1],
+        ctx.OpBitwiseAnd(ctx.U32[1],raw,u(0x80000000)),u(0)),u(0),code);
+    const Id nan = ctx.OpBitwiseOr(ctx.U32[1], u(inf|(1u<<(mantissa-1))),
+        ctx.OpBitwiseAnd(ctx.U32[1], ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(drop)), u(mask)));
     code = ctx.OpSelect(ctx.U32[1],
         ctx.OpUGreaterThan(ctx.U1[1], magnitude, u(0x7f800000)), nan, code);
-    return ctx.OpBitwiseOr(ctx.U32[1], sign, code);
+    return signed_result?ctx.OpBitwiseOr(ctx.U32[1], sign, code):code;
+}
+Id OrderedHalfCode(EmitContext& ctx,Id value){return OrderedFloatCode(ctx,value,10,true);}
+Id OrderedUnsignedFloatDecode(EmitContext& ctx,Id code,u32 mantissa){
+    const auto u=[&](u32 value){return ctx.ConstU32(value);};
+    const Id fraction=ctx.OpBitwiseAnd(ctx.U32[1],code,u((1u<<mantissa)-1));
+    const Id exponent=ctx.OpShiftRightLogical(ctx.U32[1],code,u(mantissa));
+    Id bits=ctx.OpBitwiseOr(ctx.U32[1],
+        ctx.OpShiftLeftLogical(ctx.U32[1],ctx.OpIAdd(ctx.U32[1],exponent,u(112)),u(23)),
+        ctx.OpShiftLeftLogical(ctx.U32[1],fraction,u(23-mantissa)));
+    bits=ctx.OpSelect(ctx.U32[1],ctx.OpIEqual(ctx.U1[1],exponent,u(31)),
+        ctx.OpBitwiseOr(ctx.U32[1],u(0x7f800000),ctx.OpShiftLeftLogical(ctx.U32[1],fraction,u(23-mantissa))),bits);
+    const Id sub=ctx.OpFMul(ctx.F32[1],ctx.OpConvertUToF(ctx.F32[1],fraction),ctx.ConstF32(std::ldexp(1.f,-14-int(mantissa))));
+    return ctx.OpSelect(ctx.F32[1],ctx.OpIEqual(ctx.U1[1],exponent,u(0)),sub,ctx.OpBitcast(ctx.F32[1],bits));
 }
 
 template <typename Target>
@@ -262,6 +279,25 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
     const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8;
     const bool unorm = target.number_format == AmdGpu::NumberFormat::Unorm;
+    if(target.data_format==AmdGpu::DataFormat::Format10_11_11&&target.number_format==AmdGpu::NumberFormat::Float){
+        std::array<Id,4> channels{};
+        for(u32 component=0;component<3;++component){
+            const u32 bits=component==2?10:11,shift=component==2?22:component*11;
+            const Id code=ctx.OpBitFieldUExtract(ctx.U32[1],old_word,ctx.ConstU32(shift),ctx.ConstU32(bits));
+            channels[component]=OrderedUnsignedFloatDecode(ctx,code,bits-5);
+        }
+        channels[3]=ctx.ConstF32(1.f);const Id destination=ctx.OpCompositeConstruct(ctx.F32[4],channels);
+        Id result=old_word;
+        for(u32 component=0;component<3;++component)if(target.write_mask&(1u<<component)){
+            const u32 bits=component==2?10:11,shift=component==2?22:component*11;
+            const Id value=OrderedBlendChannel(ctx,target,source,destination,constants,component);
+            result=ctx.OpBitFieldInsert(ctx.U32[1],result,OrderedFloatCode(ctx,value,bits-5,false),
+                ctx.ConstU32(shift),ctx.ConstU32(bits));
+        }
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],result,
+            ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value));
+        return;
+    }
     const u32 float_components=target.data_format==AmdGpu::DataFormat::Format32?1:
         target.data_format==AmdGpu::DataFormat::Format32_32?2:
         target.data_format==AmdGpu::DataFormat::Format32_32_32_32?4:0;

@@ -64,7 +64,7 @@ int main(int argc,char** argv){try{
     input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
     unsigned cases{};
     std::set<u64> fragment_variants;
-    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0}})
+    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7}})
     for(u32 sample_log:{0u,1u,2u,3u})for(u32 mask:{0xfffu,0xfa1u})for(u32 operation:{0u,1u,2u}){
         if(operation&&(shape[1]==7||mask==0xfff))continue;
         AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
