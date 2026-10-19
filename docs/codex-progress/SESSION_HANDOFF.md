@@ -1,3 +1,12 @@
+## Logical draw attachment continuation — 2026-10-20
+
+Production a4771ef3b166969234df02057e7419413606c678 adds scoped attachment selection/pins across replay slices. Color/depth entries initialize once; CMASK/HTILE, clears and backing sample conversion are beginning-only. Depth write planes accumulate. Pins survive final readback retirement and release before CPU reconciliation. Final readbacks remain inside the original resource callback, preserving post-draw alias/DMA ordering. BindReplay now accepts checked whole-record SRV subranges.
+
+Prepared split-rect-capture2-point-size-gcn-loop-bound and split-rect-capture3-point-unit-gcn-loop-bound modes retain independent expected image/stencil data. Separate RG/BA slice writes detect color reseeding; immutable original depth snapshots and stencil increments detect depth resets. GPU NOT_RUN. Current main path still uses one output arena and one PS replay; multipart scheduling is NOT enabled.
+
+Final core/fixture compile-link PASS; both CPU-only shader modes PASS0.679s (033224-19164/32296). Separate tracked-clean Release PASS21.570s (033226-37700). Exact hashes/source/commands: F:/PS4Dev/handoff/native-port-comparison-20261019/attachment-continuation-a4771ef.json. No GPU/game/UI/controller execution, app replacement or runtime archive. No FPS/image success claimed.
+
+NEXT: integrate ordered GS/PS partitions while freezing original feedback snapshots and preserving MSAA/alias ordering/query lifetime. Generic tessellation amplification/SO capacity and LsHsEsGs activation remain separate gaps; QuadList GS compatibility unproved. Do not repeat completed audits. Existing PC-use no-GPU/game restriction remains. Full port and acceptance incomplete.
 ## Automatic RectList fixture and normalized consumer topology — 2026-10-20
 
 Production a2c0c71674ed28016054b97497fbba6ae2b66ff2 centralizes NativePointCapturePass::StreamConsumerState: serialized point/line/triangle/adjacency records use independent list topology with strip-cut disabled and rasterizer-discard capture state. GuestRasterizer now uses this shared state. CPU interoperation checks prove each supported width1/2/3/4/6 gives exactly two primitives from two records; invalid5 is rejected. This prevents replaying serialized patch/strip data with a different GS invocation count.

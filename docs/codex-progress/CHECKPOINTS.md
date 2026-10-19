@@ -1,3 +1,5 @@
+Latest checkpoint: a4771ef attachment continuation; clean Release and CPU shader checks PASS, GPU/game NOT_RUN. See SESSION_HANDOFF.md and attachment-continuation-a4771ef.json. Multipart scheduling remains pending.
+
 ## Automatic RectList validation preparation — 2026-10-20
 
 Source a2c0c71 shares normalized GS consumer list topology in GuestRasterizer and native fixtures. Real automatic RectList frontend stages now drive prepared rect-capture2/rect-capture3 runtime tests without manual HS/DS substitution. CPU signed-DXIL/state-count/boundary checks PASS; clean Release a2c0c71 PASS20.720s. GPU/game NOT_RUN; automatic Draw execution not validated, app unchanged. Exact hashes/logs and next attachment continuation/generic-capacity work: SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/automatic-rect-a2c0c71.json. Full port incomplete.
