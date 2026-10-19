@@ -141,8 +141,20 @@ Id OrderedBlendChannel(EmitContext& ctx, const HwFragmentRuntimeInfo::OrderedCol
     const auto& blend = target.blend;
     const bool alpha = component == 3;
     const auto operation = alpha && blend.separate_alpha_blend ? blend.alpha_func : blend.color_func;
-    const Id src = ctx.OpCompositeExtract(ctx.F32[1], source, component);
-    const Id dst = ctx.OpCompositeExtract(ctx.F32[1], destination, component);
+    // Vulkan clamps the selected operands and factors before the blend operation,
+    // independently of the final normalized storage conversion. Keep floating
+    // point attachments unbounded, and evaluate factors from the original colors.
+    const auto clamp_operand = [&](Id value) {
+        if (target.number_format == AmdGpu::NumberFormat::Unorm ||
+            target.number_format == AmdGpu::NumberFormat::Snorm) {
+            return ctx.OpFClamp(ctx.F32[1], value,
+                ctx.ConstF32(target.number_format == AmdGpu::NumberFormat::Snorm ? -1.f : 0.f),
+                ctx.ConstF32(1.f));
+        }
+        return value;
+    };
+    const Id src = clamp_operand(ctx.OpCompositeExtract(ctx.F32[1], source, component));
+    const Id dst = clamp_operand(ctx.OpCompositeExtract(ctx.F32[1], destination, component));
     if (operation == AmdGpu::BlendControl::BlendFunc::Min)
         return ctx.OpFMin(ctx.F32[1], src, dst);
     if (operation == AmdGpu::BlendControl::BlendFunc::Max)
@@ -151,9 +163,9 @@ Id OrderedBlendChannel(EmitContext& ctx, const HwFragmentRuntimeInfo::OrderedCol
     const auto dst_factor = alpha && blend.separate_alpha_blend ? blend.alpha_dst_factor : blend.color_dst_factor;
     const bool shader_alpha = (target.shader_mask & AmdGpu::ColorBufferMask::ComponentA) != 0;
     const Id scaled_src = ctx.OpFMul(ctx.F32[1], src,
-        OrderedBlendFactor(ctx, src_factor, source, destination, constants, component, shader_alpha));
+        clamp_operand(OrderedBlendFactor(ctx, src_factor, source, destination, constants, component, shader_alpha)));
     const Id scaled_dst = ctx.OpFMul(ctx.F32[1], dst,
-        OrderedBlendFactor(ctx, dst_factor, source, destination, constants, component, shader_alpha));
+        clamp_operand(OrderedBlendFactor(ctx, dst_factor, source, destination, constants, component, shader_alpha)));
     switch (operation) {
     case AmdGpu::BlendControl::BlendFunc::Add:
         return ctx.OpFAdd(ctx.F32[1], scaled_src, scaled_dst);
