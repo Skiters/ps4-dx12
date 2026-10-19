@@ -593,6 +593,18 @@ void GuestRasterizer::CheckBacking(VAddr address,u64 size,bool writing){
     ValidateIndependentImageWatches();
     const auto validating=std::exchange(validating_image_watches_,true);
     SCOPE_EXIT {validating_image_watches_=validating;};
+    if(writing&&Diagnostics::Enabled()){
+        static std::atomic<unsigned> write_callers{};
+        for(const auto& image:textures_.Entries())if(image->gpu_owned&&ImageOverlap(address,size,*image)){
+            if(write_callers.fetch_add(1)<32){
+                fprintf(stderr,"DX12 image backing write caller=%p address=%llx bytes=%llu image=%llx image_bytes=%llu\n",
+                    __builtin_return_address(0),(unsigned long long)address,(unsigned long long)size,
+                    (unsigned long long)image->desc.address,(unsigned long long)image->layout.guest_bytes);
+                fflush(stderr);
+            }
+            break;
+        }
+    }
     if(writing)ResolveGpuBuffers(address,size);
     if(writing)DiscardBufferImageVersions(address,size,false);
     GuestBufferAccess::CheckBacking(address,size,writing);
