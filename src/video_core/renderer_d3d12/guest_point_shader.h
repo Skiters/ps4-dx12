@@ -36,6 +36,9 @@ std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool
 // Replay host records, never guest shader code. Only the flat record ID crosses
 // the hardware varying interface; original PS attributes are fetched from SRV.
 std::vector<u32> EmitNativePointReplayVertex();
+// Ordered uint4 SO chunks of the original DS/ES vertex payload plus patch ID.
+// This auxiliary GS replaces the original GS only in the first capture pass.
+std::vector<u32> EmitNativePrimitiveStream(const Shader::HwGeometryRuntimeInfo&);
 std::vector<u32> EmitNativePointReplayGeometry(const Shader::Info&,
     const Shader::HwGeometryRuntimeInfo&,const Shader::Profile&);
 }

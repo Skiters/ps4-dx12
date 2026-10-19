@@ -12,6 +12,13 @@ inline constexpr u32 StreamBinding=1;
 // Per input vertex: original patch/primitive ID, position.xyzw, then the
 // original ESGS parameter vectors. No float conversions or extra varyings.
 inline constexpr u32 StreamPatchWord=0,StreamPositionWord=1,StreamParameterWord=5;
+// The SO bridge serializes each vertex as uint4 chunks. Padding belongs to
+// the internal record, never to the original guest varying interface.
+inline constexpr u32 StreamRecordWords(u32 vertex_words){
+    if(vertex_words<4||vertex_words%4||vertex_words>132)
+        throw std::invalid_argument("Invalid original geometry stream vertex size");
+    return (vertex_words+4)&~3u;
+}
 inline constexpr u32 ValidWord=0,PositionWord=1,SizeWord=5,LayerWord=6,ViewportWord=7,
     ClipWord=8,CullWord=16,ParameterWord=24,RecordWords=152;
 struct Record {

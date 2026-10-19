@@ -2,8 +2,12 @@
 #pragma once
 #include "common/types.h"
 #include "resources.h"
+#include "stream_output_layout.h"
+#include <span>
+#include <string>
 namespace NativeDX12 {
 class Rasterizer;
+StreamOutputLayout ReflectPrimitiveStreamLayout(const std::wstring& dxc,std::span<const u8> bytecode);
 // A bounded slice of a host-internal, fully captured primitive stream. Caller
 // must cover the complete stream with ordered slices and prevent SO overflow.
 struct PrimitiveStreamRange {

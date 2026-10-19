@@ -6,9 +6,11 @@
 #include "video_core/renderer_d3d12/guest_viewports.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
+#include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/amdgpu/cb_db_extent.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
 #include "common/serdes.h"
 #include "common/path_util.h"
 #include "video_core/cache_storage.h"
@@ -413,6 +415,50 @@ int main(int argc,char** argv){try{
     if(compile_shaders){
         using namespace Shader::Backend::DX12;
         if(stream_inputs){
+            for(const auto topology:std::array{AmdGpu::PrimitiveType::PointList,AmdGpu::PrimitiveType::LineList,
+                AmdGpu::PrimitiveType::TriangleList,AmdGpu::PrimitiveType::AdjLineList,AmdGpu::PrimitiveType::AdjTriangleList}){
+                auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
+                geometry.in_primitive=topology;
+                // Position plus31 full parameters fills the native32-row GS
+                // input signature. Patch ID needs no extra output varying.
+                geometry.in_vertex_data_size=128;
+                const auto words=EmitNativePrimitiveStream(geometry);
+                const LinkedSpirvStage writer{SpirvStage::Geometry,words};
+                const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),std::span(&writer,1),options);
+                if(!result.success)throw std::runtime_error("Serialized primitive writer compilation failed: "+result.diagnostics);
+                const auto layout=ReflectPrimitiveStreamLayout(std::filesystem::path(argv[2]).wstring(),result.stages[0].bytecode);
+                if(layout.Desc().NumEntries!=1||layout.Desc().pBufferStrides[0]!=16)
+                    throw std::runtime_error("Primitive writer lost its reflected word-stream layout");
+                printf("COMPILED: serialized primitive writer topology%u full native input, signed DXIL %zu bytes\n",u32(topology),result.stages[0].bytecode.size());
+            }
+            const auto stream=frontend.BuildPrimitiveStream(guest);
+            if(stream.mrt_mask||stream.ordered_color_mask||stream.stages[u32(Shader::SwStage::Fragment)])
+                throw std::runtime_error("Primitive stream retained fragment outputs");
+            std::vector<LinkedSpirvStage> stream_inputs;
+            for(u32 stage=0;stage<Shader::MaxStageTypes;++stage)if(const auto* shader=stream.stages[stage]){
+                if(stage!=u32(Shader::SwStage::Geometry)&&shader!=guest.stages[stage])
+                    throw std::runtime_error("Primitive stream replaced an original producer stage");
+                stream_inputs.push_back({shader->info.sw_stage==Shader::SwStage::Geometry?SpirvStage::Geometry:SpirvStage::Vertex,shader->spirv});
+            }
+            const auto stream_result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),stream_inputs,options);
+            if(!stream_result.success)throw std::runtime_error("Original producer/primitive writer linkage failed: "+stream_result.diagnostics);
+            printf("COMPILED: original GCN producer linked to serialized primitive writer\n");
+            {
+                using namespace Shader::Backend::SPIRV;
+                Shader::HwFragmentRuntimeInfo fragment{};
+                const auto hull=EmitAuxilaryTessShader(AuxShaderType::RectListTCS,fragment,3);
+                const auto domain=EmitAuxilaryTessShader(AuxShaderType::PassthroughTES,fragment,3);
+                auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
+                geometry.in_primitive=AmdGpu::PrimitiveType::TriangleList;geometry.in_vertex_data_size=4;
+                const auto writer=EmitNativePrimitiveStream(geometry);
+                const LinkedSpirvStage stages[]{
+                    {SpirvStage::Vertex,guest.stages[u32(Shader::SwStage::Vertex)]->spirv},
+                    {SpirvStage::TessellationControl,hull},{SpirvStage::TessellationEvaluation,domain},
+                    {SpirvStage::Geometry,writer}};
+                const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),stages,options);
+                if(!result.success)throw std::runtime_error("DS/serialized primitive writer linkage failed: "+result.diagnostics);
+                printf("COMPILED: original GCN VS/auxiliary HS/DS/serialized writer linked and validated\n");
+            }
             // Exercise the full original input domain without allocating an
             // impossible extra varying: parameter31.w, adjacency vertex5,
             // position, guest PrimitiveId and invocation ID use production
@@ -630,7 +676,7 @@ int main(int argc,char** argv){try{
                     // Independent fixture input: two generated primitives from
                     // patch7. The original ES still executes once per vertex;
                     // this tests buffered GS input, not a DS/SO producer.
-                    const u32 stride=gs.in_vertex_data_size+1;
+                    const u32 stride=Shader::NativePointCapture::StreamRecordWords(gs.in_vertex_data_size);
                     std::vector<u32> records(size_t(stream_primitives)*stride);
                     for(u32 primitive=0;primitive<stream_primitives;++primitive){
                         records[primitive*stride]=7;

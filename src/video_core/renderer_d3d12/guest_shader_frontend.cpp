@@ -371,6 +371,24 @@ GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const Amd
     return result;
 }
 
+GuestGraphicsStages GuestShaderFrontend::BuildPrimitiveStream(const GuestGraphicsStages& source){
+    using Shader::SwStage;
+    const auto* geometry=source.stages[u32(SwStage::Geometry)];
+    if(!geometry||geometry->auxiliary)
+        throw std::invalid_argument("Primitive stream requires original guest GS input metadata");
+    auto words=EmitNativePrimitiveStream(geometry->runtime.hw.gs);
+    auto found=auxiliary_.find(words);
+    if(found==auxiliary_.end()){
+        auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;
+        stage->info.hw_stage=Shader::HwStage::Geometry;stage->info.sw_stage=SwStage::Geometry;
+        stage->spirv=words;found=auxiliary_.emplace(std::move(words),std::move(stage)).first;
+    }
+    // Retain the exact original VS/HS/DS stage objects and their bindings.
+    // Only original GS effects move to the later buffered-input pass.
+    auto result=source;result.stages[u32(SwStage::Geometry)]=found->second.get();
+    result.stages[u32(SwStage::Fragment)]=nullptr;result.mrt_mask=result.ordered_color_mask=0;
+    return result;
+}
 GuestShaderStage& GuestShaderFrontend::BuildCompute(AmdGpu::Liverpool& gpu) {
     VideoCore::GuestRuntimeContext context{profile_};
     Shader::Backend::Bindings bindings{};

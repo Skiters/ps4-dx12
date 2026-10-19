@@ -15,8 +15,8 @@ inline std::array<Sirit::Id,2> DefineNativePointCaptureReader(Sirit::Module& ctx
 }
 inline Id ReadNativePointStream(EmitContext& ctx,u32 vertex,u32 word){
     const auto& geometry=ctx.runtime_info.hw.gs;
-    const u32 stride=geometry.in_vertex_data_size+1;
-    if(vertex>=ctx.native_point_stream_vertices||word>=stride)
+    const u32 stride=NativePointCapture::StreamRecordWords(geometry.in_vertex_data_size);
+    if(vertex>=ctx.native_point_stream_vertices||word>geometry.in_vertex_data_size)
         throw std::out_of_range("Captured geometry input exceeds its original vertex layout");
     const auto primitive=ctx.OpLoad(ctx.U32[1],ctx.primitive_id);
     const auto record=ctx.OpIAdd(ctx.U32[1],ctx.OpIMul(ctx.U32[1],primitive,

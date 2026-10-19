@@ -3,8 +3,29 @@
 #include "primitive_stream_arguments_shader.h"
 #include "rasterizer.h"
 #include <limits>
+#include <dxcapi.h>
+#include <d3d12shader.h>
 
 namespace NativeDX12 {
+StreamOutputLayout ReflectPrimitiveStreamLayout(const std::wstring& dxc,std::span<const u8> bytecode){
+    struct Library {HMODULE value;~Library(){if(value)FreeLibrary(value);}} library{LoadLibraryW(dxc.c_str())};
+    if(!library.value)throw std::runtime_error("Cannot load pinned DXC for primitive stream reflection");
+    const auto create=reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(library.value,"DxcCreateInstance"));
+    if(!create)throw std::runtime_error("DXC primitive stream reflection entry point missing");
+    ComPtr<IDxcUtils> utils;Check(create(CLSID_DxcUtils,IID_PPV_ARGS(&utils)));
+    const DxcBuffer input{bytecode.data(),bytecode.size(),DXC_CP_ACP};
+    ComPtr<ID3D12ShaderReflection> reflection;Check(utils->CreateReflection(&input,IID_PPV_ARGS(&reflection)));
+    D3D12_SHADER_DESC desc{};Check(reflection->GetDesc(&desc));
+    if(desc.OutputParameters!=1||desc.GSOutputTopology!=D3D_PRIMITIVE_TOPOLOGY_POINTLIST)
+        throw std::invalid_argument("Primitive stream shader must output one uint4 point payload");
+    D3D12_SIGNATURE_PARAMETER_DESC output{};Check(reflection->GetOutputParameterDesc(0,&output));
+    if(output.ComponentType!=D3D_REGISTER_COMPONENT_UINT32||output.Mask!=15||output.Stream||
+       output.SystemValueType!=D3D_NAME_UNDEFINED||!output.SemanticName||!*output.SemanticName)
+        throw std::invalid_argument("Unexpected primitive stream payload signature");
+    const D3D12_SO_DECLARATION_ENTRY entry{0,output.SemanticName,output.SemanticIndex,0,4,0};
+    const UINT stride=16;
+    return StreamOutputLayout({&entry,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM});
+}
 PrimitiveStreamRange PrimitiveStreamRange::Make(u32 stride,u32 capacity,u32 primitive,u32 first,u32 limit){
     if(!stride||stride%4||stride>D3D12_SO_BUFFER_MAX_STRIDE_IN_BYTES||!capacity||
        !primitive||primitive>3||capacity%primitive||first%primitive||!limit||limit%primitive||
