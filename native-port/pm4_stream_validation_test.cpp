@@ -63,12 +63,22 @@ int main() {
         Libraries::GnmDriver::CommandWriterTrace::Scope changed_scope{
             "changed-writer", writer_buffer.data() + 4, 1};
         writer_buffer[4] = 0x12345678u;
-        changed_scope.MarkWritten();
+        changed_scope.MarkWritten(1);
     }
     const auto changed = Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
         reinterpret_cast<uintptr_t>(writer_buffer.data() + 4));
     Require(changed.size() == 1);
     Require(changed[0].function == "changed-writer");
     Require(changed[0].snapshot[0] == 0x12345678u);
+    {
+        Libraries::GnmDriver::CommandWriterTrace::Scope bounded_scope{
+            "bounded-writer", writer_buffer.data() + 5, 3};
+        bounded_scope.MarkWritten(1);
+    }
+    Require(Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
+                reinterpret_cast<uintptr_t>(writer_buffer.data() + 6)).empty());
+    const auto bounded = Libraries::GnmDriver::CommandWriterTrace::FindRecentCovering(
+        reinterpret_cast<uintptr_t>(writer_buffer.data() + 5));
+    Require(bounded.size() == 1 && bounded[0].size_dw == 1);
     return 0;
 }

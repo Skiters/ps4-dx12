@@ -751,7 +751,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirectMulti(u32* cmdbuf, u32 size, u32 data_offset,
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState(u32* cmdbuf, u32 size) {
-    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, size};
+    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, std::min(size, HwInitPacketSize)};
     LOG_TRACE(Lib_GnmDriver, "called");
 
     if (size < HwInitPacketSize) {
@@ -777,7 +777,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState(u32* cmdbuf, u32 size) {
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175(u32* cmdbuf, u32 size) {
-    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, size};
+    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, std::min(size, HwInitPacketSize)};
     LOG_TRACE(Lib_GnmDriver, "called");
 
     if (size < HwInitPacketSize) {
@@ -796,7 +796,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175(u32* cmdbuf, u32 size) {
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState200(u32* cmdbuf, u32 size) {
-    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, size};
+    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, std::min(size, HwInitPacketSize)};
     LOG_TRACE(Lib_GnmDriver, "called");
 
     if (size < HwInitPacketSize) {
@@ -833,7 +833,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState200(u32* cmdbuf, u32 size) {
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
-    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, size};
+    CommandWriterTrace::Scope command_writer_trace{__func__, cmdbuf, std::min(size, HwInitPacketSize)};
     LOG_TRACE(Lib_GnmDriver, "called");
 
     if (size < HwInitPacketSize) {
@@ -1802,7 +1802,7 @@ s32 PS4_SYSV_ABI sceGnmSetEmbeddedVsShader(u32* cmdbuf, u32 size, u32 shader_id,
     cmdbuf = PM4CmdSetData::SetContextReg(cmdbuf, 0x1c3u, vs_regs[5]); // SPI_SHADER_POS_FORMAT
 
     WriteNop<11>(cmdbuf);
-    command_writer_trace.MarkWritten();
+    command_writer_trace.MarkWritten(29);
     return ORBIS_OK;
 }
 
@@ -2136,7 +2136,7 @@ s32 PS4_SYSV_ABI sceGnmSetVsShader(u32* cmdbuf, u32 size, const u32* vs_regs, u3
     cmdbuf = PM4CmdSetData::SetContextReg(cmdbuf, 0x1c3u, vs_regs[5]); // SPI_SHADER_POS_FORMAT
 
     WriteNop<11>(cmdbuf);
-    command_writer_trace.MarkWritten();
+    command_writer_trace.MarkWritten(29);
     return ORBIS_OK;
 }
 

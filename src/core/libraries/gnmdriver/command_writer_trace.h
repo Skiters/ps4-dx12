@@ -126,7 +126,8 @@ public:
         }
     }
 
-    void MarkWritten() {
+    void MarkWritten(u32 actual_size_dw) {
+        size_dw = std::min(size_dw, actual_size_dw);
         written = true;
     }
 

@@ -1,3 +1,10 @@
+## Current PM4 diagnostic continuation — 2026-10-19
+
+Controlled run of source 51abbc7, EXE acce7997e1ff08562daf05c3400ced4b84b4336032764f166f3d15a60c7d2b32: black window, zero completed-frame records, exit 0x80000003. Evidence: F:/PS4Dev/handoff/gameplay-current-51abbc7-run2. Malformed DCB already exists before SubmitGfx at DWORD217, raw 0x00000401. Root producer remains unproven. Virtual XInput attached, but core exited before any command; feeder removed its device. World/control acceptance failed to reach the required stage.
+
+Writer attribution had false capacity-wide init200 candidates. Current source bounds four draw-init trace ranges to HwInitPacketSize and makes MarkWritten accept the actual output count (VS output29 DWORDs). Focused native-pm4-stream-validation-test rebuilt and passed; logs command-20261019-143354-57556.log and command-20261019-143359-50256.log under F:/Codex-Shared/devtools/logs. Full core build and game test of these diagnostic edits remain NOT_RUN. Installed sole core remains51abbc7; no acceptance transferred.
+
+Next: complete successful-output attribution for the remaining GNM writers, preserving failed-call/no-dereference behavior, build core, then one controlled run to identify the actual producer. Do not rerun completed ownership/physical-alias experiments or enable type0 as a workaround. The full port remains incomplete.
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
 ## Current BC prefix alias transaction checkpoint - 2026-10-19
