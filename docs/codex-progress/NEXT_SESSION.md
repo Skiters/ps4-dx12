@@ -1,3 +1,7 @@
+## Auxiliary capture guest integration checkpoint — 2026-10-20
+
+302aec1 connects fixed auxiliary-tessellation point capture to GuestRasterizer with checked patch/instance bounds, original producer reflection/index preparation, GPU indirect GS and one PS replay.835b047 preserves declared stream inputs for replacement shaders; ordinary writer uses post-DCE GS component liveness. CPU automatic RectList/sparse input/bound checks and compilation PASS; clean final Release835b047 PASS16.230s. GPU/game NOT_RUN; automatic draw execution not validated, app unchanged. One-output-arena address bounds, partitioned attachments and generic LsHsEsGs remain gaps. Exact evidence/next work in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/auxiliary-guest-capture-835b047.json.
+
 ## Ordered capture partitions checkpoint — 2026-10-20
 
 Source864be3f adds complete lazy primitive-aligned capture partitions and production Replay GPU-argument scheduling, local capture plans and first/last markers. CPU exact coverage/tail/adjacency/typed negatives PASS; core/fixture compile-link PASS; clean Release864be3f PASS15.928s. Prepared actual-count/empty-tail/lifetime GPU test compiled, NOT_RUN. Hashes/logs and remaining partitioned GS/PS attachment integration plus separate producer-capacity proof in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/partitioned-stream-864be3f.json. Game/GPU NOT_RUN; app unchanged; full port incomplete.
