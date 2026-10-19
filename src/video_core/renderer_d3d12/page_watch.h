@@ -71,7 +71,14 @@ class PageWatch {
                     }
                 }
             }
-            try{self->resolve(address,write);}catch(...){return EXCEPTION_CONTINUE_SEARCH;}
+            try{self->resolve(address,write);}
+            catch(const std::exception& error){
+                // A failed ownership/coherence callback must not disappear
+                // behind the later access violation reported by Windows.
+                std::fprintf(stderr,"PAGEWATCH resolve failed tid=%lu address=%llx write=%u: %s\n",
+                    GetCurrentThreadId(),(unsigned long long)address,unsigned(write),error.what());
+                std::fflush(stderr);return EXCEPTION_CONTINUE_SEARCH;
+            }catch(...){return EXCEPTION_CONTINUE_SEARCH;}
             resolved_generation=generation;
         }
         // Bound pathological callbacks without permitting a protected write.
