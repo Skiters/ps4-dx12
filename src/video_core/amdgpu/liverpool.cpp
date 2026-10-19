@@ -4,8 +4,6 @@
 #include <boost/preprocessor/stringize.hpp>
 #include <boost/container/small_vector.hpp>
 
-#include <cstdio>
-
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/polyfill_thread.h"
@@ -243,14 +241,12 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         constexpr size_t WindowRadius = 16;
         const size_t first_word = current_word > WindowRadius ? current_word - WindowRadius : 0;
         const size_t last_word = std::min(submission.size(), current_word + WindowRadius + 1);
-        std::fprintf(stderr,
-                     "PM4 raw dword window: current=%zu range=[%zu,%zu) total=%zu\n",
-                     current_word, first_word, last_word, submission.size());
+        LOG_ERROR(Lib_GnmDriver, "PM4 raw dword window: current={} range=[{},{}) total={}",
+                  current_word, first_word, last_word, submission.size());
         for (size_t word = first_word; word < last_word; ++word) {
-            std::fprintf(stderr, "PM4[%zu]%s=0x%08x\n", word,
+            LOG_ERROR(Lib_GnmDriver, "PM4[{}]{}={:#010x}", word,
                          word == current_word ? "*" : " ", submission[word]);
         }
-        std::fflush(stderr);
     };
     std::array<u32, 3> packet_history{};
     while (!dcb.empty()) {
