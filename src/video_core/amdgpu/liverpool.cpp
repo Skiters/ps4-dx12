@@ -828,22 +828,37 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             }
             case PM4ItOpcode::EventWriteEop: {
                 const auto event_eop = *reinterpret_cast<const PM4CmdEventWriteEop*>(header);
-                const auto write_addr = reinterpret_cast<uintptr_t>(event_eop.Address<void*>());
-                const auto source_end = source_base_addr + submission.size_bytes();
-                if (write_addr >= source_base_addr && write_addr < source_end) {
-                    LOG_ERROR(Lib_GnmDriver,
-                              "EOP writes into current PM4 source: source={:#x} bytes={} "
-                              "packet_dw={} target={:#x} target_dw={}",
-                              source_base_addr, submission.size_bytes(),
-                              (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32),
-                              write_addr, (write_addr - source_base_addr) / sizeof(u32));
-                    Common::Log::Flush();
-                }
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }
                 event_eop.SignalFence(
                     [&](void* address, u64 data, u32 num_bytes) {
+                        const auto write_addr = reinterpret_cast<uintptr_t>(address);
+                        const auto packet_offset = reinterpret_cast<uintptr_t>(header) - base_addr;
+                        if (write_addr >= source_base_addr &&
+                            write_addr - source_base_addr < submission.size_bytes()) {
+                            const auto offset = write_addr - source_base_addr;
+                            // EOP labels can live in consumed NOP payloads. Their
+                            // writes retain normal fence/IRQ ordering and do not
+                            // require draining the host logs on every frame.
+                            // Keep the original failure diagnostic for writes
+                            // touching this packet or unread command storage.
+                            if (offset < packet_offset && num_bytes <= packet_offset - offset) {
+                                LOG_DEBUG(Lib_GnmDriver,
+                                          "EOP updates consumed PM4 storage: packet_dw={} "
+                                          "target_dw={} bytes={}",
+                                          packet_offset / sizeof(u32), offset / sizeof(u32),
+                                          num_bytes);
+                            } else {
+                                LOG_ERROR(Lib_GnmDriver,
+                                          "EOP writes into current/unread PM4 source: source={:#x} "
+                                          "bytes={} packet_dw={} target={:#x} target_dw={}",
+                                          source_base_addr, submission.size_bytes(),
+                                          packet_offset / sizeof(u32), write_addr,
+                                          offset / sizeof(u32));
+                                Common::Log::Flush();
+                            }
+                        }
                         TraceGuestWrite(address, num_bytes,
                                         static_cast<u32>(PM4ItOpcode::EventWriteEop), data);
                         auto* memory = Core::Memory::Instance();
