@@ -2669,6 +2669,19 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
          (existing->desc.stencil_address&&(overlaps(d.address,layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)||
            (d.stencil_address&&overlaps(d.stencil_address,stencil_layout.guest_bytes,existing->desc.stencil_address,existing->stencil_layout.guest_bytes)))))){
         if(existing->buffer_alias_version){
+            if(existing->logical_dirty){
+                // A B write invalidates current I without destroying its native
+                // allocation history. RefreshImage obtains current B upstream;
+                // stale I must neither seed a new view nor download over B.
+                // Retire only its ownership, retaining pinned native resources
+                // for recorded commands and cached depth recreation.
+                if(!retire_independent_)
+                    throw std::runtime_error("Dirty independent image has no ownership retirement");
+                retire_independent_(*existing);
+                if(existing->gpu_owned||existing->buffer_alias_version)
+                    throw std::runtime_error("Dirty independent image remains owned after retirement");
+                continue;
+            }
             if(existing->desc.address==d.address&&(existing->desc.depth_target||d.depth_target)&&
                !MatchesReferenceOverlapClass(existing->desc,existing->layout,d,layout))continue;
             const bool private_block_view=MatchesReadonlyBlockMipPrefix(existing->desc,existing->layout,d,layout);

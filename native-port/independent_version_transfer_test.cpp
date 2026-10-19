@@ -15,6 +15,7 @@
 #include "independent_depth_growth_fixture.h"
 #include "depth_subview_fixture.h"
 #include "dirty_cached_depth_fixture.h"
+#include "dirty_owned_depth_fixture.h"
 #include "required_format_device.h"
 #include "packed19_msaa_attachment_fixture.h"
 #include "readonly_numeric_views_fixture.h"
@@ -802,6 +803,8 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--depth")==0){RunIndependentDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--paired-depth")==0){RunPairedDepthSnapshotFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-recreation-extents")==0){RunColorToMsDepthFixture(device.Get(),false,false,0,true);return 0;}
+    if(argc==2&&strcmp(argv[1],"--dirty-owned-depth")==0){
+        RunDirtyOwnedDepthFixture(device.Get());RunDirtyOwnedDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--dirty-cached-depth")==0){RunDirtyCachedDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--dirty-cached-color-depth")==0){RunDirtyCachedDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--cached-depth-uav")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,0,true);return 0;}
