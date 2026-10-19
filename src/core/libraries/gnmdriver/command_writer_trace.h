@@ -113,6 +113,31 @@ inline void RecordWritten(const char* function, const u32* address, u32 size_dw)
     return matches;
 }
 
+// Construction capacity is context only; it is never a claim that its tail was written.
+struct Construction {
+    uintptr_t address{};
+    u32 capacity_dw{};
+    u32 output_dw{};
+    u64 serial{};
+};
+inline std::array<Construction, 4096> constructions{};
+inline u64 construction_serial{};
+inline void RecordConstruction(const u32* address, u32 capacity_dw, u32 output_dw) {
+    if (!address || !output_dw || output_dw > capacity_dw) return;
+    std::scoped_lock lock{EntriesMutex()};
+    const u64 serial = ++construction_serial;
+    constructions[(serial - 1) % constructions.size()] = {
+        reinterpret_cast<uintptr_t>(address), capacity_dw, output_dw, serial};
+}
+[[nodiscard]] inline Construction FindConstruction(uintptr_t address) {
+    std::scoped_lock lock{EntriesMutex()};
+    Construction result{};
+    for (const auto& entry : constructions) {
+        if (entry.serial > result.serial && address >= entry.address &&
+            address - entry.address < uintptr_t(entry.capacity_dw) * sizeof(u32)) result = entry;
+    }
+    return result;
+}
 class Scope {
 public:
     Scope(const char* function_, const u32* address_, u32 size_dw_)

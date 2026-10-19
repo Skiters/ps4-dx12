@@ -112,6 +112,13 @@ static void LogMalformedPm4(std::span<const u32> stream, bool allow_type2,
               stream_name, static_cast<u32>(validation.error), validation.offset, address,
               validation.raw, validation.packet_words, stream.size());
 
+    const auto construction = CommandWriterTrace::FindConstruction(address);
+    if (construction.serial) {
+        LOG_ERROR(Lib_GnmDriver,
+                  "DCB construction context only: serial={} begin={:#x} capacity_dw={} output_dw={} offset_dw={}",
+                  construction.serial, construction.address, construction.capacity_dw,
+                  construction.output_dw, (address - construction.address) / sizeof(u32));
+    }
     const auto writers = CommandWriterTrace::FindRecentCovering(address);
     if (writers.empty()) {
         LOG_ERROR(Lib_GnmDriver,
@@ -790,6 +797,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState(u32* cmdbuf, u32 size) {
 
     const u32 written = SetupContext(cmdbuf, size, true);
     command_writer_trace.MarkWritten(written);
+    CommandWriterTrace::RecordConstruction(cmdbuf, size, written);
     return written;
 }
 
@@ -849,6 +857,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState200(u32* cmdbuf, u32 size) {
 
     const u32 written = SetupContext200(cmdbuf, size, true);
     command_writer_trace.MarkWritten(written);
+    CommandWriterTrace::RecordConstruction(cmdbuf, size, written);
     return written;
 }
 
@@ -888,6 +897,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
 
     const u32 written = SetupContext350(cmdbuf, size, true);
     command_writer_trace.MarkWritten(written);
+    CommandWriterTrace::RecordConstruction(cmdbuf, size, written);
     return written;
 }
 
