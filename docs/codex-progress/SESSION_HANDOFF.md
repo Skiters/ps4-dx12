@@ -1,6 +1,22 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
 
+## Current ordered one-level BC/word checkpoint - 2026-10-19
+
+Production **4def6f26aca64357010b160cc512270acf0fef57** is pushed on `fix/mixed-cmask`. `PrepareOrderedGuestStages` now admits an exact same-address, one-level BC parent and UINT block-word view as a converted domain. It creates separate BC3 typeless sampled and RGBA32 typeless writable allocations at their original stage positions, pins the early logical I allocation, selects current B after exact-base invalidation, and publishes writable ownership only at the late image bind. Shifted addresses and multilevel BC parents remain explicitly rejected.
+
+Focused GPU verification passed: `native_ordered_bc_word_stage_bindings` (3.95 s), complete `native_ordered_stage_image_buffer_bindings` (197.42 s), `native_independent_image_version_transfer` (3.84 s), and `native_guest_bc_hardware` (4.68 s). The BC/word fixture independently checks early logical BC blocks, late UINT B words and current guest padding, plus negative shifted/multilevel admission. A clean detached Release build from the exact commit and pinned dependencies linked successfully.
+
+The sole application package is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, source **4def6f26aca64357010b160cc512270acf0fef57**, EXE SHA256 **480282eac32fd2f3d5235309fad387aec5f6bda0103b9f902fd95e1db065ebf4**, PDB SHA256 **d2f519b111702f1c5c6791ecdc9f28209488232423e32c3cce32bbf2338fdff5**, preserved profile `external-7e8fca7a1bd828c19629fdd9`. The catalogue contains exactly one core and selects `dx12-current`. Runtime/game/final suite are `NOT_RUN` for this binary.
+
+Next concrete production work is the multilevel BC-parent/word-prefix ordered domain already represented by `gcn_bc_writable_alias_fixture.h`. Preserve all untouched parent mips/layers while materializing the selected UINT range at its actual stage position. Do not broaden `CompatibleGuestBlockWordStorage` until a focused GPU oracle proves logical contents, padding, I/B authority, barriers, ownership and fence lifetime. Shifted, MSAA, clipped and large domains remain separate gaps.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue `fix/mixed-cmask` from current HEAD after reading this section and verifying the sole installed `dx12-current` identity above. Resume the existing formatted-alias queue at the multilevel BC-parent/word-prefix ordered domain in `PrepareOrderedGuestStages`, using the saved `gcn_bc_writable_alias_fixture.h` descriptors and pinned Vulkan `ResolveOverlap` / `ExpandImage` semantics. Preserve untouched parent mips/layers, original stage order, exact guest words and padding, current I/B authority, barriers, ownership and allocation lifetime. Run focused GPU/readback regressions, clean-build committed source, replace the one current core and push normally. Do not repeat the one-level BC/word, converted-packed or late-envelope work; defer full suite and game/XInput/FPS acceptance until the integration boundary.
+
+
+
 ## Current ordered converted packed-domain checkpoint - 2026-10-19
 
 Production **a082b64cfd67f52b692163d9762ece23d67b025c** is pushed on `fix/mixed-cmask`. `PrepareOrderedGuestStages` now handles a same-address `CompatibleGuestPackedStorage` domain whose sampled and writable views require different native DX12 allocations. It defers conversion until each original `BindTextures` position, keeps the early I allocation pinned, selects current B after exact-base invalidation, and publishes writable ownership at the actual image bind. Existing compatible views still share the prior canonical allocation/refresh path. BC, shifted, MSAA, clipped, different-geometry and large-domain guards remain unchanged.

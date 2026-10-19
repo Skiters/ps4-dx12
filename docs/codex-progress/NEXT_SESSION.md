@@ -1,6 +1,14 @@
 # Next session
 
 
+## Current continuation boundary - one-level BC/word ordered domain
+
+Production **4def6f26aca64357010b160cc512270acf0fef57** is pushed, clean-built and focused GPU verified. Exact one-level BC parent and UINT block-word views now use ordered converted allocations and preserve early logical I, late current B, guest padding, ownership and fence lifetime. The focused test, full ordered-stage matrix, independent transfer and BC hardware checks pass. The sole installed `dx12-current` has EXE SHA256 **480282eac32fd2f3d5235309fad387aec5f6bda0103b9f902fd95e1db065ebf4**. Game/final suite were not run.
+
+Continue with the multilevel BC-parent/word-prefix cases already represented in `gcn_bc_writable_alias_fixture.h`. Preserve untouched parent mips and layers while materializing the selected word view at its actual stage position. Add a focused GPU contents/padding/lifetime control before expanding `CompatibleGuestBlockWordStorage`. Shifted, MSAA, clipped and large domains remain separate gaps. Do not repeat the completed one-level, converted-packed or late-envelope work.
+
+
+
 ## Current continuation boundary - converted packed stage domains
 
 Production **a082b64cfd67f52b692163d9762ece23d67b025c** is pushed, clean-built and focused GPU verified. Ordered packed views that require separate native sampled and writable allocations now bind in original stage order. The focused GPU fixture proves distinct early I and late current-B contents with full tiled padding; the existing ordered matrix and adjacent packed10/independent transfer regressions pass. The sole installed `dx12-current` has EXE SHA256 **7dac81c4a8f235eb6136f1c75a148d154c8422d073185c55b07819aad794989f**. Game/final suite were not run.

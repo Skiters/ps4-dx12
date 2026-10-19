@@ -1,6 +1,15 @@
 # Vulkan / native D3D12 parity audit
 
 
+## Ordered BC parent / block-word parity - 2026-10-19
+
+- Upstream contract: `TextureCache::ResolveOverlap` / `ExpandImage` preserves the logical BC image while a block-word interpretation is materialized in binding order.
+- DX12 connected: exact same-address one-level BC parent and UINT block-word views use distinct native allocations in `PrepareOrderedGuestStages`; early I and late B stay independently pinned and ordered.
+- Focused behavior verified: `native_ordered_bc_word_stage_bindings`, full `native_ordered_stage_image_buffer_bindings`, independent image transfer and BC hardware all pass with GPU readback.
+- Concrete remaining gap: multilevel BC parent plus selected word prefix; untouched parent mips/layers must remain authoritative. Shifted/MSAA/clipped/large variants remain guarded separately.
+
+
+
 ## 2026-10-19 - ordered converted packed image domains
 
 Connected and focused-verified at **a082b64cfd67f52b692163d9762ece23d67b025c**. Pinned Vulkan can retain one logical mutable image across compatible packed sampled/storage bindings; DX12 sometimes needs an expanded sampled texture and raw writable texture. The ordered binder now creates each representation at its original per-stage image-bind position, preserves early I, selects current B after exact-base invalidation, pins every native allocation, and publishes writable ownership only at its actual bind. The real GPU fixture proves different early-I/late-B data and all guest padding. Implementation state: connected for `CompatibleGuestPackedStorage` converted domains. Behavior state: focused GPU verified; game/final suite not run. BC/word views, shifted bases, MSAA, clipped transfers, different physical geometry and large-domain limits remain open.

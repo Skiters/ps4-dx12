@@ -1,6 +1,16 @@
 # Native DX12 state
 
 
+## Ordered one-level BC/word stage domain - 2026-10-19
+
+Production **4def6f26aca64357010b160cc512270acf0fef57** is connected and focused GPU verified. `PrepareOrderedGuestStages` now recognizes exact same-address, one-level BC parent and UINT block-word storage as a converted physical domain. The original stage order is preserved with separate BC3 typeless sampled and RGBA32 typeless writable allocations: the early sampled bind retains logical I, an exact-base buffer writer selects current B, and the late writable bind receives B without retiring the pinned early allocation. Shifted addresses and multilevel BC parents remain rejected.
+
+`native_ordered_bc_word_stage_bindings` passed in 3.95 s with independent GPU readback of early logical BC blocks, late UINT words and current guest padding. The complete ordered-stage matrix passed in 197.42 s; independent image transfer and BC hardware checks also pass. A clean detached Release build of the exact commit succeeded. The sole installed `dx12-current` is EXE SHA256 **480282eac32fd2f3d5235309fad387aec5f6bda0103b9f902fd95e1db065ebf4**, PDB SHA256 **d2f519b111702f1c5c6791ecdc9f28209488232423e32c3cce32bbf2338fdff5**. Runtime/game/final suite remain not run for this identity.
+
+The next concrete production gap is the multilevel BC-parent/word-prefix ordered domain. It must keep untouched parent mips authoritative while materializing the selected word view in original stage order; do not weaken the one-level, shifted, MSAA or large-domain guards without a focused contents/lifetime fixture.
+
+
+
 ## Ordered converted packed image domains - 2026-10-19
 
 Production **a082b64cfd67f52b692163d9762ece23d67b025c** is connected and focused GPU verified. `PrepareOrderedGuestStages` now preserves original per-stage binding order when one PS4 packed image needs distinct native sampled and writable representations. Compatible `CompatibleGuestPackedStorage` views bind at their actual `BindTextures` position; early conversion no longer retires the preceding I. A later exact-base B writer selects a separate current-B representation, while pins retain earlier descriptors through the submission fence. Compatible single-allocation views keep the previous refresh path. BC, shifted, MSAA, clipped and different-geometry domains remain explicit gaps.

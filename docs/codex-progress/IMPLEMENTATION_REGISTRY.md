@@ -1,6 +1,14 @@
 # Implementation and verification registry — 2026-10-17
 
 
+## Registry delta - ordered BC/word domain - 2026-10-19
+
+Connected and focused GPU verified: pinned `TextureCache::ResolveOverlap` / `ExpandImage` one-level BC-parent/block-word contract -> `CompatibleGuestBlockWordStorage` and converted-view handling in `PrepareOrderedGuestStages` -> separate native BC sampled I and UINT writable B allocations, original bind order, guest padding, ownership and lifetime verified by `native_ordered_bc_word_stage_bindings` and the full ordered-stage matrix.
+
+Concrete gap remains: pinned multilevel BC parent / word-prefix preservation -> no DX12 ordered domain admission yet -> must retain untouched parent mips/layers while materializing and writing only the selected word range. Shifted address, MSAA, clipped and large-domain variants remain separate explicit gaps.
+
+
+
 ## Current ordered converted packed domains - 2026-10-19
 
 Production **a082b64cfd67f52b692163d9762ece23d67b025c** connects same-address packed image domains that require distinct DX12 sampled and writable allocations. Implementation state: connected for `CompatibleGuestPackedStorage`, including deferred actual-bind conversion and fence-pinned earlier descriptors. Behavior state: focused GPU verified with deliberately different original-I and current-B packed10 SNORM contents, full guest padding, the existing ordered-stage matrix, independent transfer and signed packed10 regressions. Whole-game/final-suite behavior is open. `formatted-alias-ordering` remains `connected_with_known_gaps`: BC/word views, shifted/clipped/MSAA/different-geometry and large domains remain concrete production gaps.
