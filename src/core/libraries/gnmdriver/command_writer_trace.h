@@ -16,16 +16,35 @@
 namespace Libraries::GnmDriver::CommandWriterTrace {
 
 struct Entry {
+    static constexpr u32 SnapshotWords = 64;
+
     uintptr_t address{};
     u32 size_dw{};
     std::string_view function{};
     u64 serial{};
+    u64 fingerprint{};
+    u64 current_fingerprint{};
+    std::array<u32, SnapshotWords> snapshot{};
+    u32 snapshot_size_dw{};
 };
 
 inline constexpr size_t EntryCount = 64_KB;
+inline constexpr u32 MaxFingerprintWords = 256;
 inline std::array<Entry, EntryCount> entries{};
 inline std::mutex entries_mutex{};
 inline u64 next_serial{};
+
+[[nodiscard]] inline u64 Fingerprint(const u32* address, u32 size_dw) {
+    constexpr u64 OffsetBasis = 14695981039346656037ull;
+    constexpr u64 Prime = 1099511628211ull;
+    u64 hash = OffsetBasis;
+    const u32 tracked_size = std::min(size_dw, MaxFingerprintWords);
+    for (u32 index = 0; index < tracked_size; ++index) {
+        hash ^= address[index];
+        hash *= Prime;
+    }
+    return hash;
+}
 
 inline void Record(const char* function, const u32* address, u32 size_dw) {
     if (address == nullptr || size_dw == 0) {
@@ -33,12 +52,16 @@ inline void Record(const char* function, const u32* address, u32 size_dw) {
     }
     std::scoped_lock lock{entries_mutex};
     const u64 serial = ++next_serial;
-    entries[(serial - 1) % entries.size()] = {
+    auto& entry = entries[(serial - 1) % entries.size()];
+    entry = {
         .address = reinterpret_cast<uintptr_t>(address),
         .size_dw = size_dw,
         .function = function,
         .serial = serial,
+        .fingerprint = Fingerprint(address, size_dw),
     };
+    entry.snapshot_size_dw = std::min(size_dw, Entry::SnapshotWords);
+    std::copy_n(address, entry.snapshot_size_dw, entry.snapshot.begin());
 }
 
 [[nodiscard]] inline std::vector<Entry> FindRecentCovering(uintptr_t address) {
@@ -50,7 +73,10 @@ inline void Record(const char* function, const u32* address, u32 size_dw) {
         }
         const uintptr_t byte_offset = address - entry.address;
         if (byte_offset < static_cast<uintptr_t>(entry.size_dw) * sizeof(u32)) {
-            matches.push_back(entry);
+            auto match = entry;
+            match.current_fingerprint =
+                Fingerprint(reinterpret_cast<const u32*>(entry.address), entry.size_dw);
+            matches.push_back(std::move(match));
         }
     }
     std::ranges::sort(matches, std::greater{}, &Entry::serial);
@@ -63,10 +89,13 @@ inline void Record(const char* function, const u32* address, u32 size_dw) {
 class Scope {
 public:
     Scope(const char* function_, const u32* address_, u32 size_dw_)
-        : function{function_}, address{address_}, size_dw{size_dw_} {}
+        : function{function_}, address{address_}, size_dw{size_dw_},
+          initial_fingerprint{address && size_dw ? Fingerprint(address, size_dw) : 0} {}
 
     ~Scope() {
-        Record(function, address, size_dw);
+        if (address && size_dw && Fingerprint(address, size_dw) != initial_fingerprint) {
+            Record(function, address, size_dw);
+        }
     }
 
     Scope(const Scope&) = delete;
@@ -76,6 +105,7 @@ private:
     const char* function;
     const u32* address;
     u32 size_dw;
+    u64 initial_fingerprint;
 };
 
 } // namespace Libraries::GnmDriver::CommandWriterTrace

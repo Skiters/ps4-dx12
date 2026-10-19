@@ -119,11 +119,15 @@ static void LogMalformedPm4(std::span<const u32> stream, bool allow_type2,
                   address);
     } else {
         for (const auto& writer : writers) {
+            const size_t writer_offset = (address - writer.address) / sizeof(u32);
+            const bool has_recorded_word = writer_offset < writer.snapshot_size_dw;
             LOG_ERROR(Lib_GnmDriver,
                       "GNM writer candidate: serial={} function={} begin={:#x} size_dw={} "
-                      "offset_dw={}",
+                      "offset_dw={} recorded_word={:#010x} contents_unchanged={}",
                       writer.serial, writer.function, writer.address, writer.size_dw,
-                      (address - writer.address) / sizeof(u32));
+                      writer_offset,
+                      has_recorded_word ? writer.snapshot[writer_offset] : 0,
+                      writer.fingerprint == writer.current_fingerprint);
         }
     }
     Common::Log::Flush();
