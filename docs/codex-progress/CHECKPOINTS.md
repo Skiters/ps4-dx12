@@ -1263,3 +1263,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: GPU color feedback copy/SRV remap connected with native residency+fence retention and exact-mapping fallback gate. Core/GCN compile/link30.915s, resources16.249s, final fixture5.092s PASS; GPU/game NOT_RUN. Actual GuestRasterizer B/I sentinel integration next.
 
 2026-10-19: 25eba43 clean Release reproduced; identity matches/EXEb914756d/PDBd50d835c. Runtime NOT_RUN/not installed. Report gpu-feedback-copy-25eba43.json. Actual GuestRasterizer B/I feedback fixture next; app6b8104d unchanged.
+
+2026-10-19 4fda58d: production SRV-scoped feedback copies integrated and clean Release reproduced; source identity/hashes in scoped-feedback-4fda58d.json. GPU/game NOT_RUN; app unchanged. SESSION_HANDOFF authoritative.
