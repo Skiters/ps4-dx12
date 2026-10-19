@@ -209,8 +209,8 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             PrimitiveStreamPass pass(device.Get());
             ResourceBindings capture_bindings(device.Get(),pipeline.Layout());
             capture_bindings.BeforeBind([&](ResourceBindings&){renderer.Finish();});
-            captured=pass.Capture(renderer,32,12,3,[&](PrimitiveStreamLease& lease){
-                const Rasterizer::StreamOutputBinding target{&lease.data,&lease.filled_size,0,stream_bytes,0};
+            captured=pass.Capture(renderer,32,18,3,[&](PrimitiveStreamLease& lease){
+                const Rasterizer::StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(lease.range.stride)*lease.range.capacity_vertices,0};
                 renderer.ExecuteGraphics(pipeline,capture_bindings,state,{},nullptr,std::span(&viewport,1),
                     std::span(&scissor,1),blend,{6,2},{},nullptr,false,nullptr,&target);
             });
@@ -232,6 +232,24 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         memcpy(captured_expected.data()+stream_bytes+4,&draw,sizeof(draw));
         const bool captured_equal=!memcmp(mapped,captured_expected.data(),captured_total);captured_result.handle->Unmap(0,&none);
         if(!captured_equal)throw std::runtime_error("Production stream capture lost contents/count/arguments or lifetime across ownership Finish");
+        auto partition_result=Buffer(device.Get(),3*sizeof(D3D12_DRAW_ARGUMENTS),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        u32 partition_index{};
+        {
+            PrimitiveStreamPass replay(device.Get());
+            replay.Replay(renderer,captured,2,256,622592,[&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
+                if(part.input.first!=partition_index*6||part.input.limit!=6||part.first!=(partition_index==0)||part.last!=(partition_index==2))
+                    throw std::runtime_error("Production replay skipped or reordered a primitive partition");
+                auto* commands=renderer.RecordingList();lease.arguments.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
+                commands->CopyBufferRegion(partition_result.handle.Get(),partition_index*sizeof(D3D12_DRAW_ARGUMENTS),
+                    lease.arguments.handle.Get(),0,sizeof(D3D12_DRAW_ARGUMENTS));++partition_index;
+            });
+        }
+        renderer.Finish();
+        if(partition_index!=3)throw std::runtime_error("Production replay did not cover its complete reserved stream");
+        const D3D12_DRAW_ARGUMENTS partition_expected[]{{6,1,0,0},{6,1,6,0},{0,1,12,0}};
+        D3D12_RANGE partition_all{0,sizeof(partition_expected)};Check(partition_result.handle->Map(0,&partition_all,&mapped));
+        const bool partition_equal=!memcmp(mapped,partition_expected,sizeof(partition_expected));partition_result.handle->Unmap(0,&none);
+        if(!partition_equal)throw std::runtime_error("Partition replay replaced the GPU count with capacity or lost the empty tail/lifetime");
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T bytes{};Check(messages->GetMessage(i,nullptr,&bytes));
         std::vector<std::byte> data(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(data.data());

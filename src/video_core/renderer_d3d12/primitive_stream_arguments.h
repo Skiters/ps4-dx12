@@ -3,6 +3,7 @@
 #include "common/types.h"
 #include "resources.h"
 #include "stream_output_layout.h"
+#include "shader_recompiler/native_point_capture.h"
 #include <span>
 #include <string>
 #include <functional>
@@ -15,6 +16,21 @@ StreamOutputLayout ReflectPrimitiveStreamLayout(const std::wstring& dxc,std::spa
 struct PrimitiveStreamRange {
     u32 stride{},capacity_vertices{},vertices_per_primitive{},first{},limit{};
     static PrimitiveStreamRange Make(u32 stride,u32 capacity,u32 vertices_per_primitive,u32 first,u32 limit);
+};
+struct PrimitiveStreamPartition {
+    PrimitiveStreamRange input;
+    Shader::NativePointCapture::Plan capture;
+    bool first{},last{};
+};
+// Lazy complete coverage: the budget limits one capture arena, never the
+// number of original primitives replayed. All boundaries are primitive aligned.
+class PrimitiveStreamPartitions {
+    PrimitiveStreamRange input_;
+    u32 calls_,emissions_,vertices_,count_;
+public:
+    PrimitiveStreamPartitions(const PrimitiveStreamRange&,u32 calls,u32 emissions,u64 capture_byte_budget);
+    u32 Count()const{return count_;}
+    PrimitiveStreamPartition At(u32)const;
 };
 class PrimitiveStreamArguments {
     ComPtr<ID3D12RootSignature> root_;
@@ -39,5 +55,10 @@ public:
     explicit PrimitiveStreamPass(ID3D12Device*);
     std::shared_ptr<PrimitiveStreamLease> Capture(Rasterizer&,u32 vertex_stride,u32 capacity_vertices,
         u32 vertices_per_primitive,const std::function<void(PrimitiveStreamLease&)>& producer);
+    // Consumer binds input SRV at input.first*stride and uses generated GPU
+    // arguments. Its capture addresses are local to that slice. Only first
+    // may perform attachment beginning actions; every slice must be consumed.
+    void Replay(Rasterizer&,const std::shared_ptr<PrimitiveStreamLease>&,u32 calls,u32 emissions,u64 capture_byte_budget,
+        const std::function<void(PrimitiveStreamLease&,const PrimitiveStreamPartition&)>& consumer);
 };
 } // namespace NativeDX12

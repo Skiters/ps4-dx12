@@ -35,6 +35,26 @@ PrimitiveStreamRange PrimitiveStreamRange::Make(u32 stride,u32 capacity,u32 prim
         throw std::invalid_argument("Invalid bounded primitive stream range");
     return {stride,capacity,primitive,first,limit};
 }
+PrimitiveStreamPartitions::PrimitiveStreamPartitions(const PrimitiveStreamRange& input,u32 calls,u32 emissions,u64 budget)
+    :input_(PrimitiveStreamRange::Make(input.stride,input.capacity_vertices,input.vertices_per_primitive,input.first,input.limit)),
+    calls_(calls),emissions_(emissions){
+    if(!calls||!emissions||!budget)throw std::invalid_argument("Invalid primitive stream capture partition budget");
+    const u64 records=std::min<u64>(budget,UINT32_MAX)/Shader::NativePointCapture::RecordBytes;
+    // Divide before multiplying: even UINT32_MAX invocation/emission inputs
+    // must fail cleanly instead of wrapping an intermediate byte product.
+    const u64 primitives=records/calls/emissions;
+    if(!primitives)throw std::overflow_error("One original GS primitive exceeds capture partition budget");
+    vertices_=u32(std::min<u64>(input.limit,u64(input.vertices_per_primitive)*primitives));
+    count_=u32((u64(input.limit)+vertices_-1)/vertices_);
+}
+PrimitiveStreamPartition PrimitiveStreamPartitions::At(u32 index)const{
+    if(index>=count_)throw std::out_of_range("Primitive stream partition index exceeds complete coverage");
+    const u32 consumed=u32(u64(index)*vertices_);
+    const auto range=PrimitiveStreamRange::Make(input_.stride,input_.capacity_vertices,input_.vertices_per_primitive,
+        input_.first+consumed,std::min(vertices_,input_.limit-consumed));
+    return {range,Shader::NativePointCapture::Plan::Make(range.limit/range.vertices_per_primitive,calls_,emissions_,1),
+        index==0,index+1==count_};
+}
 PrimitiveStreamArguments::PrimitiveStreamArguments(ID3D12Device* device){
     D3D12_ROOT_PARAMETER parameters[3]{};
     parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;parameters[0].Descriptor={0,0};
@@ -117,6 +137,25 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         generator_.Record(renderer,arena->filled_size,arena->arguments,range);
         renderer.RetainUntilFinish([arena](u64){});
         return arena;
+    }catch(...){try{renderer.Finish();}catch(...){}throw;}
+}
+void PrimitiveStreamPass::Replay(Rasterizer& renderer,const std::shared_ptr<PrimitiveStreamLease>& captured,
+    u32 calls,u32 emissions,u64 budget,const std::function<void(PrimitiveStreamLease&,const PrimitiveStreamPartition&)>& consumer){
+    auto lease=captured;
+    if(!lease||!consumer||!lease->data.handle||!lease->filled_size.handle||!lease->arguments.handle)
+        throw std::invalid_argument("Invalid captured primitive stream replay");
+    const auto& range=lease->range;
+    if(range.first||range.limit!=range.capacity_vertices||lease->data.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
+       u64(range.stride)*range.capacity_vertices>lease->data.handle->GetDesc().Width)
+        throw std::invalid_argument("Primitive stream replay requires the complete captured capacity");
+    const PrimitiveStreamPartitions partitions(range,calls,emissions,budget);
+    std::lock_guard lock(renderer.ExecutionMutex());renderer.RetainUntilFinish([lease](u64){});
+    try{
+        for(u32 index=0;index<partitions.Count();++index){
+            const auto partition=partitions.At(index);
+            generator_.Record(renderer,lease->filled_size,lease->arguments,partition.input);
+            consumer(*lease,partition);
+        }
     }catch(...){try{renderer.Finish();}catch(...){}throw;}
 }
 } // namespace NativeDX12

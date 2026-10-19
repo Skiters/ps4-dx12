@@ -7,6 +7,28 @@
 
 namespace NativeDX12::Tests {
 inline void CheckStreamOutputLayout(){
+    const PrimitiveStreamPartitions parts(PrimitiveStreamRange::Make(32,15,3,0,15),2,256,622592);
+    if(parts.Count()!=3)throw std::runtime_error("Capture budget did not partition all five input primitives");
+    for(u32 index=0;index<3;++index){const auto part=parts.At(index);
+        if(part.input.first!=index*6||part.input.limit!=(index==2?3u:6u)||
+           part.first!=(index==0)||part.last!=(index==2)||part.capture.bytes!=(index==2?311296u:622592u))
+            throw std::runtime_error("Primitive stream partition lost exact coverage/order/capture extent");}
+    for(const u32 adjacency:std::array<u32,2>{4,6}){
+        const PrimitiveStreamPartitions adjacent(PrimitiveStreamRange::Make(16,adjacency*5,adjacency,0,adjacency*5),1,1,1216);
+        u32 covered{};for(u32 index=0;index<adjacent.Count();++index){const auto part=adjacent.At(index);
+            if(part.input.first!=covered||part.input.limit%adjacency)throw std::runtime_error("Adjacency primitive split across capture arenas");
+            covered+=part.input.limit;}
+        if(covered!=adjacency*5)throw std::runtime_error("Adjacency capture partition truncated the original stream");
+    }
+    for(unsigned invalid=0;invalid<4;++invalid){bool rejected{};
+        try{if(invalid==3)(void)parts.At(3);
+            else (void)PrimitiveStreamPartitions(PrimitiveStreamRange::Make(32,15,3,0,15),
+                invalid==0?0u:invalid==2?UINT32_MAX:2u,invalid==2?UINT32_MAX:256u,invalid==1?311295u:UINT64_MAX);}
+        catch(const std::invalid_argument&){if(invalid!=0)throw;rejected=true;}
+        catch(const std::overflow_error&){if(invalid!=1&&invalid!=2)throw;rejected=true;}
+        catch(const std::out_of_range&){if(invalid!=3)throw;rejected=true;}
+        if(!rejected)throw std::runtime_error("Malformed/undersized/overflowing primitive partition accepted");
+    }
     const auto full=PrimitiveStreamRange::Make(16,24,3,0,24);
     const auto tail=PrimitiveStreamRange::Make(16,24,3,18,6);
     (void)PrimitiveStreamRange::Make(16,24,4,0,24);
