@@ -117,6 +117,29 @@ int main(int argc,char** argv){try{
         bool rejected{};try{ResourceLayout::ProjectBindings(source_layout,target);}catch(const std::invalid_argument&){rejected=true;}
         if(!rejected)throw std::runtime_error("Incompatible cross-layout descriptor projection was accepted");
     }
+    std::vector<ShaderBinding> domains(source_layout.begin(),source_layout.end());
+    domains.insert(domains.end(),target_layout.begin(),target_layout.end());
+    const auto logical_layout=ResourceLayout::MergeBindings(domains);
+    const auto roundtrip=ResourceLayout::ProjectBindings(logical_layout,source_layout);
+    if(logical_layout.size()!=5||roundtrip.size()!=5||roundtrip[0].source!=6||roundtrip[0].target||
+       roundtrip[1].source!=4||roundtrip[1].target!=1||roundtrip[2].source||roundtrip[2].target!=5||
+       roundtrip[3].source!=7||roundtrip[3].target!=9||!roundtrip[4].sampler||roundtrip[4].source||roundtrip[4].target)
+        throw std::runtime_error("Merged stage layout lost descriptor identity or independent table offsets");
+    const std::array<ShaderBinding,2> adjacent_internal{
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,0,33,1,0),binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,33,1,1)};
+    if(ResourceLayout::MergeBindings(adjacent_internal).size()!=2)
+        throw std::runtime_error("Merged layout collapsed distinct adjacent internal register contracts");
+    for(unsigned invalid=0;invalid<4;++invalid){
+        auto incompatible=domains;
+        switch(invalid){
+        case 0:incompatible.back().count=2049;break;
+        case 1:incompatible.back().reg=UINT_MAX;break;
+        case 2:incompatible[5].dimension=D3D_SRV_DIMENSION_TEXTURE3D;break;
+        case 3:incompatible[6].nv_clock=true;break;
+        }
+        bool rejected{};try{ResourceLayout::MergeBindings(incompatible);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Incompatible or oversized merged stage layout was accepted");
+    }
     // A buffered GS needs t1/space33 in addition to the capture u0. The
     // resource executor must leave precisely these host-owned slots to the
     // callback, rather than reject the stream as missing guest metadata.
@@ -881,7 +904,7 @@ int main(int argc,char** argv){try{
                             rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
                                 viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false,captured_inputs?&indirect:nullptr);};
                     if(gs_base){
-                        auto bindings=gs_base->ForkForReplay();rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                        auto bindings=gs_base->ForkForReplay(producer_pipeline.Layout());rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
                     }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,record,textures);
                     if(stream_inputs){
                         auto download=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -930,7 +953,7 @@ int main(int argc,char** argv){try{
                         }
                         const auto record=[&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,bytes,offset);submit(bindings);};
                         if(ps_base){
-                            auto bindings=ps_base->ForkForReplay();rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                            auto bindings=ps_base->ForkForReplay(replay_pipeline->Layout());rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
                         }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,*replay_pipeline,replay_resources,push,runtime,record,textures);
                         state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=mask;replay_pipeline=&pipeline;
                     };
@@ -942,19 +965,20 @@ int main(int argc,char** argv){try{
                 });
                 };
                 if(partition_replay){
-                    // Prepare each stage domain once, fork descriptors per
-                    // slice, and finish guest storage only after all parts.
-                    ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
-                        [&](ResourceBindings& gs_base){
-                            ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,replay_resources,push,runtime,
-                                [&](ResourceBindings& ps_base){
-                                    const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
-                                    serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
-                                        [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
-                                            run_capture(partition.capture,{partition.input.limit,1},partition.input.first,&gs_base,&ps_base);
-                                        });
-                                },textures,0,{},true);
-                        },textures,0,{},true);
+                    // One logical resource context for both original GS and
+                    // PS: aliases, DMA and CPU writeback finish only once.
+                    const std::array<const ResourceLayout*,2> layouts{&producer_pipeline.Layout(),&pipeline.Layout()};
+                    auto common_layout=std::make_shared<ResourceLayout>(device.Get(),layouts);
+                    auto common_resources=capture_resources;
+                    common_resources.insert(common_resources.end(),replay_resources.begin(),replay_resources.end());
+                    ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,common_resources,push,runtime,
+                        [&](ResourceBindings& common){
+                            const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
+                            serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
+                                [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
+                                    run_capture(partition.capture,{partition.input.limit,1},partition.input.first,&common,&common);
+                                });
+                        },textures,0,{},true,common_layout);
                 }else run_capture(plan,output_draw,0,nullptr,nullptr);
             }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,pipeline,resources,push,runtime,submit,textures);
             rasterizer.Finish();GuestImageReadback cr(device.Get(),*target,rasterizer.RecordingList()),dr(device.Get(),*ds,rasterizer.RecordingList());

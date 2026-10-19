@@ -60,8 +60,11 @@ static_assert(sizeof(GraphicsRuntime)==816);
 // and guest writeback are owned here, including exceptional retirement.
 // replayable_bindings opts into independent descriptor forks inside submit;
 // all forks must retire before the common resource completion may release them.
+// logical_layout merges all participating domains for one preparation/writeback;
+// submit projects it into each actual pipeline's layout before recording draws.
 void ExecuteGuestGraphicsResources(ID3D12Device*,Rasterizer&,const ShaderPipeline&,
     std::span<const GuestResourceStage>,const Shader::PushData&,const GraphicsRuntime&,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache&,VAddr border_colors=0,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false);
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false,
+    std::shared_ptr<ResourceLayout> logical_layout={});
 }

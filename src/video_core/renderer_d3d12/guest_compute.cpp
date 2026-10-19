@@ -99,10 +99,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const ComputeInvocation& invocation,Shader::PushData push,std::span<const std::byte> runtime_data,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache* textures,VAddr border_colors,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false) {
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false,
+    std::shared_ptr<ResourceLayout> logical_layout={}) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
+    if(logical_layout&&(!replayable_bindings||pipeline.IsCompute()))
+        throw std::invalid_argument("Logical graphics resource layout requires replayable bindings");
+    const auto& resource_layout=logical_layout?*logical_layout:pipeline.Layout();
     struct Pending {
         UINT reg;bool uav;u32 push_index,byte_adjust;bool formatted_read{};u64 original_bytes{};
         bool guest_read{};std::optional<size_t> stream_view;
@@ -180,7 +184,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         throw std::out_of_range("Native guest push buffer offset index");
     bool has_guest_srv=false,has_guest_uav=false;
     for(size_t index=0;index<info.buffers.size();++index)if(info.buffers[index].buffer_type==Shader::BufferType::Guest)
-        for(const auto& binding:pipeline.Layout().Bindings())if(binding.space==0&&
+        for(const auto& binding:resource_layout.Bindings())if(binding.space==0&&
             u64(start.unified)+index>=binding.reg&&u64(start.unified)+index-u64(binding.reg)<binding.count){
             has_guest_srv|=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             has_guest_uav|=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
@@ -189,7 +193,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(index>UINT_MAX-start.unified)throw std::out_of_range("Native compute register overflow");
         const auto reg=start.unified+UINT(index);
         const ShaderBinding* reflected=nullptr;
-        for(const auto& binding:pipeline.Layout().Bindings()) {
+        for(const auto& binding:resource_layout.Bindings()) {
             if(binding.space==0&&reg>=binding.reg&&reg-binding.reg<binding.count&&
                (binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SRV||binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV)) {
                 if(reflected)throw std::runtime_error("Ambiguous native guest buffer access class");
@@ -270,7 +274,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(!count||image_reg>UINT_MAX-count)throw std::out_of_range("Native image descriptor register span");
         const auto type=source.is_written?D3D12_DESCRIPTOR_RANGE_TYPE_UAV:D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         std::optional<D3D_SRV_DIMENSION> reflected_dimension;
-        for(const auto& b:pipeline.Layout().Bindings())if(b.type==type&&b.space==0)
+        for(const auto& b:resource_layout.Bindings())if(b.type==type&&b.space==0)
             for(UINT i=0;i<count;++i)if(image_reg+i>=b.reg&&image_reg+i-b.reg<b.count){
                 covered.emplace(UINT(image_reg+i),0);
                 if(reflected_dimension&&*reflected_dimension!=b.dimension)
@@ -345,7 +349,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     }
     for(const auto& source:info.samplers) {
         if(image_reg>UINT_MAX)throw std::out_of_range("Native sampler register overflow");
-        for(const auto& b:pipeline.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER&&b.space==0&&image_reg>=b.reg&&image_reg-b.reg<b.count) {
+        for(const auto& b:resource_layout.Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER&&b.space==0&&image_reg>=b.reg&&image_reg-b.reg<b.count) {
             const auto sharp=source.GetSharp(info);const float* custom{};
             if(sharp.border_color_type.Value()==AmdGpu::BorderColor::Custom){
                 if(!border_colors)throw std::runtime_error("Native guest custom border table base is null");
@@ -640,7 +644,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 // a later formatted read must not turn them into arena aliases.
                 const bool clean_small=streams_before_binding(i);
                 const auto native=version->texture.handle?version->texture.handle->GetDesc():D3D12_RESOURCE_DESC{};
-                const bool exact_shader_bounds=std::ranges::any_of(pipeline.Layout().Bindings(),[](const auto& binding){
+                const bool exact_shader_bounds=std::ranges::any_of(resource_layout.Bindings(),[](const auto& binding){
                     return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.space==Shader::NATIVE_BUFFER_BOUNDS_SET;
                 });
                 const bool compatible_uavs=std::ranges::all_of(requests,[&](const auto& buffer){
@@ -758,7 +762,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             requests.push_back({transfer.address,transfer.bytes,false,true,true});
             requests.back().publish_dma_residency=false;
         }
-    for(const auto& binding:pipeline.Layout().Bindings()) {
+    for(const auto& binding:resource_layout.Bindings()) {
         if(binding.nv_clock||binding.amd_clock)continue;
         // Native capture/replay storage is supplied by the graphics callback,
         // never interpreted as a guest sharp or mapped into PageWatch.
@@ -963,7 +967,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(const auto& image:images)ordered_images.push_back({storage_desc(image),storage_layout(image),
             image.desc.writable,image.null_resource,
             image.storage_group?shader_image_storage[*image.storage_group].cached_plan:nullptr});
-        const bool exact_bounds=std::ranges::any_of(pipeline.Layout().Bindings(),[](const auto& binding){
+        const bool exact_bounds=std::ranges::any_of(resource_layout.Bindings(),[](const auto& binding){
             return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.space==Shader::NATIVE_BUFFER_BOUNDS_SET;});
         stage_bindings=PrepareOrderedGuestStages(device,rasterizer,*textures,binding_stages,requests,
             ordered_buffers,ordered_images,exact_bounds,[&](VAddr address,u64 bytes){
@@ -1031,7 +1035,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         }
     }
     diagnostic.Stage("descriptor-heap-allocation");
-    auto bindings_lease=std::make_shared<ResourceBindings>(device,pipeline.Layout(),&rasterizer.BindingHeapPool(),replayable_bindings);
+    auto bindings_lease=std::make_shared<ResourceBindings>(device,resource_layout,&rasterizer.BindingHeapPool(),replayable_bindings);
+    if(logical_layout)bindings_lease->RetainAllocation(logical_layout);
     auto& bindings=*bindings_lease;
     if(stage_bindings)bindings.RetainAllocation(stage_bindings->pins);
     diagnostic.Stage("buffer-descriptors-and-constants");
@@ -1279,7 +1284,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                         entry->texture.Transition(rasterizer.RecordingList(),state,mip+layer*entry->desc.levels);
                 }
             }
-            for(UINT i=0;i<image.count;++i)for(const auto& b:pipeline.Layout().Bindings()) {
+            for(UINT i=0;i<image.count;++i)for(const auto& b:resource_layout.Bindings()) {
                 const auto reg=image.reg+i;if(b.space!=0||reg<b.reg||reg-b.reg>=b.count)continue;
                 if(image.desc.writable&&b.type==D3D12_DESCRIPTOR_RANGE_TYPE_UAV) {
                     const auto mip=image.sample_storage?0:image.mip+i;
@@ -1316,7 +1321,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(const auto& [entry,transfer]:storage_transfers)
             transfer->Record(rasterizer.RecordingList(),entry->texture,entry->storage_samples,entry->storage_linear,false);
         diagnostic.Stage("sampler-descriptors");
-        for(const auto& sampler:samplers)for(const auto& b:pipeline.Layout().Bindings())
+        for(const auto& sampler:samplers)for(const auto& b:resource_layout.Bindings())
             if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER&&b.space==0&&sampler.reg>=b.reg&&sampler.reg-b.reg<b.count)
                 bindings.Sampler(b.reg,0,sampler.desc,sampler.reg-b.reg);
         diagnostic.Stage("draw-or-dispatch-recording");
@@ -1452,8 +1457,9 @@ void ExecuteGuestGraphicsResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,
     const Shader::PushData& push,const GraphicsRuntime& runtime,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache& textures,VAddr border_colors,
-    std::span<const Rasterizer::ShaderBufferRequest> read_buffers,bool replayable_bindings) {
+    std::span<const Rasterizer::ShaderBufferRequest> read_buffers,bool replayable_bindings,
+    std::shared_ptr<ResourceLayout> logical_layout) {
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics command has compute PSO");
-    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers,replayable_bindings);
+    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers,replayable_bindings,std::move(logical_layout));
 }
 }

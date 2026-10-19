@@ -152,9 +152,6 @@ D3D12_DESCRIPTOR_RANGE_TYPE RangeType(D3D_SHADER_INPUT_TYPE type) {
 ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
     std::span<const std::span<const uint8_t>> shaders) {
     if(!device||shaders.empty())throw std::invalid_argument("Resource layout needs device and shader bytecode");
-    D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
-    Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,&options,sizeof(options))));
-    binding_tier_=options.ResourceBindingTier;
     Module module(dxc_dll);
     auto create=reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module.handle,"DxcCreateInstance"));
     if(!create)throw std::runtime_error("DXC reflection entry point unavailable");
@@ -186,8 +183,55 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
                 throw std::runtime_error("Conflicting DXIL descriptor array sizes or driver extension binding");
         }
     }
+    std::vector<ShaderBinding> reflected;
+    for(const auto& [key,value]:unique)reflected.push_back(value);
+    Build(device,reflected);
+}
+std::vector<ShaderBinding> ResourceLayout::MergeBindings(std::span<const ShaderBinding> domains){
+    std::vector<ShaderBinding> sorted(domains.begin(),domains.end()),merged;
+    for(const auto& binding:sorted)if(!binding.count||binding.count>1000000||binding.reg>UINT_MAX-binding.count)
+        throw std::invalid_argument("Invalid merged descriptor range");
+    std::sort(sorted.begin(),sorted.end(),[](const auto& a,const auto& b){
+        return std::tuple{a.type,a.space,a.reg}<std::tuple{b.type,b.space,b.reg};
+    });
+    for(auto binding:sorted){
+        if(!merged.empty()){
+            auto& previous=merged.back();
+            if(previous.type==binding.type&&previous.space==binding.space&&binding.reg<previous.reg+previous.count){
+                if(previous.dimension!=binding.dimension||previous.nv_clock!=binding.nv_clock||previous.amd_clock!=binding.amd_clock)
+                    throw std::invalid_argument("Incompatible descriptors in a logical draw layout");
+                previous.count=std::max(previous.count,binding.reg-previous.reg+binding.count);continue;
+            }
+        }
+        merged.push_back(binding);
+    }
+    UINT resources{},samplers{};
+    for(auto& binding:merged){
+        const bool sampler=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        auto& count=sampler?samplers:resources;
+        const UINT maximum=sampler?D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE:1000000;
+        if(binding.count>maximum||count>maximum-binding.count)throw std::invalid_argument("Merged descriptor budget exceeded");
+        binding.offset=count;count+=binding.count;
+    }
+    return merged;
+}
+ResourceLayout::ResourceLayout(ID3D12Device* device,std::span<const ResourceLayout* const> domains){
+    if(!device||domains.empty())throw std::invalid_argument("Logical resource layout needs device and domains");
+    std::vector<ShaderBinding> bindings;
+    for(const auto* domain:domains){
+        if(!domain)throw std::invalid_argument("Null logical resource domain");
+        ComPtr<ID3D12Device> owner;Check(DX12_API_CALL(domain->Root()->GetDevice(IID_PPV_ARGS(&owner))));
+        if(owner.Get()!=device)throw std::invalid_argument("Logical resource domains belong to different devices");
+        bindings.insert(bindings.end(),domain->Bindings().begin(),domain->Bindings().end());
+    }
+    Build(device,MergeBindings(bindings));
+}
+void ResourceLayout::Build(ID3D12Device* device,std::span<const ShaderBinding> reflected){
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options{};
+    Check(DX12_API_CALL(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,&options,sizeof(options))));
+    binding_tier_=options.ResourceBindingTier;
     std::vector<D3D12_DESCRIPTOR_RANGE> resource_ranges,sampler_ranges;
-    for(const auto& [key,value]:unique) {
+    for(const auto& value:reflected) {
         auto binding=value;
         for(const auto& previous:bindings_)if(previous.type==binding.type&&previous.space==binding.space&&
             binding.reg<previous.reg+previous.count&&previous.reg<binding.reg+binding.count)

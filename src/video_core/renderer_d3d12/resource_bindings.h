@@ -41,10 +41,12 @@ class ResourceLayout {
     UINT resource_count_{},sampler_count_{};
     UINT resource_parameter_=UINT_MAX,sampler_parameter_=UINT_MAX;
     D3D12_RESOURCE_BINDING_TIER binding_tier_{};
+    void Build(ID3D12Device*,std::span<const ShaderBinding>);
     friend class ResourceBindings;
 public:
     ResourceLayout(ID3D12Device*,const std::wstring& dxc_dll,
         std::span<const std::span<const uint8_t>> shader_bytecodes);
+    ResourceLayout(ID3D12Device*,std::span<const ResourceLayout* const> domains);
     ResourceLayout(const ResourceLayout&)=delete;
     ResourceLayout& operator=(const ResourceLayout&)=delete;
     ID3D12RootSignature* Root()const{return root_.Get();}
@@ -53,6 +55,7 @@ public:
     // Match reflected register identities, independent of table/root offsets.
     static std::vector<DescriptorProjection> ProjectBindings(std::span<const ShaderBinding> source,
         std::span<const ShaderBinding> target);
+    static std::vector<ShaderBinding> MergeBindings(std::span<const ShaderBinding> domains);
 };
 // Immutable after first binding. Keep this object and its layout alive until the
 // submission fence completes; owned COM references retain bound GPU resources.
