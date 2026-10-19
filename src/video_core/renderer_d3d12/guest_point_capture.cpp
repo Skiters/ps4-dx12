@@ -53,7 +53,12 @@ u32 NativePointCapturePass::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY topology,u32 v
     case D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ:return vertices>3?vertices-3:0;
     case D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ:return vertices/6;
     case D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ:return vertices>4?(vertices-4)/2:0;
-    default:throw std::invalid_argument("Point capture primitive bound requires a non-tessellated input topology");
+    // RectList/QuadList use internal fixed tessellation even in EsGs mode.
+    // Preserve their previous conservative reservation. A tighter formula
+    // needs a separate proof of the auxiliary stages' GS primitive ordinal.
+    case D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST:
+    case D3D_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST:return vertices;
+    default:throw std::invalid_argument("Unsupported point capture input topology");
     }
 }
 GuestGraphicsState NativePointCapturePass::ProducerState(const GuestGraphicsState& original){

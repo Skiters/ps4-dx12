@@ -26,11 +26,13 @@ int main(int argc,char** argv){try{
             throw std::runtime_error("Point capture assembly bound mismatch");
     if(Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,2)||
        Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ,5)||
-       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,UINT32_MAX)!=1431655765u)
+       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,UINT32_MAX)!=1431655765u||
+       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST,6)!=6||
+       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST,8)!=8)
         throw std::runtime_error("Point capture incomplete/large primitive bound mismatch");
-    bool rejected{};try{Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST,3);}
+    bool rejected{};try{Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_UNDEFINED,3);}
     catch(const std::invalid_argument&){rejected=true;}
-    if(!rejected)throw std::runtime_error("Unbounded tessellation point capture was accepted");
+    if(!rejected)throw std::runtime_error("Undefined point capture topology was accepted");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE","CPU shader compilation","1.0",
         Common::ElfInfo::FW_900,Common::ElfInfo::FW_900,{});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);
