@@ -4,6 +4,7 @@
 #include "shader_pipeline.h"
 #include "stream_output_layout.h"
 #include <memory>
+#include <cstdint>
 namespace NativeDX12 {
 // GPU-command-thread owner. The frontend/cache must outlive this object. The
 // caller translates fixed guest raster/depth/blend/vertex state into `state`.
@@ -25,6 +26,11 @@ class GuestPipelineCache {
         GraphicsRecord(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
     };
     std::map<std::string,std::unique_ptr<GraphicsRecord>> graphics_;
+    struct LogicalLayoutRecord {
+        std::vector<ComPtr<ID3D12RootSignature>> roots;
+        std::shared_ptr<ResourceLayout> layout;
+    };
+    std::map<std::vector<std::uintptr_t>,LogicalLayoutRecord> logical_layouts_;
     std::unique_ptr<ShaderPipeline> BuildGraphics(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
 #ifdef SHADPS4_NATIVE_DX12_CORE
     bool warming_{};
@@ -49,6 +55,7 @@ public:
     const ShaderPipeline& Compute(AmdGpu::Liverpool&);
     const ShaderPipeline& Compute(const GuestShaderStage&);
     StreamOutputLayout PrimitiveStreamLayout(const GuestGraphicsStages&);
+    std::shared_ptr<ResourceLayout> LogicalLayout(std::span<const ShaderPipeline* const> domains);
     const ShaderPipeline& Graphics(AmdGpu::Liverpool&,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,
         u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0);

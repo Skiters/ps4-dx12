@@ -2,8 +2,30 @@
 #include "guest_pipeline_cache.h"
 #include "diagnostics.h"
 #include "primitive_stream_arguments.h"
+#include <algorithm>
 #include <d3d12sdklayers.h>
 namespace NativeDX12 {
+std::shared_ptr<ResourceLayout> GuestPipelineCache::LogicalLayout(std::span<const ShaderPipeline* const> domains){
+    if(domains.empty())throw std::invalid_argument("Logical draw needs graphics pipeline domains");
+    std::vector<std::uintptr_t> key;
+    key.reserve(domains.size());
+    for(const auto* domain:domains){
+        if(!domain||domain->IsCompute())throw std::invalid_argument("Invalid logical graphics pipeline domain");
+        key.push_back(reinterpret_cast<std::uintptr_t>(domain->Layout().Root()));
+    }
+    std::sort(key.begin(),key.end());key.erase(std::unique(key.begin(),key.end()),key.end());
+    if(const auto found=logical_layouts_.find(key);found!=logical_layouts_.end())return found->second.layout;
+    std::vector<const ResourceLayout*> layouts;layouts.reserve(domains.size());
+    LogicalLayoutRecord record;
+    for(const auto* domain:domains){
+        layouts.push_back(&domain->Layout());
+        // Retain root identities so a deleted pipeline's pointer cannot be
+        // recycled into a different cache key before invalidation.
+        record.roots.emplace_back(domain->Layout().Root());
+    }
+    record.layout=std::make_shared<ResourceLayout>(device_.Get(),layouts);
+    return logical_layouts_.emplace(std::move(key),std::move(record)).first->second.layout;
+}
 StreamOutputLayout GuestPipelineCache::PrimitiveStreamLayout(const GuestGraphicsStages& stages){
     const auto& geometry=shaders_.Graphics(stages).stages[u32(Shader::SwStage::Geometry)];
     return ReflectPrimitiveStreamLayout(dxc_,geometry.bytecode);
@@ -141,6 +163,7 @@ std::optional<u64> GuestPipelineCache::ReplaceShader(u64 id,std::span<const u32>
     original->spirv.swap(candidate.spirv);original->patch_spirv.swap(candidate.patch_spirv);
     original->is_patched=candidate.is_patched;original->id=candidate.id;
     compute_.merge(new_compute);graphics_.merge(new_graphics);
+    logical_layouts_.clear();
     compute_.erase(id);for(const auto& key:retired_keys)graphics_.erase(key);
     return original->id;
 }

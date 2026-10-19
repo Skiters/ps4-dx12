@@ -858,25 +858,35 @@ int main(int argc,char** argv){try{
                 const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
                 Resource stream;
                 std::shared_ptr<PrimitiveStreamLease> captured_stream;
+                GuestGraphicsState stream_state;
+                StreamOutputLayout stream_layout;
+                const ShaderPipeline* stream_pipeline{};
+                std::function<void(ResourceBindings*)> capture_stream;
                 if(captured_inputs){
                     // Fixed auxiliary quad tessellation: two triangles per
                     // patch, two3-vertex patches per original instance. This
                     // known fixture capacity is not a generic guest bound.
-                    auto stream_state=producer_state;stream_state.topology=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+                    stream_state=producer_state;stream_state.topology=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
                     stream_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
                     const auto& code=shaders.Graphics(serialized_producer).stages[u32(Shader::SwStage::Geometry)].bytecode;
-                    const auto layout=ReflectPrimitiveStreamLayout(std::filesystem::path(argv[2]).wstring(),code);
-                    stream_state.pipeline.StreamOutput=layout.Desc();
-                    const auto& stream_pipeline=pipelines.Graphics(serialized_producer,stream_state.pipeline);
+                    stream_layout=ReflectPrimitiveStreamLayout(std::filesystem::path(argv[2]).wstring(),code);
+                    stream_state.pipeline.StreamOutput=stream_layout.Desc();
+                    stream_pipeline=&pipelines.Graphics(serialized_producer,stream_state.pipeline);
                     const u32 stride=Shader::NativePointCapture::StreamRecordWords(gs.in_vertex_data_size)*4;
+                    capture_stream=[&,stride](ResourceBindings* source_base){
                     captured_stream=serialized_pass->Capture(rasterizer,stride,12*capture_instances,3,[&](PrimitiveStreamLease& lease){
-                        ExecuteGuestGraphicsResources(device.Get(),rasterizer,stream_pipeline,serialized_resources,push,runtime,
-                            [&](ResourceBindings& bindings){
+                        const auto record=[&](ResourceBindings& bindings){
                                 const Rasterizer::StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*12*capture_instances,0};
-                                rasterizer.ExecuteGraphics(stream_pipeline,bindings,stream_state,{},nullptr,viewports.viewports,
+                                rasterizer.ExecuteGraphics(*stream_pipeline,bindings,stream_state,{},nullptr,viewports.viewports,
                                     viewports.scissors,blend,{6,capture_instances},{},nullptr,false,nullptr,&target);
-                            },textures);
+                            };
+                        if(source_base){
+                            auto bindings=source_base->ForkForReplay(stream_pipeline->Layout());
+                            rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                        }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,*stream_pipeline,serialized_resources,push,runtime,record,textures);
                     });
+                    };
+                    if(!partition_replay)capture_stream(nullptr);
                 }else if(stream_inputs){
                     // Independent fixture input: two generated primitives from
                     // patch7. The original ES still executes once per vertex;
@@ -965,14 +975,19 @@ int main(int argc,char** argv){try{
                 });
                 };
                 if(partition_replay){
-                    // One logical resource context for both original GS and
-                    // PS: aliases, DMA and CPU writeback finish only once.
-                    const std::array<const ResourceLayout*,2> layouts{&producer_pipeline.Layout(),&pipeline.Layout()};
-                    auto common_layout=std::make_shared<ResourceLayout>(device.Get(),layouts);
-                    auto common_resources=capture_resources;
+                    // Original source stages, GS and PS share one preparation
+                    // and completion, with original producer effects once.
+                    const std::array<const ShaderPipeline*,3> domains{stream_pipeline,&producer_pipeline,&pipeline};
+                    auto common_layout=pipelines.LogicalLayout(domains);
+                    const std::array<const ShaderPipeline*,3> reordered{&pipeline,stream_pipeline,&producer_pipeline};
+                    if(pipelines.LogicalLayout(reordered)!=common_layout)
+                        throw std::runtime_error("Logical layout cache did not reuse equivalent pipeline domains");
+                    auto common_resources=serialized_resources;
+                    common_resources.insert(common_resources.end(),capture_resources.begin(),capture_resources.end());
                     common_resources.insert(common_resources.end(),replay_resources.begin(),replay_resources.end());
                     ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,common_resources,push,runtime,
                         [&](ResourceBindings& common){
+                            capture_stream(&common);
                             const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
                             serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
                                 [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
