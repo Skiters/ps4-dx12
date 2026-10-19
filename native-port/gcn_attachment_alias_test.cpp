@@ -52,9 +52,11 @@ int main(int argc,char** argv){try{
     const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
     const bool half_edges=std::string_view(argv[3])=="half-mixed-edges-owned";
     const bool snorm_mixed_constants=std::string_view(argv[3])=="snorm8-mixed-constants-owned";
+    const bool rg16_snorm_constants=std::string_view(argv[3])=="rg16-snorm-mixed-constants-owned";
+    const bool rg16_normalized_constants=rg16_snorm_constants||std::string_view(argv[3])=="rg16-unorm-mixed-constants-owned";
     const bool half_mixed_constants=half_edges||std::string_view(argv[3])=="half-mixed-constants-owned";
     const bool float_mixed_constants=half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
-    const bool mixed_constant_blend=snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const bool mixed_constant_blend=rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
@@ -1011,7 +1013,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(!float_mixed_constants&&!snorm_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
+        if(!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1036,8 +1038,8 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=half_mixed_constants?5:float_mixed_constants?4:signed_color?9:10;
-            cb.info.number_type=float_mixed_constants?7:signed_color?5:snorm_mixed_constants?1:0;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:signed_color?9:10;
+            cb.info.number_type=float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
@@ -1046,7 +1048,7 @@ int main(int argc,char** argv){try{
         }
         if(mixed_constant_blend){
             using BF=AmdGpu::BlendControl::BlendFactor;
-            regs.blend_constants=(float_mixed_constants||snorm_mixed_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
+            regs.blend_constants=(float_mixed_constants||snorm_mixed_constants||rg16_normalized_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
                 decltype(regs.blend_constants){.2f,.4f,.6f,.8f};
             for(auto& blend:regs.blend_control){
                 blend.enable=1;blend.separate_alpha_blend=1;
@@ -1081,7 +1083,7 @@ int main(int argc,char** argv){try{
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
         const unsigned iterations=half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
-            if(snorm_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
+            if(snorm_mixed_constants||rg16_normalized_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(float_mixed_constants){
                 regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
                 regs.num_indices=!half_edges&&warm>=4?6:3;
@@ -1122,6 +1124,17 @@ int main(int argc,char** argv){try{
                 if(mixed_constant_blend){
                     constexpr u32 blended[]{0xffbebeF1u,0xff5fc2beu,0xfffc3030u};
                     word=blended[i];
+                    if(rg16_normalized_constants){
+                        const auto halves=[](s32 r,s32 g){return u32(u16(r))|(u32(u16(g))<<16);};
+                        const s32 sign=rg16_snorm_constants?-1:1;
+                        const u32 before=halves(1000*sign,(i==1?2001:2000)*sign);
+                        const u32 after_unsigned[]{halves(16884,1000),halves(750,33768),halves(500,1000)};
+                        const u32 after_signed[]{halves(7692,-1000),halves(-750,15383),halves(-500,-1000)};
+                        memcpy(memory+4096+offset,&before,4);
+                        u32 mask{};for(u32 component=0;component<2;++component)
+                            if(regs.color_target_mask.GetMask(i)&(1u<<component))mask|=0xffffu<<(component*16);
+                        word=(before&~mask)|((rg16_snorm_constants?after_signed[i]:after_unsigned[i])&mask);
+                    }
                     if(snorm_mixed_constants){
                         const auto bytes=[](s32 r,s32 g,s32 b,s32 a){return u32(u8(r))|
                             (u32(u8(g))<<8)|(u32(u8(b))<<16)|(u32(u8(a))<<24);};
