@@ -341,13 +341,17 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
 GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const AmdGpu::Regs& regs,
     u16 vertex_sgpr_offset,u32 instance_sgpr_offset,bool is_indirect){
     using Shader::SwStage;
-    if(regs.stage_enable.raw!=AmdGpu::ShaderStageEnable::VgtStages::EsGs||
+    const bool tessellated=regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::LsHsEsGs;
+    if((regs.stage_enable.raw!=AmdGpu::ShaderStageEnable::VgtStages::EsGs&&!tessellated)||
        regs.vgt_gs_out_prim_type.GetPrimitiveType(0)!=AmdGpu::GsOutputPrimitiveType::PointList)
-        throw std::runtime_error("Native point capture currently requires export/geometry point output");
+        throw std::runtime_error("Native point capture requires original export/geometry point output");
     struct RestoreProfile {Shader::Profile& target;Shader::Profile original;~RestoreProfile(){target=original;}};
     RestoreProfile restore{profile_,profile_};profile_.native_point_capture=true;
-    const u32 patch_vertices=regs.primitive_type==AmdGpu::PrimitiveType::RectList?3u:
+    const u32 patch_vertices=tessellated?regs.ls_hs_config.hs_input_control_points:
+        regs.primitive_type==AmdGpu::PrimitiveType::RectList?3u:
         regs.primitive_type==AmdGpu::PrimitiveType::QuadList?4u:0u;
+    if(tessellated&&(!patch_vertices||patch_vertices>32))
+        throw std::invalid_argument("Native captured tessellation requires 1..32 input control points");
     profile_.native_point_capture_stream_input|=patch_vertices!=0;
     auto original=BuildGraphics(regs,vertex_sgpr_offset,instance_sgpr_offset,is_indirect);
     const auto* geometry=original.stages[u32(SwStage::Geometry)];
@@ -374,6 +378,7 @@ GuestPointCaptureStages GuestShaderFrontend::BuildPointCaptureGraphics(const Amd
     if(patch_vertices){
         result.stream_producer=BuildPrimitiveStream(original);
         result.stream_patch_vertices=patch_vertices;
+        result.stream_tessellated=tessellated;
         result.producer=BuildBufferedPointCapture(original);
     }
     return result;

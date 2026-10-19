@@ -30,6 +30,7 @@ struct GuestGraphicsStages {
 struct GuestPointCaptureStages {
     GuestGraphicsStages producer,replay,stream_producer;
     u32 stream_patch_vertices{};
+    bool stream_tessellated{};
 };
 // Owns original guest reflection and specialization. Stage objects have stable
 // addresses because StageSpecialization retains an Info pointer.

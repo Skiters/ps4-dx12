@@ -1820,12 +1820,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     };
     if(capture&&capture->stream_patch_vertices){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
-        // Existing auxiliary quad tessellation has all factors1: exactly two
-        // triangles per complete3/4-control-point patch, per original instance.
-        // Reserve one invalid primitive for incomplete patches so original VS
-        // effects still execute, while the GPU count correctly stays zero.
-        const auto range=AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
-        const u32 primitives=range.capacity_vertices/3,stride=range.stride;
+        // Auxiliary patches have fixed unit factors; original HS/DS factors
+        // require the complete hardware-tessellation bound instead. Preserve
+        // the original producer draw even for incomplete/empty patches.
+        u32 input_width=3;
+        if(capture->stream_tessellated)switch(geometry.in_primitive){
+        case AmdGpu::PrimitiveType::PointList:input_width=1;break;
+        case AmdGpu::PrimitiveType::LineList:input_width=2;break;
+        case AmdGpu::PrimitiveType::TriangleList:input_width=3;break;
+        default:throw std::invalid_argument("Captured tessellation has an invalid generated primitive topology");
+        }
+        const auto range=capture->stream_tessellated?
+            TessellatedPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size,input_width):
+            AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
+        const u32 stride=range.stride;
         const auto one=Shader::NativePointCapture::Plan::Make(1,geometry.num_invocations,geometry.output_vertices,1);
         const u64 capture_budget=std::max<u64>(64*1024*1024,one.bytes);
         const PrimitiveStreamPartitions partitions(range,geometry.num_invocations,geometry.output_vertices,capture_budget);
@@ -1855,7 +1863,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     RetainUntilFinish([bindings](u64){});
                     if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
                     if(index_view.resource){bindings->Retain(index_view.resource->handle.Get());bindings->RetainAllocation(index_view.resource->allocation);}
-                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*u32(primitives)*3,0};
+                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*range.capacity_vertices,0};
                     ExecuteGraphics(stream_pipeline,*bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
                         r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,nullptr,&target);
                 });

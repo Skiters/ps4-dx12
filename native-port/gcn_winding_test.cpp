@@ -9,6 +9,7 @@
 #include "video_core/renderer_d3d12/guest_attachment_retirement.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/amdgpu/cb_db_extent.h"
+#include "video_core/guest_shader_runtime.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
@@ -513,6 +514,27 @@ int main(int argc,char** argv){try{
     Shader::Backend::DX12::SpirvConvertOptions options;options.native_storage_buffer_uavs=true;options.runtime_viewport_flips=true;
     if(compile_shaders){
         using namespace Shader::Backend::DX12;
+        if(point_capture){
+            auto tess_regs=regs;tess_regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::LsHsEsGs;
+            tess_regs.primitive_type=AmdGpu::PrimitiveType::PatchPrimitive;
+            tess_regs.vgt_gs_out_prim_type.outprim_type=AmdGpu::GsOutputPrimitiveType::PointList;
+            for(const u32 count:std::array<u32,2>{0,33}){
+                tess_regs.ls_hs_config.hs_input_control_points=count;
+                bool rejected{};try{frontend.BuildPointCaptureGraphics(tess_regs);}catch(const std::invalid_argument&){rejected=true;}
+                if(!rejected)throw std::runtime_error("Captured original tessellation accepted an invalid control count");
+            }
+            tess_regs.ls_hs_config.hs_input_control_points=3;
+            VideoCore::GuestRuntimeContext context{profile};
+            for(const auto topology:std::array{AmdGpu::TessellationTopology::Point,AmdGpu::TessellationTopology::Line,
+                    AmdGpu::TessellationTopology::TriangleCw,AmdGpu::TessellationTopology::TriangleCcw}){
+                tess_regs.tess_config.topology=topology;
+                const auto decoded=VideoCore::BuildGuestRuntimeInfo(tess_regs,nullptr,Shader::HwStage::Geometry,Shader::SwStage::Geometry,context);
+                const auto expected=topology==AmdGpu::TessellationTopology::Point?AmdGpu::PrimitiveType::PointList:
+                    topology==AmdGpu::TessellationTopology::Line?AmdGpu::PrimitiveType::LineList:AmdGpu::PrimitiveType::TriangleList;
+                if(decoded.hw.gs.in_primitive!=expected)throw std::runtime_error("Original tessellation capture confused IA patches with generated GS primitives");
+            }
+            puts("CHECKED: original tessellation topology metadata and invalid capture control counts; guest HS/DS execution NOT_RUN");
+        }
         const auto stage_kind=[](Shader::SwStage stage){
             switch(stage){
             case Shader::SwStage::Vertex:return SpirvStage::Vertex;
@@ -542,7 +564,7 @@ int main(int argc,char** argv){try{
                 GuestShaderFrontend rect_frontend(rect_profile);
                 const auto rect=rect_frontend.BuildPointCaptureGraphics(rect_regs);
                 using Shader::SwStage;
-                if(rect.stream_patch_vertices!=3||!rect.stream_producer.stages[u32(SwStage::TessellationControl)]||
+                if(rect.stream_tessellated||rect.stream_patch_vertices!=3||!rect.stream_producer.stages[u32(SwStage::TessellationControl)]||
                    !rect.stream_producer.stages[u32(SwStage::TessellationEval)]||
                    rect.producer.stages[u32(SwStage::TessellationControl)]||rect.producer.stages[u32(SwStage::TessellationEval)])
                     throw std::runtime_error("Production rectangle capture did not separate original tessellation from GS consumer");
