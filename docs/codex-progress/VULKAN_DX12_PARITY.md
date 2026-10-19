@@ -1,3 +1,7 @@
+## Buffered original GS consumer checkpoint — 2026-10-20
+
+Source d78286a adds GS-only capture construction with auxiliary VS and no repeated original VS/HS/DS/FS. Fixed-tessellation producer->SO->GPU count->original GS->PS readback fixtures prepared/compiled, GPU NOT_RUN; CPU signed-DXIL and exact1024-component ordinary-unit boundary/oversized negatives PASS. Separate clean Release d78286a PASS21.990s. Identities/logs, fixture-only capacity and remaining generic capacity/partition/GuestRasterizer integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/buffered-consumer-d78286a.json. Game/GPU NOT_RUN; app unchanged; guest guard and full-port gaps remain.
+
 ## Bounded stream capture checkpoint — 2026-10-20
 
 Source e3feab7 adds SO binding after ownership callbacks, extent/alias checks, state/lifetime retention and explicit unbinding; reusable budgeted PrimitiveStreamPass clears GPU counter, calls producer once and builds GPU arguments. CPU checks and core/related fixture compile-link PASS; clean Release e3feab7 PASS30.068s. Prepared contents/BeforeBind-Finish/pass-destruction GPU checks NOT_RUN. Hashes/logs and next buffered original-GS consumer/capacity/partition integration in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/stream-capture-e3feab7.json. Game/GPU NOT_RUN; app unchanged; guest guard and full-port gaps remain.
