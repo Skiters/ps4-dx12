@@ -1291,3 +1291,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 d16a4a7: compact scalar ordered color connected;288 CPU compiler cases PASS,120 GPU cases prepared only; clean Release identities scalar-ordered-d16a4a7.json. App unchanged/GPU-game NOT_RUN.
 
 2026-10-20 bb0e119: packed RG8 ordered color connected;320 CPU compiler cases PASS,48 GPU cases prepared only; clean Release identities rg8-ordered-bb0e119.json. App unchanged/GPU-game NOT_RUN.
+
+2026-10-20 0931213: preserve ordered typed-family lists and enforce explicit alias formats;7 CPU family-plan cases/negatives PASS,320 shader cases PASS; clean identities ordered-family-0931213.json. GPU/game NOT_RUN.
