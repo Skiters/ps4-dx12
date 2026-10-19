@@ -565,6 +565,27 @@ bool CompatibleGuestDepthSubview(const GuestTextureDesc& source,const GuestTextu
     // view can omit S; its native SRV still uses the parent's depth plane format.
     return view.depth_target?view.stencil_address==source.stencil_address:!view.stencil_address;
 }
+bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
+    const GuestTextureDesc& view,const GuestTextureLayout& requested){
+    // Pinned ResolveOverlap keeps the existing compatible image when the
+    // requested resource extent is smaller. CB slice_max bounds the view; it
+    // must not split a sampled array into independent per-face allocations.
+    if(source.writable||view.writable||source.depth_target||view.depth_target||
+       source.stencil_address||view.stencil_address||source.volume_depth||view.volume_depth||
+       source.one_dimensional||view.one_dimensional||!view.layers||view.layers>source.layers||
+       !view.levels||view.levels>source.levels||view.first_mip>=view.levels||
+       view.first_layer>=view.layers||!view.view_layers||view.view_layers>view.layers-view.first_layer||
+       physical.block_extent!=1||requested.block_extent!=1||physical.expanded_bytes_per_pixel||
+       requested.expanded_bytes_per_pixel||physical.bytes_per_pixel!=requested.bytes_per_pixel||
+       physical.mips.size()<view.levels||requested.mips.size()!=view.levels)return false;
+    for(UINT mip=0;mip<view.levels;++mip){const auto& a=physical.mips[mip];const auto& b=requested.mips[mip];
+        if(a.pitch!=b.pitch||a.height!=b.height||a.slice_bytes!=b.slice_bytes||
+           a.macro!=b.macro||a.thickness!=b.thickness)return false;
+    }
+    auto owner=source,target=view;owner.layers=target.layers;owner.levels=target.levels;
+    owner.render_target=target.render_target=false;
+    return CompatibleGuestSampledStorage(owner,target);
+}
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc> attachments){
     // CB slice_max bounds a view as well as the requested storage. The original
     // cache grows one compatible backing to the maximum requested layer count.
@@ -1095,6 +1116,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
     if(sampled_view==desc)return Srv();
     const bool depth_alias=desc.depth_target&&
         CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
+    const bool color_alias=CompatibleGuestColorSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool shader_alias=!sampled_view.writable&&
         (CompatibleGuestShaderStorage(desc,sampled_view)||
          CanBindReadonlyWordSrv(*this,sampled_view)||
@@ -1102,13 +1124,14 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
              sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
         CanBindReadonlyBcView(*this,sampled_view,LayoutGuestTexture(sampled_view));
-    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias&&!depth_alias)||sampled_view.first_mip>=sampled_view.levels||
+    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias&&!depth_alias&&!color_alias)||sampled_view.first_mip>=sampled_view.levels||
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
     if(shader_alias&&desc.data_format!=sampled_view.data_format&&!CanBindNativeWordFormat(*this,sampled_view))
         throw std::invalid_argument("Native image word alias requires a compatible resource format list");
     Entry view;view.desc=sampled_view;view.desc.stencil_address=desc.stencil_address;
+    if(color_alias)view.desc.layers=desc.layers;
     view.layout=shader_alias||block_alias||depth_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
 }
 void EncodeGuestSubresource(const GuestTextureDesc& d,const GuestTextureLayout& l,
@@ -1155,7 +1178,8 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
     const GuestTextureDesc& attachment)const {
-    if(!CompatibleGuestAttachmentStorage(desc,attachment)||!attachment.render_target||
+    if((!CompatibleGuestAttachmentStorage(desc,attachment)&&
+        !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !((attachment.data_format==9&&attachment.number_format==1)||
          (attachment.data_format==10&&attachment.number_format==0))||
@@ -1221,9 +1245,13 @@ D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(uint32_t mip)const {
     return view;
 }
 D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(const GuestTextureDesc& attachment,uint32_t mip)const{
-    if(!CompatibleGuestAttachmentStorage(desc,attachment))
+    if(!CompatibleGuestAttachmentStorage(desc,attachment)&&
+       !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))
         throw std::invalid_argument("Incompatible native render target view");
+    if(!texture.handle||!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
+        throw std::invalid_argument("Native color parent lacks render target capability");
     Entry view;view.desc=attachment;view.layout=layout;view.texture.handle=texture.handle;
+    view.desc.layers=desc.layers;
     return view.Rtv(mip);
 }
 D3D12_DEPTH_STENCIL_VIEW_DESC GuestTextureCache::Entry::Dsv(bool read_only_depth,bool read_only_stencil)const {
@@ -1879,6 +1907,9 @@ bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTe
 }
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
+    if(CompatibleGuestColorSubview(entry.desc,entry.layout,desc,layout)&&
+       (!desc.render_target||(entry.texture.handle&&
+        (entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))))return true;
     if(CompatibleGuestDepthSubview(entry.desc,entry.layout,desc,layout))return true;
     return (entry.desc==desc||CompatibleGuestAttachmentStorage(entry.desc,desc)||
         CompatibleGuestWritableStorage(entry.desc,desc)||

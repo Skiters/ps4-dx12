@@ -1125,3 +1125,5 @@ are separate measurements and are not invalidated by the GPU timestamp bug.
 ## Mixed CMASK checkpoint — 2026-10-11
 
 DX12 adaptation added per-layer/per-tile CMASK planning in `guest_texture_cache.cpp`. It follows Vulkan's semantic model (tracked clear ownership, clear only when metadata says the tile is clear, retire the metadata state after materialization) while using AMD GCN AddrLib-style pipe-interleaved addresses for the native guest metadata plane. Vulkan itself tracks `IsMetaCleared`/`TouchMeta` and issues a native image clear; it does not decode arbitrary mixed bytes.
+
+2026-10-19 color array subviews: pinned TextureCache::ResolveOverlap same-address smaller-resource view -> CompatibleGuestColorSubview/MatchesGuestUploadStorage/Entry::Srv/Rtv/OrderedColorUav. Connected; native_color_array_subviews GPU fixture verifies6 progressive CB views share sampled parent, exact GPU face contents/padding and bounds negatives. Full game world remains UNVERIFIED; this scoped result does not close full TextureCache parity. Reentrant Rasterizer::Flush batch transfer also verified with once-only callbacks and GPU copy (01dbbde).

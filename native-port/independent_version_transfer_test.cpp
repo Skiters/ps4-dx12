@@ -691,6 +691,54 @@ static void RunCurrentIndependentBinding(ID3D12Device* device){
     require(observed_old==expected_old&&observed_new==expected_new,"Current binding lost new contents or mutated pinned old GPU version");
     renderer.ValidateDebugMessages();puts("PASS: current original image class and pinned preceding GPU contents");
 }
+static void RunColorArraySubviews(ID3D12Device* device){
+    Rasterizer renderer(device);GuestTextureCache cache(device);SCOPE_EXIT {renderer.Finish();};
+    const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
+    GuestTextureDesc sampled;sampled.address=0x40000;sampled.width=sampled.height=64;sampled.pitch=128;
+    sampled.layers=sampled.view_layers=6;sampled.data_format=5;sampled.number_format=7;sampled.tile_mode=14;
+    const auto layout=LayoutGuestTexture(sampled);
+    std::vector<std::byte> physical(layout.guest_bytes,std::byte{0x11}),expected=physical;
+    cache.SetOwnershipAcquirer([](auto& image){image.buffer_alias_version=true;
+        image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;});
+    auto& parent=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence());
+    auto pin=cache.PinBinding(parent);require(cache.Own(parent),"Color array ownership");
+    Descriptors rtvs(device,D3D12_DESCRIPTOR_HEAP_TYPE_RTV,6,false);
+    constexpr u16 halves[]{0x3000,0x3400,0x3600,0x3800,0x3900,0x3a00};
+    for(UINT layer=0;layer<6;++layer){
+        auto attachment=sampled;attachment.render_target=true;attachment.layers=layer+1;
+        attachment.first_layer=layer;attachment.view_layers=1;attachment.storage_height=64;
+        attachment.storage_slice_bytes=layout.mips[0].slice_bytes;
+        const auto requested=LayoutGuestTexture(attachment);
+        require(CompatibleGuestColorSubview(sampled,layout,attachment,requested),"Compatible color face rejected");
+        auto& selected=cache.Upload(attachment,std::span(physical).first(requested.guest_bytes),
+            renderer.RecordingList(),renderer.CompletedFence());
+        require(&selected==&parent,"CB face binding split the original color array");
+        const auto view=parent.Rtv(attachment);
+        require(view.ViewDimension==D3D12_RTV_DIMENSION_TEXTURE2DARRAY&&
+            view.Texture2DArray.FirstArraySlice==layer&&view.Texture2DArray.ArraySize==1,"RTV lost native array/view identity");
+        device->CreateRenderTargetView(parent.texture.handle.Get(),&view,rtvs.Cpu(layer));
+        parent.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_RENDER_TARGET);
+        const float color[]{float(layer+1)/8,.5f,0,1};
+        renderer.RecordingList()->ClearRenderTargetView(rtvs.Cpu(layer),color,0,nullptr);
+        require(cache.Own(parent),"Color face ownership lost");
+        std::vector<u16> pixels(size_t(sampled.width)*sampled.height*2);
+        for(size_t pixel=0;pixel<pixels.size();pixel+=2){pixels[pixel]=halves[layer];pixels[pixel+1]=0x3800;}
+        EncodeGuestSubresource(sampled,layout,expected,std::as_bytes(std::span(pixels)),0,layer);
+    }
+    auto one=sampled;one.layers=one.view_layers=1;
+    const auto srv=parent.Srv(one);require(srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
+        srv.Texture2DArray.ArraySize==1,"One-layer SRV lost native array dimension");
+    auto invalid=one;invalid.pitch*=2;
+    require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Different physical pitch accepted");
+    invalid=sampled;invalid.layers=invalid.view_layers=7;
+    require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Out-of-bounds layer view accepted");
+    GuestImageReadback readback(device,parent,renderer.RecordingList());
+    const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+    auto observed=physical;readback.Resolve(renderer.CompletedFence(),observed);
+    require(observed==expected,"Color face GPU writes, untouched layers or padding differ");
+    require(cache.FindValidIndependentImage(sampled,layout)==&parent,"Color array no longer has one authoritative image");
+    renderer.ValidateDebugMessages();puts("PASS: sampled array/CB subviews share one image; six exact GPU-written faces and padding");
+}
 int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_D3D12_VALIDATION","1");
     const bool packed19_rt=(argc==2&&std::string_view(argv[1])=="--packed19-msaa-attachment")||
@@ -698,6 +746,7 @@ int main(int argc,char** argv){try{
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--sample-backing-pressure")==0){for(UINT samples:{1u,8u})RunSampleBackingPressure(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--robust-sample-copy")==0){RunMultisampleReadbackPermission(device.Get());RunRobustSampleCopy(device.Get());return 0;}
