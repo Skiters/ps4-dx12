@@ -1039,7 +1039,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN){
         descriptions[i]=textures_.ResolveDepthViewStorage(descriptions[i]);
         layouts[i]=LayoutGuestTexture(descriptions[i]);
-        ValidateHostMemory(descriptions[i].address,layouts[i].guest_bytes,true);
+        ValidateGpuBacking(descriptions[i].address,layouts[i].guest_bytes,true);
         for(UINT j=0;j<i;++j)if(formats[j]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(descriptions[i].address,layouts[i].guest_bytes,descriptions[j].address,layouts[j].guest_bytes)){
             const auto& a=descriptions[i];const auto& b=descriptions[j];
@@ -1106,9 +1106,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool explicit_depth_clear=depth_tests.depth&&r.depth_render_control.depth_clear_enable&&
         r.depth_control.depth_write_enable;
     if(has_depth){
-        ValidateHostMemory(descriptions[8].address,layouts[8].guest_bytes,state.WritesDepth(explicit_depth_clear));
+        ValidateGpuBacking(descriptions[8].address,layouts[8].guest_bytes,state.WritesDepth(explicit_depth_clear));
         if(descriptions[8].stencil_address)
-            ValidateHostMemory(stencil_desc.address,stencil_layout.guest_bytes,state.WritesStencil(clear_stencil));
+            ValidateGpuBacking(stencil_desc.address,stencil_layout.guest_bytes,state.WritesStencil(clear_stencil));
     }
     bool depth_attachment_snapshot=false;
     bool shader_depth_overlap=false,shader_stencil_overlap=false;
@@ -1487,7 +1487,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             write_depth_stencil=state.WritesDepthStencil(clear_depth,clear_stencil);
             depth_write_planes=u32(state.WritesDepth(clear_depth))|u32(state.WritesStencil(clear_stencil))*2;
             if(clear_depth&&!explicit_depth_clear)
-                ValidateHostMemory(descriptions[8].address,layouts[8].guest_bytes,true);
+                ValidateGpuBacking(descriptions[8].address,layouts[8].guest_bytes,true);
             if((shader_depth_overlap&&(depth_write_planes&1))||(shader_stencil_overlap&&(depth_write_planes&2)))
                 throw std::logic_error("Native depth snapshot acquired a competing attachment writer");
             if(metadata_clear&&Diagnostics::Enabled()){
