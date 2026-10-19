@@ -1,3 +1,9 @@
+## User-reported sub1FPS; bounded f7c9d82 launch ended — 2026-10-19 21:54 +05
+
+Clean committed Release f7c9d82 was published as sole dx12-current; exact EXE SHA256 d5ae7f95cb9d3e590a6c3662491d1175a15a42526542c72a13b1f85608aa8c6a. Diagnostic owned PID69432 ran16:49:06.7328244Z..16:53:44.3145444Z (277.58s), with core D3D debug validation and existing optional capture. Title and Continue observed via verified XInput; remained on loading screen when deliberately closed. Exit0; feeder43500 stopped and virtual_device_removed=true; both processes absent. NEXT was NOT created; actual world depth t3 was NOT captured. This launch is NOT an FPS test or game acceptance. Report: F:/PS4Dev/handoff/physical-backing-proof-20261019/producer-depth-f7c9d82/verification.json. App core-version.Results updated to exact failed/incomplete scope. No new full runtime archive.
+
+User explicitly reports persistent about1FPS and objects to repeated diagnostics without improvement. Last valid timed world result remains eb9ba3a0.72997FPS/almost-black FAIL, not transferable to f7. Recent capture features do NOT fix rendering. Do not immediately repeat this launch or add more general instrumentation. Continue production correction from existing shader/input/ownership evidence; actual private t3 data remains missing, so do not claim depth is the proven cause. Prior9249946 device887a0001 and d01969e breakpoint causes remain unresolved/protected. No performance or black-render fix was made at this boundary.
+
 
 ## Actual SRV subresources — 2026-10-19 21:47 +05
 
