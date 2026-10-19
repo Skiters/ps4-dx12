@@ -1,5 +1,14 @@
 # Native DX12 state
 
+
+## Ordered converted packed image domains - 2026-10-19
+
+Production **a082b64cfd67f52b692163d9762ece23d67b025c** is connected and focused GPU verified. `PrepareOrderedGuestStages` now preserves original per-stage binding order when one PS4 packed image needs distinct native sampled and writable representations. Compatible `CompatibleGuestPackedStorage` views bind at their actual `BindTextures` position; early conversion no longer retires the preceding I. A later exact-base B writer selects a separate current-B representation, while pins retain earlier descriptors through the submission fence. Compatible single-allocation views keep the previous refresh path. BC, shifted, MSAA, clipped and different-geometry domains remain explicit gaps.
+
+The ordered-stage fixture passed its existing matrix plus a packed10 SNORM converted-domain case with deliberately different early I and late B contents. Both native allocations were read back independently, including the complete tiled guest envelope and padding. Independent image transfer and packed10 SNORM/SINT writer/tiled regressions pass. A clean detached Release build at the exact commit succeeded. The sole installed `dx12-current` is EXE SHA256 **7dac81c4a8f235eb6136f1c75a148d154c8422d073185c55b07819aad794989f**, PDB SHA256 **415a9a739b0f02c9b8797a031d5ae9fad41362d5332a205f300f5306e637713f**. Runtime/game/final suite remain not run for this binary.
+
+The previously recorded late same-address source-envelope hypothesis was not reproduced: depth subview, planned depth native change and current-buffer fixtures already cover the examined growth cases. The next concrete production guard is a BC/word-view ordered stage domain whose physical geometry cannot share one native allocation. Preserve exact guest words, stage order, current I/B choice, descriptor lifetime and ownership; do not weaken shifted/MSAA/large guards without their own fixture.
+
 ## Mixed constant MRT blending - 2026-10-19
 
 Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** preserves simultaneous constant-color and constant-alpha RGB blending on devices without D3D12 OPTIONS13 `AlphaBlendFactorSupported`. Supported RGBA8 UNORM and packed10 SNORM targets use the existing per-sample raster-ordered destination read/modify/write path; devices with native support keep fixed-function blending. The exact GCN fixture passed eight sample1/4 draws with three MRT equations, both disjoint layer orders, full readback and padding. The state/pipeline, graphics-resource, 136-draw RGBA8 logic, 104-case SNORM and signed shared-MRT regressions pass. Implementation is connected and focused GPU verified for the ordered formats; unsupported mixed-format combinations still reject explicitly, and game/final-suite behavior remains unverified.

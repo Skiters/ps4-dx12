@@ -1,5 +1,12 @@
 # Next session
 
+
+## Current continuation boundary - converted packed stage domains
+
+Production **a082b64cfd67f52b692163d9762ece23d67b025c** is pushed, clean-built and focused GPU verified. Ordered packed views that require separate native sampled and writable allocations now bind in original stage order. The focused GPU fixture proves distinct early I and late current-B contents with full tiled padding; the existing ordered matrix and adjacent packed10/independent transfer regressions pass. The sole installed `dx12-current` has EXE SHA256 **7dac81c4a8f235eb6136f1c75a148d154c8422d073185c55b07819aad794989f**. Game/final suite were not run.
+
+Continue the existing formatted-alias queue at the BC/word-view physical-domain guard in `PrepareOrderedGuestStages`. Build one concrete same-address BC parent/word view from `gcn_bc_writable_alias_fixture.h`, map pinned Vulkan `ResolveOverlap`/`ExpandImage`, and preserve original buffers-before-images order, exact guest words, current I/B selection, barriers, ownership and allocation lifetime. Do not repeat the late-envelope or converted-packed work. Shifted bases, MSAA, clipped and large domains remain separate explicit gaps.
+
 ## Current continuation boundary - mixed constant MRT blending
 
 Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** is pushed, clean-built and focused GPU verified. On adapters without native constant-alpha RGB factors, supported RGBA8 UNORM and packed10 SNORM targets execute mixed constant-color/alpha MRT equations through per-sample ordered storage. Eight exact GCN sample1/4 draws passed, along with state, graphics-resource, RGBA8 logic, SNORM and signed regressions. The sole installed `dx12-current` has EXE SHA256 **44ad271ebea9dfaa59c2a02ea4ef89ea351df23cd103e038c91c011dd114896c**. Game/final suite were not run.

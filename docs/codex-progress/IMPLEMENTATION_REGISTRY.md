@@ -1,5 +1,10 @@
 # Implementation and verification registry — 2026-10-17
 
+
+## Current ordered converted packed domains - 2026-10-19
+
+Production **a082b64cfd67f52b692163d9762ece23d67b025c** connects same-address packed image domains that require distinct DX12 sampled and writable allocations. Implementation state: connected for `CompatibleGuestPackedStorage`, including deferred actual-bind conversion and fence-pinned earlier descriptors. Behavior state: focused GPU verified with deliberately different original-I and current-B packed10 SNORM contents, full guest padding, the existing ordered-stage matrix, independent transfer and signed packed10 regressions. Whole-game/final-suite behavior is open. `formatted-alias-ordering` remains `connected_with_known_gaps`: BC/word views, shifted/clipped/MSAA/different-geometry and large domains remain concrete production gaps.
+
 ## Current per-sample ordered color - 2026-10-19
 
 Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** connects per-sample ordered attachment storage and writeback for packed-SNORM blending/logic and RGBA8 independent logic. Behavior is focused GPU verified by 104 packed-SNORM and 136 RGBA8 actual GCN draws with complete sample contents and padding. Clean Release repeated both. Whole-game/final-suite behavior remains open. The signed-packed10-attachment production implementation has no remaining sample1/2/4/8 code gap; final game acceptance remains separate. Packed19 MSAA remains connected on a pinned-original-capable adapter. Continue formatted-alias-ordering late source envelope reservation.

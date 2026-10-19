@@ -1,5 +1,18 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+
+## Current ordered converted packed-domain checkpoint - 2026-10-19
+
+Production **a082b64cfd67f52b692163d9762ece23d67b025c** is pushed on `fix/mixed-cmask`. `PrepareOrderedGuestStages` now handles a same-address `CompatibleGuestPackedStorage` domain whose sampled and writable views require different native DX12 allocations. It defers conversion until each original `BindTextures` position, keeps the early I allocation pinned, selects current B after exact-base invalidation, and publishes writable ownership at the actual image bind. Existing compatible views still share the prior canonical allocation/refresh path. BC, shifted, MSAA, clipped, different-geometry and large-domain guards remain unchanged.
+
+Focused GPU verification passed: the existing ordered-stage matrix plus a packed10 SNORM case with intentionally different early I and late B contents, two independent native readbacks, complete tiled guest bytes and padding. `native_independent_image_version_transfer`, packed10 SNORM/SINT word writer and tiled conversion checks pass. Clean detached Release from the exact commit and 54 pinned dependencies linked successfully. The sole app core is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, EXE SHA256 **7dac81c4a8f235eb6136f1c75a148d154c8422d073185c55b07819aad794989f**, PDB SHA256 **415a9a739b0f02c9b8797a031d5ae9fad41362d5332a205f300f5306e637713f**, preserved profile `external-7e8fca7a1bd828c19629fdd9`. Runtime/game/final suite are `NOT_RUN` for this identity.
+
+The late same-address envelope hypothesis was checked against `--depth-subviews`, `--planned-depth-native-change` and `--planned-depth-current-buffer`; all passed and the examined descriptors are already unioned before final buffer views. Do not rework that path without a new escaping descriptor. The next concrete guard is a BC parent/word-view ordered domain that cannot use one native allocation. Reuse `gcn_bc_writable_alias_fixture.h`, pinned Vulkan `ResolveOverlap`/`ExpandImage`, and preserve exact word transfer, stage order, I/B authority, barriers, PageWatch and allocation lifetime.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue `fix/mixed-cmask` from current HEAD **a082b64cfd67f52b692163d9762ece23d67b025c**. Verify the sole `dx12-current` identity above, then resume the existing formatted-alias queue at the BC/word-view physical-domain guard in `PrepareOrderedGuestStages`. Build one concrete original-applicable fixture from `gcn_bc_writable_alias_fixture.h`, compare pinned Vulkan `ResolveOverlap`/`ExpandImage`, implement exact GPU word transfer with original per-stage binding order and fence-safe native allocation lifetime, run focused GPU/readback regressions, clean-build committed source, replace the one current core and push normally. Do not repeat the late-envelope or converted-packed investigation. Defer full suite and game/XInput/FPS acceptance until the integration boundary.
+
 ## Current mixed constant MRT blend checkpoint - 2026-10-19
 
 Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** is pushed on `fix/mixed-cmask`. It preserves simultaneous constant-color and constant-alpha RGB blend factors when D3D12 OPTIONS13 lacks native support by routing supported RGBA8 UNORM and packed10 SNORM MRTs through the existing per-sample raster-ordered storage path. RGBA8 destination decode now uses actual UNORM bytes; SNORM retains signed packed decode. Native-capable adapters stay on fixed-function blending. Unsupported mixed-format combinations remain explicit failures.

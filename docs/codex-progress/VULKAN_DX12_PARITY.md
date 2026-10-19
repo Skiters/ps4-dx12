@@ -1,5 +1,10 @@
 # Vulkan / native D3D12 parity audit
 
+
+## 2026-10-19 - ordered converted packed image domains
+
+Connected and focused-verified at **a082b64cfd67f52b692163d9762ece23d67b025c**. Pinned Vulkan can retain one logical mutable image across compatible packed sampled/storage bindings; DX12 sometimes needs an expanded sampled texture and raw writable texture. The ordered binder now creates each representation at its original per-stage image-bind position, preserves early I, selects current B after exact-base invalidation, pins every native allocation, and publishes writable ownership only at its actual bind. The real GPU fixture proves different early-I/late-B data and all guest padding. Implementation state: connected for `CompatibleGuestPackedStorage` converted domains. Behavior state: focused GPU verified; game/final suite not run. BC/word views, shifted bases, MSAA, clipped transfers, different physical geometry and large-domain limits remain open.
+
 ## 2026-10-19 - mixed constant MRT blending
 
 Connected and focused-verified at **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** for ordered-capable RGBA8 UNORM and packed10 SNORM targets. The runtime queries D3D12 OPTIONS13 once. Native-capable devices retain fixed-function constant-alpha RGB factors; older devices route a globally mixed constant-color/alpha MRT set through per-sample raster-ordered storage, decode the destination according to its actual format, apply the guest blend equation once, and write the authoritative attachment back. Eight actual GCN sample1/4 draws with three distinct MRT equations, both layer orders and full allocation comparison passed. Adjacent state, resource, RGBA8 logic, SNORM and signed paths pass. Implementation state: connected for the two ordered formats. Behavior state: focused GPU verified; game/final suite not run. Other formats still reject rather than silently changing semantics, so the broad blend-state row remains partial.
