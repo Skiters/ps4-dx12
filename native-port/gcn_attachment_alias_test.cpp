@@ -58,8 +58,11 @@ int main(int argc,char** argv){try{
     const bool half_mixed_constants=half_edges||std::string_view(argv[3])=="half-mixed-constants-owned";
     const u32 wide_float_format=std::string_view(argv[3])=="rg32-mixed-constants-owned"?11:
         std::string_view(argv[3])=="rgba32-mixed-constants-owned"?14:0;
-    const bool float_mixed_constants=wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
-    const bool mixed_constant_blend=unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const u32 rgba16_kind=std::string_view(argv[3])=="rgba16-unorm-mixed-constants-owned"?1:
+        std::string_view(argv[3])=="rgba16-snorm-mixed-constants-owned"?2:
+        std::string_view(argv[3])=="rgba16-float-mixed-constants-owned"?3:0;
+    const bool float_mixed_constants=rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
+    const bool mixed_constant_blend=rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
@@ -1016,7 +1019,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
+        if(!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1041,8 +1044,8 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
-            cb.info.number_type=float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
+            cb.info.number_type=rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
@@ -1051,7 +1054,7 @@ int main(int argc,char** argv){try{
         }
         if(mixed_constant_blend){
             using BF=AmdGpu::BlendControl::BlendFactor;
-            regs.blend_constants=(float_mixed_constants||snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
+            regs.blend_constants=(rgba16_kind||float_mixed_constants||snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
                 decltype(regs.blend_constants){.2f,.4f,.6f,.8f};
             for(auto& blend:regs.blend_control){
                 blend.enable=1;blend.separate_alpha_blend=1;
@@ -1084,11 +1087,12 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=wide_float_format?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        const unsigned iterations=(rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
+            if(rgba16_kind)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(wide_float_format)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
-            if(float_mixed_constants&&!wide_float_format){
+            if(float_mixed_constants&&!wide_float_format&&!rgba16_kind){
                 regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
                 regs.num_indices=!half_edges&&warm>=4?6:3;
                 input.num_records=regs.num_indices;
@@ -1120,6 +1124,26 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
+                if(rgba16_kind){
+                    const s32 sign=rgba16_kind==2?-1:1;
+                    std::array<u16,4> before{u16(1000*sign),u16((i==1?2001:2000)*sign),
+                        u16((i==2?3001:3000)*sign),u16(1200*sign)};
+                    const std::array<u16,4> unorm_after[]{{16884,1000,1500,65535},{750,33768,750,65535},{500,1000,34268,65535}};
+                    const std::array<u16,4> snorm_after[]{{7692,u16(-1000),u16(-1500),32767},
+                        {u16(-750),15383,u16(-750),32767},{u16(-500),u16(-1000),14883,32767}};
+                    const std::array<u16,4> float_after[]{{0x3800,0x3000,0x3600,0x3c00},
+                        {0x3600,0x3900,0x3200,0x3c00},{0x3400,0x3000,0x3b00,0x3c00}};
+                    if(rgba16_kind==3){before={0x3800,0x3400,0x3a00,0x3800};
+                        if(warm&&i==0)before[1]=0x7e35;
+                        if(warm&&i==1)before[0]=0x8000;}
+                    const auto& after=rgba16_kind==1?unorm_after[i]:rgba16_kind==2?snorm_after[i]:float_after[i];
+                    for(u32 component=0;component<4;++component){
+                        memcpy(memory+4096+offset+component*2,&before[component],2);
+                        const auto result=(regs.color_target_mask.GetMask(i)&(1u<<component))?after[component]:before[component];
+                        memcpy(expected.data()+4096+offset+component*2,&result,2);
+                    }
+                    continue;
+                }
                 if(wide_float_format){
                     const u32 components=wide_float_format==11?2:4;
                     u32 initial[]{0x3f000000,0x3e800000,0x3f400000,0x3f000000};

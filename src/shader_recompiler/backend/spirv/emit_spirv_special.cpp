@@ -285,35 +285,39 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
         ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],after));
         return;
     }
-    const bool rg16_float = target.data_format == AmdGpu::DataFormat::Format16_16 &&
+    const bool half_word = target.data_format == AmdGpu::DataFormat::Format16_16 ||
+                           target.data_format == AmdGpu::DataFormat::Format16_16_16_16;
+    const u32 half_components = target.data_format == AmdGpu::DataFormat::Format16_16_16_16 ? 4 : 2;
+    const bool rg16_float = half_word &&
                             target.number_format == AmdGpu::NumberFormat::Float;
-    const bool rg16_unorm = target.data_format == AmdGpu::DataFormat::Format16_16 &&
+    const bool rg16_unorm = half_word &&
                             target.number_format == AmdGpu::NumberFormat::Unorm;
-    const bool rg16_snorm = target.data_format == AmdGpu::DataFormat::Format16_16 &&
+    const bool rg16_snorm = half_word &&
                             target.number_format == AmdGpu::NumberFormat::Snorm;
     if (rg16_float || rg16_unorm || rg16_snorm) {
-        std::array<Id, 2> old_channels{};
-        if (rg16_float) {
-            const Id unpacked = ctx.OpUnpackHalf2x16(ctx.F32[2], old_word);
-            for (u32 component = 0; component < 2; ++component)
-                old_channels[component] = ctx.OpCompositeExtract(ctx.F32[1], unpacked, component);
-        } else for (u32 component = 0; component < 2; ++component) {
-            old_channels[component] = rg16_snorm ? OrderedSnormDecode(ctx, old_word, component * 16, 16) :
+        std::array<Id, 2> words{old_word,ctx.OpCompositeExtract(ctx.U32[1],old_texel,1)};
+        std::array<Id, 4> old_channels{ctx.f32_zero_value,ctx.f32_zero_value,ctx.f32_zero_value,ctx.ConstF32(1.f)};
+        for (u32 component = 0; component < half_components; ++component) {
+            const auto word=words[component/2];const auto shift=(component%2)*16;
+            if(rg16_float){
+                const Id unpacked=ctx.OpUnpackHalf2x16(ctx.F32[2],word);
+                old_channels[component]=ctx.OpCompositeExtract(ctx.F32[1],unpacked,component%2);
+                continue;
+            }
+            old_channels[component] = rg16_snorm ? OrderedSnormDecode(ctx, word, shift, 16) :
                 ctx.OpFDiv(ctx.F32[1], ctx.OpConvertUToF(ctx.F32[1],
-                    ctx.OpBitFieldUExtract(ctx.U32[1], old_word, ctx.ConstU32(component * 16), ctx.ConstU32(16u))),
+                    ctx.OpBitFieldUExtract(ctx.U32[1], word, ctx.ConstU32(shift), ctx.ConstU32(16u))),
                     ctx.ConstF32(65535.f));
         }
-        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],
-            old_channels[0], old_channels[1],
-            ctx.f32_zero_value, ctx.ConstF32(1.f));
-        std::array<Id, 2> channels{};
-        u32 raw_mask{};
-        for (u32 component = 0; component < 2; ++component) {
+        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],old_channels);
+        std::array<Id, 4> channels{};
+        std::array<u32,2> raw_masks{};
+        for (u32 component = 0; component < half_components; ++component) {
             const bool written = (target.write_mask & (1u << component)) != 0;
             channels[component] = !written ? ctx.f32_zero_value : logic ?
                 ctx.OpCompositeExtract(ctx.F32[1], source, component) :
                 OrderedBlendChannel(ctx, target, source, destination, constants, component);
-            if (written) raw_mask |= 0xffffu << (component * 16);
+            if (written) raw_masks[component/2] |= 0xffffu << ((component%2) * 16);
         }
         // Quantize after each ordered fragment, just as the attachment store
         // does. Merge untouched raw halves rather than round-tripping NaNs or
@@ -322,14 +326,16 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
             return rg16_float ? OrderedHalfCode(ctx, channel) : rg16_unorm ?
                 OrderedUnormCode(ctx, channel, 16) : OrderedSnormCode(ctx, channel, 16);
         };
-        Id packed = ctx.OpBitwiseOr(ctx.U32[1], encode(channels[0]),
-            ctx.OpShiftLeftLogical(ctx.U32[1], encode(channels[1]), ctx.ConstU32(16u)));
-        if (logic) packed = OrderedLogicWord(ctx, target.logic_op, packed, old_word);
-        const Id result = ctx.OpBitwiseOr(ctx.U32[1],
-            ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),
-            ctx.OpBitwiseAnd(ctx.U32[1], packed, ctx.ConstU32(raw_mask)));
-        ctx.OpImageWrite(image, coordinates, ctx.OpCompositeConstruct(ctx.U32[4],
-            result, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value));
+        std::array<Id,4> result{ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value};
+        for(u32 word=0;word<half_components/2;++word){
+            Id packed=ctx.OpBitwiseOr(ctx.U32[1],encode(channels[word*2]),
+                ctx.OpShiftLeftLogical(ctx.U32[1],encode(channels[word*2+1]),ctx.ConstU32(16u)));
+            if(logic)packed=OrderedLogicWord(ctx,target.logic_op,packed,words[word]);
+            result[word]=ctx.OpBitwiseOr(ctx.U32[1],
+                ctx.OpBitwiseAnd(ctx.U32[1],words[word],ctx.ConstU32(~raw_masks[word])),
+                ctx.OpBitwiseAnd(ctx.U32[1],packed,ctx.ConstU32(raw_masks[word])));
+        }
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],result));
         return;
     }
     Id destination{};
