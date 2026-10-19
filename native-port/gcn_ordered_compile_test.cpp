@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/guest_shader_frontend.h"
 #include "video_core/renderer_d3d12/guest_shader_cache.h"
+#include "video_core/renderer_d3d12/guest_point_capture.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
@@ -13,6 +14,23 @@
 // DXIL proves translation/compilation, never GPU pixels, ordering or lifetime.
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and mode");
+    using Capture=NativeDX12::NativePointCapturePass;
+    const std::pair<D3D_PRIMITIVE_TOPOLOGY,u32> primitive_cases[]{
+        {D3D_PRIMITIVE_TOPOLOGY_POINTLIST,7},{D3D_PRIMITIVE_TOPOLOGY_LINELIST,3},
+        {D3D_PRIMITIVE_TOPOLOGY_LINESTRIP,6},{D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,2},
+        {D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,5},{D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ,1},
+        {D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ,4},{D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ,1},
+        {D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ,1}};
+    for(const auto [topology,expected]:primitive_cases)
+        if(Capture::PrimitiveBound(topology,7)!=expected||Capture::PrimitiveBound(topology,0))
+            throw std::runtime_error("Point capture assembly bound mismatch");
+    if(Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,2)||
+       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ,5)||
+       Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,UINT32_MAX)!=1431655765u)
+        throw std::runtime_error("Point capture incomplete/large primitive bound mismatch");
+    bool rejected{};try{Capture::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST,3);}
+    catch(const std::invalid_argument&){rejected=true;}
+    if(!rejected)throw std::runtime_error("Unbounded tessellation point capture was accepted");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE","CPU shader compilation","1.0",
         Common::ElfInfo::FW_900,Common::ElfInfo::FW_900,{});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);

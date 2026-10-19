@@ -42,6 +42,20 @@ std::shared_ptr<Resource> NativePointCapturePass::Acquire(Rasterizer& rasterizer
     auto buffer=std::make_shared<Resource>(rasterizer.AcquireTransientBuffer(bytes));
     buffers_.push_back(buffer);Diagnostics::Count("point-capture.buffer-new");return buffer;
 }
+u32 NativePointCapturePass::PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY topology,u32 vertices){
+    switch(topology){
+    case D3D_PRIMITIVE_TOPOLOGY_POINTLIST:return vertices;
+    case D3D_PRIMITIVE_TOPOLOGY_LINELIST:return vertices/2;
+    case D3D_PRIMITIVE_TOPOLOGY_LINESTRIP:return vertices>1?vertices-1:0;
+    case D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:return vertices/3;
+    case D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP:return vertices>2?vertices-2:0;
+    case D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ:return vertices/4;
+    case D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ:return vertices>3?vertices-3:0;
+    case D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ:return vertices/6;
+    case D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ:return vertices>4?(vertices-4)/2:0;
+    default:throw std::invalid_argument("Point capture primitive bound requires a non-tessellated input topology");
+    }
+}
 GuestGraphicsState NativePointCapturePass::ProducerState(const GuestGraphicsState& original){
     auto state=original;state.discard=false;state.rasterizer_discard=true;state.depth_bounds=false;
     state.dynamic_depth_bias=false;state.separate_stencil_faces=false;
@@ -69,12 +83,14 @@ void NativePointCapturePass::BindReplay(ResourceBindings& table,Resource& buffer
     table.RetainAllocation(buffer.allocation);table.Srv(0,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
 }
 void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::NativePointCapture::Plan& plan,
-    const DrawArguments& original,const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
+    const DrawArguments& original,D3D_PRIMITIVE_TOPOLOGY topology,
+    const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
     const std::function<void(Resource&,const DrawArguments&)>& replay){
     if(!original.count||!original.instances)return;
     const auto checked=Shader::NativePointCapture::Plan::Make(plan.primitive_bound,plan.invocations,plan.emissions,plan.instances);
     if(checked.records!=plan.records||checked.bytes!=plan.bytes||plan.instances!=original.instances||
-       plan.primitive_bound<original.count||u64(original.first_instance)+original.instances-1>std::numeric_limits<u32>::max())
+       plan.primitive_bound<std::max(1u,PrimitiveBound(topology,original.count))||
+       u64(original.first_instance)+original.instances-1>std::numeric_limits<u32>::max())
         throw std::invalid_argument("Invalid native point capture plan or instance range");
     auto buffer=Acquire(rasterizer,plan.bytes);
     // A BeforeBind callback can Finish during guest ownership resolution.

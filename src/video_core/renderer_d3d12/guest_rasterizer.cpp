@@ -1781,14 +1781,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     };
     if(capture){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
-        const auto plan=Shader::NativePointCapture::Plan::Make(draw.count,geometry.num_invocations,geometry.output_vertices,draw.instances);
+        // No GS invocation exists for an incomplete primitive, but retain one
+        // invalid slot so the original VS producer still executes unchanged.
+        const auto primitive_bound=std::max(1u,NativePointCapturePass::PrimitiveBound(source_state.topology,draw.count));
+        const auto plan=Shader::NativePointCapture::Plan::Make(primitive_bound,geometry.num_invocations,geometry.output_vertices,draw.instances);
         const auto producer_state=NativePointCapturePass::ProducerState(source_state);
         const auto& producer_pipeline=pipelines_.Graphics(capture->producer,producer_state.pipeline);
         std::vector<GuestResourceStage> producer_stages,replay_stages;
         for(const auto* stage:capture->producer.stages)if(stage)producer_stages.push_back({&stage->info,stage->bindings_start});
         for(const auto* stage:capture->replay.stages)if(stage)replay_stages.push_back({&stage->info,stage->bindings_start});
         if(!point_capture_)point_capture_=std::make_unique<NativePointCapturePass>(device_.Get());
-        point_capture_->Execute(*this,plan,draw,[&](Resource& buffer,const DrawArguments& instance,u64 offset,u64 bytes){
+        point_capture_->Execute(*this,plan,draw,source_state.topology,[&](Resource& buffer,const DrawArguments& instance,u64 offset,u64 bytes){
             auto producer_runtime=runtime;producer_runtime.base_instance=instance.first_instance;
             ExecuteGuestGraphicsResources(device_.Get(),*this,producer_pipeline,producer_stages,push,producer_runtime,
                 [&](ResourceBindings& bindings){

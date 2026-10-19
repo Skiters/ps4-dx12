@@ -16,12 +16,13 @@ class NativePointCapturePass {
 public:
     using DrawArguments=Rasterizer::DrawArguments;
     explicit NativePointCapturePass(ID3D12Device*);
+    static u32 PrimitiveBound(D3D_PRIMITIVE_TOPOLOGY,u32 vertices);
     static GuestGraphicsState ProducerState(const GuestGraphicsState&);
     static void BindProducer(ResourceBindings&,Resource&,u64 offset,u64 bytes);
     static void BindReplay(ResourceBindings&,Resource&,u64 bytes);
     // All original instances run once with disjoint UAV views, then one replay
     // draw preserves record order and clears attachments only once.
-    void Execute(Rasterizer&,const Shader::NativePointCapture::Plan&,const DrawArguments&,
+    void Execute(Rasterizer&,const Shader::NativePointCapture::Plan&,const DrawArguments&,D3D_PRIMITIVE_TOPOLOGY,
         const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
         const std::function<void(Resource&,const DrawArguments&)>& replay);
 };

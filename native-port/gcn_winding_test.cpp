@@ -576,10 +576,11 @@ int main(int argc,char** argv){try{
             };
             if(capture){
                 const auto& gs=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
-                const auto plan=Shader::NativePointCapture::Plan::Make(output_draw.count,gs.num_invocations,gs.output_vertices,output_draw.instances);
+                const auto primitives=std::max(1u,NativePointCapturePass::PrimitiveBound(original_state.topology,output_draw.count));
+                const auto plan=Shader::NativePointCapture::Plan::Make(primitives,gs.num_invocations,gs.output_vertices,output_draw.instances);
                 const auto producer_state=NativePointCapturePass::ProducerState(original_state);
                 const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
-                capture_pass->Execute(rasterizer,plan,output_draw,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
+                capture_pass->Execute(rasterizer,plan,output_draw,original_state.topology,[&](Resource& buffer,const Rasterizer::DrawArguments& draw,u64 offset,u64 bytes){
                     ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,
                         [&](ResourceBindings& bindings){NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
                             rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
