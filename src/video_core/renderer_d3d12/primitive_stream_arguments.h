@@ -5,6 +5,8 @@
 #include "stream_output_layout.h"
 #include <span>
 #include <string>
+#include <functional>
+#include <memory>
 namespace NativeDX12 {
 class Rasterizer;
 StreamOutputLayout ReflectPrimitiveStreamLayout(const std::wstring& dxc,std::span<const u8> bytecode);
@@ -20,5 +22,22 @@ class PrimitiveStreamArguments {
 public:
     explicit PrimitiveStreamArguments(ID3D12Device*);
     void Record(Rasterizer&,Resource& filled_size,Resource& arguments,const PrimitiveStreamRange&);
+};
+struct PrimitiveStreamLease {
+    Resource data,filled_size,arguments;
+    PrimitiveStreamRange range;
+};
+// Captures a producer once, then builds an authoritative GPU draw count.
+// Caller proves the complete amplification bound before Capture; overflow is
+// never a workload truncation policy. The guest frontend remains guarded
+// until that proof and the complete replay scheduling are connected.
+class PrimitiveStreamPass {
+    PrimitiveStreamArguments generator_;
+    Resource zero_;
+    std::vector<std::shared_ptr<PrimitiveStreamLease>> arenas_;
+public:
+    explicit PrimitiveStreamPass(ID3D12Device*);
+    std::shared_ptr<PrimitiveStreamLease> Capture(Rasterizer&,u32 vertex_stride,u32 capacity_vertices,
+        u32 vertices_per_primitive,const std::function<void(PrimitiveStreamLease&)>& producer);
 };
 } // namespace NativeDX12

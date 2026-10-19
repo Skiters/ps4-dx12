@@ -3,6 +3,8 @@
 #include "primitive_stream_arguments_shader.h"
 #include "rasterizer.h"
 #include <limits>
+#include <algorithm>
+#include <cstring>
 #include <dxcapi.h>
 #include <d3d12shader.h>
 
@@ -28,7 +30,7 @@ StreamOutputLayout ReflectPrimitiveStreamLayout(const std::wstring& dxc,std::spa
 }
 PrimitiveStreamRange PrimitiveStreamRange::Make(u32 stride,u32 capacity,u32 primitive,u32 first,u32 limit){
     if(!stride||stride%4||stride>D3D12_SO_BUFFER_MAX_STRIDE_IN_BYTES||!capacity||
-       !primitive||primitive>3||capacity%primitive||first%primitive||!limit||limit%primitive||
+       (primitive!=1&&primitive!=2&&primitive!=3&&primitive!=4&&primitive!=6)||capacity%primitive||first%primitive||!limit||limit%primitive||
        first>capacity||limit>capacity-first||u64(capacity)*stride>std::numeric_limits<u32>::max())
         throw std::invalid_argument("Invalid bounded primitive stream range");
     return {stride,capacity,primitive,first,limit};
@@ -71,5 +73,50 @@ void PrimitiveStreamArguments::Record(Rasterizer& renderer,Resource& filled,Reso
     const u32 constants[]{range.stride,range.first,range.limit};
     list->SetComputeRoot32BitConstants(2,3,constants,0);list->Dispatch(1,1,1);
     arguments.UavBarrier(list);arguments.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+}
+PrimitiveStreamPass::PrimitiveStreamPass(ID3D12Device* device):generator_(device),
+    zero_(Buffer(device,4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ)){
+    void* mapped{};D3D12_RANGE none{};Check(zero_.handle->Map(0,&none,&mapped));
+    const u32 zero=0;memcpy(mapped,&zero,4);D3D12_RANGE written{0,4};zero_.handle->Unmap(0,&written);
+}
+std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& renderer,u32 stride,u32 capacity,
+    u32 primitive,const std::function<void(PrimitiveStreamLease&)>& producer){
+    if(!producer)throw std::invalid_argument("Missing primitive stream producer");
+    const auto range=PrimitiveStreamRange::Make(stride,capacity,primitive,0,capacity);
+    const u64 bytes=u64(stride)*capacity;
+    std::lock_guard lock(renderer.ExecutionMutex());renderer.CollectRetirements();
+    const auto idle=[](const auto& arena){
+        return arena.use_count()==1&&
+            (!arena->data.allocation||arena->data.allocation.use_count()==1)&&
+            (!arena->filled_size.allocation||arena->filled_size.allocation.use_count()==1)&&
+            (!arena->arguments.allocation||arena->arguments.allocation.use_count()==1);
+    };
+    std::shared_ptr<PrimitiveStreamLease>* best{};
+    for(auto& arena:arenas_)if(idle(arena)&&arena->data.handle->GetDesc().Width>=bytes&&
+       (!best||arena->data.handle->GetDesc().Width<(*best)->data.handle->GetDesc().Width))best=&arena;
+    std::shared_ptr<PrimitiveStreamLease> arena;
+    if(best)arena=*best;
+    else{
+        std::erase_if(arenas_,idle);
+        arena=std::make_shared<PrimitiveStreamLease>();
+        arena->data=renderer.AcquireTransientBuffer(bytes);
+        arena->filled_size=renderer.AcquireTransientBuffer(4);
+        arena->arguments=renderer.AcquireTransientBuffer(sizeof(D3D12_DRAW_ARGUMENTS));
+        arenas_.push_back(arena);
+    }
+    arena->range=range;
+    // The pass may die or ownership preparation may Finish before the draw.
+    // The local lease spans that callback; draw/generator retain allocations
+    // through later submission, preventing reuse while work is in flight.
+    renderer.RetainUntilFinish([arena,zero=zero_.handle](u64){});
+    try{
+        auto* list=renderer.RecordingList();arena->filled_size.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        list->CopyBufferRegion(arena->filled_size.handle.Get(),0,zero_.handle.Get(),0,4);
+        producer(*arena);
+        arena->data.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        generator_.Record(renderer,arena->filled_size,arena->arguments,range);
+        renderer.RetainUntilFinish([arena](u64){});
+        return arena;
+    }catch(...){try{renderer.Finish();}catch(...){}throw;}
 }
 } // namespace NativeDX12

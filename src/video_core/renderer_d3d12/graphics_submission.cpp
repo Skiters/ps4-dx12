@@ -96,11 +96,41 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
     const GuestGraphicsState& state,std::span<const ColorAttachment> colors,const DepthAttachment* depth,
     std::span<const D3D12_VIEWPORT> viewports,std::span<const D3D12_RECT> scissors,
     std::span<const float,4> blend,const DrawArguments& draw,
-    std::span<const VertexBinding> vertices,const IndexBinding* indices,bool wait,const StreamDrawArguments* stream_draw) {
+    std::span<const VertexBinding> vertices,const IndexBinding* indices,bool wait,const StreamDrawArguments* stream_draw,
+    const StreamOutputBinding* stream_output) {
     std::lock_guard lock(execution_mutex_);
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics submission has compute PSO");
     if(state.discard||(!stream_draw&&(!draw.count||!draw.instances)))return;
     bindings.Prepare();
+    D3D12_STREAM_OUTPUT_BUFFER_VIEW stream_view{};
+    if(stream_output){
+        if(!stream_output->data||!stream_output->filled_size||!stream_output->data->handle||!stream_output->filled_size->handle||
+           !state.rasterizer_discard||state.pipeline.StreamOutput.NumStrides!=1||!state.pipeline.StreamOutput.NumEntries||
+           !state.pipeline.StreamOutput.pBufferStrides||!state.pipeline.StreamOutput.pBufferStrides[0]||
+           state.pipeline.StreamOutput.RasterizedStream!=D3D12_SO_NO_RASTERIZED_STREAM)
+            throw std::invalid_argument("Invalid internal stream-output targets or pipeline");
+        const auto data=stream_output->data->handle->GetDesc(),counter=stream_output->filled_size->handle->GetDesc();
+        if(data.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||counter.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
+           stream_output->offset%4||stream_output->counter_offset%4||!stream_output->bytes||
+           stream_output->bytes%state.pipeline.StreamOutput.pBufferStrides[0]||
+           stream_output->bytes>UINT32_MAX||stream_output->offset>data.Width||stream_output->bytes>data.Width-stream_output->offset||
+           stream_output->counter_offset>counter.Width||4>counter.Width-stream_output->counter_offset)
+            throw std::out_of_range("Internal stream-output targets exceed their buffers");
+        const auto is_output=[&](ID3D12Resource* resource){return resource==stream_output->data->handle.Get()||resource==stream_output->filled_size->handle.Get();};
+        if(bindings.References(stream_output->data->handle.Get())||bindings.References(stream_output->filled_size->handle.Get())||
+           (indices&&indices->resource&&is_output(indices->resource->handle.Get()))||
+           (stream_draw&&stream_draw->resource&&is_output(stream_draw->resource->handle.Get()))||
+           std::any_of(vertices.begin(),vertices.end(),[&](const auto& vertex){return vertex.resource&&is_output(vertex.resource->handle.Get());}))
+            throw std::invalid_argument("Internal stream output overlaps draw input or shader resources");
+        if(stream_output->data->handle.Get()==stream_output->filled_size->handle.Get()&&
+           stream_output->counter_offset<stream_output->offset+stream_output->bytes&&
+           stream_output->offset<stream_output->counter_offset+4)
+            throw std::invalid_argument("Internal stream data overlaps its filled-size counter");
+        stream_view={stream_output->data->handle->GetGPUVirtualAddress()+stream_output->offset,stream_output->bytes,
+            stream_output->filled_size->handle->GetGPUVirtualAddress()+stream_output->counter_offset};
+        RetainUntilFinish([data=stream_output->data->handle,counter=stream_output->filled_size->handle,
+            data_allocation=stream_output->data->allocation,counter_allocation=stream_output->filled_size->allocation](u64){});
+    }
     if(stream_draw){
         if(indices||!stream_draw->resource||!stream_draw->resource->handle)
             throw std::invalid_argument("Invalid internal primitive stream draw arguments");
@@ -283,7 +313,14 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             const auto read_state=resource->state&D3D12_RESOURCE_STATE_GENERIC_READ;
             dependencies.Transition(*resource,D3D12_RESOURCE_STATES(read_state|input_state|shader_read));
         }
+        if(stream_output){
+            dependencies.Transition(*stream_output->data,D3D12_RESOURCE_STATE_STREAM_OUT);
+            dependencies.Transition(*stream_output->filled_size,D3D12_RESOURCE_STATE_STREAM_OUT);
+        }
         dependencies.Flush(list);pipeline.Bind(list,bindings);
+        // Bind after BeforeBind/ownership callbacks: they may Finish and start
+        // another command list. An earlier SOSetTargets would be lost there.
+        if(stream_output)DX12_API_CALL(list->SOSetTargets(0,1,&stream_view));
         DX12_API_CALL(list->RSSetViewports(UINT(viewports.size()),viewports.data()));DX12_API_CALL(list->RSSetScissorRects(UINT(scissors.size()),scissors.data()));
         ComPtr<ID3D12GraphicsCommandList4> render_list;D3D12_FEATURE_DATA_D3D12_OPTIONS5 render_options{};
         D3D12_FEATURE_DATA_D3D12_OPTIONS18 render_validity{};
@@ -353,6 +390,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         else if(indices){DX12_API_CALL(list->IASetIndexBuffer(&index_view));DX12_API_CALL(list->DrawIndexedInstanced(draw.count,draw.instances,draw.first,draw.base_vertex,draw.first_instance));}
         else DX12_API_CALL(list->DrawInstanced(draw.count,draw.instances,draw.first,draw.first_instance));
         if(render_pass)DX12_API_CALL(render_list->EndRenderPass());
+        if(stream_output){const D3D12_STREAM_OUTPUT_BUFFER_VIEW empty{};DX12_API_CALL(list->SOSetTargets(0,1,&empty));}
         // Keep unrelated UAVs concurrent.  Microsoft recommends the minimum
         // necessary UAV barriers; guest page ownership handles later CPU use.
         for(const auto base:dirty_mappings_) {

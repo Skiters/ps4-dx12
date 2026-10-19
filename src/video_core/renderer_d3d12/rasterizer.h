@@ -416,11 +416,15 @@ public:
     // Host-generated nonindexed draw arguments. The producing pass owns the
     // GPU count/bounds contract; no CPU draw-count snapshot is substituted.
     struct StreamDrawArguments {Resource* resource{};u64 offset{};};
+    struct StreamOutputBinding {
+        Resource* data{};Resource* filled_size{};
+        u64 offset{},bytes{},counter_offset{};
+    };
     void ExecuteGraphics(const ShaderPipeline&,ResourceBindings&,const GuestGraphicsState&,
         std::span<const ColorAttachment>,const DepthAttachment*,std::span<const D3D12_VIEWPORT>,
         std::span<const D3D12_RECT>,std::span<const float,4> blend_constants,
         const DrawArguments&,std::span<const VertexBinding> vertices={},const IndexBinding* indices=nullptr,bool wait=true,
-        const StreamDrawArguments* stream_draw=nullptr);
+        const StreamDrawArguments* stream_draw=nullptr,const StreamOutputBinding* stream_output=nullptr);
     explicit Rasterizer(ID3D12Device* device);
     ~Rasterizer() override;
     void Draw(bool,u32=0) override;

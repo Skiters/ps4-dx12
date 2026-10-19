@@ -96,12 +96,11 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         D3D12_RANGE written{0,264};upload.handle->Unmap(0,&written);
         auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,upload.handle.Get(),0,256);
         list->CopyBufferRegion(counter.handle.Get(),0,upload.handle.Get(),256,8);
-        output.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);counter.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);
-        const D3D12_STREAM_OUTPUT_BUFFER_VIEW view{output.handle->GetGPUVirtualAddress()+16,UINT64(12)*stride,counter.handle->GetGPUVirtualAddress()};
-        list->SOSetTargets(0,1,&view);
+        const Rasterizer::StreamOutputBinding target{&output,&counter,16,UINT64(12)*stride,0};
+        bindings.BeforeBind([&](ResourceBindings&){renderer.Finish();});
         const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
-        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{6,2});
-        list=renderer.RecordingList();list->SOSetTargets(0,0,nullptr);
+        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{6,2},{},nullptr,true,nullptr,&target);
+        list=renderer.RecordingList();
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,256);
         list->CopyBufferRegion(readback.handle.Get(),256,counter.handle.Get(),0,8);renderer.Finish();
@@ -144,17 +143,13 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
                 srv.Buffer.FirstElement=4;srv.Buffer.NumElements=48;srv.Buffer.Flags=D3D12_BUFFER_SRV_FLAG_RAW;
                 output.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 reader_bindings.Srv(0,0,output.handle.Get(),srv);
-                destination.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_STREAM_OUT);
-                destination_counter.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_STREAM_OUT);
-                const D3D12_STREAM_OUTPUT_BUFFER_VIEW target{destination.handle->GetGPUVirtualAddress()+16,192,
-                    destination_counter.handle->GetGPUVirtualAddress()};
-                renderer.RecordingList()->SOSetTargets(0,1,&target);
+                const Rasterizer::StreamOutputBinding target{&destination,&destination_counter,16,192,0};
                 const Rasterizer::StreamDrawArguments indirect{&arguments,0};
                 // CPU counts deliberately zero: only GPU-produced arguments
                 // decide the draw. This is not a CPU filled-size approximation.
                 renderer.ExecuteGraphics(reader_pipeline,reader_bindings,state,{},nullptr,
-                    std::span(&viewport,1),std::span(&scissor,1),blend,{0,0},{},nullptr,false,&indirect);
-                list=renderer.RecordingList();list->SOSetTargets(0,0,nullptr);
+                    std::span(&viewport,1),std::span(&scissor,1),blend,{0,0},{},nullptr,false,&indirect,&target);
+                list=renderer.RecordingList();
                 destination.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
                 destination_counter.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
                 arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -194,11 +189,9 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         D3D12_RANGE written{0,total};upload.handle->Unmap(0,&written);
         auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,upload.handle.Get(),0,guarded_bytes);
         list->CopyBufferRegion(counter.handle.Get(),0,upload.handle.Get(),guarded_bytes,8);
-        output.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);counter.Transition(list,D3D12_RESOURCE_STATE_STREAM_OUT);
-        const D3D12_STREAM_OUTPUT_BUFFER_VIEW view{output.handle->GetGPUVirtualAddress()+16,stream_bytes,counter.handle->GetGPUVirtualAddress()};
-        list->SOSetTargets(0,1,&view);
-        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{6,2},{},nullptr,false);
-        list=renderer.RecordingList();list->SOSetTargets(0,0,nullptr);
+        const Rasterizer::StreamOutputBinding target{&output,&counter,16,stream_bytes,0};
+        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,{6,2},{},nullptr,false,nullptr,&target);
+        list=renderer.RecordingList();
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,guarded_bytes);
         list->CopyBufferRegion(result.handle.Get(),guarded_bytes,counter.handle.Get(),0,8);renderer.Finish();
@@ -211,6 +204,34 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         D3D12_RANGE all{0,total};Check(result.handle->Map(0,&all,&mapped));const bool equal=!memcmp(mapped,expected.data(),total);
         result.handle->Unmap(0,&none);
         if(!equal)throw std::runtime_error("Serialized primitive writer lost patch/vertex/word order, exact bits, padding or32-bit counter guards");
+        std::shared_ptr<PrimitiveStreamLease> captured;
+        {
+            PrimitiveStreamPass pass(device.Get());
+            ResourceBindings capture_bindings(device.Get(),pipeline.Layout());
+            capture_bindings.BeforeBind([&](ResourceBindings&){renderer.Finish();});
+            captured=pass.Capture(renderer,32,12,3,[&](PrimitiveStreamLease& lease){
+                const Rasterizer::StreamOutputBinding target{&lease.data,&lease.filled_size,0,stream_bytes,0};
+                renderer.ExecuteGraphics(pipeline,capture_bindings,state,{},nullptr,std::span(&viewport,1),
+                    std::span(&scissor,1),blend,{6,2},{},nullptr,false,nullptr,&target);
+            });
+        } // Production pass and its root/PSO/upload owner die before completion.
+        constexpr u32 captured_total=stream_bytes+4+sizeof(D3D12_DRAW_ARGUMENTS);
+        auto captured_result=Buffer(device.Get(),captured_total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        list=renderer.RecordingList();
+        captured->data.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        captured->filled_size.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        captured->arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        list->CopyBufferRegion(captured_result.handle.Get(),0,captured->data.handle.Get(),0,stream_bytes);
+        list->CopyBufferRegion(captured_result.handle.Get(),stream_bytes,captured->filled_size.handle.Get(),0,4);
+        list->CopyBufferRegion(captured_result.handle.Get(),stream_bytes+4,captured->arguments.handle.Get(),0,sizeof(D3D12_DRAW_ARGUMENTS));
+        renderer.Finish();D3D12_RANGE captured_all{0,captured_total};Check(captured_result.handle->Map(0,&captured_all,&mapped));
+        std::array<std::byte,captured_total> captured_expected{};
+        memcpy(captured_expected.data(),expected.data()+16,stream_bytes);
+        memcpy(captured_expected.data()+stream_bytes,&stream_bytes,4);
+        const D3D12_DRAW_ARGUMENTS draw{12,1,0,0};
+        memcpy(captured_expected.data()+stream_bytes+4,&draw,sizeof(draw));
+        const bool captured_equal=!memcmp(mapped,captured_expected.data(),captured_total);captured_result.handle->Unmap(0,&none);
+        if(!captured_equal)throw std::runtime_error("Production stream capture lost contents/count/arguments or lifetime across ownership Finish");
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T bytes{};Check(messages->GetMessage(i,nullptr,&bytes));
         std::vector<std::byte> data(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(data.data());
