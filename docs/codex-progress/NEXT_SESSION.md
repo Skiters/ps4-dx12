@@ -1304,3 +1304,7 @@ work inside `resource-upload-dispatch-writeback`.
 ## CMASK-M01 continuation
 
 Verify the equation against a captured Bloodborne CMASK surface (the opt-in `SHADPS4_CMASK_CAPTURE` path is available) and run the post-change core from the cloned `F:/PS4Dev/handoff/mixed-cmask-20261011/after` profile. Keep audio assertion evidence separate.
+
+## 2026-10-19 immediate continuation
+
+Start at `7335a30` on `fix/mixed-cmask`. Add producer-side command-writer range attribution in `gnmdriver.cpp`, validate at `PerformSubmit`, and identify the function that last covered the first malformed DWORD. Existing copied-buffer, previous-submit, PM4 direct-write, DX12 backing-write, and physical-alias checks are complete and must not be repeated. After a production fix plus regression, remove diagnostic rings/snapshots and continue shifted/rebased block-subresource views.

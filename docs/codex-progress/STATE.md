@@ -2119,3 +2119,7 @@ Copy-queue uploads are accumulated until the consuming direct-list submission. O
 and one direct-queue wait preserve upload-before-use ordering for the batch. The controlled
 46-second comparison reduced copy submissions from 4,046 to 2,678 (-33.8%), while upload calls
 and bytes remained effectively unchanged. Full native validation passes 205/205.
+
+## 2026-10-19 PM4 crash boundary
+
+HEAD/remote `7335a30`; single installed core EXE SHA256 `2add101f20f300412b0f5933992650982bfc00fb7547a6d5ccc9922eaebf40a5`. Owned-copy lifetime is fixed/tested. The current Bloodborne `0x80000003` is not fixed: malformed PM4 is present before `SubmitGfx` in a first-submit DCB and was not produced by retained PM4 writes, renderer backing commits, or physical aliases. Next code change is producer-side GNM writer-range attribution before `PerformSubmit`; no more game reruns until that instrumentation exists. Exact retained evidence: `F:/PS4Dev/handoff/gameplay-physical-trace-7335a30`.
