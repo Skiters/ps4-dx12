@@ -1,5 +1,12 @@
 # Next session
 
+## Current continuation boundary - mixed constant MRT blending
+
+Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** is pushed, clean-built and focused GPU verified. On adapters without native constant-alpha RGB factors, supported RGBA8 UNORM and packed10 SNORM targets execute mixed constant-color/alpha MRT equations through per-sample ordered storage. Eight exact GCN sample1/4 draws passed, along with state, graphics-resource, RGBA8 logic, SNORM and signed regressions. The sole installed `dx12-current` has EXE SHA256 **44ad271ebea9dfaa59c2a02ea4ef89ea351df23cd103e038c91c011dd114896c**. Game/final suite were not run.
+
+Continue the existing late formatted-alias envelope boundary. Establish an actual missing branch in `PrepareOrderedGuestStages`, `PlanCachedImageBinding` / `BindPlannedImage`, and `ValidatePreparedShaderBufferRange`. Current code already unions same-address levels and writable extents; if that covers the pinned case, record applicability and move to the next existing converted/multiview/shifted/MS/large guard. Preserve final-bind publication, I/B authority, ownership, barriers and lifetime. Do not repeat mixed-blend or packed19 capability work.
+
+
 ## Current continuation boundary - per-sample ordered color
 
 Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** is pushed, clean-built and focused GPU verified. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws with complete backing/padding checks. The sole installed dx12-current matches EXE 96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e. Game/full suite remain not run. Packed format 19 MSAA is already connected on an original-capable adapter; do not invent a fallback for an adapter where the pinned Vulkan backend also lacks B4 attachment support. Continue late formatted-alias source envelope reservation without early semantic publication. Do not repeat the completed ordered-color/sample-plane or packed19 capability audits.

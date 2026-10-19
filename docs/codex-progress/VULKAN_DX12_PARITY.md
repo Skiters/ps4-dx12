@@ -1,5 +1,10 @@
 # Vulkan / native D3D12 parity audit
 
+## 2026-10-19 - mixed constant MRT blending
+
+Connected and focused-verified at **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** for ordered-capable RGBA8 UNORM and packed10 SNORM targets. The runtime queries D3D12 OPTIONS13 once. Native-capable devices retain fixed-function constant-alpha RGB factors; older devices route a globally mixed constant-color/alpha MRT set through per-sample raster-ordered storage, decode the destination according to its actual format, apply the guest blend equation once, and write the authoritative attachment back. Eight actual GCN sample1/4 draws with three distinct MRT equations, both layer orders and full allocation comparison passed. Adjacent state, resource, RGBA8 logic, SNORM and signed paths pass. Implementation state: connected for the two ordered formats. Behavior state: focused GPU verified; game/final suite not run. Other formats still reject rather than silently changing semantics, so the broad blend-state row remains partial.
+
+
 ## 2026-10-19 - per-sample ordered color
 
 Connected and focused-verified at **e132726c97fa794e9e53e4cc8c9d80866b47ebf2**. Ordered color now uses one ROV binding and one independent storage plane per MRT/sample, with explicit MSAA-to-plane initialization, UAV ordering and plane-to-MSAA writeback. Packed-SNORM sample1/2/4/8 blend/logic passed 104 actual GCN draws. RGBA8 sample1/4 independent logic passed 136 draws. Full attachment contents and 64 KiB padding were compared. Implementation state: connected for these formats/sample counts. Behavior state: focused GPU verified; game/final suite not run. Packed format 19 MSAA is already connected and focused-verified on an adapter where the pinned Vulkan backend exposes B4 attachment support; a fallback on the current adapter is outside the pinned contract because Vulkan lacks the same capability there. The next production gap is late formatted-alias source envelope reservation.
@@ -1081,7 +1086,7 @@ EQUIVALENT below is restricted to the named tested invariant, never an entire su
 | Fast clear / resolve | FilterDraw selects EliminateFastClear/Resolve; FmaskDecompress includes upstream TODO | MaterializeColorClear and ResolveColorTargets | PARTIAL; FMASK feature cannot be called fully supported upstream | Same metadata + sample patterns, exact pixel compare | Possible; medium/large |
 | Page ownership | PageManager counts read/write watchers and updates protection | Native PageWatch and callbacks into buffer/image reconciliation | UNVERIFIED full equivalence | CPU partial writes, aliased GPU writers, pending-fence faults | Critical; large |
 | Shader pipeline | Shared TranslateProgram and SPIR-V emitter | GuestShaderFrontend already calls shared TranslateProgram/EmitSPIRV, then DXIL | UNVERIFIED across complete GCN instruction set, not a missing shared frontend | Instruction/result fixtures, stage interface and atomics comparison | Critical; large |
-| Blend / depth state | Vulkan pipeline/dynamic state | GuestGraphicsState, explicit unsupported blend combinations | PARTIAL; mixed constant-alpha/color restrictions are explicit | Port only demonstrated state combinations with GPU pixel tests | Occurrence unknown; medium |
+| Blend / depth state | Vulkan pipeline/dynamic state | GuestGraphicsState plus ordered RGBA8/SNORM fallback | PARTIAL; mixed constant-alpha/color is connected and focused GPU-verified for ordered-capable formats; other unsupported formats reject explicitly | Extend only when a pinned original path demonstrates another required format/state combination | Occurrence unknown; medium |
 
 Do not add totals of nested diagnostics. The earlier GPU compute average of 0.0064 ms
 must be remeasured after the query ownership fix. CPU wall-time and submission counts

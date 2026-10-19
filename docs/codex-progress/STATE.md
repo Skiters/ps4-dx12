@@ -1,5 +1,16 @@
 # Native DX12 state
 
+## Mixed constant MRT blending - 2026-10-19
+
+Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** preserves simultaneous constant-color and constant-alpha RGB blending on devices without D3D12 OPTIONS13 `AlphaBlendFactorSupported`. Supported RGBA8 UNORM and packed10 SNORM targets use the existing per-sample raster-ordered destination read/modify/write path; devices with native support keep fixed-function blending. The exact GCN fixture passed eight sample1/4 draws with three MRT equations, both disjoint layer orders, full readback and padding. The state/pipeline, graphics-resource, 136-draw RGBA8 logic, 104-case SNORM and signed shared-MRT regressions pass. Implementation is connected and focused GPU verified for the ordered formats; unsupported mixed-format combinations still reject explicitly, and game/final-suite behavior remains unverified.
+
+The clean committed Release is the sole installed `dx12-current`: EXE SHA256 **44ad271ebea9dfaa59c2a02ea4ef89ea351df23cd103e038c91c011dd114896c**, PDB SHA256 **92f1f80ae80a265442a724d06ea012a02089875cc72f13229515538bcceacf0a**. The application catalogue contains one core and selects it. The previous launch manifest remains factual history for the last launched binary; this core was not launched.
+
+Current storage measurement after publication: C: has 33.450 GiB free, F: has 689.780 GiB free; `F:/PS4Dev/handoff` is 15.097 GiB, `C:/Users/skei/Documents/Codex/handoff` is 0.737 GiB, and the single installed core directory is 0.180 GiB. No new per-test runtime archive was created.
+
+Next boundary is the recorded late formatted-alias source-envelope item. First prove whether the current same-address domain union already reserves every original level/layer and depth/stencil extent before final descriptor selection. If it does, record that scope and advance to the next existing converted/multiview/shifted/MS/large guard; do not invent a production change.
+
+
 ## Per-sample ordered color - 2026-10-19
 
 Production **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** connects ordered color to independent MSAA sample planes and writes them back into the authoritative attachment. Packed-SNORM sample1/2/4/8 ordered blend/logic passed 104 actual GCN draws; RGBA8 sample1/4 independent logic passed 136 draws. Both verify complete contents and padding, with signed, graphics-resource and transfer regressions passing. Clean Release reproduced both focused GPU checks. The sole installed dx12-current has EXE **96b0ef3657ea9fcbd05e27387d57d4de18d70ab80a6c0761bcd88dbd6371a06e** and PDB **1106f8206b62c846ce1c946773191bd2f5465bbdc518bfbdb230c227abdf5f2d**. Game/final-suite behavior is not verified. Packed format 19 MSAA remains connected and focused-verified on the pinned-original-capable AMD adapter; no NVIDIA-only fallback is required by the pinned original. Next gap: late formatted-alias source growth beyond the buffer envelope reserved before descriptor creation.

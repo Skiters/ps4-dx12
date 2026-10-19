@@ -1,5 +1,14 @@
 # Checkpoints
 
+## Mixed constant MRT blending - 2026-10-19
+
+- Source: **2b03a4d0dfe07882984e5b8f36babc0a80302e5b**, pushed.
+- Connected: one-time OPTIONS13 capability, native fixed-function path where available, and per-sample ordered RGBA8 UNORM/packed10 SNORM fallback for simultaneous constant-color/alpha RGB factors.
+- Verified: eight exact GCN sample1/4 mixed-factor draws with three MRTs, both layer orders and complete padding; state/pipeline, graphics-resource, 136 RGBA8 logic, 104 packed-SNORM and signed regressions pass; clean committed Release repeated the new GCN case.
+- Installed: sole `dx12-current`, EXE **44ad271ebea9dfaa59c2a02ea4ef89ea351df23cd103e038c91c011dd114896c**, PDB **92f1f80ae80a265442a724d06ea012a02089875cc72f13229515538bcceacf0a**; game/final suite not run.
+- Open: non-ordered mixed formats remain explicit; next establish an actual late formatted-alias envelope miss before production changes.
+
+
 ## Independent packed-SNORM MRT logic - 2026-10-19
 
 - Source: **bcc852b**.

@@ -1,5 +1,22 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current mixed constant MRT blend checkpoint - 2026-10-19
+
+Production **2b03a4d0dfe07882984e5b8f36babc0a80302e5b** is pushed on `fix/mixed-cmask`. It preserves simultaneous constant-color and constant-alpha RGB blend factors when D3D12 OPTIONS13 lacks native support by routing supported RGBA8 UNORM and packed10 SNORM MRTs through the existing per-sample raster-ordered storage path. RGBA8 destination decode now uses actual UNORM bytes; SNORM retains signed packed decode. Native-capable adapters stay on fixed-function blending. Unsupported mixed-format combinations remain explicit failures.
+
+Focused verification passed in the development tree and the new exact GCN case passed again from a clean detached checkout. The new case executes eight actual sample1/4 draws, three distinct MRT constant-factor equations, both disjoint layer orders, exact output bytes and full padding. `dx12-shader-pipeline-test`, `dx12-guest-graphics-resources-test`, 136-draw RGBA8 independent logic, 104-case packed-SNORM and signed shared-MRT regressions pass. This proves the mechanism for the supported ordered formats; Bloodborne and the final suite were not run.
+
+The sole application package is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, source **2b03a4d0dfe07882984e5b8f36babc0a80302e5b**, EXE SHA256 **44ad271ebea9dfaa59c2a02ea4ef89ea351df23cd103e038c91c011dd114896c**, PDB SHA256 **92f1f80ae80a265442a724d06ea012a02089875cc72f13229515538bcceacf0a**. Its runtime dependencies and pinned source identity are hashed, the catalogue has exactly one core, and selection is `dx12-current`. The old launch manifest is retained as the truthful record of the previous actual launch; this executable has not been launched.
+
+Current storage measurement after publication: C: has 33.450 GiB free, F: has 689.780 GiB free; `F:/PS4Dev/handoff` is 15.097 GiB, `C:/Users/skei/Documents/Codex/handoff` is 0.737 GiB, and the single installed core directory is 0.180 GiB. No new per-test runtime archive was created.
+
+Next concrete boundary is the saved late formatted-alias source-envelope item. Inspect the existing same-address union in `PrepareOrderedGuestStages`, `PlanCachedImageBinding` / `BindPlannedImage`, and the final `ValidatePreparedShaderBufferRange` guard. Establish a reproducing missing extent before changing production. If the current union already covers all original levels/layers and D/S native extents, record that exact applicability and advance to the next existing converted/multiview/shifted/MS/large guard. Preserve actual-bind class/metadata/ownership publication, I/B authority, PageWatch, barriers, fences and lifetime.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue `fix/mixed-cmask` from current HEAD and verify the sole installed `dx12-current` identity above. Read the saved `F:/PS4Dev/handoff/packed16-codec-20261018/NEXT_ORDERED_DOMAIN.md`. Establish the exact late formatted-alias extent that can escape current pre-descriptor same-address domain union; do not patch speculatively. If already covered, document applicability and continue the next recorded converted/multiview/shifted/MS/large guard. Reuse existing fixtures and metrics, run only focused GPU/readback checks, clean-build committed source, replace the one current core, update implementation/behavior states separately and push normally. Defer full suite and game/XInput/FPS acceptance until the integration boundary.
+
+
 ## Current per-sample ordered color checkpoint - 2026-10-19
 
 Production commit **e132726c97fa794e9e53e4cc8c9d80866b47ebf2** connects ordered color to independent single-sample storage planes for every covered MSAA sample. Fragment specialization carries each target's sample count, forces sample-rate execution through SampleId, assigns a separate ROV binding per target/sample, initializes each plane from the authoritative MSAA image, and writes all planes back after UAV ordering barriers. The same path covers packed 10:10:10:2 SNORM ordered blending/logic and RGBA8 UNORM independent logic at 1x/2x/4x/8x where applicable. Stage persistence is version 31.
