@@ -1115,6 +1115,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     const auto needs_readback=[&](const GuestTextureCache::Entry* entry){return !entry->gpu_owned&&!staged_image(entry);};
     std::vector<GuestTextureCache::Entry*> bc_readers;
     std::vector<GuestTextureCache::WritableBlockAlias> alias_writers;
+    std::vector<bool> alias_commits;
     std::vector<std::pair<GuestTextureDesc,GuestTextureCache::Entry*>> uploaded_views;
     // Keep all recorded resources alive on exceptions as well as normal GPU
     // completion. Cache entries own texture uploads; readbacks own their buffers.
@@ -1155,6 +1156,20 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 }
             }
         }
+        const auto acquire_block_alias=[&](BlockViewGroup& group){
+            if(!group.alias){
+                rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
+                auto storage=images[group.storage].desc;storage.writable=true;
+                auto alias=textures->BeginWritableBlockAlias(storage,
+                    rasterizer.RecordingList(),rasterizer.CompletedFence());
+                if(!alias||!alias->image||alias->parent!=group.parent||alias->parent_uid!=group.parent_uid)
+                    throw std::runtime_error("BC block parent changed before transient image binding");
+                group.alias=alias_writers.size();
+                bindings.RetainAllocation(alias->image_pin);uploaded.push_back(alias->image);
+                alias_writers.push_back(std::move(*alias));alias_commits.push_back(group.has_writer);
+            }
+            return alias_writers[*group.alias].image;
+        };
         for(size_t image_index=0;image_index<images.size();++image_index) {
             const auto& image=images[image_index];
             // Native null views match the guest null T# without reading address
@@ -1168,23 +1183,23 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 bindings.RetainAllocation(textures->PinBinding(*entry));uploaded.push_back(entry);
             }
             bool block_alias_view=false;
+            if(image_block_group[image_index]&&!block_groups[*image_block_group[image_index]].has_writer){
+                auto& group=block_groups[*image_block_group[image_index]];
+                // A readonly UINT block-word prefix is a view of the current
+                // authoritative BC parent. Materialize one transient word image
+                // from that parent; uploading the short prefix can find an old
+                // retired UINT cache entry or rebuild it from stale guest B.
+                if(textures->FindBlockViewParent(image.desc,image.layout)!=group.parent||
+                   group.parent->image_uid!=group.parent_uid)
+                    throw std::runtime_error("Readonly BC block parent changed after group planning");
+                entry=acquire_block_alias(group);block_alias_view=true;
+            }
             if(image_block_group[image_index]&&block_groups[*image_block_group[image_index]].has_writer){
                 auto& group=block_groups[*image_block_group[image_index]];
                 if(textures->FindBlockViewParent(image.desc,image.layout)!=group.parent||
                    group.parent->image_uid!=group.parent_uid)
                     throw std::runtime_error("Writable BC parent changed after group planning");
-                if(!group.alias){
-                    rasterizer.NotifyOnSubmission([textures](u64 fence){textures->Submitted(fence);});
-                    auto storage=images[group.storage].desc;storage.writable=true;
-                    auto alias=textures->BeginWritableBlockAlias(storage,
-                        rasterizer.RecordingList(),rasterizer.CompletedFence());
-                    if(!alias||!alias->image||alias->parent!=group.parent||alias->parent_uid!=group.parent_uid)
-                        throw std::runtime_error("Writable BC block parent changed before transient image binding");
-                    group.alias=alias_writers.size();
-                    bindings.RetainAllocation(alias->image_pin);uploaded.push_back(alias->image);
-                    alias_writers.push_back(std::move(*alias));
-                }
-                entry=alias_writers[*group.alias].image;block_alias_view=true;
+                entry=acquire_block_alias(group);block_alias_view=true;
                 if(entry->gpu_owned||entry->buffer_alias_version||!entry->logical_dirty)
                     throw std::runtime_error("Writable BC block transient acquired independent authority before dispatch");
             }else if(!entry&&image.desc.writable&&textures->FindWritableBlockParent(image.desc,image.layout))
@@ -1322,7 +1337,9 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         for(auto* entry:bc_readers)entry->texture.Transition(rasterizer.RecordingList(),
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         submit(bindings);
-        for(auto& alias:alias_writers){
+        for(size_t alias_index=0;alias_index<alias_writers.size();++alias_index){
+            if(!alias_commits[alias_index])continue;
+            auto& alias=alias_writers[alias_index];
             // Dispatch writes only transient UINT storage. Merge it into a
             // parent-I-seeded replacement BC before recording later commands;
             // the child never acquires guest authority or CPU readback fallback.

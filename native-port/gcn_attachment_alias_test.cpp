@@ -75,6 +75,7 @@ int main(int argc,char** argv){try{
     const bool cached_depth_storage=cached_depth_packed_storage||cached_depth_storage_ordered||cached_depth_cmask||mode=="cached-depth-storage-owned";
     const bool ordered_formatted_core=mode=="ordered-formatted-core-owned";
     const bool ordered_formatted=ordered_formatted_core||mode=="ordered-formatted-owned";
+    const bool ordered_bc_writable=mode=="ordered-bc-writable-owned";
     const bool readonly_numeric_exclusive=mode=="readonly-numeric-exclusive-owned";
     const bool readonly_packed_ms=mode=="readonly-snormword-msaa-owned"||mode=="readonly-sintword-msaa-owned";
     const bool readonly_packed_sample=mode=="readonly-snormword-sample-owned";
@@ -87,7 +88,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -161,6 +162,11 @@ int main(int argc,char** argv){try{
         RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
     }else if(cached_depth_storage){
         RunCachedDepthStorageGcnFixture(rasterizer,gpu,plain_vertex,vertex_words,cached_depth_storage_ordered,memory,backing,base,initialize,cached_depth_cmask,cached_depth_cmask_packed?cached_depth_cmask_packed:cached_depth_cmask6?6:10,cached_depth_packed_storage);
+    }else if(ordered_bc_writable){
+        // Establish Liverpool's normal GFX queue context through the same path
+        // that owns this related fixture, then run the writable BC suite alone.
+        RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base,false);
+        RunBcWritableAliasGcnFixture(rasterizer,gpu,profile,memory,backing,base);
     }else if(ordered_formatted){
         RunOrderedFormattedGcnFixture(rasterizer,gpu,profile,memory,backing,base,!ordered_formatted_core,std::filesystem::path(argv[1]).wstring());
     }else if(formatted_cmask){

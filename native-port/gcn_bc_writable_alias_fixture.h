@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace NativeDX12 {
-// Authored, unrun selected UINT writers sharing a retained BC parent domain.
+// Real GCN selected UINT writers sharing a retained BC parent domain.
 inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const Shader::Profile& profile,std::byte* memory,std::byte* backing,u64 base) {
     constexpr u64 Bytes=65536,ImageOffset=4096,OutputOffset=57344,OutputBytes=4096;
@@ -59,7 +59,13 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
         if(next!=buffers.end())throw std::runtime_error("Writable BC removed guest buffer");
         auto expected=images.begin();for(const auto& resource:stage.info.images){const auto sharp=resource.GetSharp(stage.info);
             if(resource.is_written!=expected->written||!resource.is_array||resource.native_raw32||
-               std::memcmp(&sharp,&expected->sharp,sizeof(sharp)))throw std::runtime_error("Writable BC changed original image slot/order/access");
+               std::memcmp(&sharp,&expected->sharp,sizeof(sharp))){
+                std::fprintf(stderr,"Writable BC image=%zu actual base=%llx mip=%u..%u layer=%u..%u write=%u expected base=%llx mip=%u..%u layer=%u..%u write=%u\n",
+                    size_t(expected-images.begin()),static_cast<unsigned long long>(sharp.Address()),u32(sharp.base_level),u32(sharp.last_level),
+                    u32(sharp.base_array),u32(sharp.last_array),resource.is_written,
+                    static_cast<unsigned long long>(expected->sharp.Address()),u32(expected->sharp.base_level),u32(expected->sharp.last_level),
+                    u32(expected->sharp.base_array),u32(expected->sharp.last_array),expected->written);
+                throw std::runtime_error("Writable BC changed original image slot/order/access");}
             if(resource.is_written&&!profile.supports_image_load_store_lod&&
                (resource.mip_fallback_mode!=Shader::MipStorageFallbackMode::ConstantIndex||resource.constant_mip_index!=expected->relative_mip))
                 throw std::runtime_error("Writable BC lost explicit view-relative LOD");++expected;}
@@ -238,17 +244,24 @@ inline void RunBcWritableAliasGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liv
             0xe0700190,0x80010400,0xe0700194,0x80010500,0xbf810000},hash(7));auto& rp=bind(raw,8);
         std::memcpy(rp.user_data.data(),&target,sizeof(target));std::memcpy(rp.user_data.data()+4,&output,sizeof(output));
         verify(frontend.BuildCompute(gpu),{{target,false,false},{output,true,false}});rasterizer.DispatchDirect();expect(OutputOffset+400,BufferValue);expect(OutputOffset+404,Poison);
-        const auto read_gpu=[&]{auto snapshot=rasterizer.CapturePreparedShaderBuffer(output.base_address,OutputBytes);ComPtr<ID3D12Device> device;
+        u32 read_phase{};const auto read_gpu=[&]{const auto phase=read_phase++;auto snapshot=rasterizer.CapturePreparedShaderBuffer(output.base_address,OutputBytes);ComPtr<ID3D12Device> device;
             Check(snapshot.handle->GetDevice(IID_PPV_ARGS(&device)));auto readback=Buffer(device.Get(),OutputBytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             rasterizer.RetainUntilFinish([snapshot,readback](u64){(void)snapshot;(void)readback;});auto* list=rasterizer.RecordingList();snapshot.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
             list->CopyBufferRegion(readback.handle.Get(),0,snapshot.handle.Get(),0,OutputBytes);rasterizer.Finish();rasterizer.ValidateDebugMessages();void* mapped{};
             D3D12_RANGE range{0,SIZE_T(OutputBytes)};Check(readback.handle->Map(0,&range,&mapped));const bool valid=std::memcmp(mapped,expected.data()+OutputOffset,OutputBytes)==0;
             size_t output_mismatch{};while(output_mismatch<OutputBytes&&static_cast<const std::byte*>(mapped)[output_mismatch]==expected[OutputOffset+output_mismatch])++output_mismatch;
-            D3D12_RANGE empty{};readback.handle->Unmap(0,&empty);const bool dirty=rasterizer.IsGpuBufferModified(target.base_address,image_bytes);
+            D3D12_RANGE empty{};const bool dirty=rasterizer.IsGpuBufferModified(target.base_address,image_bytes);
             const bool physical=std::memcmp(backing,physical_before.data(),Bytes)==0;
-            if(!valid||!dirty||!physical){std::fprintf(stderr,"Writable BC variant=%u output=%u mismatch=%zu dirty=%u physical=%u\n",
-                    variant,valid,output_mismatch,dirty,physical);
-                throw std::runtime_error("Writable BC GPU observations or unpublished B/P dirty witness changed");}};
+            if(!valid||!dirty||!physical){std::fprintf(stderr,"Writable BC variant=%u phase=%u output=%u mismatch=%zu dirty=%u physical=%u\n",
+                    variant,phase,valid,output_mismatch,dirty,physical);
+                if(output_mismatch<OutputBytes){const auto begin=output_mismatch&~size_t(15);
+                    for(size_t offset=begin;offset<std::min(begin+32,size_t(OutputBytes));offset+=4){u32 actual{},wanted{};
+                        std::memcpy(&actual,static_cast<const std::byte*>(mapped)+offset,4);
+                        std::memcpy(&wanted,expected.data()+OutputOffset+offset,4);
+                        std::fprintf(stderr,"  +%zu actual=%08x expected=%08x\n",offset,actual,wanted);}}
+                readback.handle->Unmap(0,&empty);
+                throw std::runtime_error("Writable BC GPU observations or unpublished B/P dirty witness changed");}
+            readback.handle->Unmap(0,&empty);};
         read_gpu();
         if(one_level){
             // UserData contains only16 DWORDs. Keep both T#s there and build

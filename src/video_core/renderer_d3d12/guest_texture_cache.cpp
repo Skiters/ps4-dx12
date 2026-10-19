@@ -2734,7 +2734,10 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             return finish_refresh(*existing);
         }
     }
-    Entry* entry=nullptr;if(!fresh_depth_recreation){auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
+    // A dependent block child belongs to exactly one parent transaction. An
+    // older unowned/unpinned child may have compatible dimensions yet contains
+    // a previous parent's snapshot and cannot be rebound to this lease.
+    Entry* entry=nullptr;if(!fresh_depth_recreation&&!dependent){auto [first,last]=address_entries();for(auto indexed=first;indexed!=last;++indexed)
         if(!(guest_snapshot&&(indexed->second->gpu_owned||indexed->second->BindingPinned()||
              (!current_buffer_snapshot&&indexed->second->cached_native_current)))&&
            (indexed->second->desc==d||CompatibleGuestAttachmentStorage(indexed->second->desc,d)||

@@ -1474,6 +1474,14 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
         const auto flags = usage.user->Flags<IR::TextureInstInfo>();
         const ImageResource source{.sharp_fetch=fetch,.is_depth=bool(flags.is_depth),
             .is_array=bool(flags.is_array),.is_r128=bool(flags.is_r128),.post_op=usage.sharps[0].post_op};
+        const auto mip_overlap=[&](const ImageResource& a,const ImageResource& b){
+            const auto left=a.GetSharp(info),right=b.GetSharp(info);
+            return left.base_level<=right.last_level&&right.base_level<=left.last_level;
+        };
+        const auto write_mip_overlap=[&](const ImageResource& a,const NativeImageWrite& b){
+            const auto left=a.GetSharp(info);
+            return left.base_level<=b.sharp.last_level&&b.sharp.base_level<=left.last_level;
+        };
         bool storage = false, original_storage = false;
         for (const auto& other : resources) {
             if (other.user->GetOpcode() != IR::Opcode::ImageWrite &&
@@ -1487,10 +1495,14 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
                    usage.sharps[0].post_op == other.sharps[0].post_op &&
                    fetch == other_fetch;
             original_storage |= same_source;
-            storage |= same_source || NativeImageViewAliases(source, destination, info);
+            // DX12 resource-state hazards are per mip here. Distinct selected
+            // mip ranges may retain an SRV beside a UAV of the same physical
+            // allocation; overlapping mips use a coherent storage read.
+            storage |= same_source ||
+                (NativeImageViewAliases(source,destination,info)&&mip_overlap(source,destination));
         }
         for (const auto& write : info.native_pipeline_writes)
-            storage |= NativeImageViewAliases(source, write, info);
+            storage |= NativeImageViewAliases(source,write,info)&&write_mip_overlap(source,write);
         return std::pair{storage, !query && storage &&
             (!original_storage || opcode == IR::Opcode::ImageSampleRaw) &&
             source.GetSharp(info).GetNumberFmt() == AmdGpu::NumberFormat::Srgb};
