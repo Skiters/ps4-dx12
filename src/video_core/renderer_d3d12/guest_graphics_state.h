@@ -31,7 +31,8 @@ inline GuestDepthActivity GuestDepthTests(const AmdGpu::Regs& regs) {
 }
 inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
     return (color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
-            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) ||
+            (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
+             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
             (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
              color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||

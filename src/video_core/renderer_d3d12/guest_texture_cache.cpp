@@ -138,7 +138,7 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
     return d.render_target&&!d.writable&&!d.depth_target&&!d.stencil_address&&
         !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
         std::has_single_bit(d.samples)&&d.samples<=8&&
-        ((d.data_format==9&&d.number_format==1)||
+        ((d.data_format==9&&(d.number_format==0||d.number_format==1))||
          (d.data_format==10&&(d.number_format==0||d.number_format==1))||
          (d.data_format==5&&(d.number_format==0||d.number_format==1))||
          ((d.data_format==4||d.data_format==5)&&d.number_format==7));
@@ -148,6 +148,8 @@ bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
 }
 std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool supported){
     static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array packed10_unorm{DXGI_FORMAT_R10G10B10A2_UNORM,
+        DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rgba8_snorm{DXGI_FORMAT_R8G8B8A8_SNORM,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rg16{DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
@@ -155,6 +157,7 @@ std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool su
     static constexpr std::array rg16_snorm{DXGI_FORMAT_R16G16_SNORM,DXGI_FORMAT_R32_UINT};
     if(!supported||!IsOrderedColorClass(d))return {};
     if(d.data_format==9&&d.number_format==1)return packed10;
+    if(d.data_format==9&&d.number_format==0)return packed10_unorm;
     if(d.data_format==10&&d.number_format==0)return rgba8;
     if(d.data_format==10&&d.number_format==1)return rgba8_snorm;
     if(d.data_format==5&&d.number_format==7)return rg16;
@@ -1232,7 +1235,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
     if((!CompatibleGuestAttachmentStorage(desc,attachment)&&
         !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
-       !((attachment.data_format==9&&attachment.number_format==1)||
+       !((attachment.data_format==9&&(attachment.number_format==0||attachment.number_format==1))||
          (attachment.data_format==10&&(attachment.number_format==0||attachment.number_format==1))||
          (attachment.data_format==5&&(attachment.number_format==0||attachment.number_format==1))||
          ((attachment.data_format==4||attachment.data_format==5)&&attachment.number_format==7))||
