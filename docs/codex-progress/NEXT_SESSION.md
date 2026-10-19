@@ -1,3 +1,5 @@
+Latest:1460b0b recognizes real buffered-GS t1/space33 as callback-owned. CPU classification/shader checks and clean Release PASS; GPU/game NOT_RUN. Shared cross-layout GS/PS resource context remains pending. See SESSION_HANDOFF.md.
+
 Prepared partition-rect-* modes now use real complete GS capture partitions and descriptor forks, with common per-stage resource completion. Compiled; CPU shader checks PASS; GPU NOT_RUN. Next: shared GS/PS formatted alias context before main activation. See SESSION_HANDOFF.md.
 
 Latest: 82cb259 opt-in prepared descriptor forks; core/fixture and clean Release compile-link PASS, GPU/game NOT_RUN. Main multipart scheduling remains pending. See SESSION_HANDOFF.md and replay-descriptor-forks-82cb259.json.
