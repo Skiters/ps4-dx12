@@ -3195,8 +3195,20 @@ GuestTextureCache::IndependentImageVersion GuestTextureCache::CaptureIndependent
     if(image.cache!=this||!image.gpu_owned||!image.buffer_alias_version||!image.HasValidLogicalImage()||
        image.HasUnprotectedCpuPages()||!owner||!CanRetainGuestImageOwnership(*this,*owner)||
        !list||!capture_buffer||!CanUploadGpuSnapshot(target,physical,target.writable)||
-       !CanMapIndependentDepthImage(image.desc,image.layout,target,physical))
+       !CanMapIndependentDepthImage(image.desc,image.layout,target,physical)){
+        std::fprintf(stderr,"DX12 depth conversion rejected uid=%llu cache=%u gpu=%u alias=%u valid=%u boundary=%u retained=%u upload=%u mapping=%u source=%llx/%ux%u/p%u/l%u/m%u/f%u-%u/t%u/d%u/s%u target=%llx/%ux%u/p%u/l%u/m%u/f%u-%u/t%u/d%u/s%u\n",
+            (unsigned long long)image.image_uid,unsigned(image.cache==this),unsigned(image.gpu_owned),
+            unsigned(image.buffer_alias_version),unsigned(image.HasValidLogicalImage()),unsigned(image.HasUnprotectedCpuPages()),
+            unsigned(owner&&CanRetainGuestImageOwnership(*this,*owner)),
+            unsigned(CanUploadGpuSnapshot(target,physical,target.writable)),
+            unsigned(CanMapIndependentDepthImage(image.desc,image.layout,target,physical)),
+            (unsigned long long)image.desc.address,image.desc.width,image.desc.height,image.desc.pitch,image.desc.layers,
+            image.desc.levels,image.desc.data_format,image.desc.number_format,image.desc.tile_mode,unsigned(image.desc.depth_target),image.desc.samples,
+            (unsigned long long)target.address,target.width,target.height,target.pitch,target.layers,target.levels,
+            target.data_format,target.number_format,target.tile_mode,unsigned(target.depth_target),target.samples);
+        std::fflush(stderr);
         throw std::invalid_argument("Independent depth conversion has no live physical image mapping");
+    }
     GuestTextureLayout stencil;
     if(target.stencil_address){
         stencil=LayoutGuestTexture(DescribeGuestStencil(target));
