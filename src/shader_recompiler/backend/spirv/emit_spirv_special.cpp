@@ -260,8 +260,8 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
     const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
-    const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
-                       target.number_format == AmdGpu::NumberFormat::Unorm;
+    const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8;
+    const bool rgba8_unorm = rgba8 && target.number_format == AmdGpu::NumberFormat::Unorm;
     const bool r32_float = target.data_format == AmdGpu::DataFormat::Format32 &&
                            target.number_format == AmdGpu::NumberFormat::Float;
     if (r32_float) {
@@ -311,14 +311,14 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     if (!logic) {
         std::array<Id, 4> destination_channels{};
         for (u32 component = 0; component < 4; ++component) {
-            if (rgba8) {
+            if (rgba8_unorm) {
                 const Id code = ctx.OpBitFieldUExtract(ctx.U32[1], old_word,
                     ctx.ConstU32(component * 8), ctx.ConstU32(8u));
                 destination_channels[component] = ctx.OpFDiv(ctx.F32[1],
                     ctx.OpConvertUToF(ctx.F32[1], code), ctx.ConstF32(255.f));
             } else {
                 destination_channels[component] = OrderedSnormDecode(ctx, old_word,
-                    component * 10, component == 3 ? 2 : 10);
+                    rgba8 ? component * 8 : component * 10, rgba8 ? 8 : component == 3 ? 2 : 10);
             }
         }
         destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
@@ -330,7 +330,7 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
         const u32 shift = rgba8 ? component * 8 : component * 10;
         const Id value = logic ? ctx.OpCompositeExtract(ctx.F32[1], source, component) :
                                  OrderedBlendChannel(ctx, target, source, destination, constants, component);
-        const Id code = rgba8 ? OrderedUnormCode(ctx, value, bits) : OrderedSnormCode(ctx, value, bits);
+        const Id code = rgba8_unorm ? OrderedUnormCode(ctx, value, bits) : OrderedSnormCode(ctx, value, bits);
         packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
             shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
         if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;

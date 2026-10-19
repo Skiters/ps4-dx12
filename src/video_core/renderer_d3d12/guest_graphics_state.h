@@ -33,7 +33,8 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
     return (color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
-            color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm) ||
+            (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
+             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||
            ((color.GetDataFmt() == AmdGpu::DataFormat::Format32 ||
              color.GetDataFmt() == AmdGpu::DataFormat::Format16_16) &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Float);
