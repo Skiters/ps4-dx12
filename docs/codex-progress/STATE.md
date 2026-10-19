@@ -1,5 +1,9 @@
 # Native DX12 state
 
+## Latest continuation — 2026-10-19, f4f6729
+
+Authoritative current binary: sole application `dx12-current`, source f4f6729e7c3ee2b71deda3d1862613ae8b2833b0, EXE SHA256 298d89b0ad557d34aedf2f4dfa2bd417b5aa79a46d763d50f9f95e548be5ecff. Separate clean Release built; all 19 installed runtime hashes verified. Reentrant Flush callbacks, writable page envelopes, color array attachment subviews and converted-clear pressure retirement have focused GPU/readback acceptance. Title/menu/Continue input observed on exact binary; world loading still fails at guest_stage_bindings.cpp146: ordered formatted readers require exact-base image contract. No world, movement or world FPS acceptance. Next work is this shifted formatted-reader domain, using pinned original texel-buffer synchronization; retain B/I contents, range offsets, ordering and lifetime. See SESSION_HANDOFF.md for exact evidence. Older sections below are historical checkpoints.
+
 ## BC prefix alias transactions - 2026-10-19
 
 Production **51abbc717cab66032c60582c20755ffedf57998e** is connected and focused GPU verified. Readonly and writable block-word aliases now derive from one current BC parent transaction; only writer aliases commit back, dependent children cannot be reused across parent snapshots, and shader resource promotion is limited to overlapping mip ranges. All 27 writable BC variants pass sequentially, including shifted/rebased prefixes, duplicate same-mip slots, native BC readers and cross-transaction lifetime. The complete ordered-formatted related suite and focused ownership/PageWatch/binding/subresource checks pass.
