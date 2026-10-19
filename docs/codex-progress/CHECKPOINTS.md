@@ -1285,3 +1285,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 e475638: paired-word RGBA16 ordered color connected;192 CPU compiler variants PASS,48 GPU cases prepared only; clean Release identities rgba16-ordered-e475638.json. App unchanged/GPU-game NOT_RUN.
 
 2026-10-20 00ded3c: R11 ordered blending/direct UF RNE connected;200 CPU compiler cases PASS,16 finite GPU cases prepared only; conversion boundary GPU proof pending. Clean identities r11-ordered-00ded3c.json. App unchanged.
+
+2026-10-20 32f89ea: independent56-code UF11/UF10 CPU oracle PASS,448 actual GCN boundary draws prepared/compiled, GPU NOT_RUN; identities ufloat-boundary-32f89ea.json. Production00ded3c/app unchanged.
