@@ -384,7 +384,9 @@ GuestGraphicsStages GuestShaderFrontend::BuildPrimitiveStream(const GuestGraphic
     const auto* geometry=source.stages[u32(SwStage::Geometry)];
     if(!geometry||geometry->auxiliary)
         throw std::invalid_argument("Primitive stream requires original guest GS input metadata");
-    auto words=EmitNativePrimitiveStream(geometry->runtime.hw.gs,&geometry->info);
+    // A replacement SPIR-V binary can read a different component while the
+    // original IR reflection remains unchanged. Preserve its declared payload.
+    auto words=EmitNativePrimitiveStream(geometry->runtime.hw.gs,geometry->is_patched?nullptr:&geometry->info);
     auto found=auxiliary_.find(words);
     if(found==auxiliary_.end()){
         auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;
