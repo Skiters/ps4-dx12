@@ -139,7 +139,7 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
         std::has_single_bit(d.samples)&&d.samples<=8&&
         ((d.data_format==9&&d.number_format==1)||
          (d.data_format==10&&d.number_format==0)||
-         (d.data_format==4&&d.number_format==7));
+         ((d.data_format==4||d.data_format==5)&&d.number_format==7));
 }
 bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
     return IsOrderedColorClass(d)&&d.samples>1;
@@ -147,9 +147,11 @@ bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
 std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool supported){
     static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array rg16{DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
     if(!supported||!IsOrderedColorClass(d))return {};
     if(d.data_format==9&&d.number_format==1)return packed10;
     if(d.data_format==10&&d.number_format==0)return rgba8;
+    if(d.data_format==5&&d.number_format==7)return rg16;
     return {};
 }
 bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
@@ -1201,7 +1203,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !((attachment.data_format==9&&attachment.number_format==1)||
          (attachment.data_format==10&&attachment.number_format==0)||
-         (attachment.data_format==4&&attachment.number_format==7))||
+         ((attachment.data_format==4||attachment.data_format==5)&&attachment.number_format==7))||
        attachment.first_mip||attachment.levels!=1||!attachment.view_layers||
        attachment.first_layer>=attachment.layers||
        attachment.view_layers>attachment.layers-attachment.first_layer)
@@ -1389,9 +1391,10 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
     }
     const bool initial_readonly=IsReadonlyMultisampleWordClass(entry.desc)&&
         !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
-    // R32 float attachments normally use native blending. Allocate sample
+    // Float word attachments normally use native blending. Allocate sample
     // UAVs only when ordered blending is actually requested, not for every RT.
-    const bool initial_ordered=IsOrderedMultisampleColorClass(entry.desc)&&entry.desc.data_format==4&&
+    const bool initial_ordered=IsOrderedMultisampleColorClass(entry.desc)&&
+        (entry.desc.data_format==4||entry.desc.data_format==5)&&
         !entry.storage_retired&&entry.storage_samples.empty()&&!entry.storage_linear.handle;
     if((!entry.storage_retired&&!initial_readonly&&!initial_ordered)||!entry.storage_samples.empty()||entry.storage_linear.handle||
        !CanTransferIndependentMultisample(entry.desc,entry.layout))
@@ -3098,7 +3101,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         storage_description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         uint64_t storage_linear_bytes{};
         const bool multisample_storage=d.samples>1&&(d.writable||
-            (IsOrderedMultisampleColorClass(d)&&d.data_format!=4));
+            (IsOrderedMultisampleColorClass(d)&&d.data_format!=4&&d.data_format!=5));
         if(multisample_storage){
             const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,storage_cast_formats);
             storage_linear_bytes=GuestMultisample::LinearBytes(d,GuestMultisample::Footprint(d,layout));

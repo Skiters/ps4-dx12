@@ -49,7 +49,9 @@ int main(int argc,char** argv){try{
     const bool shared_exponent=shared_exponent_msaa_writer||shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_logic=std::string_view(argv[3])=="signed-logic";
     const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
-    const bool float_mixed_constants=std::string_view(argv[3])=="float-mixed-constants-owned";
+    const bool half_edges=std::string_view(argv[3])=="half-mixed-edges-owned";
+    const bool half_mixed_constants=half_edges||std::string_view(argv[3])=="half-mixed-constants-owned";
+    const bool float_mixed_constants=half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
     const bool mixed_constant_blend=float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
@@ -1028,7 +1030,7 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=float_mixed_constants?4:signed_color?9:10;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=half_mixed_constants?5:float_mixed_constants?4:signed_color?9:10;
             cb.info.number_type=float_mixed_constants?7:signed_color?5:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
@@ -1066,17 +1068,32 @@ int main(int argc,char** argv){try{
             case Logic::OrInverted:return(~source)|destination;case Logic::Copy:return source;
             case Logic::OrReverse:return source|(~destination);case Logic::Or:return source|destination;
             case Logic::Set:return~0u;}throw std::runtime_error("Invalid fixture logic operation");};
-        const unsigned iterations=float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        constexpr std::pair<u32,u16> half_boundaries[]{{0,0},{0x32ffffff,0},{0x33000000,0},
+            {0x33000001,1},{0x33800000,1},{0x33c00000,2},{0xb3000001,0x8001},
+            {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
+            {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
+            {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
+        const unsigned iterations=half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
             if(float_mixed_constants){
-                regs.color_target_mask.raw=warm==2?0x001:warm==3?0x011:0xfff;
-                regs.num_indices=warm>=4?6:3;
+                regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
+                regs.num_indices=!half_edges&&warm>=4?6:3;
                 input.num_records=regs.num_indices;
                 memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
                 // Missing destination alpha of R32 is one. This final case
                 // must produce1.25, without normalized-output clamping.
-                regs.blend_control[0].color_src_factor=warm==3?
+                regs.blend_control[0].color_src_factor=!half_edges&&warm==3?
                     AmdGpu::BlendControl::BlendFactor::DstAlpha:AmdGpu::BlendControl::BlendFactor::ConstantColor;
+                if(half_edges){
+                    regs.blend_constants[3]=0.f;
+                    const u32 bits=half_boundaries[warm].first;
+                    // The shader emits4*x; multiplication by the legal blend
+                    // constant.25 yields exactly the chosen f32 boundary x.
+                    const u32 literal=!(bits&0x7fffffff)||(bits&0x7fffffff)>=0x7f800000?bits:bits+0x01000000;
+                    initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,literal,0x7e020280,0x7e040280,0x7e0602ff,0x3f800000,
+                        0xf800000f,0x03020100,0x7e000280,0x7e0202ff,0x3f800000,0xf800001f,0x03020100,
+                        0x7e020280,0x7e0402ff,0x3f800000,0xf800082f,0x03020100,0xbf810000},0x4154484544470000ULL+warm);
+                }
             }
             const auto operation=independent_unorm_logic?logic_operations[warm/2]:regs.color_control.rop3;
             regs.color_control.rop3=operation;
@@ -1108,6 +1125,36 @@ int main(int argc,char** argv){try{
                         const float result=warm==3&&i==0?1.25f:
                             (regs.color_target_mask.GetMask(i)&1)?after[i]:before[i];
                         word=std::bit_cast<u32>(result);
+                        if(half_mixed_constants&&!half_edges){
+                            // Independent exact encodings, not the renderer's
+                            // half packing routine or GPU readback values.
+                            const auto half=[](float value)->u16{
+                                constexpr std::pair<float,u16> known[]{{.5f,0x3800},{.25f,0x3400},
+                                    {.75f,0x3a00},{.1875f,0x3200},{.375f,0x3600},{1.25f,0x3d00},
+                                    {.140625f,0x3080},{-.25f,0xb400},{-.75f,0xba00},
+                                    {-.140625f,0xb080},{-.1875f,0xb200}};
+                                for(auto [input,code]:known)if(value==input)return code;
+                                throw std::runtime_error("Unknown independent half fixture value");
+                            };
+                            const u16 initial_green=warm==2&&i==0?0x7e35:
+                                warm==3&&i==0?0x8000:u16((i==0?0x3400:i==1?0x3800:0x3a00)|(warm==5?0x8000:0));
+                            const u16 green=warm<2?(i==0?0x3000:i==1?0x3a00:0x3600):
+                                warm==2||warm==3?initial_green:
+                                warm==5?(i==0?0xac00:i==1?0x3900:0xb200):
+                                i==0?0x2c00:i==1?0x3b00:0x3200;
+                            const u16 initial_red=warm==6&&i==1?0x3401:half(before[i]);
+                            const u32 initial_word=u32(initial_red)|(u32(initial_green)<<16);
+                            memcpy(memory+4096+offset,&initial_word,4);
+                            // RNE after EACH fragment: two *.75 blends from
+                            // half3401 produce3082; one final conversion gives3081.
+                            const u16 red=warm==6&&i==1?0x3082:half(result);
+                            word=u32(red)|(u32(green)<<16);
+                        }
+                        if(half_edges){
+                            const u32 initial_word=i==0?0x7e353800u:i==1?0x38003400u:0x3a003a00u;
+                            memcpy(memory+4096+offset,&initial_word,4);
+                            word=i==0?(0x7e350000u|half_boundaries[warm].second):initial_word;
+                        }
                     }
                 }
                 memcpy(expected.data()+4096+offset,&word,4);
@@ -1169,7 +1216,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

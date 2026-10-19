@@ -4132,7 +4132,7 @@
         "continuation_20261015": "Native cull-both classification uses final GS output and tessellation isolines; RectList retains pinned Vulkan cull exemption. Shader side effects are preserved. Source corrections to CB sRGB encoding and dual-face fixture oracle retain expected bytes; no runtime result for this delta.",
         "color_write_mask_20261015": "d7d9064: valid guest CB color write masks use original Swizzle().ApplyMask scatter, matching pinned vk_pipeline_cache.cpp independently of shader export gather. Native-only callers with absent guest CB format keep explicit mask. Existing format19 transfer handles packed nibble layout; no extra color swizzle. Prepared 1152 format/swap/mask combinations plus disabled/hole/native-only boundaries are unrun. Standalone backend now links pixel_format.cpp and its existing fixture diagnostic sink.",
         "historical_review_notes": "GPU acceptance and persistence/lifetime acceptance; polygon-to-point fill still requires native clipping and point rasterization and reports this gap instead of silently drawing wireframe. Wide lines, exported point sizes, GS/tessellation points, unsupported-adapter constant-alpha and depth bounds paths remain open. No completed render-state equivalence claim.",
-        "open_contracts": "Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture.; R32 FLOAT ordered fallback is connected and narrowly GPU verified for samples1/2/4/8, alongside existing RGBA8 UNORM and packed10 SNORM paths. Other applicable attachment formats outside these classes still require mixed constant-color/alpha fallback on adapters without native ALPHA_FACTOR; supporting native adapters retain hardware blending. No whole-group or game acceptance. Shared compatible MRT logic now uses a valid D3D12 state and narrowly GPU verified. Original independent MRT logic write masks still need an ordered implementation; rejecting the incompatible case is not parity closure.",
+        "open_contracts": "Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture.; R32 FLOAT and R16G16 FLOAT ordered fallbacks are connected and narrowly GPU verified for samples1/2/4/8, alongside existing RGBA8 UNORM and packed10 SNORM paths. R16G16 packed-word views use supported explicit native format lists; an equivalent route on adapters lacking that capability remains open. Other applicable attachment formats outside these classes still require mixed constant-color/alpha fallback on adapters without native ALPHA_FACTOR; supporting native adapters retain hardware blending. No whole-group or game acceptance. Shared compatible MRT logic now uses a valid D3D12 state and narrowly GPU verified. Original independent MRT logic write masks still need an ordered implementation; rejecting the incompatible case is not parity closure.",
         "function_verification_20261019_snorm_logic": {
           "canonical_group": "native-signed-packed-integer-color",
           "scope": "valid shared-MRT logic state and exact rejection of incompatible independent masks"
@@ -4163,6 +4163,12 @@
         "core_release_build_commit": "378bda3aba1771026b9a2160bfca28a3867433b8"
       },
       "behavior_verification": {
+        "rg16_float_mixed_constant_blending": {
+          "implementation": "connected",
+          "behavior": "narrow_gpu_pass",
+          "result": "56 actual GCN mixed-constant draws plus136 RNE boundary draws; MSAA1/2/4/8, per-fragment half rounding, raw masked NaN/negative-zero halves, overlap, signed/HDR, full padding. Native R32/RG16 lazy-storage channels/sample GPU readback PASS; R32 48-case regression PASS. Other formats/unsupported format-list adapters/full group/game remain open.",
+          "evidence": "F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-half-verification.json"
+        },
         "r32_float_mixed_constant_blending": {
           "implementation": "connected",
           "behavior": "narrow_gpu_pass",
@@ -18501,7 +18507,7 @@
     "mixed-blend-constants": {
       "upstream_symbol": "Vulkan::GraphicsPipeline / Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "R32 FLOAT ordered fallback is connected and narrowly GPU verified for samples1/2/4/8, alongside existing RGBA8 UNORM and packed10 SNORM paths. Other applicable attachment formats outside these classes still require mixed constant-color/alpha fallback on adapters without native ALPHA_FACTOR; supporting native adapters retain hardware blending. No whole-group or game acceptance.",
+      "missing_semantics": "R32 FLOAT and R16G16 FLOAT ordered fallbacks are connected and narrowly GPU verified for samples1/2/4/8, alongside existing RGBA8 UNORM and packed10 SNORM paths. R16G16 packed-word views use supported explicit native format lists; an equivalent route on adapters lacking that capability remains open. Other applicable attachment formats outside these classes still require mixed constant-color/alpha fallback on adapters without native ALPHA_FACTOR; supporting native adapters retain hardware blending. No whole-group or game acceptance.",
       "evidence": "GuestOrderedColorMask / Entry::OrderedColorUav / Entry::StorageUav / EmitOrderedColorSample R32 bit-preserving float branch; F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-float-verification.json; other formats retain explicit mixed-constant guard",
       "groups": [
         34

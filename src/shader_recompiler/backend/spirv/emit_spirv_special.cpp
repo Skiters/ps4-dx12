@@ -214,6 +214,45 @@ Id OrderedLogicWord(EmitContext& ctx, AmdGpu::ColorControl::LogicOp operation,
     throw std::runtime_error("Ordered color reached invalid logic operation");
 }
 
+Id OrderedHalfCode(EmitContext& ctx, Id value) {
+    // Attachment conversion is RNE. Do not use the general PackHalf2x16
+    // intrinsic here: its native lowering need not use attachment rounding.
+    const auto u = [&](u32 bits) { return ctx.ConstU32(bits); };
+    const Id raw = ctx.OpBitcast(ctx.U32[1], value);
+    const Id magnitude = ctx.OpBitwiseAnd(ctx.U32[1], raw, u(0x7fffffffu));
+    const Id sign = ctx.OpBitwiseAnd(ctx.U32[1],
+        ctx.OpShiftRightLogical(ctx.U32[1], raw, u(16)), u(0x8000));
+    const Id retained_lsb = ctx.OpBitwiseAnd(ctx.U32[1],
+        ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(13)), u(1));
+    const Id rounded = ctx.OpIAdd(ctx.U32[1], magnitude,
+        ctx.OpIAdd(ctx.U32[1], u(0xfff), retained_lsb));
+    Id normal = ctx.OpISub(ctx.U32[1],
+        ctx.OpShiftRightLogical(ctx.U32[1], rounded, u(13)), u(0x1c000));
+    normal = ctx.OpSelect(ctx.U32[1],
+        ctx.OpUGreaterThanEqual(ctx.U1[1], magnitude, u(0x477ff000)), u(0x7c00), normal);
+    const Id exponent = ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(23));
+    // Every speculative shift is defined, including for zero/NaN inputs.
+    const Id shift = ctx.OpUMax(ctx.U32[1], u(14), ctx.OpUMin(ctx.U32[1], u(24),
+        ctx.OpISub(ctx.U32[1], u(126), exponent)));
+    const Id significand = ctx.OpBitwiseOr(ctx.U32[1], u(0x800000),
+        ctx.OpBitwiseAnd(ctx.U32[1], magnitude, u(0x7fffff)));
+    const Id bias = ctx.OpISub(ctx.U32[1],
+        ctx.OpShiftLeftLogical(ctx.U32[1], u(1), ctx.OpISub(ctx.U32[1], shift, u(1))), u(1));
+    const Id sub_lsb = ctx.OpBitwiseAnd(ctx.U32[1],
+        ctx.OpShiftRightLogical(ctx.U32[1], significand, shift), u(1));
+    Id subnormal = ctx.OpShiftRightLogical(ctx.U32[1],
+        ctx.OpIAdd(ctx.U32[1], significand, ctx.OpIAdd(ctx.U32[1], bias, sub_lsb)), shift);
+    subnormal = ctx.OpSelect(ctx.U32[1],
+        ctx.OpULessThan(ctx.U1[1], magnitude, u(0x33000000)), u(0), subnormal);
+    Id code = ctx.OpSelect(ctx.U32[1],
+        ctx.OpUGreaterThanEqual(ctx.U1[1], magnitude, u(0x38800000)), normal, subnormal);
+    const Id nan = ctx.OpBitwiseOr(ctx.U32[1], u(0x7e00),
+        ctx.OpBitwiseAnd(ctx.U32[1], ctx.OpShiftRightLogical(ctx.U32[1], magnitude, u(13)), u(0x3ff)));
+    code = ctx.OpSelect(ctx.U32[1],
+        ctx.OpUGreaterThan(ctx.U1[1], magnitude, u(0x7f800000)), nan, code);
+    return ctx.OpBitwiseOr(ctx.U32[1], sign, code);
+}
+
 template <typename Target>
 void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_variable,
                             Id coordinates, Id constants, Id source) {
@@ -235,6 +274,35 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
             ctx.f32_zero_value, ctx.ConstF32(1.f));
         const Id result = (target.write_mask & 1u) ? ctx.OpBitcast(ctx.U32[1],
             OrderedBlendChannel(ctx, target, source, destination, constants, 0)) : old_word;
+        ctx.OpImageWrite(image, coordinates, ctx.OpCompositeConstruct(ctx.U32[4],
+            result, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value));
+        return;
+    }
+    const bool rg16_float = target.data_format == AmdGpu::DataFormat::Format16_16 &&
+                            target.number_format == AmdGpu::NumberFormat::Float;
+    if (rg16_float) {
+        const Id unpacked = ctx.OpUnpackHalf2x16(ctx.F32[2], old_word);
+        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],
+            ctx.OpCompositeExtract(ctx.F32[1], unpacked, 0),
+            ctx.OpCompositeExtract(ctx.F32[1], unpacked, 1),
+            ctx.f32_zero_value, ctx.ConstF32(1.f));
+        std::array<Id, 2> channels{};
+        u32 raw_mask{};
+        for (u32 component = 0; component < 2; ++component) {
+            const bool written = (target.write_mask & (1u << component)) != 0;
+            channels[component] = written ?
+                OrderedBlendChannel(ctx, target, source, destination, constants, component) :
+                ctx.f32_zero_value;
+            if (written) raw_mask |= 0xffffu << (component * 16);
+        }
+        // Quantize after each ordered fragment, just as the attachment store
+        // does. Merge untouched raw halves rather than round-tripping NaNs or
+        // signed zero through float arithmetic and half conversion.
+        const Id packed = ctx.OpBitwiseOr(ctx.U32[1], OrderedHalfCode(ctx, channels[0]),
+            ctx.OpShiftLeftLogical(ctx.U32[1], OrderedHalfCode(ctx, channels[1]), ctx.ConstU32(16u)));
+        const Id result = ctx.OpBitwiseOr(ctx.U32[1],
+            ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),
+            ctx.OpBitwiseAnd(ctx.U32[1], packed, ctx.ConstU32(raw_mask)));
         ctx.OpImageWrite(image, coordinates, ctx.OpCompositeConstruct(ctx.U32[4],
             result, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value));
         return;

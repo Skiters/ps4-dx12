@@ -34,7 +34,8 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm) ||
-           (color.GetDataFmt() == AmdGpu::DataFormat::Format32 &&
+           ((color.GetDataFmt() == AmdGpu::DataFormat::Format32 ||
+             color.GetDataFmt() == AmdGpu::DataFormat::Format16_16) &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Float);
 }
 inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u,

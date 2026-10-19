@@ -9,13 +9,19 @@ int main(){try{
     DeviceOptions options;options.validation_enabled=true;
     auto device=CreateHardwareDevice(nullptr,options);Rasterizer renderer(device.Get());
     GuestTextureCache cache(device.Get());
-    for(UINT samples:{2u,4u,8u}){
+    constexpr uint16_t halves[]{0x2c00,0x3000,0x3200,0x3400,0x3500,0x3600,0x3700,0x3800,
+        0x3880,0x3900,0x3980,0x3a00,0x3a80,0x3b00,0x3b80,0x3c00};
+    const auto word=[&](UINT data,UINT sample,UINT layer){
+        const auto n=sample+layer*8;
+        return data==4?std::bit_cast<uint32_t>(float(n+1)/16):uint32_t(halves[n])|(uint32_t(halves[15-n])<<16);
+    };
+    for(UINT data:{4u,5u})for(UINT samples:{2u,4u,8u}){
         GuestTextureDesc d;d.width=d.pitch=8;d.height=8;d.layers=d.view_layers=2;
-        d.data_format=4;d.number_format=7;d.render_target=true;d.samples=samples;
+        d.data_format=data;d.number_format=7;d.render_target=true;d.samples=samples;
         const auto layout=LayoutGuestTexture(d);std::vector<std::byte> guest(layout.guest_bytes,std::byte{0xa6});
         for(UINT sample=0;sample<samples;++sample)for(UINT layer=0;layer<2;++layer)
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
-            const float value=float(1+sample+layer*8)/16;
+            const auto value=word(data,sample,layer);
             memcpy(guest.data()+GuestPixelOffset(d,layout,0,layer,x,y,sample),&value,4);
         }
         d.address=reinterpret_cast<uint64_t>(guest.data());
@@ -37,11 +43,11 @@ int main(){try{
         }
         const auto fence=renderer.Flush();cache.Submitted(fence);renderer.Finish();
         for(UINT sample=0;sample<samples;++sample)for(UINT layer=0;layer<2;++layer){
-            std::vector<float> pixels(64);copies[sample*2+layer].ReadRows(pixels.data(),256,32);
-            for(float value:pixels)Require(value==float(1+sample+layer*8)/16);
+            std::vector<uint32_t> pixels(64);copies[sample*2+layer].ReadRows(pixels.data(),256,32);
+            for(auto value:pixels)Require(value==word(data,sample,layer));
         }
         renderer.ValidateDebugMessages();cache.Collect(renderer.CompletedFence());
         cache.Invalidate(d.address,layout.guest_bytes,renderer.CompletedFence());
     }
-    puts("PASS: ordinary R32 float MSAA2/4/8 has no eager storage; ordered storage allocates once and preserves every layer/sample");return 0;
+    puts("PASS: ordinary R32/RG16 float MSAA2/4/8 has no eager storage; ordered storage allocates once and preserves exact channels/layers/samples");return 0;
 }catch(const std::exception& e){fprintf(stderr,"%s\n",e.what());return 1;}}
