@@ -56,7 +56,7 @@ int main(int argc,char** argv){try{
     const bool mixed_constant_blend=float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
-    const bool color_feedback=mode=="color-feedback-owned";
+    const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
     const bool snorm_color=mode=="snorm-color-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
@@ -163,7 +163,8 @@ int main(int argc,char** argv){try{
         });
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(color_feedback){
-        RunColorFeedbackGcnFixture(rasterizer,gpu,plain_vertex,memory,backing,base,initialize);
+        RunColorFeedbackGcnFixture(device.Get(),rasterizer,gpu,plain_vertex,memory,backing,base,initialize,
+            mode=="color-feedback-buffer-owned");
     }else if(snorm_color){
         RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
     }else if(mixed_samples){

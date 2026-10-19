@@ -3,12 +3,15 @@
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/cb_db_extent.h"
+#include <array>
+#include <cstring>
+#include <vector>
 
 namespace NativeDX12 {
 template<class Initialize>
-void RunColorFeedbackGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
+void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize){
+    const Initialize& initialize,bool raw_domain=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -54,7 +57,16 @@ void RunColorFeedbackGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& g
     rasterizer.InvalidateMemory(base,65536);memset(memory,0xa5,65536);
     const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
-    const std::vector<std::byte> physical(backing,backing+65536);
+    std::vector<std::byte> physical(backing,backing+65536);
+    // A large original index sharp selects resident B rather than the clean
+    // <=16KiB private CPU stream. Establish it before any image writes.
+    constexpr UINT raw_bytes=32768;
+    Rasterizer::IndexBinding original_b{};
+    if(raw_domain){
+        original_b=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!original_b.resource||original_b.bytes!=raw_bytes)
+            throw std::runtime_error("Feedback fixture did not establish resident raw B");
+    }
     const auto draw=[&](const auto& program,bool feedback){
         regs.ps_program.address=reinterpret_cast<u64>(program.data())>>8;
         regs.ps_program.settings.num_user_regs=feedback?8:0;regs.ps_program.settings.num_vgprs=1;
@@ -69,6 +81,46 @@ void RunColorFeedbackGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& g
     regs.generic_scissor.top_left_x=4;draw(left,true);
     regs.generic_scissor.top_left_x=0;regs.generic_scissor.bottom_right_x=4;draw(right,true);
     regs.generic_scissor.top_left_x=4;regs.generic_scissor.bottom_right_x=8;draw(left,true);
+    if(raw_domain){
+        const auto current_b=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!current_b.resource||current_b.bytes!=raw_bytes)
+            throw std::runtime_error("Feedback fixture lost resident raw B");
+        auto raw_readback=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        rasterizer.RetainUntilFinish([raw_readback,lease=current_b.allocation](u64){(void)raw_readback;(void)lease;});
+        const auto prior=current_b.resource->State(0);
+        current_b.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(raw_readback.handle.Get(),0,
+            current_b.resource->handle.Get(),current_b.offset,raw_bytes);
+        current_b.resource->Transition(rasterizer.RecordingList(),prior);
+        if(memcmp(backing,physical.data(),65536))
+            throw std::runtime_error("Resident B admission published native image I to CPU");
+        rasterizer.Finish();
+        void* raw{};const D3D12_RANGE read_range{0,raw_bytes};
+        Check(raw_readback.handle->Map(0,&read_range,&raw));
+        const bool preserved=memcmp(raw,physical.data()+16384,raw_bytes)==0;
+        const D3D12_RANGE no_write{0,0};raw_readback.handle->Unmap(0,&no_write);
+        if(!preserved)throw std::runtime_error("Feedback native image writes replaced independent raw B contents");
+        if(memcmp(backing,physical.data(),65536))
+            throw std::runtime_error("Independent image I escaped into physical backing after raw B readback");
+        // Once B and I are independent, CPU reads observe B, not I. Observe I via
+        // a real guest shader into a separate color target, never by forcing an
+        // image download over the physical B bytes we are testing.
+        cb.base_address=u32((base+61440)>>8);
+        const auto probe_desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
+        const auto probe_layout=LayoutGuestTexture(probe_desc);
+        regs.generic_scissor.top_left_x=0;
+        auto expected=physical;
+        const auto probe=[&](const auto& program,float result){
+            draw(program,true);rasterizer.Finish();rasterizer.ReadMemory(base+61440,probe_layout.guest_bytes);
+            for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
+                memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&result,4);
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Feedback independent I probe, physical B or padding mismatch");
+            physical.assign(backing,backing+65536);
+        };
+        probe(left,.125f);probe(right,.0625f);
+        return;
+    }
     rasterizer.Finish();rasterizer.ReadMemory(base,65536);
     auto expected=physical;
     for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
@@ -77,5 +129,21 @@ void RunColorFeedbackGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& g
     }
     if(memcmp(backing,expected.data(),65536))
         throw std::runtime_error("GCN feedback current GPU pixels or complete physical padding mismatch");
+    // After completed readback, an ordinary CPU write invalidates the cached
+    // image version. The next feedback draw must load that precise texel;
+    // neither the previous private snapshot nor resident B can override it.
+    const auto cpu_offset=16384+GuestPixelOffset(target,layout,0,0,0,0);
+    rasterizer.InvalidateMemory(base+cpu_offset,sizeof(float));
+    const float cpu_value=.75f;memcpy(memory+cpu_offset,&cpu_value,sizeof(cpu_value));
+    memcpy(expected.data()+cpu_offset,&cpu_value,sizeof(cpu_value));
+    physical.assign(backing,backing+65536);
+    draw(left,true);
+    rasterizer.Finish();rasterizer.ReadMemory(base,65536);
+    for(u32 y=0;y<8;++y)for(u32 x=4;x<8;++x){
+        const float value=.375f;
+        memcpy(expected.data()+16384+GuestPixelOffset(target,layout,0,0,x,y),&value,4);
+    }
+    if(memcmp(backing,expected.data(),65536))
+        throw std::runtime_error("CPU texel winner was lost by feedback rebinding or changed neighbouring bytes");
 }
 } // namespace NativeDX12
