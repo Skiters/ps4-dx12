@@ -1,3 +1,5 @@
+2026-10-20:343e58c normalized pre-blend clamp;2669533 boundary fixtures;178e323 packed16 ordered path. CPU432 PASS, clean Release178e323 PASS; GPU/game NOT_RUN. See SESSION_HANDOFF current checkpoint and packed16-ordered-178e323.json.
+
 ## R32 float fallback published — 2026-10-19 22:15 +05
 
 Committed source537bdcfc3b9845a88bd6174fc4025a466351b061 reproduced in separate tracked-clean Release checkout with pinned dependencies and matching release-identity. Sole app dx12-current safely replaced; EXEee95a017834fbbf4c1cc5cc72f494d3ba321bf47c14d8530cd8b6d123644ee74, PDB92c254c6cf5ac58ef89fcaefa121bbc93a1c3f7dbd3125a379d2844b59390890. Exact new EXE GAME_NOT_RUN. Source-scoped48 GCN mixed-constant cases/lazy-storage/UNORM+SNORM regressions passed; black image/sub1FPS unchanged as an unresolved acceptance requirement. Publication identity: F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-float-core.json. No full runtime copies or game launch.

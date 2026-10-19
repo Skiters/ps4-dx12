@@ -1,3 +1,5 @@
+2026-10-20 source178e323: CPU432 shader validations PASS3.100s; clean Release PASS. No new GPU/game/FPS measurement; compile timings are not game performance. Exact scope/hashes: F:/PS4Dev/handoff/native-port-comparison-20261019/packed16-ordered-178e323.json.
+
 ## Producer capture checkpoint — 2026-10-19 21:32 +05
 
 Authoritative details: SESSION_HANDOFF.md section Actual buffer producer capture / unresolved device failure. Core9249946 EXEe36c2a84 current. First load failed device887a0001; exact validation rerun reached black world/producer capture/exit0, no severity0/1, no FPS measurement. Captured scalar+352 is0.1/0.1/0.1/1, both outputs unchanged in that one draw; no black-image cause proven. NEXT actual private depth SRV t3 capture/contract, not another multiplier or general129-group audit. XInput bounded cached-state verification fixed;3 negatives/delay tests and actual Title/Continue passed. No full acceptance, last timed eb9ba3a0.72997FPS/almost-black FAIL. Exact source/runtime evidence F:/PS4Dev/handoff/physical-backing-proof-20261019/producer-buffer-9249946.
