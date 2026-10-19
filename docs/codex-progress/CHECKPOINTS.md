@@ -1287,3 +1287,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 00ded3c: R11 ordered blending/direct UF RNE connected;200 CPU compiler cases PASS,16 finite GPU cases prepared only; conversion boundary GPU proof pending. Clean identities r11-ordered-00ded3c.json. App unchanged.
 
 2026-10-20 32f89ea: independent56-code UF11/UF10 CPU oracle PASS,448 actual GCN boundary draws prepared/compiled, GPU NOT_RUN; identities ufloat-boundary-32f89ea.json. Production00ded3c/app unchanged.
+
+2026-10-20 d16a4a7: compact scalar ordered color connected;288 CPU compiler cases PASS,120 GPU cases prepared only; clean Release identities scalar-ordered-d16a4a7.json. App unchanged/GPU-game NOT_RUN.
