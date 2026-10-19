@@ -1,5 +1,11 @@
 # Next session
 
+## Current ordered-render compiler checkpoint - 2026-10-19
+
+Continue from the ROV compiler selector now present in `SpirvConvertOptions`, the scoped Mesa export and `nir_to_dxil` UAV metadata. The focused reflection test and incremental Release core build pass. Do not reimplement or re-audit that compiler work. Next, lower only the affected pixel export path to the selected UAV, connect the descriptor/root range and resource transitions, and prove ordered destination read/modify/write with GPU readback. Then use it for exact packed-SNORM post-blend quantization and independent MRT logic masks. Keep current guards until those contents/order checks pass.
+
+The single installed core remains 378bda3. Its exact-HWND capture shows a rendered Bloodborne scene and it exited 0, but foreground/XInput/world/FPS acceptance is still open. Do not repeat blind input while another elevated window owns foreground.
+
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19
 
 This section supersedes the 2026-10-18 current-state section below. Branch `fix/mixed-cmask` is at production commit **378bda3aba1771026b9a2160bfca28a3867433b8** plus desktop catalogue-path fix **54ddffbae5a112027ffb074aa98feb85a9203904**. The full pinned shadPS4 port remains **ACTIVE / INCOMPLETE**; original reference revision is **e0a466753a1aacbc8db8253be685bf7ab4d9daae**.

@@ -1,5 +1,11 @@
 # Benchmarks
 
+## Current ordered-render compiler checkpoint - 2026-10-19
+
+`native_dxil_raster_ordered_metadata` PASS, 0.20 s: baseline no-ROV, mismatched binding no-ROV, exact selected UAV with `D3D_SHADER_REQUIRES_ROVS`, selector reset no-ROV, and non-pixel rejection. Incremental Release `shadps4` core compilation/link PASS. These are compiler/build results, not GPU blend/logic acceptance.
+
+Installed core 378bda3 controlled run: runtime identities verified, exact Bloodborne HWND rendered and captured twice with identical SHA256 **e8682831bd4025f56375865a6a97d5e6bce174f06beee11dc6bec0e100f3de6e**, graceful exit code 0. The static five-second image and failed foreground acquisition prevent active-world/XInput/FPS claims. `guest-frames.csv` contains no completed-frame rows for this run.
+
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19
 
 This section supersedes the 2026-10-18 current-state section below. Branch `fix/mixed-cmask` is at production commit **378bda3aba1771026b9a2160bfca28a3867433b8** plus desktop catalogue-path fix **54ddffbae5a112027ffb074aa98feb85a9203904**. The full pinned shadPS4 port remains **ACTIVE / INCOMPLETE**; original reference revision is **e0a466753a1aacbc8db8253be685bf7ab4d9daae**.

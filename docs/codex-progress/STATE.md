@@ -1,5 +1,11 @@
 # Native DX12 state
 
+## Current ordered-render compiler checkpoint - 2026-10-19
+
+The ROV compiler prerequisite is connected: an explicit pixel UAV binding range is emitted as DXIL rasterizer-ordered metadata, sets the required module feature, is scoped per thread/compile, participates in shader-cache identity and is rejected for invalid stages/ranges. `native_dxil_raster_ordered_metadata` passed, including normal/mismatch/exact/reset/invalid-stage cases, and the Release core links. Renderer behavior is not yet verified or implemented end to end: fragment export lowering, UAV binding/state, blend/logic semantics and GPU ordering/readback remain the next production work.
+
+Installed core 378bda3 still remains the only application core. An exact window capture shows a rendered Bloodborne scene and the controlled run exited 0, but the window could not be foregrounded; active-world input, XInput and completed-frame FPS remain unverified. No controlled process remains running.
+
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19
 
 This section supersedes the 2026-10-18 current-state section below. Branch `fix/mixed-cmask` is at production commit **378bda3aba1771026b9a2160bfca28a3867433b8** plus desktop catalogue-path fix **54ddffbae5a112027ffb074aa98feb85a9203904**. The full pinned shadPS4 port remains **ACTIVE / INCOMPLETE**; original reference revision is **e0a466753a1aacbc8db8253be685bf7ab4d9daae**.

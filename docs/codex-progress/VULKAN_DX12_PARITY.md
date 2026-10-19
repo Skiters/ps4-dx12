@@ -1,5 +1,9 @@
 # Vulkan / native D3D12 parity audit
 
+## Current ordered-render compiler checkpoint - 2026-10-19
+
+Ordered fragment operations: **compiler path connected and narrowly verified; renderer behavior open**. The DX12 SPIR-V converter can mark one exact pixel UAV range as rasterizer ordered, emits the DXIL metadata/feature flag, scopes the choice across standalone and linked compilation and keys cache variants. Reflection regression passed for positive and negative variants. Remaining concrete production chain is guest fragment export -> read/modify/write UAV lowering -> matching descriptor/root binding -> resource state/visibility/lifetime -> ordered packed-SNORM blend quantization and independent MRT logic masks -> GPU readback. Existing explicit guards remain correct until that chain is complete.
+
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19
 
 This section supersedes the 2026-10-18 current-state section below. Branch `fix/mixed-cmask` is at production commit **378bda3aba1771026b9a2160bfca28a3867433b8** plus desktop catalogue-path fix **54ddffbae5a112027ffb074aa98feb85a9203904**. The full pinned shadPS4 port remains **ACTIVE / INCOMPLETE**; original reference revision is **e0a466753a1aacbc8db8253be685bf7ab4d9daae**.

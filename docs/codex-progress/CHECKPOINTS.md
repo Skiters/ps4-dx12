@@ -1,5 +1,11 @@
 # Checkpoints
 
+## Current ordered-render compiler checkpoint - 2026-10-19
+
+DXIL ROV metadata generation is implemented and connected for an explicitly selected pixel UAV range. The selector is thread-local and restored per conversion; linked compilation marks only its pixel stage. Reflection regression covers normal, mismatched, exact, reset and invalid-stage behavior and passed in 0.20 s. Incremental Release core build/link passed. This closes the compiler prerequisite only; fragment-output UAV lowering, D3D12 bindings/transitions and ordered blend/logic GPU behavior remain open.
+
+Installed core 378bda3 produced an exact captured Bloodborne scene and exited 0 with verified runtimes. Foreground acquisition failed, so active world, XInput and FPS are not accepted. Evidence: `F:/PS4Dev/handoff/gameplay-current-378bda3-20261019`.
+
 ## Current packed SNORM and one-core integration checkpoint - 2026-10-19
 
 This section supersedes the 2026-10-18 current-state section below. Branch `fix/mixed-cmask` is at production commit **378bda3aba1771026b9a2160bfca28a3867433b8** plus desktop catalogue-path fix **54ddffbae5a112027ffb074aa98feb85a9203904**. The full pinned shadPS4 port remains **ACTIVE / INCOMPLETE**; original reference revision is **e0a466753a1aacbc8db8253be685bf7ab4d9daae**.
