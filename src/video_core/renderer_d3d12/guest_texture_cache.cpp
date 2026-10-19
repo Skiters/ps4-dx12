@@ -1953,8 +1953,12 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
         };
         report("request",desc,layout.guest_bytes,nullptr);
         for(auto indexed=first;indexed!=last;++indexed){const auto* entry=indexed->second;
-            if(entry->gpu_owned&&entry->buffer_alias_version&&!entry->logical_dirty&&
-               MatchesGuestUploadStorage(*entry,desc,layout))report("candidate",entry->desc,entry->layout.guest_bytes,entry);
+            report("indexed",entry->desc,entry->layout.guest_bytes,entry);
+            std::fprintf(stderr,"DX12 independent identity uid=%llu owned=%u alias=%u dirty=%u exact=%u match=%u samples=%u storage_height=%u slice=%llu first=%u/%u view_layers=%u\n",
+                (unsigned long long)entry->image_uid,unsigned(entry->gpu_owned),unsigned(entry->buffer_alias_version),
+                unsigned(entry->logical_dirty),unsigned(entry->desc==desc),unsigned(MatchesGuestUploadStorage(*entry,desc,layout)),
+                entry->desc.samples,entry->desc.storage_height,(unsigned long long)entry->desc.storage_slice_bytes,
+                entry->desc.first_mip,entry->desc.first_layer,entry->desc.view_layers);
         }
         std::fflush(stderr);
         throw std::runtime_error("Ambiguous clean independent image binding");
