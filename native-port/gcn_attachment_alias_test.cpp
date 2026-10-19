@@ -930,7 +930,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,2u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if((linear_attachment||independent_unorm_logic)&&log2_samples)continue;
+        if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
@@ -1047,7 +1047,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 68 actual GCN RGBA8 UNORM draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

@@ -77,27 +77,26 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
             blend.color_dst_factor=blend.alpha_dst_factor=AmdGpu::BlendControl::BlendFactor::One;
             blend.color_func=blend.alpha_func=AmdGpu::BlendControl::BlendFunc::Add;
             blend.separate_alpha_blend=1;
-            if(log==0){
-                // Independent exact result for source {0,.25,1/511,-.5}
-                // added to the preceding {1,-1,0,-1} destination.
-                regs.ps_program.address=reinterpret_cast<u64>(pixels[1].data())>>8;
-                const auto blended=pack({511,-383,1,-1});
+            // Independent exact result for source {0,.25,1/511,-.5}
+            // added to the preceding {1,-1,0,-1} destination. Every native
+            // sample must address its own ordered storage plane.
+            regs.ps_program.address=reinterpret_cast<u64>(pixels[1].data())>>8;
+            const auto blended=pack({511,-383,1,-1});
+            for(u32 sample=0;sample<desc.samples;++sample)
                 for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
-                    const auto offset=4096+GuestPixelOffset(desc,layout,0,1,x,y,0);u32 old;
+                    const auto offset=4096+GuestPixelOffset(desc,layout,0,1,x,y,sample);u32 old;
                     memcpy(&old,expected.data()+offset,4);
                     const auto result=(old&~bitmask)|(blended&bitmask);
                     memcpy(expected.data()+offset,&result,4);
                 }
-                r.Draw(false);r.ReadMemory(desc.address,layout.guest_bytes);r.Finish();r.ValidateDebugMessages();
-                if(memcmp(backing,expected.data(),expected.size()))
-                    throw std::runtime_error("SNORM ordered blend lost destination contents, quantization, mask or padding");
-                ++cases;
-            }else{
-                bool rejected=false;try{(void)BuildGuestGraphicsState(regs,formats);}catch(const std::runtime_error& error){
-                    rejected=std::string_view(error.what()).find("single-sample")!=std::string_view::npos;
-                }
-                if(!rejected)throw std::runtime_error("Multisample SNORM blend accepted without per-sample ordered access");
+            r.Draw(false);r.ReadMemory(desc.address,layout.guest_bytes);r.Finish();r.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),expected.size())){
+                for(size_t i=0;i<expected.size();++i)if(backing[i]!=expected[i]){
+                    fprintf(stderr,"SNORM ordered blend samples=%u mask=%u byte=%zu actual=%02x expected=%02x\n",
+                        desc.samples,mask,i,unsigned(backing[i]),unsigned(expected[i]));break;}
+                throw std::runtime_error("SNORM ordered blend lost per-sample contents, quantization, mask or padding");
             }
+            ++cases;
             regs.blend_control[0].enable=0;
         }
         ++cases;
@@ -110,6 +109,7 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0x7e000280,0x7e0202ff,
         0x3f800000,0xf800001f,0x03020100,0x7e020280,0x7e0402ff,0x3f800000,
         0xf800082f,0x03020100,0xbf810000},0x534e4f524d4d5254ull);
+    for(u32 logic_log=0;logic_log<4;++logic_log){
     r.ReadMemory(base,65536);r.Finish();r.UnmapMemory(base,65536);r.MapMemory(base,65536);
     r.NotifyHostMapping(base,65536,true,true);memset(memory,0xa7,65536);
     const float mrt_xy[3][2]{{-1,-1},{3,-1},{-1,3}};
@@ -134,12 +134,14 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
         regs.generic_scissor.bottom_right_x=8;
     regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=
         regs.generic_scissor.bottom_right_y=8;
+    regs.aa_config.msaa_num_samples=logic_log;
     AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
     input.data_format=4;input.num_format=4;input.dst_sel_x=4;input.dst_sel_y=5;
     input.dst_sel_z=6;input.dst_sel_w=7;memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
     std::array<GuestTextureDesc,3> descriptions{};std::array<GuestTextureLayout,3> layouts{};
     for(u32 i=0;i<3;++i){auto& cb=regs.color_buffers[i];cb.base_address=u32((base+4096+i*4096)>>8);
         cb.info.format=9;cb.info.number_type=1;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
+        cb.attrib.num_fragments_log2=logic_log;
         cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[i]={8,8};
         descriptions[i]=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[i]);layouts[i]=LayoutGuestTexture(descriptions[i]);}
     const u32 seed=pack({-512,-19,-2,-1});
@@ -148,8 +150,9 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
     for(u32 i=0;i<3;++i){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
         u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))
             raw_mask|=(channel==3?3u:1023u)<<(channel*10);
+        for(u32 sample=0;sample<descriptions[i].samples;++sample)
         for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const auto offset=descriptions[i].address-base+
-            GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,0);memcpy(memory+offset,&seed,4);
+            GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,sample);memcpy(memory+offset,&seed,4);
             memcpy(expected.data()+offset,&seed,4);}}
     using Logic=AmdGpu::ColorControl::LogicOp;
     constexpr std::array operations{Logic::Clear,Logic::Nor,Logic::AndInverted,Logic::CopyInverted,
@@ -169,8 +172,9 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
         for(u32 i=0;i<3;++i){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
             u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))
                 raw_mask|=(channel==3?3u:1023u)<<(channel*10);
+            for(u32 sample=0;sample<descriptions[i].samples;++sample)
             for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const auto offset=descriptions[i].address-base+
-                GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,0);u32 old{};memcpy(&old,expected.data()+offset,4);
+                GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,sample);u32 old{};memcpy(&old,expected.data()+offset,4);
                 const u32 result=(old&~raw_mask)|(apply_logic(operation,sources[i],old)&raw_mask);
                 memcpy(expected.data()+offset,&result,4);}}
         r.Draw(false);for(u32 i=0;i<3;++i)r.ReadMemory(descriptions[i].address,layouts[i].guest_bytes);
@@ -179,6 +183,7 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
             throw std::runtime_error("SNORM ordered independent MRT logic lost operation, target masks, raw contents or padding");
         ++cases;
     }
-    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer/full65536 padding;sample1 ordered Add blend,all logic ops with three independent MRT masks and explicit MSAA rejection\n",cases);
+    }
+    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer/full65536 padding;per-sample ordered Add blend and all logic ops with three independent MRT masks\n",cases);
 }
 } // namespace NativeDX12

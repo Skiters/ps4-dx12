@@ -376,7 +376,10 @@ void EmitContext::DefineInputs() {
             output_layer = DefineVariable(U32[1], spv::BuiltIn::Layer, spv::StorageClass::Input);
             Decorate(output_layer, spv::Decoration::Flat);
         }
-        if (info.loads.Get(IR::Attribute::SampleIndex)) {
+        const bool ordered_multisample = std::ranges::any_of(
+            runtime_info.hw.fs.ordered_color_targets,
+            [](const auto& target) { return target.enabled && target.num_samples > 1; });
+        if (ordered_multisample || info.loads.Get(IR::Attribute::SampleIndex)) {
             sample_index = DefineVariable(U32[1], spv::BuiltIn::SampleId, spv::StorageClass::Input);
             Decorate(sample_index, spv::Decoration::Flat);
         }
@@ -930,15 +933,21 @@ void EmitContext::DefineOrderedColorImages() {
     ordered_color_image_type = TypeImage(U32[1], spv::Dim::Dim2D, false, true, false, 2,
                                          spv::ImageFormat::R32ui);
     const Id pointer = TypePointer(spv::StorageClass::UniformConstant, ordered_color_image_type);
-    for (u32 i = 0; i < ordered_color_images.size(); ++i) {
-        if (!runtime_info.hw.fs.ordered_color_targets[i].enabled) continue;
-        const Id image = AddGlobalVariable(pointer, spv::StorageClass::UniformConstant);
-        Decorate(image, spv::Decoration::DescriptorSet, NativeOrderedColor::DescriptorSet);
-        Decorate(image, spv::Decoration::Binding, NativeOrderedColor::Binding + i);
-        Decorate(image, spv::Decoration::Coherent);
-        Name(image, fmt::format("ordered_color{}", i));
-        interfaces.push_back(image);
-        ordered_color_images[i] = image;
+    for (u32 target = 0; target < ordered_color_images.size(); ++target) {
+        const auto samples = runtime_info.hw.fs.ordered_color_targets[target].num_samples;
+        if (!runtime_info.hw.fs.ordered_color_targets[target].enabled) continue;
+        if (!std::has_single_bit(samples) || samples > NativeOrderedColor::MaxSamples)
+            throw std::runtime_error("Invalid ordered color sample count");
+        for (u32 sample = 0; sample < samples; ++sample) {
+            const Id image = AddGlobalVariable(pointer, spv::StorageClass::UniformConstant);
+            Decorate(image, spv::Decoration::DescriptorSet, NativeOrderedColor::DescriptorSet);
+            Decorate(image, spv::Decoration::Binding,
+                     NativeOrderedColor::Register(target, sample));
+            Decorate(image, spv::Decoration::Coherent);
+            Name(image, fmt::format("ordered_color{}_sample{}", target, sample));
+            interfaces.push_back(image);
+            ordered_color_images[target][sample] = image;
+        }
     }
 }
 

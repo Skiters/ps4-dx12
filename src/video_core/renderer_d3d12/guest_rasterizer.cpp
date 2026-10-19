@@ -1371,6 +1371,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const auto submit_replay=[&](ResourceBindings& bindings) {
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         std::array<ColorAttachment,8> attachments{};
+        struct OrderedMultisampleTransfer {
+            GuestTextureCache::Entry* entry{};
+            std::shared_ptr<GuestMultisample::StorageLease> lease;
+        };
+        std::vector<OrderedMultisampleTransfer> ordered_multisample;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
             auto& entry=textures_.Upload(descriptions[i],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
@@ -1393,15 +1398,33 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
             targets[i]=&entry;
             if(state.ordered_color_mask&(1u<<i)){
-                const auto first=descriptions[i].first_layer;
-                const auto count=descriptions[i].view_layers;
-                for(UINT layer=first;layer<first+count;++layer)
-                    entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                             layer*entry.desc.levels);
-                const auto view=entry.OrderedColorUav(descriptions[i]);
-                bindings.Uav(Shader::NativeOrderedColor::Binding+i,
-                             Shader::NativeOrderedColor::DescriptorSet,
-                             entry.texture.handle.Get(),view);
+                if(descriptions[i].samples==1){
+                    const auto first=descriptions[i].first_layer;
+                    const auto count=descriptions[i].view_layers;
+                    for(UINT layer=first;layer<first+count;++layer)
+                        entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 layer*entry.desc.levels);
+                    const auto view=entry.OrderedColorUav(descriptions[i]);
+                    bindings.Uav(Shader::NativeOrderedColor::Register(i),
+                                 Shader::NativeOrderedColor::DescriptorSet,
+                                 entry.texture.handle.Get(),view);
+                }else{
+                    auto transfer=std::ranges::find(ordered_multisample,&entry,
+                        &OrderedMultisampleTransfer::entry);
+                    if(transfer==ordered_multisample.end()){
+                        auto lease=textures_.PrepareMultisampleStorage(entry,descriptions[i]);
+                        lease->Record(RecordingList(),entry.texture,entry.storage_samples,
+                                      entry.storage_linear,false);
+                        ordered_multisample.push_back({&entry,std::move(lease)});
+                    }
+                    for(UINT sample=0;sample<descriptions[i].samples;++sample){
+                        auto& plane=entry.storage_samples.at(sample);
+                        bindings.RetainAllocation(plane.allocation);
+                        bindings.Uav(Shader::NativeOrderedColor::Register(i,sample),
+                                     Shader::NativeOrderedColor::DescriptorSet,
+                                     plane.handle.Get(),entry.StorageUav(descriptions[i],sample));
+                    }
+                }
             }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
         DepthAttachment depth{};
@@ -1559,8 +1582,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             std::span(attachments.data(),pipeline.TargetFormats().size()),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
-        for(UINT i=0;i<target_count;++i)if(targets[i]&&(state.ordered_color_mask&(1u<<i)))
-            targets[i]->texture.UavBarrier(RecordingList());
+        for(UINT i=0;i<target_count;++i)if(targets[i]&&(state.ordered_color_mask&(1u<<i))&&
+            descriptions[i].samples==1)targets[i]->texture.UavBarrier(RecordingList());
+        for(const auto& transfer:ordered_multisample){
+            for(auto& plane:transfer.entry->storage_samples)plane.UavBarrier(RecordingList());
+            transfer.lease->Record(RecordingList(),transfer.entry->texture,
+                transfer.entry->storage_samples,transfer.entry->storage_linear,true);
+        }
         // A recorded attachment writer changes original GpuModified history,
         // even when recreation copied a CPU-initialized (GpuModified0) source.
         for(UINT i=0;i<target_count;++i)if(targets[i])targets[i]->NoteLogicalImageWrite();

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_graphics_state.h"
+#include "shader_recompiler/native_ordered_color.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 namespace NativeDX12 {
 bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type) {
@@ -193,8 +195,9 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
                        factor == BF::Src1Alpha || factor == BF::InvSrc1Alpha;
             };
             const auto& blend = regs.blend_control[i];
-            if (regs.color_buffers[i].NumSamples() != 1)
-                throw std::runtime_error("Native packed10 SNORM ordered color needs single-sample storage");
+            const auto samples = regs.color_buffers[i].NumSamples();
+            if (!std::has_single_bit(samples) || samples > Shader::NativeOrderedColor::MaxSamples)
+                throw std::runtime_error("Native ordered color sample count exceeds storage planes");
             if (regs.color_control.rop3 == AmdGpu::ColorControl::LogicOp::Copy &&
                 (dual(blend.color_src_factor) || dual(blend.color_dst_factor) ||
                 (blend.separate_alpha_blend &&

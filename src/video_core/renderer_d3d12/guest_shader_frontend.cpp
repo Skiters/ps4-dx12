@@ -29,6 +29,7 @@ void ConfigureOrderedColorTargets(Shader::RuntimeInfo& runtime, const AmdGpu::Re
         target.write_mask = u8(regs.color_buffers[i].Swizzle().ApplyMask(
             regs.color_target_mask.GetMask(i)));
         target.shader_mask = u8(regs.color_shader_mask.GetMask(i));
+        target.num_samples = u8(regs.color_buffers[i].NumSamples());
     }
 }
 } // namespace

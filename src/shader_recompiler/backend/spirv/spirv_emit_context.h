@@ -10,6 +10,7 @@
 #include "shader_recompiler/backend/bindings.h"
 #include "shader_recompiler/info.h"
 #include "shader_recompiler/ir/value.h"
+#include "shader_recompiler/native_ordered_color.h"
 #include "shader_recompiler/profile.h"
 #include "shader_recompiler/native_dma.h"
 
@@ -279,7 +280,8 @@ public:
     Id helper_invocation{};
     Id sample_index{};
     Id ordered_color_image_type{};
-    std::array<Id, MaxColorBuffers> ordered_color_images{};
+    std::array<std::array<Id, NativeOrderedColor::MaxSamples>, MaxColorBuffers>
+        ordered_color_images{};
     Id clip_distances{};
     Id cull_distances{};
 

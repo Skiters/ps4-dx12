@@ -131,11 +131,20 @@ std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool su
        (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5)))return available;
     return {};
 }
+bool IsOrderedColorClass(const GuestTextureDesc& d) {
+    return d.render_target&&!d.writable&&!d.depth_target&&!d.stencil_address&&
+        !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
+        std::has_single_bit(d.samples)&&d.samples<=8&&
+        ((d.data_format==9&&d.number_format==1)||
+         (d.data_format==10&&d.number_format==0));
+}
+bool IsOrderedMultisampleColorClass(const GuestTextureDesc& d) {
+    return IsOrderedColorClass(d)&&d.samples>1;
+}
 std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool supported){
     static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
     static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R32_UINT};
-    if(!supported||!d.render_target||d.writable||d.depth_target||d.stencil_address||d.samples!=1||
-       d.first_mip||d.levels!=1)return {};
+    if(!supported||!IsOrderedColorClass(d))return {};
     if(d.data_format==9&&d.number_format==1)return packed10;
     if(d.data_format==10&&d.number_format==0)return rgba8;
     return {};
@@ -148,10 +157,12 @@ bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTe
     return native==(view.UsesRaw32()?DXGI_FORMAT_R32_TYPELESS:GuestStorageFormat(view.data_format,format));
 }
 bool CanUseMultisampleStorageView(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
-    if(!entry.texture.handle||!view.writable||entry.desc.samples<2||entry.desc.samples>16||
+    const bool ordered=IsOrderedMultisampleColorClass(entry.desc)&&
+        IsOrderedMultisampleColorClass(view)&&CompatibleGuestAttachmentStorage(entry.desc,view);
+    if(!entry.texture.handle||(!view.writable&&!ordered)||entry.desc.samples<2||entry.desc.samples>16||
        !std::has_single_bit(entry.desc.samples)||view.samples!=entry.desc.samples||
        entry.desc.levels!=1||view.levels!=1||entry.desc.depth_target||
-       (!entry.desc.writable&&!IsReadonlyMultisampleWordClass(entry.desc)))return false;
+       (!entry.desc.writable&&!IsReadonlyMultisampleWordClass(entry.desc)&&!ordered))return false;
     const auto native=entry.texture.handle->GetDesc();
     if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
        native.SampleDesc.Count!=entry.desc.samples||native.MipLevels!=1||
@@ -160,9 +171,10 @@ bool CanUseMultisampleStorageView(const GuestTextureCache::Entry& entry,const Gu
        !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||
        (native.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE))return false;
     auto written_source=entry.desc;written_source.writable=true;
-    return ((entry.desc.writable&&entry.desc==view)||
+    return (ordered||(entry.desc.writable&&entry.desc==view)||
         CompatibleGuestWritableStorage(written_source,view))&&
-        MatchesGuestMipLayout(entry.layout,LayoutGuestTexture(view))&&CanBindNativeWordFormat(entry,view);
+        MatchesGuestMipLayout(entry.layout,LayoutGuestTexture(view))&&
+        (ordered||CanBindNativeWordFormat(entry,view));
 }
 bool IsReadonlyRawR32Class(const GuestTextureDesc& d){
     if(d.writable||d.render_target||d.depth_target||d.stencil_address||
@@ -1171,6 +1183,14 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::StorageUav(const Gues
        native.MipLevels!=1||native.Width!=desc.width||native.Height!=desc.height||
        native.DepthOrArraySize!=desc.layers||!(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
         throw std::invalid_argument("Native MSAA storage plane lacks its exact writable geometry");
+    if(IsOrderedMultisampleColorClass(writable_view)){
+        if(!storage.AllowsCast(DXGI_FORMAT_R32_UINT))
+            throw std::invalid_argument("Native ordered MSAA plane lacks R32_UINT format casting");
+        D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;
+        view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+        view.Texture2DArray={0,writable_view.first_layer,writable_view.view_layers,0};
+        return view;
+    }
     // Build the UAV from the actual single-sample plane. The authoritative
     // MSAA texture is not UAV-capable; its original readonly class stays put.
     Entry plane;plane.desc=writable_view;plane.desc.samples=1;
@@ -1329,7 +1349,8 @@ void GuestTextureCache::EnsureMultisampleStorage(Entry& entry,const GuestTexture
         throw std::invalid_argument("Retired MSAA storage needs matching native sample backing");
     description.SampleDesc={1,0};description.Alignment=0;
     description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    const auto formats=ResourceCasts(entry.texture);
+    const auto ordered_formats=OrderedColorCasts(entry.desc,texture_allocator_.SupportsFormatCasting());
+    const auto formats=ordered_formats.empty()?ResourceCasts(entry.texture):ordered_formats;
     const auto texture_bytes=texture_allocator_.AllocationInfo(description,formats).SizeInBytes;
     const auto linear_bytes=GuestMultisample::LinearBytes(entry.desc,GuestMultisample::Footprint(entry.desc,entry.layout));
     D3D12_RESOURCE_DESC buffer{};buffer.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -2750,7 +2771,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         ReadonlyWordCasts(d,texture_allocator_.SupportsFormatCasting());
     if(!word_casts.empty())cast_formats=word_casts;
     const auto ordered_color_casts=OrderedColorCasts(d,texture_allocator_.SupportsFormatCasting());
-    if(!ordered_color_casts.empty())cast_formats=ordered_color_casts;
+    if(!ordered_color_casts.empty()&&d.samples==1)cast_formats=ordered_color_casts;
+    const auto storage_cast_formats=!ordered_color_casts.empty()?ordered_color_casts:cast_formats;
     if(d.samples>1&&(d.data_format==6||d.data_format==34)&&!d.UsesRaw32()&&cast_formats.empty())
         throw std::runtime_error("Native packed-float MSAA requires bit-preserving D3D12 format casting");
     bool new_resource=false;
@@ -2808,7 +2830,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             // able to restore THIS original allocation, without recreating I.
             if(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET)r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         }
-        if(!ordered_color_casts.empty())r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+        if(!ordered_color_casts.empty()&&d.samples==1)
+            r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         if(d.samples>1){
             const auto typed=d.depth_target?(d.stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
                 layout.bytes_per_pixel==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT):layout.format;
@@ -2832,8 +2855,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         auto storage_description=r;storage_description.SampleDesc={1,0};storage_description.Alignment=0;
         storage_description.Flags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         uint64_t storage_linear_bytes{};
-        if(d.writable&&d.samples>1){
-            const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,cast_formats);
+        const bool multisample_storage=d.samples>1&&(d.writable||IsOrderedMultisampleColorClass(d));
+        if(multisample_storage){
+            const auto storage_allocation=texture_allocator_.AllocationInfo(storage_description,storage_cast_formats);
             storage_linear_bytes=GuestMultisample::LinearBytes(d,GuestMultisample::Footprint(d,layout));
             D3D12_RESOURCE_DESC buffer{};buffer.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER;
             buffer.Width=(storage_linear_bytes+3)&~uint64_t(3);buffer.Height=buffer.DepthOrArraySize=buffer.MipLevels=1;
@@ -2866,7 +2890,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
         if(storage_linear_bytes){
             new_entry->storage_samples.reserve(d.samples);
             for(UINT sample=0;sample<d.samples;++sample)
-                new_entry->storage_samples.push_back(AllocateTexture(new_entry.get(),storage_description,D3D12_RESOURCE_STATE_COMMON,nullptr,cast_formats));
+                new_entry->storage_samples.push_back(AllocateTexture(new_entry.get(),storage_description,D3D12_RESOURCE_STATE_COMMON,nullptr,storage_cast_formats));
             new_entry->storage_linear=GuestTiler::Scratch(device_.Get(),storage_linear_bytes);
         }
         entry=new_entry.get();entries_.push_back(std::move(new_entry));Index(*entry);new_resource=true;}

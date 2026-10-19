@@ -221,6 +221,7 @@ struct HwFragmentRuntimeInfo {
         AmdGpu::NumberFormat number_format{};
         u8 write_mask{};
         u8 shader_mask{};
+        u8 num_samples{1};
         bool enabled{};
 
         bool operator==(const OrderedColorTarget&) const noexcept = default;

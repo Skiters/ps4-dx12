@@ -214,6 +214,45 @@ Id OrderedLogicWord(EmitContext& ctx, AmdGpu::ColorControl::LogicOp operation,
     throw std::runtime_error("Ordered color reached invalid logic operation");
 }
 
+template <typename Target>
+void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_variable,
+                            Id coordinates, Id constants, Id source) {
+    const Id image = ctx.OpLoad(ctx.ordered_color_image_type, image_variable);
+    const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
+    const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
+    const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
+    Id destination{};
+    if (!logic) {
+        std::array<Id, 4> destination_channels{};
+        for (u32 component = 0; component < 4; ++component)
+            destination_channels[component] = OrderedSnormDecode(ctx, old_word,
+                component * 10, component == 3 ? 2 : 10);
+        destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
+    }
+    Id packed = ctx.u32_zero_value;
+    u32 raw_mask{};
+    const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
+                       target.number_format == AmdGpu::NumberFormat::Unorm;
+    for (u32 component = 0; component < 4; ++component) {
+        const u32 bits = rgba8 ? 8 : component == 3 ? 2 : 10;
+        const u32 shift = rgba8 ? component * 8 : component * 10;
+        const Id value = logic ? ctx.OpCompositeExtract(ctx.F32[1], source, component) :
+                                 OrderedBlendChannel(ctx, target, source, destination, constants, component);
+        const Id code = rgba8 ? OrderedUnormCode(ctx, value, bits) : OrderedSnormCode(ctx, value, bits);
+        packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
+            shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
+        if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;
+    }
+    if (logic) packed = OrderedLogicWord(ctx, target.logic_op, packed, old_word);
+    const Id mask = ctx.ConstU32(raw_mask);
+    const Id result = ctx.OpBitwiseOr(ctx.U32[1],
+        ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),
+        ctx.OpBitwiseAnd(ctx.U32[1], packed, mask));
+    const Id texel = ctx.OpCompositeConstruct(ctx.U32[4], result, ctx.u32_zero_value,
+                                               ctx.u32_zero_value, ctx.u32_zero_value);
+    ctx.OpImageWrite(image, coordinates, texel);
+}
+
 void EmitOrderedColor(EmitContext& ctx) {
     const Id constants_ptr = ctx.OpAccessChain(
         ctx.TypePointer(spv::StorageClass::PushConstant, ctx.F32[4]), ctx.push_data_block,
@@ -224,44 +263,30 @@ void EmitOrderedColor(EmitContext& ctx) {
         ctx.OpConvertFToS(ctx.S32[1], ctx.OpCompositeExtract(ctx.F32[1], position, 0)),
         ctx.OpConvertFToS(ctx.S32[1], ctx.OpCompositeExtract(ctx.F32[1], position, 1)),
         ctx.OpBitcast(ctx.S32[1], ctx.OpLoad(ctx.U32[1], ctx.output_layer)));
+    Id invocation_sample{};
     for (u32 index = 0; index < ctx.ordered_color_images.size(); ++index) {
         const auto& target = ctx.runtime_info.hw.fs.ordered_color_targets[index];
         if (!target.enabled) continue;
-        const Id image = ctx.OpLoad(ctx.ordered_color_image_type, ctx.ordered_color_images[index]);
-        const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
-        const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
         const Id source = ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[index].id);
-        const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
-        Id destination{};
-        if (!logic) {
-            std::array<Id, 4> destination_channels{};
-            for (u32 component = 0; component < 4; ++component)
-                destination_channels[component] = OrderedSnormDecode(ctx, old_word,
-                    component * 10, component == 3 ? 2 : 10);
-            destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
+        if (target.num_samples == 1) {
+            EmitOrderedColorSample(ctx, target, ctx.ordered_color_images[index][0],
+                                   coordinates, constants, source);
+            continue;
         }
-        Id packed = ctx.u32_zero_value;
-        u32 raw_mask{};
-        const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
-                           target.number_format == AmdGpu::NumberFormat::Unorm;
-        for (u32 component = 0; component < 4; ++component) {
-            const u32 bits = rgba8 ? 8 : component == 3 ? 2 : 10;
-            const u32 shift = rgba8 ? component * 8 : component * 10;
-            const Id value = logic ? ctx.OpCompositeExtract(ctx.F32[1], source, component) :
-                                     OrderedBlendChannel(ctx, target, source, destination, constants, component);
-            const Id code = rgba8 ? OrderedUnormCode(ctx, value, bits) : OrderedSnormCode(ctx, value, bits);
-            packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
-                shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
-            if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;
+        if (!Sirit::ValidId(invocation_sample))
+            invocation_sample = ctx.OpLoad(ctx.U32[1], ctx.sample_index);
+        for (u32 sample = 0; sample < target.num_samples; ++sample) {
+            const Id active = ctx.OpLabel();
+            const Id merge = ctx.OpLabel();
+            const Id selected = ctx.OpIEqual(ctx.U1[1], invocation_sample, ctx.ConstU32(sample));
+            ctx.OpSelectionMerge(merge, spv::SelectionControlMask::MaskNone);
+            ctx.OpBranchConditional(selected, active, merge);
+            ctx.AddLabel(active);
+            EmitOrderedColorSample(ctx, target, ctx.ordered_color_images[index][sample],
+                                   coordinates, constants, source);
+            ctx.OpBranch(merge);
+            ctx.AddLabel(merge);
         }
-        if (logic) packed = OrderedLogicWord(ctx, target.logic_op, packed, old_word);
-        const Id mask = ctx.ConstU32(raw_mask);
-        const Id result = ctx.OpBitwiseOr(ctx.U32[1],
-            ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),
-            ctx.OpBitwiseAnd(ctx.U32[1], packed, mask));
-        const Id texel = ctx.OpCompositeConstruct(ctx.U32[4], result, ctx.u32_zero_value,
-                                                   ctx.u32_zero_value, ctx.u32_zero_value);
-        ctx.OpImageWrite(image, coordinates, texel);
     }
 }
 } // namespace
