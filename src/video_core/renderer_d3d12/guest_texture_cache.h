@@ -20,6 +20,8 @@
 #include <map>
 namespace AmdGpu {struct Image;struct ColorBuffer;struct DepthBuffer;struct DepthView;union CbDbExtent;}
 namespace NativeDX12 {
+struct GuestStorageImageClearLease;
+struct GuestImageClearLease;
 struct GuestTextureDesc {
     uint64_t address=0;
     uint32_t width=1,height=1,pitch=1,levels=1,layers=1;
@@ -181,6 +183,10 @@ public:
         bool storage_retired=false;
         std::vector<std::shared_ptr<GuestMultisample::StorageLease>> storage_leases;
         std::vector<std::shared_ptr<void>> storage_clear_leases;
+        // Immutable clear descriptors follow this allocation/view. In-flight
+        // callers retain old leases independently when the backing changes.
+        std::shared_ptr<GuestStorageImageClearLease> storage_clear_descriptors;
+        std::shared_ptr<GuestImageClearLease> render_clear_descriptors;
         std::vector<Resource> uploads;uint64_t fence=0;bool pending=false;
         std::vector<Resource> buffer_sync_resources;
         uint64_t buffer_sync_allocation_bytes{};

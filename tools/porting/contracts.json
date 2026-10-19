@@ -14559,7 +14559,7 @@
       "contract": {
         "inputs": "Compatible cached image-clear resource whose existing descriptor may select a nonzero first mip, partial layers, volume slices or padded guest storage.",
         "outputs": "Native image clears no longer require a padding-free guest allocation. Clear views explicitly select mip zero through all levels and every resource layer; single-sample zero UAV images also retain their complete 1D/3D dimensions. Clear commands affect native image texels and guest readback keeps physical padding intact. Whole-allocation copy restrictions remain separate.",
-        "ordering": "Pinned IsComputeImageClear builds base level/layer zero with extent image.info.resources. Native temporary clear descriptors likewise reset first mip/layer and select all layers without mutating stored image/view identity. Existing RTV/UAV family validation, image ownership, zero-bit/format rules and retained descriptor/resource leases remain authoritative.",
+        "ordering": "Pinned IsComputeImageClear builds base level/layer zero with extent image.info.resources. Native temporary clear descriptors likewise reset first mip/layer and select all layers without mutating stored image/view identity. Existing RTV/UAV family validation, image ownership, zero-bit/format rules and retained descriptor/resource leases remain authoritative. Immutable per-image RTV/UAV clear descriptors are reused for the same resource, complete clear view and native format; backing changes release cached descriptors while in-flight leases retain prior storage.",
         "verification_prepared": "A real padded RGBA8 RTV fixture has width17/pitch32/height9, two mips and three layers while its cached view selects mip1/layer1. Full GuestImageReadback must show exact yellow on every logical texel and unchanged 0xa6 padding. GCN zero-clear shapes expand to 84 R32 FLOAT warm/extent/mip/layer/cube/volume cases, requiring image zero with unchanged separate physical buffer bytes before restoring the quarter scenario. Core/checks/attachment fixture compile/link; final all-ten refresh/audit pending, no execution.",
         "historical_review_notes": "Actual full-subresource RTV/UAV descriptors, padded/mip/layer/cube/volume clear and retile/readback, partial cached view legality, negative-zero/nonzero/integer/sRGB/packed/expanded formats, MSAA/storage samples, buffer domains/fault/fence and full acceptance remain unverified. No semantic closure.",
         "open_contracts": "No specific remaining production change established for this group. Behavior acceptance remains separate."
@@ -14582,6 +14582,13 @@
         "reason": "Executed the bounded native fixture subcontracts listed here with actual GPU/readback. Whole-group, real-GCN paths not in these fixtures, full-suite and final game acceptance remain open. No core-binary acceptance transfer.",
         "evidence": "F:\\PS4Dev\\handoff\\breakpoint-crash-d01969e-20261016T234433Z\\narrow-regressions-8fb9c79.json",
         "executed_checks": [
+          {
+            "test": "native_clear_descriptor_reuse",
+            "date": "2026-10-19",
+            "result": "PASS0.40s; real GPU R32 float RTV/UAV, all2mips/2layers;64 ordered repeated clears reuse descriptor identities across submission; backing replacement retains old clear/copy data; wrong resource/format prepared leases rejected; integer37 view replacement; descriptor lifetime release; Debug Layer severity0/1 absent. Related native_gpu_page_ownership_360p PASS33.62s. Not game/FPS/full-group acceptance.",
+            "source": "native-port/clear_descriptor_reuse_test.cpp",
+            "output": "F:/PS4Dev/handoff/physical-backing-proof-20261019/clear-descriptor-reuse-tests.log"
+          },
           {
             "test": "native_gpu_page_ownership",
             "sha256": "742885251c7677a7d416eb4be49b5342edf69165ff113040f8db49ed43e46857",

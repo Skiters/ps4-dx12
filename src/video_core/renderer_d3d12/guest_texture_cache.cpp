@@ -1368,6 +1368,7 @@ void GuestTextureCache::SetBackingSamples(Entry& entry,UINT samples,ID3D12Graphi
         entry.pending=true;
         for(const auto& lease:prepared)lease->Record(list,entry.texture,destination);
     }
+    entry.storage_clear_descriptors.reset();entry.render_clear_descriptors.reset();
     backings[old_samples]=std::move(entry.texture);entry.texture=std::move(destination);
     entry.sample_backings.swap(backings);entry.requested_backing_samples=samples;
     entry.allocation_bytes+=added_bytes;entry.last_use=++use_sequence_;

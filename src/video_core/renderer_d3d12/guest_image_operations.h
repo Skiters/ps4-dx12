@@ -82,9 +82,11 @@ inline bool GuestStorageImageClearCompatible(const GuestTextureCache::Entry& e,c
 }
 struct GuestStorageImageClearLease {
     Resource texture;
+    GuestTextureDesc view;
+    DXGI_FORMAT view_format;
     Descriptors visible,cpu;
     uint32_t mips;
-    GuestStorageImageClearLease(ID3D12Device* device,const GuestTextureCache::Entry& e):texture(e.texture),
+    GuestStorageImageClearLease(ID3D12Device* device,const GuestTextureCache::Entry& e):texture(e.texture),view(GuestImageClearView(e.desc)),view_format(e.layout.format),
         visible(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,e.desc.levels,true),
         cpu(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,e.desc.levels,false),mips(e.desc.levels){
         const auto clear_view=GuestImageClearView(e.desc);
@@ -162,8 +164,13 @@ inline std::shared_ptr<GuestStorageImageClearLease> RecordGuestStorageImageClear
     GuestTextureCache::Entry& e,ID3D12GraphicsCommandList* list,const float (&color)[4],
     std::shared_ptr<GuestStorageImageClearLease> lease={}) {
     if(!GuestStorageImageClearCompatible(e,color))throw std::invalid_argument("Incompatible guest storage image clear");
-    if(!lease)lease=std::make_shared<GuestStorageImageClearLease>(device,e);
-    if(lease->texture.handle!=e.texture.handle||lease->mips!=e.desc.levels)
+    if(!lease){
+        auto& cached=e.storage_clear_descriptors;
+        if(!cached||cached->texture.handle!=e.texture.handle||cached->view!=GuestImageClearView(e.desc)||cached->view_format!=e.layout.format)
+            cached=std::make_shared<GuestStorageImageClearLease>(device,e);
+        lease=cached;
+    }
+    if(lease->texture.handle!=e.texture.handle||lease->view!=GuestImageClearView(e.desc)||lease->view_format!=e.layout.format)
         throw std::invalid_argument("Mismatched prepared guest storage image clear");
     e.texture.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     // ClearUAV is a compute operation, including when the state is unchanged.
@@ -236,8 +243,8 @@ inline std::shared_ptr<GuestMultisampleStorageClearLease> RecordGuestMultisample
     image.pending=true;return lease;
 }
 struct GuestImageClearLease {
-    Resource texture;ComPtr<ID3D12DescriptorHeap> heap;UINT step,mips;
-    GuestImageClearLease(ID3D12Device* device,const GuestTextureCache::Entry& e):texture(e.texture),mips(e.desc.levels){
+    Resource texture;GuestTextureDesc view;DXGI_FORMAT view_format;ComPtr<ID3D12DescriptorHeap> heap;UINT step,mips;
+    GuestImageClearLease(ID3D12Device* device,const GuestTextureCache::Entry& e):texture(e.texture),view(GuestImageClearView(e.desc)),view_format(e.layout.format),mips(e.desc.levels){
         D3D12_DESCRIPTOR_HEAP_DESC desc{};desc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;desc.NumDescriptors=mips;
         Check(DX12_API_CALL(device->CreateDescriptorHeap(&desc,IID_PPV_ARGS(&heap))));
         auto handle=heap->GetCPUDescriptorHandleForHeapStart();step=device->GetDescriptorHandleIncrementSize(desc.Type);
@@ -252,8 +259,13 @@ inline ComPtr<ID3D12DescriptorHeap> RecordGuestImageClear(ID3D12Device* device,
     GuestTextureCache::Entry& e,ID3D12GraphicsCommandList* list,const float (&color)[4],
     std::shared_ptr<GuestImageClearLease> lease={}) {
     if(!GuestImageClearCompatible(e))throw std::invalid_argument("Incompatible guest image clear");
-    if(!lease)lease=std::make_shared<GuestImageClearLease>(device,e);
-    if(lease->texture.handle!=e.texture.handle||lease->mips!=e.desc.levels)
+    if(!lease){
+        auto& cached=e.render_clear_descriptors;
+        if(!cached||cached->texture.handle!=e.texture.handle||cached->view!=GuestImageClearView(e.desc)||cached->view_format!=e.layout.format)
+            cached=std::make_shared<GuestImageClearLease>(device,e);
+        lease=cached;
+    }
+    if(lease->texture.handle!=e.texture.handle||lease->view!=GuestImageClearView(e.desc)||lease->view_format!=e.layout.format)
         throw std::invalid_argument("Mismatched prepared guest render target clear");
     auto handle=lease->heap->GetCPUDescriptorHandleForHeapStart();
     e.texture.Transition(list,D3D12_RESOURCE_STATE_RENDER_TARGET);

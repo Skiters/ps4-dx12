@@ -261,6 +261,9 @@ add_executable(native-page-owned-gpu-test page_owned_gpu_test.cpp
     "${PORT_ROOT}/src/video_core/renderer_d3d12/memory_surface_provider.cpp")
 target_link_libraries(native-page-owned-gpu-test PRIVATE shadps4_native_guest_textures shadps4_native_d3d12)
 add_test(NAME native_gpu_page_ownership COMMAND native-page-owned-gpu-test)
+add_executable(native-clear-descriptor-reuse-test clear_descriptor_reuse_test.cpp)
+target_link_libraries(native-clear-descriptor-reuse-test PRIVATE shadps4_native_guest_textures shadps4_native_d3d12)
+add_test(NAME native_clear_descriptor_reuse COMMAND native-clear-descriptor-reuse-test)
 add_test(NAME native_gpu_page_ownership_360p COMMAND native-page-owned-gpu-test lowres)
 # Includes typed/converted mip/layer/volume clears and gated allocation lifetime
 # controls; the old 20s limit expired before those controls completed on hardware.
