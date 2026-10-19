@@ -55,6 +55,13 @@ class PageWatch {
                 if(!owned){
                     const auto retired=self->retired.upper_bound(address);
                     const bool tracked=retired!=self->retired.begin()&&std::prev(retired)->second>address;
+                    if(!accessible&&std::getenv("SHADPS4_PAGE_FAULT_TRACE")){
+                        static std::atomic<unsigned> failures{};
+                        if(failures.fetch_add(1)<16)std::fprintf(stderr,
+                            "PAGEWATCH unowned fault address=%llx write=%u tracked=%u resolved=%llu protection=%lx\n",
+                            (unsigned long long)address,unsigned(write),unsigned(tracked),
+                            (unsigned long long)resolved_generation,region.Protect);
+                    }
                     return (resolved_generation||tracked)&&accessible?EXCEPTION_CONTINUE_EXECUTION:EXCEPTION_CONTINUE_SEARCH;
                 }
                 generation=current->second.generation;
@@ -62,7 +69,14 @@ class PageWatch {
                 if(!write&&current->second.read_only&&accessible)return EXCEPTION_CONTINUE_EXECUTION;
                 // A callback that leaves the same ownership unresolved is a
                 // real failure, not a reason to retry forever or unprotect it.
-                if(generation==resolved_generation)return EXCEPTION_CONTINUE_SEARCH;
+                if(generation==resolved_generation){
+                    if(std::getenv("SHADPS4_PAGE_FAULT_TRACE"))std::fprintf(stderr,
+                        "PAGEWATCH unresolved fault address=%llx write=%u generation=%llu readonly=%u protection=%lx original=%lx watched=%lx\n",
+                        (unsigned long long)address,unsigned(write),(unsigned long long)generation,unsigned(current->second.read_only),
+                        region.Protect,current->second.protection.empty()?0:current->second.protection.front().original,
+                        current->second.protection.empty()?0:current->second.protection.front().watched);
+                    return EXCEPTION_CONTINUE_SEARCH;
+                }
                 if(resolved_generation&&std::getenv("SHADPS4_PAGE_FAULT_TRACE")){
                     static std::atomic<unsigned> count{};
                     if(count.fetch_add(1)<64){
