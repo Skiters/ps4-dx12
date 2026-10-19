@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <cstring>
 #include <tuple>
 #include <bit>
 #include <cstdlib>
@@ -384,6 +385,15 @@ std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(const Resource
         view.descriptor=*descriptor;capture_register(view,D3D12_DESCRIPTOR_RANGE_TYPE_SRV);child->capture_textures_.push_back(std::move(view));
     }
     return child;
+}
+void ResourceBindings::ImmutableConstants(UINT reg,UINT space,std::span<const std::byte> data){
+    if(data.empty()||data.size()>65536)throw std::invalid_argument("Invalid immutable replay constant data");
+    const auto bytes=UINT((data.size()+255)&~size_t(255));
+    auto buffer=std::make_shared<Resource>(Buffer(device_.Get(),bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ));
+    void* mapped{};D3D12_RANGE no_read{};Check(DX12_API_CALL(buffer->handle->Map(0,&no_read,&mapped)));
+    memset(mapped,0,bytes);memcpy(mapped,data.data(),data.size());
+    D3D12_RANGE written{0,bytes};DX12_API_CALL(buffer->handle->Unmap(0,&written));
+    RetainAllocation(buffer);Cbv(reg,space,buffer->handle.Get(),0,bytes);
 }
 void ResourceBindings::RecycleRetiredHeaps(){
     if(!pool_)return;

@@ -1043,7 +1043,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     // Original arena bindings remain logical through BindTextures and
     // BeginRendering. Attachment uploads can grow a preserving B envelope or
     // Finish/reset constants. Pick native descriptors only at the final bind.
-    bindings.BeforeBind([&rasterizer,push,ordinary_count,
+    bindings.BeforeBind([&rasterizer,push,ordinary_count,replayable_bindings,
         pending,dma,dma_pending,prepared_views=views,
         auxiliary=std::vector<Rasterizer::ShaderBufferRequest>(read_buffers.begin(),read_buffers.end()),
         runtime=std::vector<std::byte>(runtime_data.begin(),runtime_data.end()),
@@ -1112,6 +1112,15 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     b.space==0&&target.reg>=b.reg&&target.reg-b.reg<b.count)
                     table.Srv(b.reg,0,view.resource.Get(),d,target.reg-b.reg);
             }
+        }
+        if(replayable_bindings){
+            for(const auto& b:table.Layout().Bindings())if(b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV){
+                if(b.space==Shader::NATIVE_BUFFER_BOUNDS_SET)
+                    table.ImmutableConstants(0,b.space,std::as_bytes(std::span(buffer_limits)));
+                else if(b.space==30)table.ImmutableConstants(0,b.space,std::as_bytes(std::span(&push,1)));
+                else table.ImmutableConstants(0,b.space,runtime);
+            }
+            return;
         }
         auto push_buffer=rasterizer.UploadConstants(std::as_bytes(std::span(&push,1)));
         auto runtime_buffer=rasterizer.UploadConstants(runtime);
@@ -1452,6 +1461,12 @@ void ExecuteGuestBufferCompute(ID3D12Device* device,Rasterizer& rasterizer,
     ExecuteGuestResources(device,rasterizer,pipeline,stages,invocation,push,
         std::as_bytes(std::span(&runtime,1)),[&](ResourceBindings& b){rasterizer.ExecuteCompute(pipeline,b,
             invocation.groups[0],invocation.groups[1],invocation.groups[2],false);},textures,border_colors);
+}
+void BindGuestGraphicsRuntime(ResourceBindings& bindings,const GraphicsRuntime& runtime){
+    for(const auto& binding:bindings.Layout().Bindings())if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.space==31){
+        if(binding.reg||binding.count!=1)throw std::invalid_argument("Invalid graphics runtime constant binding");
+        bindings.ImmutableConstants(0,31,std::as_bytes(std::span(&runtime,1)));return;
+    }
 }
 void ExecuteGuestGraphicsResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ShaderPipeline& pipeline,std::span<const GuestResourceStage> stages,

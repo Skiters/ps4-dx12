@@ -914,7 +914,10 @@ int main(int argc,char** argv){try{
                             rasterizer.ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,
                                 viewports.viewports,viewports.scissors,blend,draw,{},nullptr,false,captured_inputs?&indirect:nullptr);};
                     if(gs_base){
-                        auto bindings=gs_base->ForkForReplay(producer_pipeline.Layout());rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                        auto bindings=gs_base->ForkForReplay(producer_pipeline.Layout());
+                        auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
+                        BindGuestGraphicsRuntime(*bindings,local_runtime);
+                        rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
                     }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,capture_resources,push,runtime,record,textures);
                     if(stream_inputs){
                         auto download=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -963,7 +966,10 @@ int main(int argc,char** argv){try{
                         }
                         const auto record=[&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,bytes,offset);submit(bindings);};
                         if(ps_base){
-                            auto bindings=ps_base->ForkForReplay(replay_pipeline->Layout());rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
+                            auto bindings=ps_base->ForkForReplay(replay_pipeline->Layout());
+                            auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
+                            BindGuestGraphicsRuntime(*bindings,local_runtime);
+                            rasterizer.RetainUntilFinish([bindings](u64){});record(*bindings);
                         }else ExecuteGuestGraphicsResources(device.Get(),rasterizer,*replay_pipeline,replay_resources,push,runtime,record,textures);
                         state.pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask=mask;replay_pipeline=&pipeline;
                     };
@@ -991,6 +997,14 @@ int main(int argc,char** argv){try{
                             const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
                             serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
                                 [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
+                                    if(!partition.first){
+                                        // The preceding private capture readback
+                                        // retired/reset the ordinary arena.
+                                        // Overwrite it; logical draw constants
+                                        // must remain immutable across Finish.
+                                        std::array<std::byte,8192> unrelated;unrelated.fill(std::byte{0x6d});
+                                        rasterizer.UploadConstants(unrelated);
+                                    }
                                     run_capture(partition.capture,{partition.input.limit,1},partition.input.first,&common,&common);
                                 });
                         },textures,0,{},true,common_layout);

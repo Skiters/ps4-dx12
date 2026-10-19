@@ -109,6 +109,9 @@ public:
     // Caller must retain each returned table through its submission fence.
     std::shared_ptr<ResourceBindings> ForkForReplay();
     std::shared_ptr<ResourceBindings> ForkForReplay(const ResourceLayout& target);
+    // Contents must survive command-list retirement and upload-arena reset
+    // while a logical draw still has unsubmitted replay slices.
+    void ImmutableConstants(UINT reg,UINT space,std::span<const std::byte> data);
     // Explicit retirement, never automatic destructor recycling: callers can
     // also record bindings without waiting for the GPU.
     void RecycleRetiredHeaps();

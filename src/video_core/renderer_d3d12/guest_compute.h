@@ -55,6 +55,9 @@ static_assert(offsetof(GraphicsRuntime,viewport_extents)==48);
 static_assert(offsetof(GraphicsRuntime,viewport_depths)==304);
 static_assert(offsetof(GraphicsRuntime,viewport_clip_transforms)==560);
 static_assert(sizeof(GraphicsRuntime)==816);
+// Replays use local non-indexed IDs; keep their runtime constants separate
+// from the original indexed/instanced producer and from resettable arenas.
+void BindGuestGraphicsRuntime(ResourceBindings&,const GraphicsRuntime&);
 // Shared native bindings for all linked graphics stages. submit must record the
 // actual native draw using the supplied immutable resource table. Completion
 // and guest writeback are owned here, including exceptional retirement.
