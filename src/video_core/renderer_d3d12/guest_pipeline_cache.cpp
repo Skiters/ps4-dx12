@@ -16,11 +16,10 @@ struct Key {
 };
 std::string GraphicsKey(const GuestGraphicsStages& guest,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d,
     bool depth_bounds,ShaderPipeline::StencilFaces stencil) {
-    if(d.StreamOutput.NumEntries||d.StreamOutput.NumStrides)
-        throw std::invalid_argument("Guest stream output is not connected to native D3D12 yet");
     if(d.InputLayout.NumElements&&!d.InputLayout.pInputElementDescs)
         throw std::invalid_argument("Null native vertex input layout");
     Key k;for(auto* stage:guest.stages)k.Add(stage?stage->id:u64(0));
+    StreamOutputLayout::AppendKey(k,d.StreamOutput);
     k.Add(d.BlendState.AlphaToCoverageEnable);k.Add(d.BlendState.IndependentBlendEnable);
     for(const auto& r:d.BlendState.RenderTarget) {
         k.Add(r.BlendEnable);k.Add(r.LogicOpEnable);k.Add(r.SrcBlend);k.Add(r.DestBlend);k.Add(r.BlendOp);
@@ -50,12 +49,13 @@ std::string GraphicsKey(const GuestGraphicsStages& guest,const D3D12_GRAPHICS_PI
 }
 GuestPipelineCache::GraphicsRecord::GraphicsRecord(const GuestGraphicsStages& g,
     const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d,bool bounds,ShaderPipeline::StencilFaces faces)
-    :guest(g),state(d),depth_bounds(bounds),stencil(faces){
+    :guest(g),state(d),stream_output(d.StreamOutput),depth_bounds(bounds),stencil(faces){
     inputs.reserve(d.InputLayout.NumElements);semantics.reserve(d.InputLayout.NumElements);
     for(UINT i=0;i<d.InputLayout.NumElements;++i){inputs.push_back(d.InputLayout.pInputElementDescs[i]);
         semantics.emplace_back(inputs.back().SemanticName);}
     for(size_t i=0;i<inputs.size();++i)inputs[i].SemanticName=semantics[i].c_str();
     state.InputLayout={inputs.data(),UINT(inputs.size())};state.pRootSignature=nullptr;
+    state.StreamOutput=stream_output.Desc();
     state.VS=state.PS=state.DS=state.HS=state.GS={};state.CachedPSO={};
 }
 const ShaderPipeline& GuestPipelineCache::Compute(AmdGpu::Liverpool& gpu) {

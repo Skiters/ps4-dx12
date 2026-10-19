@@ -4,6 +4,7 @@
 #include "nv_shader_clock.h"
 #include "ags_shader_clock.h"
 #include "persistent_cache.h"
+#include "stream_output_layout.h"
 #include <map>
 #include <mutex>
 #include <cstring>
@@ -11,8 +12,7 @@
 namespace NativeDX12 {
 namespace {
 void AddGraphicsState(CacheKey& k,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
-    if(d.StreamOutput.NumEntries||d.StreamOutput.NumStrides)
-        throw std::invalid_argument("Guest stream output is not connected to native D3D12 yet");
+    StreamOutputLayout::AppendKey(k,d.StreamOutput);
     if(d.InputLayout.NumElements&&!d.InputLayout.pInputElementDescs)
         throw std::invalid_argument("Null native vertex input layout");
     k.Add(d.BlendState.AlphaToCoverageEnable);k.Add(d.BlendState.IndependentBlendEnable);
@@ -45,7 +45,7 @@ std::filesystem::path PsoDirectory(){
 CacheKey PsoKey(ID3D12Device* device,const std::wstring& dxc){
     struct Fingerprint {std::filesystem::file_time_type modified;uintmax_t size;std::array<std::byte,32> hash;};
     static std::mutex mutex;static std::map<std::wstring,Fingerprint> fingerprints;
-    CacheKey key;key.Text("native-pso-cache-20261009-v1");
+    CacheKey key;key.Text("native-pso-cache-20261020-v2-stream-output");
     {std::lock_guard lock(mutex);const auto modified=std::filesystem::last_write_time(dxc);const auto size=std::filesystem::file_size(dxc);
         auto found=fingerprints.find(dxc);
         if(found==fingerprints.end()||found->second.modified!=modified||found->second.size!=size)

@@ -18587,7 +18587,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Extend oversized point-output capture fallback to the tessellation+geometry stage domain already accepted by pinned graphics; the currently connected capture route requires EsGs. Dynamic ring scalar-offset paths and complete indirect-batch bounds still need adaptation in that fallback. On-chip geometry and stream output are excluded because the pinned renderer skips them.",
+      "missing_semantics": "Internal primitive-stream pipeline prerequisites are now connected: owned SO declarations/semantic strings/strides in both PSO keys and cached graphics records, versioned persistence and host GS compilation/build integration. CPU ownership/key/serialization/malformed-layout checks and host VS/GS DXIL compile passed; actual SO content GPU fixture is compiled only. This does not yet connect the tessellation bridge or remove the EsGs capture guard. Extend oversized point-output capture fallback to the tessellation+geometry stage domain already accepted by pinned graphics; the currently connected capture route requires EsGs. Dynamic ring scalar-offset paths and complete indirect-batch bounds still need adaptation in that fallback. On-chip geometry and stream output are excluded because the pinned renderer skips them.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,

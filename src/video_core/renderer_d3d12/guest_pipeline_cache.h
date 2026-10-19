@@ -2,6 +2,7 @@
 #pragma once
 #include "guest_shader_cache.h"
 #include "shader_pipeline.h"
+#include "stream_output_layout.h"
 #include <memory>
 namespace NativeDX12 {
 // GPU-command-thread owner. The frontend/cache must outlive this object. The
@@ -17,6 +18,7 @@ class GuestPipelineCache {
         D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};
         std::vector<D3D12_INPUT_ELEMENT_DESC> inputs;
         std::vector<std::string> semantics;
+        StreamOutputLayout stream_output;
         bool depth_bounds{};
         ShaderPipeline::StencilFaces stencil{};
         std::unique_ptr<ShaderPipeline> pipeline;

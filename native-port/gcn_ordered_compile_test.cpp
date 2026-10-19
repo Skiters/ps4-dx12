@@ -8,6 +8,7 @@
 #include "normalized_blend_oracle.h"
 #include "srgb_blend_oracle.h"
 #include "integer_logic_oracle.h"
+#include "stream_output_layout_checks.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
@@ -24,6 +25,7 @@ int main(int argc,char** argv){try{
     NativeDX12::Tests::CheckNormalizedBlendOracle();
     NativeDX12::Tests::CheckSrgbBlendOracle();
     NativeDX12::Tests::CheckIntegerLogicOracle();
+    NativeDX12::Tests::CheckStreamOutputLayout();
     // Vulkan logicOpEnable disables blending even for formats where the bit
     // operation itself is not applied. Check native state without a device.
     AmdGpu::Regs logic_regs{};

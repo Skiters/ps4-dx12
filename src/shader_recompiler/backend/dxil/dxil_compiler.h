@@ -9,4 +9,6 @@ struct DxilResult { bool success{}; std::vector<uint8_t> bytecode; std::string d
 // Explicit DLL path keeps this portable and avoids changing the installed SDK/driver.
 DxilResult CompileDxil(const std::wstring& compiler_dll, const std::string& hlsl, Stage stage);
 DxilResult CompileComputeDxil(const std::wstring& compiler_dll,const std::string& hlsl);
+// Host-internal geometry passes; guest GCN still uses the full linked SPIR-V path.
+DxilResult CompileGeometryDxil(const std::wstring& compiler_dll,const std::string& hlsl);
 }

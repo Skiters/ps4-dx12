@@ -28,7 +28,7 @@ target_sources(shadps4 PRIVATE
     "${_native}/guest_compute.cpp" "${_native}/guest_stage_bindings.cpp"
     "${_native}/guest_rasterizer.cpp" "${_native}/guest_backend.cpp"
     "${_native}/guest_shader_frontend.cpp" "${_native}/guest_shader_cache.cpp" "${_native}/guest_pipeline_cache.cpp"
-    "${_dxil}/spirv_converter.cpp" "${_dxil}/linked_spirv_converter.cpp"
+    "${_dxil}/spirv_converter.cpp" "${_dxil}/linked_spirv_converter.cpp" "${_dxil}/dxil_compiler.cpp"
     "${PROJECT_SOURCE_DIR}/native-port/vendor/imgui_impl_dx12.cpp"
     "${PROJECT_SOURCE_DIR}/src/video_core/guest_shader_runtime.cpp")
 target_sources(shadps4 PRIVATE "${PROJECT_SOURCE_DIR}/src/video_core/screenshot.cpp")

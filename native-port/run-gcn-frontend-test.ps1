@@ -1,5 +1,5 @@
 param([string]$BuildDir,[string]$Mode='base',
-    [ValidateSet('gcn_frontend','gcn_ordered_compile','shader_reload','pipeline_storage','wave64','gcn_arithmetic','gcn_winding','gcn_attachment_alias','address_space_protections','guest_frame_trace','packed_float','emulator_shutdown')][string]$Fixture='gcn_frontend',
+    [ValidateSet('gcn_frontend','gcn_ordered_compile','primitive_stream','shader_reload','pipeline_storage','wave64','gcn_arithmetic','gcn_winding','gcn_attachment_alias','address_space_protections','guest_frame_trace','packed_float','emulator_shutdown')][string]$Fixture='gcn_frontend',
     [switch]$CompileOnly,[ValidateRange(1,64)][int]$Jobs=20)
 $ErrorActionPreference='Stop'
 $build=(Resolve-Path -LiteralPath $BuildDir).Path

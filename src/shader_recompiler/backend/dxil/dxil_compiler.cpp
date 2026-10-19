@@ -55,4 +55,7 @@ DxilResult CompileDxil(const std::wstring& compiler_dll,const std::string& hlsl,
 DxilResult CompileComputeDxil(const std::wstring& compiler_dll,const std::string& hlsl){
     return CompileShaderProfile(compiler_dll,hlsl,L"cs_6_0");
 }
+DxilResult CompileGeometryDxil(const std::wstring& compiler_dll,const std::string& hlsl){
+    return CompileShaderProfile(compiler_dll,hlsl,L"gs_6_0");
+}
 }

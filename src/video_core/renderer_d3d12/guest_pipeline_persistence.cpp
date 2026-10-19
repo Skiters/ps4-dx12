@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=31,PipelineVersion=4;
+constexpr u32 StageVersion=31,PipelineVersion=5;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";
@@ -32,7 +32,7 @@ std::array<std::byte,32> ExecutableIdentity(){
     return digest;
 }
 std::vector<u8> Identity(const GuestShaderCache& shaders){
-    CacheKey key;key.Text("native-pipeline-metadata-v34");key.Blob(ExecutableIdentity());
+    CacheKey key;key.Text("native-pipeline-metadata-v35");key.Blob(ExecutableIdentity());
     key.Blob(shaders.ConfigurationIdentity());
     return {reinterpret_cast<const u8*>(key.bytes.data()),reinterpret_cast<const u8*>(key.bytes.data()+key.bytes.size())};
 }
@@ -52,7 +52,7 @@ struct FixedGraphicsState{
     D3D12_PIPELINE_STATE_FLAGS flags{};
 };
 FixedGraphicsState State(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d){
-    if(d.StreamOutput.NumEntries||d.StreamOutput.NumStrides)throw std::invalid_argument("Unsupported cached stream output");
+    StreamOutputLayout::Validate(d.StreamOutput);
     FixedGraphicsState result{};
     result.blend=d.BlendState;result.sample_mask=d.SampleMask;result.raster=d.RasterizerState;
     result.rasterized_stream=d.StreamOutput.RasterizedStream;
@@ -71,16 +71,18 @@ void SaveGraphicsState(Serialization::Archive& ar,const D3D12_GRAPHICS_PIPELINE_
         save.Write(input.InputSlot);save.Write(input.AlignedByteOffset);save.Write(input.InputSlotClass);
         save.Write(input.InstanceDataStepRate);
     }
+    StreamOutputLayout(d.StreamOutput).Save(save);
 }
 struct GraphicsState{
     D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};
     std::vector<std::string> semantics;
     std::vector<D3D12_INPUT_ELEMENT_DESC> inputs;
+    StreamOutputLayout stream_output;
     explicit GraphicsState(Serialization::Archive& ar){
         Serialization::Reader load(ar);FixedGraphicsState fixed{};load.Read(&fixed,sizeof(fixed));
         if(fixed.target_count>8||!fixed.samples.Count)throw std::runtime_error("Invalid cached graphics target state");
         state.BlendState=fixed.blend;state.SampleMask=fixed.sample_mask;state.RasterizerState=fixed.raster;
-        if(fixed.rasterized_stream&&fixed.rasterized_stream!=D3D12_SO_NO_RASTERIZED_STREAM)
+        if(fixed.rasterized_stream>=D3D12_SO_STREAM_COUNT&&fixed.rasterized_stream!=D3D12_SO_NO_RASTERIZED_STREAM)
             throw std::runtime_error("Invalid cached rasterized stream");
         state.StreamOutput.RasterizedStream=fixed.rasterized_stream;
         state.DepthStencilState=fixed.depth;state.IBStripCutValue=fixed.strip;state.PrimitiveTopologyType=fixed.topology;
@@ -95,6 +97,9 @@ struct GraphicsState{
             load.Read(input.AlignedByteOffset);load.Read(input.InputSlotClass);load.Read(input.InstanceDataStepRate);
         }
         state.InputLayout={inputs.data(),count};
+        stream_output=StreamOutputLayout::Load(load);state.StreamOutput=stream_output.Desc();
+        if(state.StreamOutput.RasterizedStream!=fixed.rasterized_stream)
+            throw std::runtime_error("Cached primitive stream state disagrees with its fixed graphics state");
     }
 };
 }
