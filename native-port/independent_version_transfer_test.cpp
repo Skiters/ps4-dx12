@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_d3d12/backend_factory.h"
+#include "common/scope_exit.h"
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "video_core/renderer_d3d12/guest_image_operations.h"
 #include "video_core/renderer_d3d12/guest_image_ownership.h"
@@ -646,12 +647,57 @@ void RunReadonlyMultisampleWordStorage(ID3D12Device* device,UINT samples){
         printf("PASS: readonly R9 MSAA%u,R32 writer planes,2 layers,real permission/cast negatives,pressure retirement/restore,distinct GPU I/B and padding\n",samples);
     }catch(...){try{renderer.Finish();}catch(...){}throw;}
 }
+static void RunCurrentIndependentBinding(ID3D12Device* device){
+    Rasterizer renderer(device);GuestTextureCache cache(device);
+    SCOPE_EXIT {renderer.Finish();};
+    const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
+    GuestTextureDesc sampled;sampled.address=0x40000;sampled.width=sampled.height=64;
+    sampled.pitch=128;sampled.layers=6;sampled.view_layers=6;
+    sampled.data_format=5;sampled.number_format=7;sampled.tile_mode=14;
+    auto attachment=sampled;attachment.render_target=true;
+    const auto layout=LayoutGuestTexture(sampled);
+    std::vector<std::byte> old_bytes(layout.guest_bytes,std::byte{0x11});
+    std::vector<std::byte> new_bytes(layout.guest_bytes,std::byte{0x22});
+    cache.SetOwnershipAcquirer([](auto& image){image.buffer_alias_version=true;
+        image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;});
+    auto& old=cache.Upload(sampled,old_bytes,renderer.RecordingList(),renderer.CompletedFence());
+    auto old_pin=cache.PinBinding(old);
+    auto& current=cache.Upload(attachment,new_bytes,renderer.RecordingList(),renderer.CompletedFence());
+    require(&current!=&old&&current.texture.handle.Get()!=old.texture.handle.Get(),"Fixture needs distinct sampled/RT resources");
+    require(cache.Own(old)&&cache.Own(current),"Fixture cannot publish image owners");
+    require(!old.cached_native_current&&current.cached_native_current,"Original image class did not advance");
+    // Even an exact old descriptor must bind the current original image class.
+    require(cache.FindValidIndependentImage(sampled,layout)==&current,"Exact old sampled image shadowed its current RT version");
+    auto view=sampled;view.first_layer=2;view.view_layers=1;
+    require(cache.FindIndependentUploadSource(view,layout)==&current,"Subview did not select current original image class");
+    current.cached_native_current=false;bool rejected=false;
+    try{(void)cache.FindValidIndependentImage(view,layout);}catch(const std::runtime_error&){rejected=true;}
+    require(rejected,"Unresolved independent image ambiguity was silently accepted");
+    current.cached_native_current=true;current.logical_dirty=true;
+    require(cache.FindValidIndependentImage(sampled,layout)==&old,"Dirty current allocation shadowed a valid source");
+    current.logical_dirty=false;
+    GuestImageReadback old_read(device,old,renderer.RecordingList());
+    GuestImageReadback new_read(device,current,renderer.RecordingList());
+    const auto fence=renderer.Flush();cache.Submitted(fence);old_read.Submitted(fence);new_read.Submitted(fence);renderer.Finish();
+    auto observed_old=old_bytes,observed_new=new_bytes;
+    // Poison logical pixels so a skipped readback cannot satisfy the oracle.
+    auto expected_old=old_bytes,expected_new=new_bytes;
+    std::vector<std::byte> poison(size_t(sampled.width)*sampled.height*layout.bytes_per_pixel,std::byte{0x6d});
+    for(UINT layer=0;layer<sampled.layers;++layer){
+        EncodeGuestSubresource(sampled,layout,observed_old,poison,0,layer);
+        EncodeGuestSubresource(sampled,layout,observed_new,poison,0,layer);
+    }
+    old_read.Resolve(renderer.CompletedFence(),observed_old);new_read.Resolve(renderer.CompletedFence(),observed_new);
+    require(observed_old==expected_old&&observed_new==expected_new,"Current binding lost new contents or mutated pinned old GPU version");
+    renderer.ValidateDebugMessages();puts("PASS: current original image class and pinned preceding GPU contents");
+}
 int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_D3D12_VALIDATION","1");
     const bool packed19_rt=(argc==2&&std::string_view(argv[1])=="--packed19-msaa-attachment")||
         (argc==5&&std::string_view(argv[1])=="--cached-depth-color"&&std::string_view(argv[2])=="19"&&std::string_view(argv[4])=="rt")||
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
+    if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--sample-backing-pressure")==0){for(UINT samples:{1u,8u})RunSampleBackingPressure(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--robust-sample-copy")==0){RunMultisampleReadbackPermission(device.Get());RunRobustSampleCopy(device.Get());return 0;}

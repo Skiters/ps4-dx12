@@ -1911,6 +1911,21 @@ GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const Gue
     for(auto indexed=first;indexed!=last;++indexed){auto* entry=indexed->second;
         if(!entry->gpu_owned||!entry->buffer_alias_version||entry->logical_dirty||
            !MatchesGuestUploadStorage(*entry,desc,layout))continue;
+        // Separate D3D12 allocations may preserve preceding sampled/attachment
+        // snapshots for commands already recorded. They are not separate
+        // original images when RememberNativeImageStorage has advanced this
+        // physical overlap class. Bind its current allocation even if a stale
+        // snapshot happens to match the requested view descriptor exactly.
+        if(!entry->cached_native_current){
+            const bool superseded=std::any_of(first,last,[&](const auto& indexed_current){
+                const auto& current=*indexed_current.second;
+                return current.cached_native_current&&current.gpu_owned&&current.buffer_alias_version&&
+                    !current.logical_dirty&&current.desc.width==entry->desc.width&&
+                    MatchesReferenceOverlapClass(entry->desc,entry->layout,current.desc,current.layout)&&
+                    MatchesGuestUploadStorage(current,desc,layout);
+            });
+            if(superseded)continue;
+        }
         if(entry->HasUnprotectedCpuPages())
             throw std::runtime_error("Independent image lookup requires boundary validation");
         if(result){
