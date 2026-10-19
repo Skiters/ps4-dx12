@@ -165,11 +165,14 @@ void GuestTextureCache::ClearRawStorageImage(Entry& entry,const float (&color)[4
         throw std::runtime_error("Invalid converted MSAA clear intermediate allocation");
     const bool keep_backing=HasExactPackedExpansion(entry.desc,entry.layout);
     const auto backing_bytes=keep_backing?GuestPackedTransfer::BackingBytes(device_.Get(),entry.layout):0;
-    Collect(completed);RefreshMemoryBudget();const auto resident=ResidentBytes();
-    if(info.SizeInBytes>resident_budget_||intermediate_bytes>resident_budget_-info.SizeInBytes||
-       scratch>resident_budget_-info.SizeInBytes-intermediate_bytes||
-       resident>resident_budget_-info.SizeInBytes-intermediate_bytes-scratch)
-        throw std::runtime_error("Converted guest clear exceeds native resident budget");
+    if(info.SizeInBytes>UINT64_MAX-intermediate_bytes||
+       scratch>UINT64_MAX-info.SizeInBytes-intermediate_bytes)
+        throw std::overflow_error("Converted guest clear reservation overflow");
+    Collect(completed);
+    ReserveMemory(info.SizeInBytes+intermediate_bytes+scratch,completed,&entry);
+    // Pressure retirement may have submitted/closed the caller's old list.
+    if(recording_list_)list=recording_list_();
+    if(!list)throw std::runtime_error("Converted guest clear lost its recording list");
     if(!tiler_)tiler_=std::make_shared<GuestTiler>(device_.Get());
     if(!multisample_)multisample_=std::make_shared<GuestMultisample>(device_.Get());
     Entry temporary;temporary.desc=clear_desc;temporary.layout=clear_layout;

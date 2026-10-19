@@ -1648,6 +1648,15 @@ void GuestTextureCache::ReserveMemory(uint64_t bytes,uint64_t completed,Entry* p
             if(bytes<=resident_budget_&&ResidentBytes()<=resident_budget_-bytes)return;
             if(PressureRetirementBytes()<retired)continue;
         }
+        // Converted clears and other transfer leases remain attached to
+        // pending entries until their ordinary submission retires. Eviction
+        // cannot reclaim them before that fence, even if the GPU is idle.
+        if(retire_pending_&&std::ranges::any_of(entries_,[&](const auto& image){
+            return image->pending||image->fence>completed;})){
+            const auto preceding_resident=ResidentBytes(),preceding_completed=completed;
+            retire_pending_();completed=std::max(completed,collected_fence_);Collect(completed);
+            if(ResidentBytes()<preceding_resident||completed>preceding_completed)continue;
+        }
         throw std::runtime_error("Native texture batch exceeds adapter-derived cache budget including transfer pools and in-flight sources");
     }
 }

@@ -739,6 +739,48 @@ static void RunColorArraySubviews(ID3D12Device* device){
     require(cache.FindValidIndependentImage(sampled,layout)==&parent,"Color array no longer has one authoritative image");
     renderer.ValidateDebugMessages();puts("PASS: sampled array/CB subviews share one image; six exact GPU-written faces and padding");
 }
+static void RunConvertedClearPressure(ID3D12Device* device){
+    Rasterizer renderer(device);GuestTextureCache cache(device);SCOPE_EXIT {renderer.Finish();};
+    const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
+    GuestTextureDesc desc;desc.address=0x40000;desc.width=7;desc.height=5;desc.pitch=16;
+    desc.layers=desc.view_layers=2;desc.data_format=10;desc.number_format=0;desc.tile_mode=13;
+    desc.writable=true;desc.native_raw32=true;const auto layout=LayoutGuestTexture(desc);
+    std::vector<std::byte> physical(layout.guest_bytes,std::byte{0x11}),expected=physical;
+    auto& image=cache.Upload(desc,physical,renderer.RecordingList(),renderer.CompletedFence());
+    cache.SetRecordingListProvider([&]{return renderer.RecordingList();});
+    const float initial[]{0,0,0,0};cache.ClearRawStorageImage(image,initial,renderer.RecordingList(),renderer.CompletedFence());
+    std::weak_ptr<GuestPackedTransfer> pending=image.format_transfers.back();
+    // Inject only policy accounting, not a multi-GiB allocation. The actual
+    // pending clear/resources must still execute and retire at a real fence.
+    constexpr u64 pressure=16ULL*1024*1024*1024;
+    image.allocation_bytes+=pressure;image.format_retirement_bytes+=pressure;
+    unsigned drains{};
+    cache.SetPendingRetirement([&]{
+        ++drains;require(!pending.expired(),"Pending clear released before its GPU fence");
+        cache.Submitted(renderer.Flush());renderer.Finish();cache.Collect(renderer.CompletedFence());
+        require(pending.expired(),"Completed clear conversion was not reclaimed");
+    });
+    const float final[]{1,0,1,1};cache.ClearRawStorageImage(image,final,renderer.RecordingList(),renderer.CompletedFence());
+    require(drains==1&&image.allocation_bytes<pressure,"Clear pressure did not retire exactly one old batch");
+    std::vector<u32> pixels(size_t(desc.width)*desc.height,0xffff00ffU);
+    for(UINT layer=0;layer<desc.layers;++layer)
+        EncodeGuestSubresource(desc,layout,expected,std::as_bytes(std::span(pixels)),0,layer);
+    GuestImageReadback readback(device,image,renderer.RecordingList());
+    const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+    auto observed=physical;readback.Resolve(renderer.CompletedFence(),observed);
+    require(observed==expected,"Pressure clear lost GPU contents, layers or padding");
+    cache.Collect(renderer.CompletedFence());
+    const auto saved=image.texture.handle;const auto before=image.allocation_bytes;
+    image.allocation_bytes+=pressure;image.format_retirement_bytes+=pressure;image.pending=true;
+    unsigned blocked_drains{};cache.SetPendingRetirement([&]{++blocked_drains;});
+    bool rejected=false;try{cache.ClearRawStorageImage(image,initial,renderer.RecordingList(),renderer.CompletedFence());}
+    catch(const std::runtime_error&){rejected=true;}
+    require(rejected&&blocked_drains==1&&image.texture.handle.Get()==saved.Get()&&
+        image.allocation_bytes==before+pressure,"Unreclaimable clear pressure replayed, mutated storage or falsely succeeded");
+    image.allocation_bytes-=pressure;image.format_retirement_bytes-=pressure;image.pending=false;
+    renderer.ValidateDebugMessages();
+    puts("PASS: converted clear drains pending GPU transfers under injected accounting pressure; exact contents/padding and no-progress rejection");
+}
 int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_D3D12_VALIDATION","1");
     const bool packed19_rt=(argc==2&&std::string_view(argv[1])=="--packed19-msaa-attachment")||
@@ -747,6 +789,7 @@ int main(int argc,char** argv){try{
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--converted-clear-pressure")==0){RunConvertedClearPressure(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--sample-backing-pressure")==0){for(UINT samples:{1u,8u})RunSampleBackingPressure(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--robust-sample-copy")==0){RunMultisampleReadbackPermission(device.Get());RunRobustSampleCopy(device.Get());return 0;}
