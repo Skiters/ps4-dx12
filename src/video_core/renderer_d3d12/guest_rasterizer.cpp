@@ -86,8 +86,9 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
         while(!result.empty()){const auto amount=std::min<u64>(16384-address%16384,result.size());
             memcpy(result.data(),*pages->find(address>>14)+address%16384,amount);address+=amount;result=result.subspan(amount);}
         return true;
-    },[pages,has](VAddr address,std::span<const std::byte> source){
+    },[this,pages,has](VAddr address,std::span<const std::byte> source){
         if(!has(address,source.size()))return false;
+        gpu_.TraceBackingWrite(address,source.size());
         while(!source.empty()){const auto amount=std::min<u64>(16384-address%16384,source.size());
             memcpy(*pages->find(address>>14)+address%16384,source.data(),amount);address+=amount;source=source.subspan(amount);}
         return true;

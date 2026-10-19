@@ -44,6 +44,12 @@ void Liverpool::TraceGuestWrite(void* address, u32 size, u32 kind, u64 value) {
     };
 }
 
+void Liverpool::TraceBackingWrite(VAddr address, u64 size) {
+    TraceGuestWrite(reinterpret_cast<void*>(address),
+                    static_cast<u32>(std::min<u64>(size, std::numeric_limits<u32>::max())),
+                    0x100);
+}
+
 void Liverpool::DumpGuestWritesAt(uintptr_t address) const {
     std::string matches = fmt::format("Recent PM4 guest writes covering {:#x}:", address);
     u32 count{};
