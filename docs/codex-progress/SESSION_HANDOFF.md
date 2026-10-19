@@ -1,3 +1,6 @@
+## PM4 successful-writer instrumentation follow-up
+
+Successful GNM draw/dispatch/wait/marker/shader writers now mark their bounded output; failed scopes no longer publish capacity-only candidates. Hardware-init writers record returned packet length. Incremental full Release compilation/link passed (command-20261019-143515-70872.log); focused PM4 fixture rebuilt and executed successfully (build log command-20261019-143511-47576.log). This is diagnostic coverage, not a crash fix. No new game run or clean-checkout proof yet. Next: verify exact output-count annotations against emitted packet lengths, add failed-scope regression, then committed clean build and one controlled producer-attribution run. Installed dx12-current remains51abbc7.
 ## Current PM4 diagnostic continuation — 2026-10-19
 
 Controlled run of source 51abbc7, EXE acce7997e1ff08562daf05c3400ced4b84b4336032764f166f3d15a60c7d2b32: black window, zero completed-frame records, exit 0x80000003. Evidence: F:/PS4Dev/handoff/gameplay-current-51abbc7-run2. Malformed DCB already exists before SubmitGfx at DWORD217, raw 0x00000401. Root producer remains unproven. Virtual XInput attached, but core exited before any command; feeder removed its device. World/control acceptance failed to reach the required stage.

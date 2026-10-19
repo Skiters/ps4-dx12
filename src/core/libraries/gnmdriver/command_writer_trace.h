@@ -121,8 +121,7 @@ public:
     ~Scope() {
         if (written) {
             RecordWritten(function, address, size_dw);
-        } else {
-            Record(function, address, size_dw);
+
         }
     }
 

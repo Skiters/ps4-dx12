@@ -236,6 +236,7 @@ s32 PS4_SYSV_ABI sceGnmComputeWaitOnAddress(u32* cmdbuf, u32 size, uintptr_t add
         wait_reg_mem->poll_interval = 10u;
 
         WriteNop<2>(cmdbuf + 7);
+        command_writer_trace.MarkWritten(14);
         return ORBIS_OK;
     }
     return -1;
@@ -252,6 +253,7 @@ s32 PS4_SYSV_ABI sceGnmComputeWaitSemaphore(u32* cmdbuf, u32 size, u64 sem_addr,
         cmdbuf += 2;
 
         WriteNop<2>(cmdbuf);
+        command_writer_trace.MarkWritten(10);
         return ORBIS_OK;
     }
     return -1;
@@ -439,6 +441,7 @@ s32 PS4_SYSV_ABI sceGnmDispatchDirect(u32* cmdbuf, u32 size, u32 threads_x, u32 
         cmdbuf[0] = (flags & 0x18) + 1; // ordered append mode
 
         WriteNop<3>(cmdbuf + 1);
+        command_writer_trace.MarkWritten(9);
         return ORBIS_OK;
     }
     return -1;
@@ -456,6 +459,7 @@ s32 PS4_SYSV_ABI sceGnmDispatchIndirect(u32* cmdbuf, u32 size, u32 data_offset, 
         cmdbuf[1] = (flags & 0x18) + 1; // ordered append mode
 
         WriteNop<3>(cmdbuf + 2);
+        command_writer_trace.MarkWritten(7);
         return ORBIS_OK;
     }
     return -1;
@@ -469,6 +473,7 @@ s32 PS4_SYSV_ABI sceGnmDispatchIndirectOnMec(u32* cmdbuf, u32 size, VAddr args, 
         cmdbuf[3] = (modifier & 0x18) | 1u;
         cmdbuf[4] = 0xc0021000;
         cmdbuf[5] = 0;
+        command_writer_trace.MarkWritten(6);
         return ORBIS_OK;
     }
     return ORBIS_FAIL;
@@ -506,6 +511,7 @@ u32 PS4_SYSV_ABI sceGnmDispatchInitDefaultHardwareState(u32* cmdbuf, u32 size) {
 
     cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, sceKernelIsNeoMode() ? 0xe9 : 0xef);
     cmdbuf = WriteBody(cmdbuf, 0u);
+    command_writer_trace.MarkWritten(HwInitPacketSize);
     return HwInitPacketSize;
 }
 
@@ -526,6 +532,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndex(u32* cmdbuf, u32 size, u32 index_count, uintptr
         draw_index->draw_initiator = sceKernelIsNeoMode() ? flags & 0xe0000000u : 0;
 
         WriteNop<3>(cmdbuf + 6);
+        command_writer_trace.MarkWritten(10);
         return ORBIS_OK;
     }
     return -1;
@@ -541,6 +548,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexAuto(u32* cmdbuf, u32 size, u32 index_count, u32
             cmdbuf, PM4ShaderType::ShaderGraphics, index_count,
             sceKernelIsNeoMode() ? flags & 0xe0000000u | 2u : 2u);
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(7);
         return ORBIS_OK;
     }
     return -1;
@@ -568,6 +576,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexIndirect(u32* cmdbuf, u32 size, u32 data_offset,
 
         cmdbuf += 4;
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(9);
         return ORBIS_OK;
     }
     return -1;
@@ -604,6 +613,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexIndirectCountMulti(u32* cmdbuf, u32 size, u32 da
 
         cmdbuf += 9;
         WriteNop<2>(cmdbuf);
+        command_writer_trace.MarkWritten(16);
         return ORBIS_OK;
     }
     return -1;
@@ -634,6 +644,7 @@ int PS4_SYSV_ABI sceGnmDrawIndexIndirectMulti(u32* cmdbuf, u32 size, u32 data_of
 
         cmdbuf += 6;
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(11);
         return ORBIS_OK;
     }
     return -1;
@@ -658,6 +669,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexOffset(u32* cmdbuf, u32 size, u32 index_offset, 
                            sceKernelIsNeoMode() ? flags & 0xe0000000u : 0u);
 
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(9);
         return ORBIS_OK;
     }
     return -1;
@@ -684,6 +696,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirect(u32* cmdbuf, u32 size, u32 data_offset, u32 
 
         cmdbuf += 4;
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(9);
         return ORBIS_OK;
     }
     return -1;
@@ -718,6 +731,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirectCountMulti(u32* cmdbuf, u32 size, u32 data_of
 
         cmdbuf += 9;
         WriteNop<2>(cmdbuf);
+        command_writer_trace.MarkWritten(16);
         return ORBIS_OK;
     }
     return -1;
@@ -745,6 +759,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirectMulti(u32* cmdbuf, u32 size, u32 data_offset,
 
         cmdbuf += 6;
         WriteNop<3>(cmdbuf);
+        command_writer_trace.MarkWritten(11);
         return ORBIS_OK;
     }
     return -1;
@@ -773,7 +788,9 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState(u32* cmdbuf, u32 size) {
         return HwInitPacketSize;
     };
 
-    return SetupContext(cmdbuf, size, true);
+    const u32 written = SetupContext(cmdbuf, size, true);
+    command_writer_trace.MarkWritten(written);
+    return written;
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175(u32* cmdbuf, u32 size) {
@@ -792,6 +809,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175(u32* cmdbuf, u32 size) {
     const auto cmdbuf_left = cmdbuf_end - cmdbuf - 1;
     WriteNop(cmdbuf, cmdbuf_left);
 
+    command_writer_trace.MarkWritten(HwInitPacketSize);
     return HwInitPacketSize;
 }
 
@@ -829,7 +847,9 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState200(u32* cmdbuf, u32 size) {
         return HwInitPacketSize;
     };
 
-    return SetupContext200(cmdbuf, size, true);
+    const u32 written = SetupContext200(cmdbuf, size, true);
+    command_writer_trace.MarkWritten(written);
+    return written;
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
@@ -866,7 +886,9 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
         return HwInitPacketSize;
     };
 
-    return SetupContext350(cmdbuf, size, true);
+    const u32 written = SetupContext350(cmdbuf, size, true);
+    command_writer_trace.MarkWritten(written);
+    return written;
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitToDefaultContextState(u32* cmdbuf, u32 size) {
@@ -883,6 +905,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitToDefaultContextState(u32* cmdbuf, u32 size) {
     } else {
         std::memcpy(cmdbuf, CtxInitSequence.data(), CtxInitSequence.size() * 4);
     }
+    command_writer_trace.MarkWritten(CtxInitPacketSize);
     return CtxInitPacketSize;
 }
 
@@ -905,6 +928,7 @@ u32 PS4_SYSV_ABI sceGnmDrawInitToDefaultContextState400(u32* cmdbuf, u32 size) {
     } else {
         std::memcpy(cmdbuf, CtxInitSequence400.data(), CtxInitSequence400.size() * 4);
     }
+    command_writer_trace.MarkWritten(CtxInitPacketSize);
     return CtxInitPacketSize;
 }
 
@@ -1156,7 +1180,8 @@ s32 PS4_SYSV_ABI sceGnmInsertDingDongMarker(u32* cmdbuf, u32 size) {
         return -1;
     }
     WritePacket<PM4ItOpcode::Nop>(cmdbuf, PM4ShaderType::ShaderGraphics, 0u, 0u, 0u);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(4);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmInsertPopMarker(u32* cmdbuf, u32 size) {
@@ -1167,6 +1192,7 @@ s32 PS4_SYSV_ABI sceGnmInsertPopMarker(u32* cmdbuf, u32 size) {
         cmdbuf =
             WritePacket<PM4ItOpcode::Nop>(cmdbuf, PM4ShaderType::ShaderGraphics,
                                           PM4CmdNop::PayloadType::DebugMarkerPop, 0u, 0u, 0u, 0u);
+        command_writer_trace.MarkWritten(6);
         return ORBIS_OK;
     }
     return -1;
@@ -1190,7 +1216,8 @@ s32 PS4_SYSV_ABI sceGnmInsertPushColorMarker(u32* cmdbuf, u32 size, const char* 
                 color;
             std::memset(reinterpret_cast<u8*>(&nop->data_block[1]) + marker_len + 8 + sizeof(u32),
                         0, packet_size * 4 - marker_len - 8 - sizeof(u32));
-            return ORBIS_OK;
+            command_writer_trace.MarkWritten(size);
+        return ORBIS_OK;
         }
     }
     return -1;
@@ -1212,7 +1239,8 @@ s32 PS4_SYSV_ABI sceGnmInsertPushMarker(u32* cmdbuf, u32 size, const char* marke
             std::memcpy(&nop->data_block[1], marker, marker_len);
             std::memset(reinterpret_cast<u8*>(&nop->data_block[1]) + marker_len, 0,
                         packet_size * 4 - marker_len);
-            return ORBIS_OK;
+            command_writer_trace.MarkWritten(size);
+        return ORBIS_OK;
         }
     }
     return -1;
@@ -1239,7 +1267,8 @@ s32 PS4_SYSV_ABI sceGnmInsertSetMarker(u32* cmdbuf, u32 size, const char* marker
             std::memcpy(&nop->data_block[1], marker, marker_len);
             std::memset(reinterpret_cast<u8*>(&nop->data_block[1]) + marker_len, 0,
                         packet_size * 4 - marker_len);
-            return ORBIS_OK;
+            command_writer_trace.MarkWritten(size);
+        return ORBIS_OK;
         }
     }
     return -1;
@@ -1271,7 +1300,8 @@ s32 PS4_SYSV_ABI sceGnmInsertWaitFlipDone(u32* cmdbuf, u32 size, s32 vo_handle, 
     wait_reg_mem->ref = 0u;
     wait_reg_mem->mask = 0xffff'ffffu;
     wait_reg_mem->poll_interval = 10u;
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(7);
+        return ORBIS_OK;
 }
 
 int PS4_SYSV_ABI sceGnmIsCoredumpValid() {
@@ -1569,7 +1599,8 @@ s32 PS4_SYSV_ABI sceGnmResetVgtControl(u32* cmdbuf, u32 size) {
     } else {
         PM4CmdSetData::SetContextReg(cmdbuf, 0x2aau, 0xffu); // IA_MULTI_VGT_PARAM
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(3);
+        return ORBIS_OK;
 }
 
 int PS4_SYSV_ABI sceGnmSdmaClose() {
@@ -1645,7 +1676,8 @@ s32 PS4_SYSV_ABI sceGnmSetCsShader(u32* cmdbuf, u32 size, const u32* cs_regs) {
         cs_regs[6]); // COMPUTE_NUM_THREAD_X/COMPUTE_NUM_THREAD_Y/COMPUTE_NUM_THREAD_Z
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(25);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetCsShaderWithModifier(u32* cmdbuf, u32 size, const u32* cs_regs,
@@ -1679,7 +1711,8 @@ s32 PS4_SYSV_ABI sceGnmSetCsShaderWithModifier(u32* cmdbuf, u32 size, const u32*
         cs_regs[6]); // COMPUTE_NUM_THREAD_X/COMPUTE_NUM_THREAD_Y/COMPUTE_NUM_THREAD_Z
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(25);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetEmbeddedPsShader(u32* cmdbuf, u32 size, u32 shader_id,
@@ -1749,7 +1782,8 @@ s32 PS4_SYSV_ABI sceGnmSetEmbeddedPsShader(u32* cmdbuf, u32 size, u32 shader_id,
 
     WriteNop<11>(cmdbuf);
 
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(40);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetEmbeddedVsShader(u32* cmdbuf, u32 size, u32 shader_id,
@@ -1835,7 +1869,8 @@ s32 PS4_SYSV_ABI sceGnmSetEsShader(u32* cmdbuf, u32 size, const u32* es_regs, u3
     cmdbuf = PM4CmdSetData::SetShReg(cmdbuf, 0xcau, var, es_regs[3]); // SPI_SHADER_PGM_RSRC1_ES
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(20);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetGsRingSizes(u32 esgs_ring_size, u32 gsvs_ring_size) {
@@ -1883,7 +1918,8 @@ s32 PS4_SYSV_ABI sceGnmSetGsShader(u32* cmdbuf, u32 size, const u32* gs_regs) {
     cmdbuf = PM4CmdSetData::SetContextReg(cmdbuf, 0x2e4u, gs_regs[6]); // VGT_GS_INSTANCE_CNT
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(29);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetHsShader(u32* cmdbuf, u32 size, const u32* hs_regs, u32 param4) {
@@ -1914,7 +1950,8 @@ s32 PS4_SYSV_ABI sceGnmSetHsShader(u32* cmdbuf, u32 size, const u32* hs_regs, u3
 
     // right padding?
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(30);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetLsShader(u32* cmdbuf, u32 size, const u32* ls_regs, u32 shader_modifier) {
@@ -1948,7 +1985,8 @@ s32 PS4_SYSV_ABI sceGnmSetLsShader(u32* cmdbuf, u32 size, const u32* ls_regs, u3
     cmdbuf = PM4CmdSetData::SetShReg(cmdbuf, 0x14au, var, ls_regs[3]); // SPI_SHADER_PGM_RSRC1_LS
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(23);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetPsShader(u32* cmdbuf, u32 size, const u32* ps_regs) {
@@ -1986,7 +2024,8 @@ s32 PS4_SYSV_ABI sceGnmSetPsShader(u32* cmdbuf, u32 size, const u32* ps_regs) {
 
         WriteNop<11>(cmdbuf);
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(40);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetPsShader350(u32* cmdbuf, u32 size, const u32* ps_regs) {
@@ -2025,7 +2064,8 @@ s32 PS4_SYSV_ABI sceGnmSetPsShader350(u32* cmdbuf, u32 size, const u32* ps_regs)
 
         WriteNop<11>(cmdbuf);
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(40);
+        return ORBIS_OK;
 }
 
 int PS4_SYSV_ABI sceGnmSetResourceRegistrationUserMemory() {
@@ -2102,7 +2142,8 @@ s32 PS4_SYSV_ABI sceGnmSetVgtControl(u32* cmdbuf, u32 size, u32 prim_group_sz_mi
             ((partial_vs_wave_mode & 1) << 0x10) | (prim_group_sz_minus_one & 0xffffu);
         PM4CmdSetData::SetContextReg(cmdbuf, 0x2aau, reg_value); // IA_MULTI_VGT_PARAM
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(3);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmSetVsShader(u32* cmdbuf, u32 size, const u32* vs_regs, u32 shader_modifier) {
@@ -2623,7 +2664,8 @@ s32 PS4_SYSV_ABI sceGnmUpdateGsShader(u32* cmdbuf, u32 size, const u32* gs_regs)
                                            gs_regs[6]);
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(29);
+        return ORBIS_OK;
 }
 
 int PS4_SYSV_ABI sceGnmUpdateHsShader(u32* cmdbuf, u32 size, const u32* hs_regs, u32 ls_hs_config) {
@@ -2657,7 +2699,8 @@ int PS4_SYSV_ABI sceGnmUpdateHsShader(u32* cmdbuf, u32 size, const u32* hs_regs,
                                            ls_hs_config); // VGT_LS_HS_CONFIG update
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(30);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmUpdatePsShader(u32* cmdbuf, u32 size, const u32* ps_regs) {
@@ -2701,7 +2744,8 @@ s32 PS4_SYSV_ABI sceGnmUpdatePsShader(u32* cmdbuf, u32 size, const u32* ps_regs)
 
         WriteNop<11>(cmdbuf);
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(40);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmUpdatePsShader350(u32* cmdbuf, u32 size, const u32* ps_regs) {
@@ -2747,7 +2791,8 @@ s32 PS4_SYSV_ABI sceGnmUpdatePsShader350(u32* cmdbuf, u32 size, const u32* ps_re
 
         WriteNop<11>(cmdbuf);
     }
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(40);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmUpdateVsShader(u32* cmdbuf, u32 size, const u32* vs_regs,
@@ -2786,7 +2831,8 @@ s32 PS4_SYSV_ABI sceGnmUpdateVsShader(u32* cmdbuf, u32 size, const u32* vs_regs,
                                            vs_regs[5]); // PA_CL_VS_OUT_CNTL update
 
     WriteNop<11>(cmdbuf);
-    return ORBIS_OK;
+    command_writer_trace.MarkWritten(29);
+        return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceGnmValidateCommandBuffers() {
