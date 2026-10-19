@@ -397,15 +397,13 @@ int wmain(int argc,wchar_t** argv){try {
     const auto rgba16_logic=BuildGuestGraphicsState(logic_regs,rgba16_mrt);
     if(rgba16_logic.ordered_color_mask!=3||rgba16_logic.pipeline.NumRenderTargets)
         throw std::runtime_error("RGBA16 independent logic lost a target or collapsed its mask");
-    // Keep a real negative control: independent UINT masks still need an
-    // explicit integer ordered path, rather than silently sharing target0.
+    // Integer logical operations also require independent target masks.
     for(u32 i=0;i<2;++i){logic_regs.color_buffers[i].info.format=4;
         logic_regs.color_buffers[i].info.number_type=4;}
-    const std::array unsupported_mrt{DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_UINT};
-    bool independent_logic_rejected=false;
-    try{(void)BuildGuestGraphicsState(logic_regs,unsupported_mrt);}
-    catch(const std::runtime_error& error){independent_logic_rejected=std::string_view(error.what()).find("independent write masks")!=std::string_view::npos;}
-    if(!independent_logic_rejected)throw std::runtime_error("Independent MRT logic masks silently collapsed");
+    const std::array integer_mrt{DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_UINT};
+    const auto integer_logic=BuildGuestGraphicsState(logic_regs,integer_mrt);
+    if(integer_logic.ordered_color_mask!=3||integer_logic.pipeline.NumRenderTargets)
+        throw std::runtime_error("Independent UINT logic masks silently collapsed");
     AmdGpu::Regs ordered_logic_regs{};
     ordered_logic_regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
     ordered_logic_regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Xor;

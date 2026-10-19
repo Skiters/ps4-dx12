@@ -7,6 +7,7 @@
 #include "ufloat_attachment_oracle.h"
 #include "normalized_blend_oracle.h"
 #include "srgb_blend_oracle.h"
+#include "integer_logic_oracle.h"
 #include "video_core/amdgpu/regs.h"
 #include "common/elf_info.h"
 #include "core/emulator_settings.h"
@@ -22,6 +23,7 @@ int main(int argc,char** argv){try{
     NativeDX12::Tests::CheckUfloatBoundaryOracle();
     NativeDX12::Tests::CheckNormalizedBlendOracle();
     NativeDX12::Tests::CheckSrgbBlendOracle();
+    NativeDX12::Tests::CheckIntegerLogicOracle();
     // Vulkan logicOpEnable disables blending even for formats where the bit
     // operation itself is not applied. Check native state without a device.
     AmdGpu::Regs logic_regs{};
@@ -57,23 +59,33 @@ int main(int argc,char** argv){try{
         throw std::runtime_error("RGBA16 independent logical masks no longer use both ordered targets");
     for(u32 i=0;i<2;++i){logic_regs.color_buffers[i].info.format=4;logic_regs.color_buffers[i].info.number_type=4;}
     const std::array integer_logic{DXGI_FORMAT_R32_UINT,DXGI_FORMAT_R32_UINT};
-    bool integer_rejected{};
-    try{(void)NativeDX12::BuildGuestGraphicsState(logic_regs,integer_logic);}
-    catch(const std::runtime_error&){integer_rejected=true;}
-    if(!integer_rejected)throw std::runtime_error("Unimplemented independent UINT masks silently collapsed");
+    const auto integer_state=NativeDX12::BuildGuestGraphicsState(logic_regs,integer_logic);
+    if(integer_state.ordered_color_mask!=3||integer_state.pipeline.NumRenderTargets)
+        throw std::runtime_error("UINT independent logical masks lost an ordered target");
+    logic_regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+    logic_regs.blend_control[0].color_src_factor=AmdGpu::BlendControl::BlendFactor::ConstantColor;
+    logic_regs.blend_control[1].color_src_factor=AmdGpu::BlendControl::BlendFactor::ConstantAlpha;
+    if(NativeDX12::GuestOrderedColorMask(logic_regs,3,false))
+        throw std::runtime_error("Integer color incorrectly selected floating-point ordered blending");
     using Cache=NativeDX12::GuestTextureCache;
     const std::set<DXGI_FORMAT> rg16_family{DXGI_FORMAT_R16G16_UNORM,DXGI_FORMAT_R16G16_SNORM,
         DXGI_FORMAT_R16G16_UINT,DXGI_FORMAT_R16G16_SINT,DXGI_FORMAT_R16G16_FLOAT,DXGI_FORMAT_R32_UINT};
     const std::set<DXGI_FORMAT> rgba8_family{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_SNORM,
         DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_SINT,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,DXGI_FORMAT_R32_UINT};
     const std::set<DXGI_FORMAT> packed_family{DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
-    for(const auto shape:{std::array<u32,2>{5,0},{5,1},{5,7},{10,0},{10,1},{10,9},{9,0},{9,1},{16,0},{17,0},{18,0},{19,0}}){
+    const std::set<DXGI_FORMAT> rg8_family{DXGI_FORMAT_R8G8_UNORM,DXGI_FORMAT_R8G8_SNORM,
+        DXGI_FORMAT_R8G8_UINT,DXGI_FORMAT_R8G8_SINT,DXGI_FORMAT_R16_UINT};
+    const std::set<DXGI_FORMAT> rgba16_family{DXGI_FORMAT_R16G16B16A16_UNORM,DXGI_FORMAT_R16G16B16A16_SNORM,
+        DXGI_FORMAT_R16G16B16A16_UINT,DXGI_FORMAT_R16G16B16A16_SINT,DXGI_FORMAT_R16G16B16A16_FLOAT,DXGI_FORMAT_R32G32_UINT};
+    for(const auto shape:{std::array<u32,2>{5,0},{5,1},{5,7},{10,0},{10,1},{10,9},{9,0},{9,1},{16,0},{17,0},{18,0},{19,0},
+        {3,4},{3,5},{5,4},{5,5},{9,4},{9,5},{10,4},{10,5},{12,4},{12,5}}){
         NativeDX12::GuestTextureDesc desc;desc.render_target=true;desc.data_format=shape[0];desc.number_format=shape[1];
         const auto formats=Cache::OrderedColorFormats(desc,true);
         const std::set<DXGI_FORMAT> actual(formats.begin(),formats.end());
         const std::set<DXGI_FORMAT> packed16_family{shape[0]==16?DXGI_FORMAT_B5G6R5_UNORM:
             shape[0]==19?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_B5G5R5A1_UNORM,DXGI_FORMAT_R16_UINT};
-        const auto& expected=shape[0]>=16?packed16_family:shape[0]==5?rg16_family:shape[0]==10?rgba8_family:packed_family;
+        const auto& expected=shape[0]>=16?packed16_family:shape[0]==3?rg8_family:shape[0]==5?rg16_family:
+            shape[0]==10?rgba8_family:shape[0]==12?rgba16_family:packed_family;
         if(actual!=expected||actual.size()!=formats.size()||!Cache::OrderedColorFormats(desc,false).empty())
             throw std::runtime_error("Ordered allocation narrowed its original typed family or ignored capabilities");
         auto invalid=desc;invalid.writable=true;
@@ -134,10 +146,24 @@ int main(int argc,char** argv){try{
     unsigned cases{};
     std::set<u64> fragment_variants;
     for(unsigned boundary=0;boundary<=NativeDX12::Tests::NormalizedBlendBoundaries.size();++boundary)
-    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{10,9},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7},{1,0},{1,1},{2,0},{2,1},{2,7},{0,1},{3,0},{3,1},{16,0},{17,0},{18,0},{19,0}})
+    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{10,9},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7},{12,0},{12,1},{12,7},{0,0},{6,7},{1,0},{1,1},{2,0},{2,1},{2,7},{0,1},{3,0},{3,1},{16,0},{17,0},{18,0},{19,0},
+        {1,4},{1,5},{2,4},{2,5},{3,4},{3,5},{4,4},{4,5},{5,4},{5,5},{9,4},{9,5},{10,4},{10,5},{11,4},{11,5},{12,4},{12,5},{14,4},{14,5}})
     for(u32 sample_log:{0u,1u,2u,3u})for(u32 mask:{0xfffu,0xfa1u})for(u32 operation:{0u,1u,2u}){
         if(boundary&&(shape[0]!=10||(shape[1]>1&&shape[1]!=9)||operation))continue;
+        const bool integer=shape[1]==4||shape[1]==5;
+        if(integer&&(!operation||mask==0xfff))continue;
         if(operation&&(shape[1]==7||shape[1]==9||mask==0xfff))continue;
+        if(!boundary){
+            if(integer){
+                const bool sint=shape[1]==5;
+                initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,sint?u32(-5):5,
+                    0x7e0202ff,sint?u32(-10):10,0x7e0402ff,3,0x7e0602ff,sint?u32(-1):1,
+                    0xf800000f,0x03020100,0xf800001f,0x03020100,0xf800082f,0x03020100,0xbf810000},
+                    0x494e544c4f470000ULL+shape[1]);
+            }else initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,0x7e0602ff,0x3f800000,
+                0xf800000f,0x03020100,0x7e000280,0x7e0202ff,0x3f800000,0xf800001f,0x03020100,
+                0x7e020280,0x7e0402ff,0x3f800000,0xf800082f,0x03020100,0xbf810000},0x434f4d504f524450ULL);
+        }
         AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
         regs.vs_program.address=reinterpret_cast<u64>(vertex.data())>>8;

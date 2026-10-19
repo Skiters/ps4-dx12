@@ -17,6 +17,7 @@
 #include "ufloat_attachment_oracle.h"
 #include "normalized_blend_oracle.h"
 #include "srgb_blend_oracle.h"
+#include "integer_logic_oracle.h"
 #include <dxgi1_6.h>
 #include <d3d12sdklayers.h>
 #include <cstdio>
@@ -45,6 +46,11 @@ static ComPtr<ID3D12Device> HardwareDevice(DXGI_FORMAT required_format=DXGI_FORM
 }
 int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and attachment mode");
+    const NativeDX12::Tests::IntegerLogicCase* integer_case{};bool integer_sint{};
+    for(const auto& shape:NativeDX12::Tests::IntegerLogicCases){
+        if(std::string_view(argv[3])==std::string(shape.name)+"-uint-logic-owned")integer_case=&shape;
+        if(std::string_view(argv[3])==std::string(shape.name)+"-sint-logic-owned"){integer_case=&shape;integer_sint=true;}
+    }
     const bool shared_exponent_sample=std::string_view(argv[3])=="shared-exponent-sample-owned";
     const bool shared_exponent_msaa=std::string_view(argv[3])=="shared-exponent-msaa-owned";
     const bool shared_exponent_msaa_writer=std::string_view(argv[3])=="shared-exponent-msaa-writer-owned";
@@ -83,7 +89,7 @@ int main(int argc,char** argv){try{
         std::string_view(argv[3])=="r16-snorm-mixed-constants-owned"?4:
         std::string_view(argv[3])=="r16-float-mixed-constants-owned"?5:0;
     const bool float_mixed_constants=scalar_kind==5||r11_mixed_constants||rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
-    const bool mixed_constant_blend=srgb_color||packed16_format||normalized_edges||scalar_kind||rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const bool mixed_constant_blend=integer_case||srgb_color||packed16_format||normalized_edges||scalar_kind||rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
@@ -137,6 +143,7 @@ int main(int argc,char** argv){try{
     if(r11_edges)NativeDX12::Tests::CheckUfloatBoundaryOracle();
     if(normalized_edges)NativeDX12::Tests::CheckNormalizedBlendOracle();
     if(srgb_color)NativeDX12::Tests::CheckSrgbBlendOracle();
+    if(integer_case)NativeDX12::Tests::CheckIntegerLogicOracle();
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     if(linear_download)EmulatorSettings.SetReadbackLinearImagesEnabled(false);
     if(linear_attachment){EmulatorSettings.SetReadbackLinearImagesEnabled(true);
@@ -1043,7 +1050,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(!srgb_color&&!packed16_format&&!normalized_edges&&!scalar_kind&&!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
+        if(!integer_case&&!srgb_color&&!packed16_format&&!normalized_edges&&!scalar_kind&&!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1068,8 +1075,8 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=packed16_format?packed16_format:rg8_normalized_constants?3:scalar_kind?(scalar_kind<=2?1:2):r11_mixed_constants?6:rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
-            cb.info.number_type=srgb_color?6:scalar_kind?(scalar_kind==5?7:(scalar_kind==2||scalar_kind==4)?1:0):rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=integer_case?integer_case->format:packed16_format?packed16_format:rg8_normalized_constants?3:scalar_kind?(scalar_kind<=2?1:2):r11_mixed_constants?6:rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
+            cb.info.number_type=integer_case?(integer_sint?5:4):srgb_color?6:scalar_kind?(scalar_kind==5?7:(scalar_kind==2||scalar_kind==4)?1:0):rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
@@ -1111,10 +1118,19 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=srgb_color?(srgb_blend?4:2):packed16_format?3:normalized_edges?unsigned(NativeDX12::Tests::NormalizedBlendBoundaries.size()*2):
+        const unsigned iterations=integer_case?4:srgb_color?(srgb_blend?4:2):packed16_format?3:normalized_edges?unsigned(NativeDX12::Tests::NormalizedBlendBoundaries.size()*2):
             (rg8_normalized_constants||scalar_kind)?3:r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
             (r11_mixed_constants||rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
+            if(integer_case){
+                constexpr Logic operations[]{Logic::Xor,Logic::AndReverse,Logic::Invert,Logic::Noop};
+                regs.color_target_mask.raw=warm==1?0x1af:0xfa1;
+                regs.color_control.rop3=operations[warm];
+                initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,integer_sint?u32(-5):5,
+                    0x7e0202ff,integer_sint?u32(-10):10,0x7e0402ff,3,0x7e0602ff,integer_sint?u32(-1):1,
+                    0xf800000f,0x03020100,0xf800001f,0x03020100,0xf800082f,0x03020100,0xbf810000},
+                    0x494e544c4f470000ULL+(integer_sint?5:4));
+            }
             if(srgb_color){
                 regs.color_target_mask.raw=warm==1?0xfa1:0xfff;
                 regs.num_indices=srgb_blend&&warm==2?6:3;input.num_records=regs.num_indices;
@@ -1200,6 +1216,17 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
+                if(integer_case){
+                    for(u32 byte=0;byte<integer_case->bytes;++byte){
+                        const u32 word=byte/4,shift=(byte%4)*8;
+                        const auto before=NativeDX12::Tests::IntegerLogicBefore[word];
+                        const auto after=NativeDX12::Tests::IntegerLogicExpected(*integer_case,integer_sint,
+                            regs.color_target_mask.GetMask(i),warm,word,before);
+                        memory[4096+offset+byte]=std::byte(u8(before>>shift));
+                        expected[4096+offset+byte]=std::byte(u8(after>>shift));
+                    }
+                    continue;
+                }
                 if(srgb_color){
                     for(u32 channel=0;channel<4;++channel){
                         const auto before=NativeDX12::Tests::SrgbBlendBefore[warm==1][channel];
@@ -1464,6 +1491,10 @@ int main(int argc,char** argv){try{
         std::vector<std::byte> bytes(size);auto* message=reinterpret_cast<D3D12_MESSAGE*>(bytes.data());
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
+    }
+    if(integer_case){
+        puts("PASS: 32 actual GCN UINT/SINT logical draws, exact integer exports, independent masks, MSAA1/2/4/8, layers and physical padding");
+        return 0;
     }
     if(srgb_color){
         puts(srgb_blend?"PASS: 32 actual GCN sRGB linear-space mixed-constant draws, EOTF branches, per-fragment stores, linear alpha, HDR source clamp, MSAA/layers/masks/padding":

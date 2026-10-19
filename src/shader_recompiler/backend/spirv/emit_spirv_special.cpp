@@ -291,6 +291,40 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
     const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
+    if(AmdGpu::IsInteger(target.number_format)){
+        if(!logic)throw std::runtime_error("Integer ordered color requires a logical operation");
+        using D=AmdGpu::DataFormat;
+        const bool packed10=target.data_format==D::Format2_10_10_10;
+        const u32 width=target.data_format==D::Format8||target.data_format==D::Format8_8||
+            target.data_format==D::Format8_8_8_8?8:
+            target.data_format==D::Format16||target.data_format==D::Format16_16||
+            target.data_format==D::Format16_16_16_16?16:32;
+        const u32 components=target.data_format==D::Format8||target.data_format==D::Format16||
+            target.data_format==D::Format32?1:target.data_format==D::Format8_8||
+            target.data_format==D::Format16_16||target.data_format==D::Format32_32?2:4;
+        std::array<Id,4> words{};
+        for(u32 word=0;word<4;++word)words[word]=ctx.OpCompositeExtract(ctx.U32[1],old_texel,word);
+        for(u32 component=0;component<components;++component)if(target.write_mask&(1u<<component)){
+            const u32 bits=packed10?(component==3?2:10):width;
+            const u32 word=packed10?0:component*width/32,shift=packed10?component*10:component*width%32;
+            Id code=ctx.OpBitcast(ctx.U32[1],ctx.OpCompositeExtract(ctx.F32[1],source,component));
+            if(bits<32){
+                // In-range exports retain their exact integer bits. Choose the
+                // ordinary native store's saturating conversion outside that
+                // range (undefined by Vulkan), also matching pinned packed SINT.
+                if(target.number_format==AmdGpu::NumberFormat::Sint){
+                    code=ctx.OpBitcast(ctx.U32[1],ctx.OpSClamp(ctx.S32[1],ctx.OpBitcast(ctx.S32[1],code),
+                        ctx.ConstS32(-s32(1u<<(bits-1))),ctx.ConstS32(s32((1u<<(bits-1))-1))));
+                }else code=ctx.OpUMin(ctx.U32[1],code,ctx.ConstU32((1u<<bits)-1));
+            }
+            const Id previous=ctx.OpBitFieldUExtract(ctx.U32[1],words[word],ctx.ConstU32(shift),ctx.ConstU32(bits));
+            code=OrderedLogicWord(ctx,target.logic_op,code,previous);
+            words[word]=ctx.OpBitFieldInsert(ctx.U32[1],words[word],code,ctx.ConstU32(shift),ctx.ConstU32(bits));
+        }
+        // Keep masked integer fields intact without a floating-point roundtrip.
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],words));
+        return;
+    }
     const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8;
     const bool srgb = target.number_format == AmdGpu::NumberFormat::Srgb;
     const bool unorm = target.number_format == AmdGpu::NumberFormat::Unorm || srgb;
