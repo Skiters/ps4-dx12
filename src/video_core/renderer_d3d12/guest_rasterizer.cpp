@@ -1319,10 +1319,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // states simultaneously.  Materialize the previous color contents and
     // evict its native attachment view before resource binding; the sampled
     // upload then becomes an immutable snapshot and the callback creates a
-    // distinct RTV for this draw. This preserves a pre-draw sampled version,
-    // not Vulkan's live same-storage attachment-feedback contract. Full
-    // feedback still needs shader access and attachment writes unified in a
-    // legal D3D12 storage/ordering path; do not treat this snapshot as parity.
+    // distinct RTV for this draw. Feedback layout alone does not promise
+    // rasterization-ordered communication between fragment invocations. A
+    // snapshot may cover defined pre-draw/disjoint-pixel reads, but this CPU
+    // publication changes the physical-memory path and is not full parity.
+    // Replace that publication with retained GPU contents; preserve the pinned
+    // renderer's actual synchronization instead of inventing stronger ordering.
     for(UINT i=0;i<target_count;++i)if(color_feedback[i]){
         ResolveMemory(descriptions[i].address,layouts[i].guest_bytes);
         DiscardImages(descriptions[i].address,layouts[i].guest_bytes);

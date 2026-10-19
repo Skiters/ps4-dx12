@@ -6593,6 +6593,12 @@
         "shader_subresource_access_20261019": {
           "implementation": "connected_compile_linked",
           "verification": "gpu_runtime_not_run",
+          "pinned_feedback_scope_correction": "Supersedes earlier blanket requirements for ordered per-fragment feedback. VK_EXT_attachment_feedback_loop_layout permits sampling/attachment use with defined pixel-granularity cases but does not itself grant rasterization-order attachment access or fragment interlock. Pinned e0a46675 renderer/compiler source has no interlock/ROAA path. Do not require new ordering semantics beyond that original or mark feedback complete from this observation. Preserve actual contents, barriers, sampling and independent physical B/I; replace current CPU publication with retained GPU contents. ROV is an implementation option, not an extra acceptance requirement.",
+          "feedback_scope_sources": [
+            "https://docs.vulkan.org/spec/latest/chapters/renderpass.html#renderpass-feedbackloop",
+            "https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_attachment_feedback_loop_layout.html",
+            "Pinned src/video_core/renderer_vulkan/vk_rasterizer.cpp BindTextures around936 and SetupRenderState around1050; no interlock/ROAA tokens in pinned video_core/shader_recompiler source"
+          ],
           "physical_mapping_guard": "Guest disjointness additionally requires equal actual format/bytes/block expansion and every mip pitch/height/offset/slice_bytes/macro/thickness. CompatibleGuestSampledStorage normalizes some storage/pow2 hints and alone is not a physical byte-map proof. Existing layouts are passed in; no repeated Layout computation. Mismatched mapping negative prepared, runtime unrun.",
           "upstream_contract": "Pinned BindTextures/SetupRenderState keep shader and attachment views on the same cached image. D3D12 needs access roles and actual mip/layer/plane ranges before selecting a legal shared-storage path.",
           "native_symbols": "ResourceBindings::Srv/Uav -> typed ShaderTextureRange/ShaderAccess/HasShaderUav. Native ExecuteGraphics validates exact attachment overlap and transitions disjoint color shader subresources separately; depth planning retains UAV versus SRV access rather than treating every descriptor as shader-read. GuestRasterizer::DrawInternal skips CPU snapshot only for proven compatible disjoint color sampled views and non-ordered-ROV targets.",
