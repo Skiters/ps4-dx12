@@ -2702,8 +2702,19 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             if((depth_transfer?!read_independent_image_:(partial_block?!expand_block_:!read_independent_))||
                !acquire_independent_||!retire_independent_||!CanUploadGpuSnapshot(d,layout,d.writable))
                 throw std::runtime_error("Independent image view has no domain-preserving GPU transfer");
-            if(depth_transfer&&!CanMapIndependentDepthImage(existing->desc,existing->layout,d,layout))
+            if(depth_transfer&&!CanMapIndependentDepthImage(existing->desc,existing->layout,d,layout)){
+                const auto& source=existing->desc;
+                std::fprintf(stderr,"DX12 depth overlap rejected uid=%llu valid=%u source=%llx/%ux%u/p%u/l%u/m%u/f%u-%u/t%u/d%u/s%u/stencil%llx/bytes%llu target=%llx/%ux%u/p%u/l%u/m%u/f%u-%u/t%u/d%u/s%u/stencil%llx/bytes%llu\n",
+                    (unsigned long long)existing->image_uid,unsigned(existing->HasValidLogicalImage()),
+                    (unsigned long long)source.address,source.width,source.height,source.pitch,source.layers,source.levels,
+                    source.data_format,source.number_format,source.tile_mode,unsigned(source.depth_target),source.samples,
+                    (unsigned long long)source.stencil_address,(unsigned long long)existing->layout.guest_bytes,
+                    (unsigned long long)d.address,d.width,d.height,d.pitch,d.layers,d.levels,
+                    d.data_format,d.number_format,d.tile_mode,unsigned(d.depth_target),d.samples,
+                    (unsigned long long)d.stencil_address,(unsigned long long)layout.guest_bytes);
+                std::fflush(stderr);
                 throw std::runtime_error("Independent depth/color overlap needs an exact physical transfer plan");
+            }
             const auto samples_supported=[](const auto& desc,const auto& physical){
                 return IsGuestDepthPlaneStorage(desc,physical)||CanTransferIndependentMultisample(desc,physical);};
             if(!color_ms_depth&&(existing->desc.samples>1||d.samples>1)&&
