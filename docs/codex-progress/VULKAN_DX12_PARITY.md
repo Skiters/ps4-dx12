@@ -1,3 +1,8 @@
+## Integer MRT logical path — 2026-10-20
+
+Productiona46e3e9 connects independent UINT/SINT logical operations for original attachment formats1/2/3/4/5/9/10/11/12/14. Ordered shaders retain integer export bits and masks; native UINT word views/family permissions and lazy sample storage are reused. Integer blending never selects the float fallback. RGB32 remains sampled-only. CPU624 signed-DXIL translations,22 cast plans and6 state cases PASS;20 prepared GPU modes32 draws each compile/link only. GPU/game NOT_RUN.
+
+Clean Releasea46e3e9/pinned dependencies/Jobs4 PASS; hashes, exact scope and fixture modes: F:/PS4Dev/handoff/native-port-comparison-20261019/integer-logic-a46e3e9.json. App core unchanged, no new runtime archive/FPS claim. NEXT existing source gap: GuestShaderFrontend::BuildPointCaptureGraphics tessellation+geometry stage domain, bounded primitive/output ordering and original exclusions. Do not repeat129-group/native-port audits. Targeted GPU acceptance backlog and final world/control/performance remain required; full port incomplete.
 ## sRGB ordered blending / logical pass-through — 2026-10-20
 
 Production4516bfe connects RGBA8 sRGB mixed-constant fallback: shared EOTF decode, linear-space blend, inverse EOTF per stored fragment, linear alpha, raw masked-bit merge and lazy MSAA scratch. FLOAT/sRGB logic ops preserve pass-through with blending disabled; applicable normalized targets in mixed MRTs use ordered logic. CPU464 GCN->signed validated DXIL cases,12 cast plans,5 state cases,256 byte roundtrips and independent literal/negative controls PASS. sRGB32-draw blend and16-draw logical-pass fixtures compile only; GPU/game NOT_RUN.

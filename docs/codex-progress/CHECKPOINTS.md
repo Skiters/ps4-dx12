@@ -1,3 +1,5 @@
+2026-10-20:a46e3e9 independent UINT/SINT MRT logic. CPU624 and clean Release PASS;20 pixel modes compiled only, GPU/game NOT_RUN. See integer-logic-a46e3e9.json for exact identities/scope.
+
 2026-10-20:4516bfe linear-space ordered sRGB and FLOAT/sRGB logical pass-through. CPU464 and clean Release PASS; pixel fixtures compiled, GPU/game NOT_RUN. srgb-ordered-4516bfe.json retains exact identities.
 
 2026-10-20:343e58c normalized pre-blend clamp;2669533 boundary fixtures;178e323 packed16 ordered path. CPU432 PASS, clean Release178e323 PASS; GPU/game NOT_RUN. See SESSION_HANDOFF current checkpoint and packed16-ordered-178e323.json.
