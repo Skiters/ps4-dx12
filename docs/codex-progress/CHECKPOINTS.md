@@ -1269,3 +1269,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: actual GCN color-feedback-owned CPU texel replacement and color-feedback-buffer-owned32KiB raw B/native I probe cases prepared; compile/link9.539s PASS, runtime NOT_RUN. Details in SESSION_HANDOFF.
 
 2026-10-20 f10bc6c: RGBA8 SNORM ordered blending connected;16 GCN scenarios prepared/compiled, runtime NOT_RUN; clean Release identities in snorm8-ordered-f10bc6c.json. No app replacement/FPS claim.
+
+2026-10-20 4654660: normalized RG16 ordered blending connected;32 GCN cases prepared/compiled, GPU NOT_RUN; clean Release identities rg16-normalized-4654660.json. No FPS claim/app replacement.
