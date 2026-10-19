@@ -1,3 +1,5 @@
+Latest:ad38ee6 caches full source/GS/PS logical layouts;1559575 preserves immutable replay constants across Finish/arena reset. Core/fixture and clean Release PASS; GPU/game NOT_RUN. Main GuestRasterizer partition integration remains pending. See SESSION_HANDOFF.md.
+
 Latest:ab449e4 adds merged reflected GS/PS layout and one logical preparation/completion, wired in partition fixture. CPU merge/projection/shader checks and clean Release PASS; GPU/game NOT_RUN. Original SO producer context and main integration remain pending. See SESSION_HANDOFF.md.
 
 Latest:c60debe projects prepared descriptors into per-pass reflected layouts; CPU plan/shader checks and clean Release PASS. GPU/game NOT_RUN. Merged GS/PS logical resource preparation/completion remains pending; see SESSION_HANDOFF.md.
