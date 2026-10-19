@@ -56,6 +56,19 @@ struct AjmBatch {
     std::binary_semaphore finished{0};
     boost::container::small_vector<AjmJob, 16> jobs;
 
+    template <typename ExecuteJobs>
+    void Execute(ExecuteJobs&& execute_jobs) {
+        if (!canceled) {
+            bool expected = false;
+            processed.compare_exchange_strong(expected, true);
+            execute_jobs(id, std::span<AjmJob>{jobs});
+        }
+        // Cancellation skips codec execution, not completion. BatchWait must
+        // wake, destroy the batch and return ORBIS_AJM_ERROR_CANCELLED. Keep
+        // this after execution so exceptions never publish false completion.
+        finished.release();
+    }
+
     static std::shared_ptr<AjmBatch> FromBatchBuffer(std::span<u8> buffer);
 };
 

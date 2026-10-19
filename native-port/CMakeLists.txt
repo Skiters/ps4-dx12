@@ -40,6 +40,13 @@ target_compile_features(native-page-watch-test PRIVATE cxx_std_20)
 add_test(NAME native_page_ownership_and_cache COMMAND native-page-watch-test)
 set_tests_properties(native_page_ownership_and_cache PROPERTIES TIMEOUT 20)
 set(SHADPS4_DEPENDENCY_ROOT "${PORT_ROOT}/../shadps4-original-e0a46675" CACHE PATH "Pinned read-only upstream dependencies")
+add_executable(native-ajm-batch-completion-test ajm_batch_completion_test.cpp)
+target_compile_features(native-ajm-batch-completion-test PRIVATE cxx_std_23)
+target_include_directories(native-ajm-batch-completion-test PRIVATE
+    "${SHADPS4_DEPENDENCY_ROOT}/externals/ext-boost"
+    "${SHADPS4_DEPENDENCY_ROOT}/externals/fmt/include")
+add_test(NAME native_ajm_batch_completion COMMAND native-ajm-batch-completion-test)
+set_tests_properties(native_ajm_batch_completion PROPERTIES TIMEOUT 10)
 enable_language(C)
 add_executable(native-net-epoll-test net_epoll_wait_test.cpp
     "${PORT_ROOT}/src/core/net/host_net.cpp"
