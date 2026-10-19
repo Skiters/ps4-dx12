@@ -6,6 +6,7 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 namespace NativeDX12 {
 // Reuse driver allocations only after the caller retires their GPU fence.
 // Unlike Vulkan descriptor pools, D3D12 heaps are shader-visible objects.
@@ -48,6 +49,10 @@ public:
     ResourceLayout& operator=(const ResourceLayout&)=delete;
     ID3D12RootSignature* Root()const{return root_.Get();}
     const std::vector<ShaderBinding>& Bindings()const{return bindings_;}
+    struct DescriptorProjection {bool sampler;UINT source,target,count;};
+    // Match reflected register identities, independent of table/root offsets.
+    static std::vector<DescriptorProjection> ProjectBindings(std::span<const ShaderBinding> source,
+        std::span<const ShaderBinding> target);
 };
 // Immutable after first binding. Keep this object and its layout alive until the
 // submission fence completes; owned COM references retain bound GPU resources.
@@ -60,6 +65,9 @@ class ResourceBindings {
     // draws keep writing their shader-visible tables directly.
     ComPtr<ID3D12DescriptorHeap> replay_resources_,replay_samplers_;
     bool replayable_{};
+    std::unordered_map<SIZE_T,ID3D12Resource*> replay_descriptor_resources_;
+    std::unordered_set<ID3D12Resource*> projected_references_;
+    bool projected_{};
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
     std::unordered_map<ID3D12Resource*,UINT> shader_planes_;
@@ -97,6 +105,7 @@ public:
     // resource/allocation leases. Does not rerun guest ownership or writeback.
     // Caller must retain each returned table through its submission fence.
     std::shared_ptr<ResourceBindings> ForkForReplay();
+    std::shared_ptr<ResourceBindings> ForkForReplay(const ResourceLayout& target);
     // Explicit retirement, never automatic destructor recycling: callers can
     // also record bindings without waiting for the GPU.
     void RecycleRetiredHeaps();
@@ -115,6 +124,7 @@ public:
         TextureTransfer transfer;std::string omitted;};
     std::vector<TextureCapture> CaptureTextureInputs(ID3D12GraphicsCommandList*,uint64_t total_bytes);
     bool References(ID3D12Resource* resource)const {
+        if(projected_)return projected_references_.contains(resource);
         for(const auto& held:keep_alive_)if(held.Get()==resource)return true;
         return false;
     }

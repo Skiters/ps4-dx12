@@ -77,6 +77,46 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    const auto binding=[](D3D12_DESCRIPTOR_RANGE_TYPE type,UINT reg,UINT space,UINT count,UINT offset,
+                          D3D_SRV_DIMENSION dimension=D3D_SRV_DIMENSION_UNKNOWN){
+        ShaderBinding value{type,reg,space,count,offset};value.dimension=dimension;return value;
+    };
+    const std::array<ShaderBinding,5> source_layout{
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,0,33,1,0,D3D_SRV_DIMENSION_BUFFER),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,0,33,2,1,D3D_SRV_DIMENSION_BUFFER),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,4,0,4,5,D3D_SRV_DIMENSION_TEXTURE2D),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,0,31,1,9),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,2,0,2,0)};
+    const std::array<ShaderBinding,3> target_layout{
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,6,0,2,0,D3D_SRV_DIMENSION_TEXTURE2D),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,0,33,1,2,D3D_SRV_DIMENSION_BUFFER),
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,3,0,1,0)};
+    const auto projected=ResourceLayout::ProjectBindings(source_layout,target_layout);
+    if(projected.size()!=3||projected[0].sampler||projected[0].source!=7||projected[0].target||projected[0].count!=2||
+       projected[1].sampler||projected[1].source||projected[1].target!=2||projected[1].count!=1||
+       !projected[2].sampler||projected[2].source!=1||projected[2].target||projected[2].count!=1)
+        throw std::runtime_error("Cross-layout descriptor projection lost register identity or sampler separation");
+    const std::array<ShaderBinding,2> split_layout{
+        binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,0,0,2,0),binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,2,0,2,2)};
+    const std::array<ShaderBinding,1> merged_layout{binding(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,2,0)};
+    const auto merged=ResourceLayout::ProjectBindings(split_layout,merged_layout);
+    if(merged.size()!=2||merged[0].source!=1||merged[0].target||merged[0].count!=1||
+       merged[1].source!=2||merged[1].target!=1||merged[1].count!=1)
+        throw std::runtime_error("Cross-layout descriptor projection lost an array segment");
+    for(unsigned invalid=0;invalid<7;++invalid){
+        auto target=target_layout;
+        switch(invalid){
+        case 0:target[0].reg=8;break;
+        case 1:target[0].space=1;break;
+        case 2:target[0].dimension=D3D_SRV_DIMENSION_TEXTURE3D;break;
+        case 3:target[1].offset=1;break;
+        case 4:target[0].count=0;break;
+        case 5:target[0].reg=UINT_MAX;break;
+        case 6:target[1].nv_clock=true;break;
+        }
+        bool rejected{};try{ResourceLayout::ProjectBindings(source_layout,target);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Incompatible cross-layout descriptor projection was accepted");
+    }
     // A buffered GS needs t1/space33 in addition to the capture u0. The
     // resource executor must leave precisely these host-owned slots to the
     // callback, rather than reject the stream as missing guest metadata.

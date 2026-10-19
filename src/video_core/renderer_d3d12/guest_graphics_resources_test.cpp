@@ -346,6 +346,8 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
                 // fresh snapshot here would add .125 twice and fail the
                 // unchanged independent full-image/padding oracle below.
                 auto continuation=table.ForkForReplay();
+                if(continuation->References(entry.texture.handle.Get())||!continuation->References(saved_feedback.handle.Get()))
+                    throw std::runtime_error("Replay projected an unbound retained resource into shader dependencies");
                 continuation->Srv(0,0,entry.texture.handle.Get(),srv);
                 if(continuation->RemapTextureSrvs(entry.texture.handle.Get(),saved_feedback)!=1||
                    continuation->HasTextureSrvs(entry.texture.handle.Get())||

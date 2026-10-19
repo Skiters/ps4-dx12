@@ -9,6 +9,7 @@
 #include <d3d12shader.h>
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <tuple>
 #include <bit>
 #include <cstdlib>
@@ -247,39 +248,97 @@ ResourceBindings::ResourceBindings(ID3D12Device* device,const ResourceLayout& la
         Uav(binding.reg,binding.space,nullptr,desc);
     }
 }
-std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(){
+std::vector<ResourceLayout::DescriptorProjection> ResourceLayout::ProjectBindings(
+    std::span<const ShaderBinding> source,std::span<const ShaderBinding> target){
+    const auto validate=[](std::span<const ShaderBinding> bindings){
+        for(size_t i=0;i<bindings.size();++i){
+            const auto& binding=bindings[i];
+            if(!binding.count||binding.reg>UINT_MAX-binding.count||binding.offset>UINT_MAX-binding.count)
+                throw std::invalid_argument("Invalid replay descriptor range");
+            for(size_t j=0;j<i;++j){
+                const auto& previous=bindings[j];
+                const bool sampler=binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                if(sampler==(previous.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER)&&
+                   binding.offset<previous.offset+previous.count&&previous.offset<binding.offset+binding.count)
+                    throw std::invalid_argument("Overlapping replay descriptor table offsets");
+                if(binding.type==previous.type&&binding.space==previous.space&&
+                   binding.reg<previous.reg+previous.count&&previous.reg<binding.reg+binding.count)
+                    throw std::invalid_argument("Ambiguous replay descriptor register ranges");
+            }
+        }
+    };
+    validate(source);validate(target);
+    std::vector<DescriptorProjection> result;
+    for(const auto& destination:target)for(UINT copied=0;copied<destination.count;){
+        const auto reg=destination.reg+copied;
+        const ShaderBinding* from=nullptr;
+        for(const auto& candidate:source)if(candidate.type==destination.type&&candidate.space==destination.space&&
+            reg>=candidate.reg&&reg-candidate.reg<candidate.count){from=&candidate;break;}
+        if(!from||from->dimension!=destination.dimension||from->nv_clock!=destination.nv_clock||from->amd_clock!=destination.amd_clock)
+            throw std::invalid_argument("Replay layout has an absent or incompatible reflected register");
+        const auto relative=reg-from->reg;
+        const auto count=std::min(destination.count-copied,from->count-relative);
+        result.push_back({destination.type==D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
+            from->offset+relative,destination.offset+copied,count});
+        copied+=count;
+    }
+    return result;
+}
+std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(){return ForkForReplay(layout_);}
+std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(const ResourceLayout& target_layout){
     if(!replayable_)throw std::logic_error("Descriptor replay was not enabled before resource preparation");
     Prepare();
     // Owned child heaps need no pool mutation on exceptional construction or
     // unwind; the caller's fence lease owns their full lifetime.
-    auto child=std::make_shared<ResourceBindings>(device_.Get(),layout_,nullptr,true);
-    const auto copy=[&](const ComPtr<ID3D12DescriptorHeap>& source,
-                        const ComPtr<ID3D12DescriptorHeap>& target,
-                        const std::vector<bool>& written,D3D12_DESCRIPTOR_HEAP_TYPE type){
-        if(!source)return;
-        const auto from=source->GetCPUDescriptorHandleForHeapStart();
-        const auto to=target->GetCPUDescriptorHandleForHeapStart();
+    const auto projection=ResourceLayout::ProjectBindings(layout_.Bindings(),target_layout.Bindings());
+    auto child=std::make_shared<ResourceBindings>(device_.Get(),target_layout,nullptr,true);
+    for(const auto& range:projection){
+        const auto type=range.sampler?D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER:D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        const auto from=(range.sampler?replay_samplers_:replay_resources_)->GetCPUDescriptorHandleForHeapStart();
+        const auto to=(range.sampler?child->replay_samplers_:child->replay_resources_)->GetCPUDescriptorHandleForHeapStart();
+        const auto& written=range.sampler?written_samplers_:written_resources_;
+        auto& target_written=range.sampler?child->written_samplers_:child->written_resources_;
         const auto step=device_->GetDescriptorHandleIncrementSize(type);
-        for(size_t i=0;i<written.size();++i)if(written[i])
-            DX12_API_CALL(device_->CopyDescriptorsSimple(1,{to.ptr+i*step},{from.ptr+i*step},type));
-    };
-    copy(replay_resources_,child->replay_resources_,written_resources_,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    copy(replay_samplers_,child->replay_samplers_,written_samplers_,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-    child->written_resources_=written_resources_;child->written_samplers_=written_samplers_;
+        for(UINT i=0;i<range.count;++i){
+            target_written[range.target+i]=written[range.source+i];
+            if(written[range.source+i])DX12_API_CALL(device_->CopyDescriptorsSimple(1,
+                {to.ptr+SIZE_T(range.target+i)*step},{from.ptr+SIZE_T(range.source+i)*step},type));
+        }
+    }
     child->keep_alive_=keep_alive_;child->allocation_leases_=allocation_leases_;
-    child->shader_planes_=shader_planes_;child->shader_texture_ranges_=shader_texture_ranges_;
-    child->capture_buffers_=capture_buffers_;child->capture_textures_=capture_textures_;
-    const auto rebase=[&](SIZE_T descriptor){
+    child->projected_=true;
+    const auto rebase=[&](SIZE_T descriptor)->std::optional<SIZE_T>{
         if(!replay_resources_)throw std::logic_error("Replay metadata without a resource descriptor heap");
         const auto from=replay_resources_->GetCPUDescriptorHandleForHeapStart().ptr;
         const auto step=device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         if(descriptor<from||(descriptor-from)%step||(descriptor-from)/step>=written_resources_.size())
             throw std::logic_error("Replay descriptor metadata is outside its source table");
-        return child->replay_resources_->GetCPUDescriptorHandleForHeapStart().ptr+(descriptor-from);
+        const auto index=(descriptor-from)/step;
+        for(const auto& range:projection)if(!range.sampler&&index>=range.source&&index-range.source<range.count)
+            return child->replay_resources_->GetCPUDescriptorHandleForHeapStart().ptr+
+                SIZE_T(range.target+index-range.source)*step;
+        return {};
     };
-    for(auto& [_,ranges]:child->shader_texture_ranges_)for(auto& range:ranges)range.descriptor=rebase(range.descriptor);
-    for(auto& view:child->capture_buffers_)view.descriptor=rebase(view.descriptor);
-    for(auto& view:child->capture_textures_)view.descriptor=rebase(view.descriptor);
+    for(const auto& [descriptor,resource]:replay_descriptor_resources_)if(const auto target=rebase(descriptor)){
+        child->replay_descriptor_resources_[*target]=resource;
+        if(resource)child->projected_references_.insert(resource);
+    }
+    for(const auto& [resource,ranges]:shader_texture_ranges_)for(auto range:ranges)if(const auto descriptor=rebase(range.descriptor)){
+        range.descriptor=*descriptor;child->shader_texture_ranges_[resource].push_back(range);
+        child->shader_planes_[resource]|=range.planes;
+    }
+    const auto capture_register=[&](auto& view,D3D12_DESCRIPTOR_RANGE_TYPE type){
+        const auto reg=view.reg+view.index;
+        for(const auto& binding:target_layout.Bindings())if(binding.type==type&&binding.space==view.space&&
+            reg>=binding.reg&&reg-binding.reg<binding.count){view.reg=binding.reg;view.index=reg-binding.reg;return;}
+        throw std::logic_error("Replay capture has no target register");
+    };
+    for(auto view:capture_buffers_)if(const auto descriptor=rebase(view.descriptor)){
+        view.descriptor=*descriptor;capture_register(view,view.type);child->capture_buffers_.push_back(std::move(view));
+    }
+    for(auto view:capture_textures_)if(const auto descriptor=rebase(view.descriptor)){
+        view.descriptor=*descriptor;capture_register(view,D3D12_DESCRIPTOR_RANGE_TYPE_SRV);child->capture_textures_.push_back(std::move(view));
+    }
     return child;
 }
 void ResourceBindings::RecycleRetiredHeaps(){
@@ -302,7 +361,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE ResourceBindings::Slot(D3D12_DESCRIPTOR_RANGE_TYPE t
     }
     throw std::out_of_range("Register absent from reflected DXIL resource layout");
 }
-void ResourceBindings::Retain(ID3D12Resource* resource){if(resource)keep_alive_.emplace_back(resource);}
+void ResourceBindings::Retain(ID3D12Resource* resource){if(resource){keep_alive_.emplace_back(resource);if(projected_)projected_references_.insert(resource);}}
 void ResourceBindings::TrackShaderTextureRange(ID3D12Resource* resource,ShaderTextureRange range,SIZE_T descriptor){
     for(auto& [_,ranges]:shader_texture_ranges_)
         std::erase_if(ranges,[descriptor](const auto& previous){return previous.descriptor==descriptor;});
@@ -356,6 +415,7 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
         }
     }
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,reg,space,index);DX12_API_CALL(device_->CreateShaderResourceView(resource,&desc,slot));Retain(resource);
+    if(replayable_)replay_descriptor_resources_[slot.ptr]=resource;
     if(CaptureBuffersEnabled()){
         std::erase_if(capture_textures_,[&](const auto& old){return old.descriptor==slot.ptr;});
         if(resource&&capture_source&&capture_textures_.size()<128){
@@ -431,6 +491,7 @@ UINT ResourceBindings::RemapTextureSrvs(ID3D12Resource* original,const Resource&
     destination.reserve(destination.size()+moved.size());
     for(const auto& range:moved){
         DX12_API_CALL(device_->CreateShaderResourceView(replacement.handle.Get(),&range.srv,{range.descriptor}));
+        if(replayable_)replay_descriptor_resources_[range.descriptor]=replacement.handle.Get();
         destination.push_back(range);
         for(auto& capture:capture_textures_)if(capture.descriptor==range.descriptor)capture.source=replacement;
     }
@@ -442,6 +503,7 @@ UINT ResourceBindings::RemapTextureSrvs(ID3D12Resource* original,const Resource&
 }
 void ResourceBindings::Uav(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_UNORDERED_ACCESS_VIEW_DESC& desc,UINT index) {
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_UAV,reg,space,index);DX12_API_CALL(device_->CreateUnorderedAccessView(resource,nullptr,&desc,slot));Retain(resource);
+    if(replayable_)replay_descriptor_resources_[slot.ptr]=resource;
     if(CaptureBuffersEnabled())TrackCaptureBuffer({
         desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER&&(desc.Buffer.Flags&D3D12_BUFFER_UAV_FLAG_RAW)?resource:nullptr,
         reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_UAV,desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER?desc.Buffer.FirstElement*4:0,
@@ -499,6 +561,7 @@ void ResourceBindings::Cbv(UINT reg,UINT space,ID3D12Resource* resource,UINT64 o
         throw std::invalid_argument("Invalid constant buffer range/alignment");
     D3D12_CONSTANT_BUFFER_VIEW_DESC desc{DX12_API_CALL(resource->GetGPUVirtualAddress())+offset,bytes};
     const auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,reg,space,index);
+    if(replayable_)replay_descriptor_resources_[slot.ptr]=resource;
     DX12_API_CALL(device_->CreateConstantBufferView(&desc,slot));Retain(resource);
     if(CaptureBuffersEnabled())TrackCaptureBuffer({resource,reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_CBV,offset,bytes,slot.ptr});
 }
