@@ -549,6 +549,25 @@ void GuestRasterizer::ReleaseBufferPageWatch(VAddr address,u64 size){
 }
 void GuestRasterizer::ResolveCpuFault(VAddr address,bool writing){
     ValidateIndependentImageWatches();
+    SCOPE_EXIT {
+        MEMORY_BASIC_INFORMATION region{};
+        if(writing&&std::getenv("SHADPS4_PAGE_FAULT_TRACE")&&
+           VirtualQuery(reinterpret_cast<void*>(address),&region,sizeof(region))&&region.Protect==PAGE_READONLY){
+            static std::atomic<unsigned> reports{};
+            if(reports.fetch_add(1)<16){
+                fprintf(stderr,"DX12 CPU fault retained owners address=%llx strong_buffers=%zu\n",
+                    (unsigned long long)address,GpuOwnedBufferProtectionRanges(address,1).size());
+                for(const auto& image:textures_.Entries())for(const auto& plane:image->ProtectionPlanes())
+                    if(plane.bytes&&ShareGuestProtectionPages(address,1,plane.address,plane.bytes))
+                        fprintf(stderr,"DX12 CPU fault image uid=%llu plane=%llx+%llu gpu=%u alias=%u cpu_watch=%u dirty=%u boundary=%u origin=%s\n",
+                            (unsigned long long)image->image_uid,(unsigned long long)plane.address,
+                            (unsigned long long)plane.bytes,unsigned(image->gpu_owned),unsigned(image->buffer_alias_version),
+                            unsigned(image->cpu_watched),unsigned(image->logical_dirty),unsigned(image->HasUnprotectedCpuPages()),
+                            image->logical_dirty_origin);
+                fflush(stderr);
+            }
+        }
+    };
     // The faulting instruction has not executed its store yet. A nested image
     // resolver/Finish must not certify and rearm its new boundary snapshot
     // before the VEH returns; validation resumes at the next access/command.
