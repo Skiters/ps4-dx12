@@ -1271,3 +1271,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 f10bc6c: RGBA8 SNORM ordered blending connected;16 GCN scenarios prepared/compiled, runtime NOT_RUN; clean Release identities in snorm8-ordered-f10bc6c.json. No app replacement/FPS claim.
 
 2026-10-20 4654660: normalized RG16 ordered blending connected;32 GCN cases prepared/compiled, GPU NOT_RUN; clean Release identities rg16-normalized-4654660.json. No FPS claim/app replacement.
+
+2026-10-20 e830b9c:80 CPU-only actual GCN/SPIR-V/signed DXIL variants PASS1.113s, exact identities ordered-cpu-compiler-e830b9c.json; GPU/game NOT_RUN.
