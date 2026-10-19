@@ -1,3 +1,9 @@
+## R32 float fallback published — 2026-10-19 22:15 +05
+
+Committed source537bdcfc3b9845a88bd6174fc4025a466351b061 reproduced in separate tracked-clean Release checkout with pinned dependencies and matching release-identity. Sole app dx12-current safely replaced; EXEee95a017834fbbf4c1cc5cc72f494d3ba321bf47c14d8530cd8b6d123644ee74, PDB92c254c6cf5ac58ef89fcaefa121bbc93a1c3f7dbd3125a379d2844b59390890. Exact new EXE GAME_NOT_RUN. Source-scoped48 GCN mixed-constant cases/lazy-storage/UNORM+SNORM regressions passed; black image/sub1FPS unchanged as an unresolved acceptance requirement. Publication identity: F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-float-core.json. No full runtime copies or game launch.
+
+NEXT: existing mixed-blend-constants gap still has other applicable formats. Extend the same ordered-word path to R16G16 FLOAT with exact per-fragment half conversion/masks/missing alpha, then address other formats; preserve supported hardware blend route. Reuse48-case GCN fixture shape and direct native allocation proof, adding independent expected half values and overlapping fragments. Do not reimplement tested R32/UNORM/SNORM, rerun full129 audit or generic capture instrumentation. Remaining independent image/buffer format matrix beyond R32 also stays open (R32-specific matrix passed). Bloodborne cause must not be inferred from this unrelated fixed exception. Goal remains active.
+
 
 ## Clear descriptor reuse published — 2026-10-19 22:02 +05
 
