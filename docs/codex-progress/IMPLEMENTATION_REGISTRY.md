@@ -1,5 +1,11 @@
 # Implementation and verification registry — 2026-10-17
 
+## Registry delta - BC prefix alias transactions - 2026-10-19
+
+Connected and focused GPU verified: pinned `ResolveOverlap` / `ExpandImage` BC-parent semantics -> `BlockViewGroup` planning in `PrepareOrderedGuestStages`, transaction-local dependent children in `GuestTextureCache::UploadVersion`, and mip-overlap-aware SRV/UAV promotion in `resource_patching_pass.cpp` -> all 27 writable BC variants plus the full ordered-formatted related suite pass. This closes the previous exact, multilevel and shifted/rebased prefix items, including duplicate-slot, native-reader and cross-transaction lifetime cases. Game/final-suite behavior is open.
+
+Concrete gaps remain: pinned MSAA, clipped and large BC block domains -> no accepted DX12 end-to-end case yet -> require separate original-applicable descriptors and real GPU readback proving all samples/contents, padding, visibility, ordering, ownership and lifetime. The existing broad `native_resources` `invalid map<K, T> key` failure remains a separate unresolved fixture failure.
+
 
 ## Registry delta - multilevel BC/word prefix - 2026-10-19
 

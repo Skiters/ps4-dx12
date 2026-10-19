@@ -1,5 +1,11 @@
 # Next session
 
+## Current continuation boundary - remaining BC block domains
+
+Production **51abbc717cab66032c60582c20755ffedf57998e** is clean-built and focused GPU verified. The complete 27-case writable BC alias set now covers exact, multilevel, shifted/rebased, duplicate-slot, native-reader and cross-transaction prefix behavior. The sole application core is `dx12-current`, EXE SHA256 **acce7997e1ff08562daf05c3400ced4b84b4336032764f166f3d15a60c7d2b32**. Runtime/game/full suite are not run.
+
+Continue with an original-applicable **MSAA BC block-view domain** from the existing registry, preserving the parent image, exact block words, all samples, padding, visibility, ownership and fence lifetime. Add one focused real-GPU/readback oracle before changing production admission. Clipped and large block domains remain separate following items. Do not repeat the completed exact/multilevel/shifted prefix work. The separate broad `native_resources` `invalid map<K, T> key` failure is unresolved and must not be used as evidence against the accepted BC transaction mechanism without a focused reproducer.
+
 
 ## Current continuation boundary - multilevel BC/word terminal prefix
 

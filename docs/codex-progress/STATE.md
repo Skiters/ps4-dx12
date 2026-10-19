@@ -1,5 +1,11 @@
 # Native DX12 state
 
+## BC prefix alias transactions - 2026-10-19
+
+Production **51abbc717cab66032c60582c20755ffedf57998e** is connected and focused GPU verified. Readonly and writable block-word aliases now derive from one current BC parent transaction; only writer aliases commit back, dependent children cannot be reused across parent snapshots, and shader resource promotion is limited to overlapping mip ranges. All 27 writable BC variants pass sequentially, including shifted/rebased prefixes, duplicate same-mip slots, native BC readers and cross-transaction lifetime. The complete ordered-formatted related suite and focused ownership/PageWatch/binding/subresource checks pass.
+
+The exact clean Release is the sole installed `dx12-current`: EXE SHA256 **acce7997e1ff08562daf05c3400ced4b84b4336032764f166f3d15a60c7d2b32**, PDB SHA256 **c05f51518aa744ad009b4a9da6138afe45bff3953c16f96059fe3cca786d55b8**. Game/runtime/full suite are not run. The broad `native_resources` fixture still has a separate `invalid map<K, T> key` failure and is not accepted or attributed to this mechanism. Next concrete BC gaps are MSAA, clipped and large block domains, each requiring its own contents/ordering/lifetime proof.
+
 
 ## Ordered multilevel BC/word terminal prefixes - 2026-10-19
 

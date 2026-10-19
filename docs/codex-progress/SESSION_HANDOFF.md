@@ -1,5 +1,19 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current BC prefix alias transaction checkpoint - 2026-10-19
+
+Production **51abbc717cab66032c60582c20755ffedf57998e** on `fix/mixed-cmask` preserves one authoritative BC parent across readonly block-word views and writable prefix transactions. `PrepareOrderedGuestStages` now plans one `BlockViewGroup`, materializes every alias from that group's current parent, commits only writer aliases, and pins each transient allocation through submission. `GuestTextureCache::UploadVersion` gives every dependent word child the exact parent snapshot instead of reusing a child from an older transaction. `reads_written_image` promotes overlapping mip aliases to UAV reads while allowing disjoint mips on the same physical allocation to retain legal SRV/UAV bindings.
+
+Implementation state: **connected** for the 27 exact, multilevel, shifted/rebased, duplicate-slot, native-reader and cross-transaction BC prefix variants represented by `gcn_bc_writable_alias_fixture.h`. Behavior state: **focused GPU verified**; all 27 variants pass sequentially and the complete `ordered-formatted-owned` related suite passes, including the ordered-disjoint and readonly-revalidation cases. Focused ownership, dirty-range, PageWatch transfer, range lookup, reflected-binding and mixed-subresource native checks pass. The unrelated broad `native_resources` executable still fails with `invalid map<K, T> key` after its expected rejected-range cases and is not counted as acceptance. Game/runtime/full-suite behavior remains **NOT_RUN** for this source identity.
+
+An exact clean detached Release build using pinned dependencies succeeded. The application contains exactly one package at `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, source **51abbc717cab66032c60582c20755ffedf57998e**, EXE SHA256 **acce7997e1ff08562daf05c3400ced4b84b4336032764f166f3d15a60c7d2b32**, PDB SHA256 **c05f51518aa744ad009b4a9da6138afe45bff3953c16f96059fe3cca786d55b8**, preserved profile `external-7e8fca7a1bd828c19629fdd9`. The catalogue selects `dx12-current`; no game launch was performed.
+
+The earlier shifted/rebased prefix gap is closed by the full 27-variant GPU run. Continue the existing registry at BC block domains not represented by those variants: first establish an original-applicable MSAA block-view case, then clipped and large-domain cases. Do not widen admission from descriptor overlap alone. Preserve exact contents, visibility, ordering, parent-tail/padding, PageWatch ownership and fence lifetime. Diagnose `native_resources` independently if its failing path becomes relevant; do not treat it as a BC regression without a reproducer.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue `fix/mixed-cmask` from current HEAD after verifying the sole installed `dx12-current` identity above. Read the first sections of `SESSION_HANDOFF.md`, `IMPLEMENTATION_REGISTRY.md` and `VULKAN_DX12_PARITY.md`. Resume the recorded BC domain queue with one original-applicable MSAA block-view contract and a focused GPU/readback oracle; keep clipped and large domains explicit until separately proved. Reuse the passing 27-variant BC and ordered-formatted fixtures, do not repeat the exact/multilevel/shifted prefix investigation, and preserve contents, visibility, ordering, resource lifetime and guest-memory ownership. Build from the clean checkout, replace the one current core after verification and push normally. Full suite and game/XInput/FPS acceptance remain final-stage work.
+
 
 ## Current ordered multilevel BC/word prefix checkpoint - 2026-10-19
 

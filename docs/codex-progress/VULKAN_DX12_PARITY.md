@@ -1,5 +1,12 @@
 # Vulkan / native D3D12 parity audit
 
+## BC prefix alias transaction parity - 2026-10-19
+
+- Upstream contract: `TextureCache::ResolveOverlap` / `ExpandImage` keeps one logical BC parent authoritative while block-word interpretations read or update only selected physical prefixes.
+- DX12 connected: `PrepareOrderedGuestStages` groups aliases by parent transaction, materializes readonly and writable children from the current parent, commits writer children only, and pins every allocation through submission. `UploadVersion` prevents dependent-child reuse across parent snapshots; shader read/write promotion follows actual mip overlap.
+- Focused behavior verified: all 27 writable BC variants pass sequentially, including multilevel, shifted/rebased, duplicate-slot, native-reader and cross-transaction cases; the full ordered-formatted related suite and focused ownership/binding/subresource checks pass.
+- Behavior not verified: Bloodborne, runtime acceptance and the final suite were not run for commit `51abbc717cab66032c60582c20755ffedf57998e`. The broad `native_resources` fixture retains a separate `invalid map<K, T> key` failure.
+- Concrete remaining gaps: MSAA, clipped and large BC block domains need separate original-applicable GPU contents/visibility/ordering/lifetime proofs.
 
 ## Multilevel BC parent / word-prefix parity - 2026-10-19
 
