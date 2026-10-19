@@ -1,3 +1,8 @@
+
+## Clean publication 3eb131d — 2026-10-19
+
+Clean Release from committed checkout PASS20.431s (command-20261019-203304-65660.log); build-release.ps1 revalidated pinned dependencies and refreshed exact release identity. Sole dx12-current safely replaced, no core process active, profile retained. EXE 4455fb7033cdb13fa0f40a5d601250ca9adcf5917c97150ff251668121bfd4c5; PDB 6bba3ebb32a9e133ff3e5c5717dc28a277512c3a49ee063c559414e299b01ac5. Exact packaged core GAME_NOT_RUN, source-scoped GPU6/6 only; later texture-view matrix failure remains open. Normal push to origin/fix/mixed-cmask completed. No FPS improvement claim. Next production task remains exact Invalid guest texture view range descriptor/view rebase failure in linear-download-owned.
+
 ## CPU download window integrated — 2026-10-19 20:32 +05
 
 Production ReadMemory and real CPU read/pre-store GPU-dirty faults now follow pinned e0a46675 BufferCache::ReadMemory's 512KiB download window. ResolveGpuBuffers remains exact; new PrepareCpuUpload retains the previous exact internal upload/image dependency path, avoiding unrelated GPU ownership retirement. Clean-page CPU writes do not download neighbours; post-store notifications remain precise. Existing GPU-only synthesized bytes and CPU winners are preserved.
