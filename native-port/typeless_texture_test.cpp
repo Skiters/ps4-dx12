@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstring>
 using namespace NativeDX12;
-int main(){try{
+int main(int argc,char** argv){try{
     ComPtr<ID3D12Debug> debug;if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
     ComPtr<IDXGIFactory6> factory;Check(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory)));ComPtr<ID3D12Device> device;
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1> adapter;
@@ -16,6 +16,27 @@ int main(){try{
     }
     if(!device)throw std::runtime_error("No hardware device");
     Rasterizer renderer(device.Get());GuestTextureCache cache(device.Get());
+    if(argc>1&&std::string_view(argv[1])=="color-overlap"){
+        GuestTextureDesc desc;desc.address=0x100000;desc.width=desc.height=desc.pitch=32;
+        desc.levels=2;desc.layers=desc.view_layers=1;desc.data_format=4;desc.number_format=7;desc.writable=true;
+        const auto layout=LayoutGuestTexture(desc);
+        std::vector<std::byte> guest(layout.guest_bytes,std::byte{0x39}),expected=guest;
+        auto& entry=cache.Upload(desc,guest,renderer.RecordingList(),renderer.CompletedFence());
+        auto requested=desc;requested.levels=1;requested.layers=requested.view_layers=2;
+        (void)LayoutGuestTexture(requested);
+        auto* original=entry.texture.handle.Get();
+        if(cache.ResolveDepthViewStorage(requested)!=requested||entry.texture.handle.Get()!=original)
+            throw std::runtime_error("Color/color overlap changed requested storage through depth recreation");
+        GuestImageReadback readback(device.Get(),entry,renderer.RecordingList());
+        const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);
+        renderer.Finish();readback.Resolve(renderer.CompletedFence(),guest);cache.Collect(renderer.CompletedFence());
+        if(guest!=expected)throw std::runtime_error("Color overlap changed cached GPU contents or padding");
+        auto invalid=requested;invalid.view_layers=3;bool rejected=false;
+        try{(void)LayoutGuestTexture(invalid);}catch(const std::runtime_error&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Invalid color view was accepted");
+        renderer.ValidateDebugMessages();
+        puts("PASS: color/color overlap preserves requested extent, cached GPU contents and invalid-view rejection");return 0;
+    }
     struct FormatCase{u32 data,component_bits,components;};
     for(auto test:{FormatCase{1,8,1},{2,16,1},{3,8,2},{4,32,1},{5,16,2},
         {9,10,4},{10,8,4},{11,32,2},{12,16,4},{14,32,4}}){

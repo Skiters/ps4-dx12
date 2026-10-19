@@ -92,7 +92,8 @@ bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDes
     const GuestTextureLayout&,std::span<std::byte> color,std::span<std::byte> cmask);
 GuestTextureDesc DescribeGuestDepthBuffer(const AmdGpu::DepthBuffer&,const AmdGpu::DepthView&,AmdGpu::CbDbExtent);
 GuestTextureDesc DescribeGuestStencil(const GuestTextureDesc& depth);
-GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& desc);
+GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& desc,
+    std::source_location caller=std::source_location::current());
 bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc sampled);
 // Logical readonly BC view compatibility, including numeric variants/prefixes.
 // Actual native resource casting and ownership must be proved by the cache.

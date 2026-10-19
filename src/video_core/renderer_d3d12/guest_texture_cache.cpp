@@ -834,7 +834,7 @@ bool MaterializeGuestColorClear(const AmdGpu::ColorBuffer& b,const GuestTextureD
     }
     return true;
 }
-GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
+GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d,std::source_location caller){
     if(!std::has_single_bit(d.samples)||d.samples>16)
         throw std::invalid_argument("Invalid guest sample count");
     if(d.samples>1&&(d.levels!=1||d.volume_depth||d.one_dimensional||d.data_format>=35))
@@ -850,7 +850,11 @@ GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& d){
         throw std::out_of_range("Invalid guest attachment physical height");
     if(d.tile_mode>26&&d.tile_mode!=31)throw std::invalid_argument("Invalid guest tile mode");
     if(d.first_mip>=d.levels||d.first_layer>=d.layers||!d.view_layers||d.view_layers>d.layers-d.first_layer)
-        throw std::runtime_error("Invalid guest texture view range");
+        throw std::runtime_error("Invalid guest texture view range: address="+std::to_string(d.address)+
+            " first_mip="+std::to_string(d.first_mip)+" levels="+std::to_string(d.levels)+
+            " first_layer="+std::to_string(d.first_layer)+" layers="+std::to_string(d.layers)+
+            " view_layers="+std::to_string(d.view_layers)+" caller="+caller.function_name()+
+            ":"+std::to_string(caller.line()));
     Mapping(d.swizzle);
     const bool signed_packed10=d.data_format==9&&(d.number_format==1||d.number_format==5);
     if(signed_packed10&&d.depth_target)
@@ -2321,6 +2325,10 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
     Entry* preceding{};bool preceding_independent=false;auto resolved=requested;
     auto [first,last]=address_index_.equal_range(requested.address);
     for(auto indexed=first;indexed!=last;++indexed){auto* candidate=indexed->second;
+        // ResolveDepthOverlap rejects color/color pairs before comparing
+        // resource extents. A lexicographic mip/layer maximum from an unrelated
+        // color image can otherwise manufacture an invalid requested view.
+        if(!candidate->desc.depth_target&&!requested.depth_target)continue;
         auto storage=requested;
         if(std::pair(candidate->desc.levels,candidate->desc.layers)>std::pair(storage.levels,storage.layers)){
             storage.levels=candidate->desc.levels;storage.layers=candidate->desc.layers;
