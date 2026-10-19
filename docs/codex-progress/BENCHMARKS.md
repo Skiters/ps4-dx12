@@ -1,5 +1,9 @@
 # Benchmarks
 
+## Production ordered packed-SNORM verification - 2026-10-19
+
+The production GCN script completed in 22.905 s including incremental rebuild/relink; its actual GPU fixture completed in 4.836 s and reported 27 passes. `native_dxil_raster_ordered_metadata` passed in 0.04 s, `native_dxil_raster_ordered_gpu` in 0.33 s, and `native_guest_graphics_resources` in 3.86 s. These are correctness timings only. No game was launched and no FPS or performance claim applies to commit **3b886393**.
+
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
 `native_dxil_raster_ordered_gpu` PASS, 0.41 s; combined metadata/GPU rerun PASS, 0.36 s. A 4x4 `R32_UINT` UAV received 64 overlapping pixel increments per texel and read back exact value 64 in all 16 texels.

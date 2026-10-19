@@ -1,5 +1,17 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current production ordered packed-SNORM checkpoint - 2026-10-19
+
+Branch `fix/mixed-cmask` is at production commit **3b886393c6e7d345bbe298763ed4a9e045f60d91**. Single-sample packed 10:10:10:2 SNORM destination blending is now connected end to end through a rasterizer-ordered `R32_UINT` UAV: fragment exports preserve their source until the ordered read/modify/write, blend constants and per-target state reach the shader, non-dual-source blend factors and Add/Subtract/ReverseSubtract/Min/Max are implemented, masked lanes are merged, and quantization uses deterministic nearest-even SNORM encoding. Texture creation, UAV descriptors, transitions, barriers, ownership and lifetime are connected to this path. Invalid MSAA and dual-source cases remain explicit rejections.
+
+Focused production verification passed. `native-port/run-gcn-frontend-test.ps1 build-migration-core snorm-color-owned gcn_attachment_alias` reported 27 passes, including real destination-plus-source ordered blending and explicit MSAA rejection. `native_dxil_raster_ordered_metadata`, `native_dxil_raster_ordered_gpu` and `native_guest_graphics_resources` passed; the hardware ordering fixture still reads exact value 64 from all 16 texels after 64 overlapping fragments. Incremental Release core compilation and linking passed. No game was launched for this identity, so image, gameplay, FPS and final-suite acceptance remain open.
+
+The next production gap is independent MRT logic operations and write masks through the ordered path. Per-sample packed-SNORM MSAA is a separate open gap. Do not repeat the compiler/ROV or single-sample SNORM audit unless new evidence invalidates these checks. The installed application core is still the earlier `378bda3` build until a post-commit rebuild supplies an exact executable/PDB identity and replaces `dx12-current` safely.
+
+### NEXT CODEX SESSION — START HERE
+
+Read this file and verify the current Git HEAD. Rebuild the committed `fix/mixed-cmask` state, run the focused ordered packed-SNORM fixture, record exact executable/PDB hashes, and safely replace the single application core at `dx12-current`. Then continue production code with independent MRT logic operations and per-target write masks using the existing ordered UAV path; preserve contents, visibility, ordering, ownership and lifetime. Keep packed-SNORM MSAA explicit until implemented. Reuse the pinned Vulkan reference and existing measurements, avoid completed audits, run only mechanism-specific GPU/readback checks, and defer the full game suite until the integration boundary.
+
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
 Hardware D3D12 execution is now verified for the prepared ROV path: a 4x4 `R32_UINT` UAV received 64 overlapping pixel increments per texel, explicit UAV barriers preserved visibility, and readback returned exact value 64 in all 16 texels. `native_dxil_raster_ordered_gpu` passed in 0.41 s; the combined metadata/GPU pair passed in 0.36 s. Guest color-export lowering and ordered blend/logic selection remain open.

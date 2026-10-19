@@ -1,5 +1,9 @@
 # Vulkan / native D3D12 parity audit
 
+## Production ordered packed-SNORM checkpoint - 2026-10-19
+
+Single-sample packed 10:10:10:2 SNORM destination blending is implemented and connected at commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** through a rasterizer-ordered R32_UINT UAV. The production GCN fixture passed 27 cases, including real source-plus-destination blend readback. Metadata, hardware ordering and graphics-resource checks passed. Status: implementation connected and mechanism verified; Bloodborne/final suite not verified. Concrete remaining gaps are independent MRT logic operations with per-target write masks and per-sample packed-SNORM MSAA.
+
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
 Hardware D3D12 execution is also verified for the prepared path: 64 overlapping pixel invocations incremented every 4x4 UAV texel to exactly 64 with explicit UAV barriers and readback. Guest color-export lowering and ordered blend/logic selection remain open.

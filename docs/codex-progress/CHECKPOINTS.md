@@ -1,5 +1,13 @@
 # Checkpoints
 
+## Production ordered packed-SNORM checkpoint - 2026-10-19
+
+- Source: **3b886393c6e7d345bbe298763ed4a9e045f60d91**.
+- Connected: single-sample packed 10:10:10:2 SNORM ordered destination blending, blend constants/state, masked merge, UAV descriptors/states/barriers and resource lifetime.
+- Verified: 27 production GCN cases; ROV metadata; 64-fragment hardware ordering/readback; guest graphics resources; incremental Release core link.
+- Not verified: Bloodborne image/gameplay/FPS and final suite for this identity.
+- Open production gaps: independent MRT logic/write masks and packed-SNORM MSAA.
+
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
 Hardware D3D12 proof passed: 64 overlapping fragments incremented all 16 UAV texels to 64 with explicit UAV barriers and readback. Guest fragment export and ordered blend/logic integration remain open.

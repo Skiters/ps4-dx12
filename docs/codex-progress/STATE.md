@@ -1,5 +1,9 @@
 # Native DX12 state
 
+## Current production ordered packed-SNORM checkpoint - 2026-10-19
+
+Commit **3b886393c6e7d345bbe298763ed4a9e045f60d91** connects single-sample packed 10:10:10:2 SNORM blending end to end through a rasterizer-ordered `R32_UINT` UAV. Blend constants/state, destination read/modify/write, masks, transitions, barriers, ownership and resource lifetime are connected. The production GCN fixture passed 27 cases; ROV metadata, hardware ordering and guest graphics-resource tests also passed. The implementation is connected and mechanism-verified, while game/final-suite behavior is not yet verified. Independent MRT logic/write masks and packed-SNORM MSAA remain concrete gaps. The installed core still has the earlier `378bda3` identity until the post-commit build is published.
+
 ## Current ordered-render compiler checkpoint - 2026-10-19
 
 The prepared ROV path passed real D3D12 execution: 64 overlapping pixel invocations produced ordered value 64 in all 16 UAV texels after barriers and readback. Guest color-export lowering and blend/logic selection remain open.
