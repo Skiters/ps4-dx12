@@ -1253,3 +1253,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: CPU host-copy/snapshot helper EXECUTED/PASS0.102s231922-20088; GPU/game not run. Pinned same-storage color feedback differs from current pre-draw snapshot; overclaiming comment corrected, behavior unchanged. Exact next production contract in SESSION_HANDOFF.
 
 2026-10-19: Typed SRV/UAV subresource graph + native disjoint color states + guest proven-disjoint snapshot bypass connected. Core/GCN compile+link PASS23.694s; final checks compile/link PASS12.645s; GPU/game NOT_RUN. Full live feedback remains open.
+
+2026-10-19: Disjoint guest color route now requires exact physical mip mapping in addition to native compatibility; mismatched-map negative prepared. Final checks compile/link11.625s, GPU/game NOT_RUN.

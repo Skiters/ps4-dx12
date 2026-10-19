@@ -288,8 +288,10 @@ float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),
         auto sampled=desc;sampled.render_target=false;sampled.first_mip=mip;sampled.first_layer=source_layer;
         auto overlapping=sampled;overlapping.first_layer=target_layer;
         auto invalid=sampled;invalid.view_layers=0;
-        if(!DisjointGuestColorSampledViews(target,sampled)||DisjointGuestColorSampledViews(target,overlapping)||
-           DisjointGuestColorSampledViews(target,invalid))throw std::runtime_error("Guest color subresource overlap plan mismatch");
+        auto mismapped=layout;++mismapped.mips[0].offset;
+        if(!DisjointGuestColorSampledViews(target,layout,sampled,layout)||DisjointGuestColorSampledViews(target,layout,overlapping,layout)||
+           DisjointGuestColorSampledViews(target,layout,invalid,layout)||DisjointGuestColorSampledViews(target,layout,sampled,mismapped))
+            throw std::runtime_error("Guest color subresource overlap/physical mapping plan mismatch");
         const Rasterizer::ColorAttachment attachment{&entry.texture,entry.Rtv(target)};
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=layout.format;
         srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;

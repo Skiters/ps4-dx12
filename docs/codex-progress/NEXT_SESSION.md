@@ -1,3 +1,7 @@
+## Physical mapping guard for disjoint views — 2026-10-19
+
+The new guest disjoint-color route additionally requires exact actual format/bytes/block-expansion and every physical mip's pitch/height/offset/slice_bytes/macro/thickness. CompatibleGuestSampledStorage intentionally normalizes storage/pow2 hints and alone does not prove identical guest byte mapping. Reused already-computed layouts; no repeated layout generation in the binding loop. Added mismatched-mip-map negative to the prepared graphics fixture. Final relevant production/resources/host/scheduler fixture compile/link PASS11.625s command-20261019-233208-30868.log; runtime/GPU/game not run. Full core reproduction from these committed sources is next. Live same-subresource feedback remains open.
+
 ## Typed shader subresource access connected — 2026-10-19
 
 ResourceBindings now tracks SRV versus UAV access for actual texture mip/layer/plane ranges (including 1D/arrays/2D/MS/cube/3D); descriptor replacement removes its old active range while COM ownership stays retained. Unknown views remain conservative. Native ExecuteGraphics rejects actual attachment/shader overlap rather than every reference to a color resource; disjoint color subresources receive their correct separate RT/SRV/UAV states with UAV ordering. Depth planning keeps access roles and rejects UAV overlap even for a readonly DSV. SRV/UAV same-subresource conflicts remain explicit instead of emitting an illegal combined D3D12 state.

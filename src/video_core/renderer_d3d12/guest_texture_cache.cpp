@@ -547,11 +547,20 @@ bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc a,const GuestTextureLayou
     a.levels=b.levels=std::max(a.levels,b.levels);
     return CompatibleGuestShaderStorage(a,b);
 }
-bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTextureDesc& sampled){
+bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTextureLayout& physical,
+    const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
     if(!target.render_target||target.depth_target||!CompatibleGuestSampledStorage(target,sampled)||
        target.first_mip>=target.levels||sampled.first_mip>=sampled.levels||
        !target.view_layers||!sampled.view_layers||target.first_layer>=target.layers||sampled.first_layer>=sampled.layers||
        target.view_layers>target.layers-target.first_layer||sampled.view_layers>sampled.layers-sampled.first_layer)return false;
+    // Compatible native views can normalize pow2/storage hints. A disjoint
+    // guest-memory proof additionally needs the actual physical mip mapping.
+    if(physical.format!=sampled_layout.format||physical.guest_bytes!=sampled_layout.guest_bytes||
+       physical.bytes_per_pixel!=sampled_layout.bytes_per_pixel||physical.block_extent!=sampled_layout.block_extent||
+       physical.expanded_bytes_per_pixel!=sampled_layout.expanded_bytes_per_pixel||physical.mips.size()!=sampled_layout.mips.size())return false;
+    for(size_t i=0;i<physical.mips.size();++i){const auto& a=physical.mips[i];const auto& b=sampled_layout.mips[i];
+        if(a.pitch!=b.pitch||a.height!=b.height||a.offset!=b.offset||a.slice_bytes!=b.slice_bytes||
+           a.macro!=b.macro||a.thickness!=b.thickness)return false;}
     return target.first_mip<sampled.first_mip||target.first_mip>=sampled.levels||
         target.first_layer>=sampled.first_layer+sampled.view_layers||
         sampled.first_layer>=target.first_layer+target.view_layers;
