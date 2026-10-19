@@ -34,6 +34,31 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
     {
         memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
         Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
+        const Rasterizer::ShaderBufferRequest old{base+4096,4096,false,true,true};
+        renderer.PrepareShaderBuffers(std::span(&old,1));
+        const Rasterizer::ShaderBufferRequest readonly{base+16,16384-32,false,true,true};
+        const Rasterizer::ShaderBufferRequest mixed[]{readonly,{base+8192,4096,true,true,true}};
+        renderer.PrepareShaderBuffers(mixed);
+        renderer.FillPreparedShaderBuffer(base+8192,4096,0x71727374,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.RetainedImages({{base+4096,4096}});renderer.ReleaseCpuBufferWatches(readonly.address,readonly.size);
+        renderer.NotifyCpuWrite(base+4096+17,1);renderer.RetainedImages({});
+        renderer.ReleaseUnusedReadOnlyWatches(base+4096,4096);
+        MEMORY_BASIC_INFORMATION state{};VirtualQuery(reinterpret_cast<void*>(base+4096),&state,sizeof(state));
+        require(state.Protect==PAGE_READWRITE,"Unrelated GPU pages retained an image-only read-only guard");
+        VirtualQuery(reinterpret_cast<void*>(base+8192),&state,sizeof(state));
+        require(state.Protect==PAGE_NOACCESS,"Image-only guard retirement released actual GPU pages");
+        reinterpret_cast<volatile std::byte*>(base)[4096+17]=std::byte{0x77};
+        require(renderer.ReadMemory(base+8192,4096),"Retained GPU page could not resolve");renderer.Finish();
+        renderer.PrepareShaderBuffers(std::span(&readonly,1));const auto observed=read(renderer,readonly.address,readonly.size);
+        for(size_t offset=16;offset<16384-16;++offset){const u8 word[]{0x74,0x73,0x72,0x71};
+            const auto expected=offset==4096+17?std::byte{0x77}:offset>=8192&&offset<12288?std::byte{word[offset%4]}:std::byte{0x31};
+            require(observed[offset-16]==expected&&physical[offset]==expected,"Image-only retirement changed CPU winner, GPU contents or padding");}
+        require(committed==4096,"Image-only retirement widened actual GPU commit");
+        renderer.ReleaseCpuBufferWatches(base,16384);renderer.ValidateDebugMessages();
+    }
+    {
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
         const Rasterizer::ShaderBufferRequest readonly{base,8192,false,true,true};
         renderer.PrepareShaderBuffers(std::span(&readonly,1));
         renderer.NotifyCpuWrite(base+17,1);

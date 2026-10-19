@@ -540,7 +540,12 @@ void Rasterizer::ReleaseUnusedReadOnlyWatches(VAddr address,u64 size,std::span<c
         const auto& mapping=it->second;
         if(retiring_buffer&&mapping.base==*retiring_buffer)continue;
         const auto first=std::max(address,mapping.base),last=std::min(end,mapping.base+mapping.size);
-        if(mapping.gpu_owned||mapping.cpu_watched||mapping.cpu_watch_pending){retain_pages(first,last);continue;}
+        // A native arena may own only selected GPU pages. Keeping its whole
+        // envelope here would strand an unrelated image's RO guard after that
+        // image and all CPU proofs have retired, making legal stores fault.
+        for(const auto& [begin,finish]:mapping.gpu_owned_ranges)
+            retain_pages(std::max(first,mapping.base+begin),std::min(last,mapping.base+finish));
+        if(mapping.cpu_watched||mapping.cpu_watch_pending){retain_pages(first,last);continue;}
         if(!mapping.cpu_partial_proof)continue;
         auto cursor=first;
         for(const auto& [begin,finish]:mapping.cpu_dirty_ranges){
