@@ -176,6 +176,36 @@ Id OrderedSnormCode(EmitContext& ctx, Id value, u32 bits) {
                             ctx.ConstU32((1u << bits) - 1));
 }
 
+Id OrderedLogicWord(EmitContext& ctx, AmdGpu::ColorControl::LogicOp operation,
+                    Id source, Id destination) {
+    using L = AmdGpu::ColorControl::LogicOp;
+    const auto invert = [&](Id value) { return ctx.OpNot(ctx.U32[1], value); };
+    switch (operation) {
+    case L::Clear: return ctx.u32_zero_value;
+    case L::Nor: return invert(ctx.OpBitwiseOr(ctx.U32[1], source, destination));
+    case L::AndInverted:
+        return ctx.OpBitwiseAnd(ctx.U32[1], invert(source), destination);
+    case L::CopyInverted: return invert(source);
+    case L::AndReverse:
+        return ctx.OpBitwiseAnd(ctx.U32[1], source, invert(destination));
+    case L::Invert: return invert(destination);
+    case L::BrushXor:
+    case L::Xor: return ctx.OpBitwiseXor(ctx.U32[1], source, destination);
+    case L::Nand: return invert(ctx.OpBitwiseAnd(ctx.U32[1], source, destination));
+    case L::And: return ctx.OpBitwiseAnd(ctx.U32[1], source, destination);
+    case L::Equiv: return invert(ctx.OpBitwiseXor(ctx.U32[1], source, destination));
+    case L::Noop: return destination;
+    case L::OrInverted:
+        return ctx.OpBitwiseOr(ctx.U32[1], invert(source), destination);
+    case L::Copy: return source;
+    case L::OrReverse:
+        return ctx.OpBitwiseOr(ctx.U32[1], source, invert(destination));
+    case L::Or: return ctx.OpBitwiseOr(ctx.U32[1], source, destination);
+    case L::Set: return ctx.ConstU32(~0u);
+    }
+    throw std::runtime_error("Ordered color reached invalid logic operation");
+}
+
 void EmitOrderedColor(EmitContext& ctx) {
     const Id constants_ptr = ctx.OpAccessChain(
         ctx.TypePointer(spv::StorageClass::PushConstant, ctx.F32[4]), ctx.push_data_block,
@@ -198,17 +228,20 @@ void EmitOrderedColor(EmitContext& ctx) {
                 component * 10, component == 3 ? 2 : 10);
         const Id destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
         const Id source = ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[index].id);
+        const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
         Id packed = ctx.u32_zero_value;
         u32 raw_mask{};
         for (u32 component = 0; component < 4; ++component) {
             const u32 bits = component == 3 ? 2 : 10;
             const u32 shift = component * 10;
-            const Id blended = OrderedBlendChannel(ctx, target, source, destination, constants, component);
-            const Id code = OrderedSnormCode(ctx, blended, bits);
+            const Id value = logic ? ctx.OpCompositeExtract(ctx.F32[1], source, component) :
+                                     OrderedBlendChannel(ctx, target, source, destination, constants, component);
+            const Id code = OrderedSnormCode(ctx, value, bits);
             packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
                 shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
             if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;
         }
+        if (logic) packed = OrderedLogicWord(ctx, target.logic_op, packed, old_word);
         const Id mask = ctx.ConstU32(raw_mask);
         const Id result = ctx.OpBitwiseOr(ctx.U32[1],
             ctx.OpBitwiseAnd(ctx.U32[1], old_word, ctx.ConstU32(~raw_mask)),

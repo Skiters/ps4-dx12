@@ -170,7 +170,10 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     const bool normal=regs.color_control.mode==AmdGpu::ColorControl::OperationMode::Normal;
     if(!normal&&regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable)
         throw std::runtime_error("Native guest fast-clear/resolve/decompress pass needs attachment operation");
-    const u32 ordered_color_mask = GuestOrderedColorMask(regs);
+    u32 active_color_mask{};
+    for (u32 i = 0; i < targets.size(); ++i)
+        if (targets[i] != DXGI_FORMAT_UNKNOWN) active_color_mask |= 1u << i;
+    const u32 ordered_color_mask = GuestOrderedColorMask(regs, active_color_mask);
     bool needs_constant_color_rgb=false,needs_constant_alpha_rgb=false;
     for(UINT i=0;i<8;++i) {
         auto& rt=p.BlendState.RenderTarget[i];rt.SrcBlend=rt.SrcBlendAlpha=D3D12_BLEND_ONE;
@@ -191,10 +194,11 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             };
             const auto& blend = regs.blend_control[i];
             if (regs.color_buffers[i].NumSamples() != 1)
-                throw std::runtime_error("Native packed10 SNORM ordered blending needs single-sample storage");
-            if (dual(blend.color_src_factor) || dual(blend.color_dst_factor) ||
+                throw std::runtime_error("Native packed10 SNORM ordered color needs single-sample storage");
+            if (regs.color_control.rop3 == AmdGpu::ColorControl::LogicOp::Copy &&
+                (dual(blend.color_src_factor) || dual(blend.color_dst_factor) ||
                 (blend.separate_alpha_blend &&
-                 (dual(blend.alpha_src_factor) || dual(blend.alpha_dst_factor))))
+                 (dual(blend.alpha_src_factor) || dual(blend.alpha_dst_factor)))))
                 throw std::runtime_error("Native packed10 SNORM ordered blending does not support dual-source input");
             result.ordered_color_mask |= 1u << i;
             p.RTVFormats[i] = DXGI_FORMAT_UNKNOWN;
@@ -244,12 +248,12 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     // slots still require their original indices.
     while (p.NumRenderTargets && p.RTVFormats[p.NumRenderTargets - 1] == DXGI_FORMAT_UNKNOWN)
         --p.NumRenderTargets;
-    // D3D12 forbids logic operations with IndependentBlendEnable. A single
-    // shared state is exact only when every bound target has the same scattered
-    // write mask. Do not silently write a masked MRT or replay side-effecting
-    // guest shaders to emulate independent masks. Regression: snorm-color-owned
-    // and signed-logic (real GCN/readback); native_guest_graphics_resources
-    // additionally rejects incompatible independent masks before submission.
+    // D3D12 forbids logic operations with IndependentBlendEnable. Packed SNORM
+    // targets with distinct masks use the ordered UAV path above; remaining
+    // fixed-function targets are exact only when every bound target has the same
+    // scattered mask. Do not replay side-effecting guest shaders to emulate it.
+    // Regression: snorm-color-owned and signed-logic (real GCN/readback);
+    // native_guest_graphics_resources rejects unsupported combinations.
     const D3D12_RENDER_TARGET_BLEND_DESC* logic_state=nullptr;
     for(UINT i=0;i<p.NumRenderTargets;++i)
         if(targets[i]!=DXGI_FORMAT_UNKNOWN&&p.BlendState.RenderTarget[i].LogicOpEnable){

@@ -296,6 +296,21 @@ int wmain(int argc,wchar_t** argv){try {
     try{(void)BuildGuestGraphicsState(logic_regs,logic_mrt);}
     catch(const std::runtime_error& error){independent_logic_rejected=std::string_view(error.what()).find("independent write masks")!=std::string_view::npos;}
     if(!independent_logic_rejected)throw std::runtime_error("Independent MRT logic masks silently collapsed");
+    AmdGpu::Regs ordered_logic_regs{};
+    ordered_logic_regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+    ordered_logic_regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Xor;
+    ordered_logic_regs.color_target_mask.raw=0xa1;
+    for(u32 i=0;i<2;++i){
+        auto& color=ordered_logic_regs.color_buffers[i];color.base_address=1+i;
+        color.info.format=9;color.info.number_type=1;
+    }
+    const std::array ordered_logic_formats{DXGI_FORMAT_R10G10B10A2_UINT,
+                                           DXGI_FORMAT_R10G10B10A2_UINT};
+    const auto ordered_logic=BuildGuestGraphicsState(ordered_logic_regs,ordered_logic_formats);
+    if(ordered_logic.ordered_color_mask!=3||ordered_logic.pipeline.NumRenderTargets||
+       ordered_logic.pipeline.BlendState.RenderTarget[0].LogicOpEnable||
+       ordered_logic.pipeline.BlendState.RenderTarget[1].LogicOpEnable)
+        throw std::runtime_error("Packed SNORM independent MRT logic did not select ordered UAVs");
     AmdGpu::Sampler sampler_desc{};sampler_desc.raw0=u64(AmdGpu::ClampMode::ClampHalfBorder)|
         (u64(AmdGpu::ClampMode::MirrorOnceBorder)<<3)|(u64(1)<<15);
     sampler_desc.raw1=u64(AmdGpu::BorderColor::Custom)<<62;

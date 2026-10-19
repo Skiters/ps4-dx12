@@ -29,15 +29,34 @@ inline GuestDepthActivity GuestDepthTests(const AmdGpu::Regs& regs) {
     result.bounds=regs.depth_control.depth_bounds_enable&&regs.depth_buffer.DepthValid()&&result.HasAttachment();
     return result;
 }
-inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs) {
+inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u) {
     u32 result{};
-    if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Normal ||
-        regs.color_control.rop3 != AmdGpu::ColorControl::LogicOp::Copy) return result;
+    if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Normal) return result;
+    const bool logic = regs.color_control.rop3 != AmdGpu::ColorControl::LogicOp::Copy;
+    bool independent_logic{};
+    if (logic) {
+        u32 shared_mask{};
+        bool found{};
+        for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
+            const auto& color = regs.color_buffers[i];
+            if (!color || (active_targets & (1u << i)) == 0) continue;
+            const u32 mask = color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i));
+            if (!found) {
+                shared_mask = mask;
+                found = true;
+            } else {
+                independent_logic |= mask != shared_mask;
+            }
+        }
+    }
     for (u32 i = 0; i < AmdGpu::NUM_COLOR_BUFFERS; ++i) {
+        if ((active_targets & (1u << i)) == 0) continue;
         const auto& color = regs.color_buffers[i];
         const auto& blend = regs.blend_control[i];
-        if (color && color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i)) &&
-            blend.enable && !color.info.blend_bypass &&
+        const bool writes = color && color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i));
+        const bool ordered_blend = !logic && blend.enable && !color.info.blend_bypass;
+        const bool ordered_logic = logic && independent_logic;
+        if (writes && (ordered_blend || ordered_logic) &&
             color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) result |= 1u << i;
     }

@@ -102,6 +102,83 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
         }
         ++cases;
     }
-    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer/full65536 padding;sample1 ordered Add blend and explicit MSAA rejection\n",cases);
+    // D3D12 cannot combine fixed-function logic operations with independent
+    // MRT write masks. Exercise the ordered replacement with three real guest
+    // exports and independently computed raw-word expectations.
+    alignas(256) std::array<u32,128> mrt_pixel{};
+    initialize(mrt_pixel,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
+        0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0x7e000280,0x7e0202ff,
+        0x3f800000,0xf800001f,0x03020100,0x7e020280,0x7e0402ff,0x3f800000,
+        0xf800082f,0x03020100,0xbf810000},0x534e4f524d4d5254ull);
+    r.ReadMemory(base,65536);r.Finish();r.UnmapMemory(base,65536);r.MapMemory(base,65536);
+    r.NotifyHostMapping(base,65536,true,true);memset(memory,0xa7,65536);
+    const float mrt_xy[3][2]{{-1,-1},{3,-1},{-1,3}};
+    for(unsigned i=0;i<3;++i){const float position[]{mrt_xy[i][0],mrt_xy[i][1],.5f,1.f};
+        memcpy(memory+i*32,position,sizeof(position));}
+    auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
+    regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
+    regs.vs_program.address=reinterpret_cast<u64>(vertex.data())>>8;
+    regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=1;
+    regs.ps_program.address=reinterpret_cast<u64>(mrt_pixel.data())>>8;regs.ps_program.settings.num_vgprs=1;
+    const u32 export_format=u32(AmdGpu::ShaderExportFormat::ABGR_32);
+    regs.color_export_format.raw=export_format|(export_format<<4)|(export_format<<8);
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+    regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+    regs.color_shader_mask.raw=0xfff;regs.color_target_mask.raw=0xfa1;
+    regs.clipper_control.clip_space=AmdGpu::ClipSpace::ZeroToW;
+    auto& vp=regs.viewport_control;vp.xscale_enable=vp.yscale_enable=vp.xoffset_enable=
+        vp.yoffset_enable=vp.zscale_enable=1;
+    regs.viewports[0].xscale=4;regs.viewports[0].yscale=-4;
+    regs.viewports[0].xoffset=regs.viewports[0].yoffset=4;regs.viewports[0].zscale=1;
+    regs.screen_scissor.bottom_right_x=regs.window_scissor.bottom_right_x=
+        regs.generic_scissor.bottom_right_x=8;
+    regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=
+        regs.generic_scissor.bottom_right_y=8;
+    AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
+    input.data_format=4;input.num_format=4;input.dst_sel_x=4;input.dst_sel_y=5;
+    input.dst_sel_z=6;input.dst_sel_w=7;memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
+    std::array<GuestTextureDesc,3> descriptions{};std::array<GuestTextureLayout,3> layouts{};
+    for(u32 i=0;i<3;++i){auto& cb=regs.color_buffers[i];cb.base_address=u32((base+4096+i*4096)>>8);
+        cb.info.format=9;cb.info.number_type=1;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
+        cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[i]={8,8};
+        descriptions[i]=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[i]);layouts[i]=LayoutGuestTexture(descriptions[i]);}
+    const u32 seed=pack({-512,-19,-2,-1});
+    const std::array<u32,3> sources{pack({511,0,0,1}),pack({0,511,0,1}),pack({0,0,511,1})};
+    std::vector<std::byte> expected(memory,memory+65536);
+    for(u32 i=0;i<3;++i){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
+        u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))
+            raw_mask|=(channel==3?3u:1023u)<<(channel*10);
+        for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const auto offset=descriptions[i].address-base+
+            GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,0);memcpy(memory+offset,&seed,4);
+            memcpy(expected.data()+offset,&seed,4);}}
+    using Logic=AmdGpu::ColorControl::LogicOp;
+    constexpr std::array operations{Logic::Clear,Logic::Nor,Logic::AndInverted,Logic::CopyInverted,
+        Logic::AndReverse,Logic::Invert,Logic::BrushXor,Logic::Xor,Logic::Nand,Logic::And,
+        Logic::Equiv,Logic::Noop,Logic::OrInverted,Logic::Copy,Logic::OrReverse,Logic::Or,Logic::Set};
+    const auto apply_logic=[](Logic op,u32 source,u32 destination){switch(op){
+        case Logic::Clear:return 0u;case Logic::Nor:return~(source|destination);
+        case Logic::AndInverted:return(~source)&destination;case Logic::CopyInverted:return~source;
+        case Logic::AndReverse:return source&(~destination);case Logic::Invert:return~destination;
+        case Logic::BrushXor:case Logic::Xor:return source^destination;
+        case Logic::Nand:return~(source&destination);case Logic::And:return source&destination;
+        case Logic::Equiv:return~(source^destination);case Logic::Noop:return destination;
+        case Logic::OrInverted:return(~source)|destination;case Logic::Copy:return source;
+        case Logic::OrReverse:return source|(~destination);case Logic::Or:return source|destination;
+        case Logic::Set:return~0u;}throw std::runtime_error("Invalid fixture logic operation");};
+    for(const auto operation:operations){regs.color_control.rop3=operation;
+        for(u32 i=0;i<3;++i){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
+            u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))
+                raw_mask|=(channel==3?3u:1023u)<<(channel*10);
+            for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const auto offset=descriptions[i].address-base+
+                GuestPixelOffset(descriptions[i],layouts[i],0,0,x,y,0);u32 old{};memcpy(&old,expected.data()+offset,4);
+                const u32 result=(old&~raw_mask)|(apply_logic(operation,sources[i],old)&raw_mask);
+                memcpy(expected.data()+offset,&result,4);}}
+        r.Draw(false);for(u32 i=0;i<3;++i)r.ReadMemory(descriptions[i].address,layouts[i].guest_bytes);
+        r.Finish();r.ValidateDebugMessages();
+        if(memcmp(backing,expected.data(),expected.size()))
+            throw std::runtime_error("SNORM ordered independent MRT logic lost operation, target masks, raw contents or padding");
+        ++cases;
+    }
+    printf("PASS:%u actual GCN SNORM packed10 sample1/2/4/8,three payloads,clamp/nearest-even,masked endpoint bits,XOR,layer/full65536 padding;sample1 ordered Add blend,all logic ops with three independent MRT masks and explicit MSAA rejection\n",cases);
 }
 } // namespace NativeDX12

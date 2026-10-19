@@ -14,11 +14,19 @@
 
 namespace NativeDX12 {
 namespace {
-void RestrictOrderedColorTargets(Shader::RuntimeInfo& runtime, u32 mrt_mask) {
+void ConfigureOrderedColorTargets(Shader::RuntimeInfo& runtime, const AmdGpu::Regs& regs,
+                                  u32 mrt_mask = ~0u) {
+    const u32 ordered_mask = GuestOrderedColorMask(regs, mrt_mask);
     for (u32 i = 0; i < Shader::MaxColorBuffers; ++i) {
-        if ((mrt_mask & (1u << i)) == 0) {
-            runtime.hw.fs.ordered_color_targets[i] = {};
-        }
+        auto& target = runtime.hw.fs.ordered_color_targets[i];
+        target = {};
+        if ((ordered_mask & (1u << i)) == 0) continue;
+        target.enabled = true;
+        target.blend = regs.blend_control[i];
+        target.logic_op = regs.color_control.rop3;
+        target.write_mask = u8(regs.color_buffers[i].Swizzle().ApplyMask(
+            regs.color_target_mask.GetMask(i)));
+        target.shader_mask = u8(regs.color_shader_mask.GetMask(i));
     }
 }
 } // namespace
@@ -36,15 +44,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     std::span<const Shader::NativeImageWrite> raw32_views) {
     auto runtime = VideoCore::BuildGuestRuntimeInfo(regs, compute, hardware, logical, context);
     if(logical==Shader::SwStage::Fragment){
-        const u32 ordered_mask = GuestOrderedColorMask(regs);
-        for (u32 i = 0; i < Shader::MaxColorBuffers; ++i) if (ordered_mask & (1u << i)) {
-            auto& target = runtime.hw.fs.ordered_color_targets[i];
-            target.enabled = true;
-            target.blend = regs.blend_control[i];
-            target.write_mask = u8(regs.color_buffers[i].Swizzle().ApplyMask(
-                regs.color_target_mask.GetMask(i)));
-            target.shader_mask = u8(regs.color_shader_mask.GetMask(i));
-        }
+        ConfigureOrderedColorTargets(runtime, regs);
         runtime.hw.fs.native_point_input_compaction=(regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&
             regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList)||
             (regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs&&
@@ -113,7 +113,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             variant->info.native_pipeline_raw32_views.assign(raw32_views.begin(),raw32_views.end());
             auto requested_runtime=runtime;
             if (logical == Shader::SwStage::Fragment) {
-                RestrictOrderedColorTargets(requested_runtime, variant->info.mrt_mask);
+                ConfigureOrderedColorTargets(requested_runtime, regs, variant->info.mrt_mask);
             }
             if(logical==Shader::SwStage::Fragment&&runtime.hw.fs.native_point_input_compaction){
                 const auto transport=BuildNativePointTransport(variant->info,regs.num_interp,
@@ -160,7 +160,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     if (stage->info.translation_failed)
         throw std::runtime_error("Guest shader translation failed");
     if (logical == Shader::SwStage::Fragment) {
-        RestrictOrderedColorTargets(mutable_runtime, stage->info.mrt_mask);
+        ConfigureOrderedColorTargets(mutable_runtime, regs, stage->info.mrt_mask);
     }
     if(logical==Shader::SwStage::Fragment&&mutable_runtime.hw.fs.native_point_input_compaction){
         const auto transport=BuildNativePointTransport(stage->info,regs.num_interp,
@@ -239,7 +239,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
     bind(HwStage::Fragment, SwStage::Fragment, false);
     if (const auto* fragment = result.stages[static_cast<u32>(SwStage::Fragment)])
         result.mrt_mask = fragment->info.mrt_mask;
-    result.ordered_color_mask = GuestOrderedColorMask(regs) & result.mrt_mask;
+    result.ordered_color_mask = GuestOrderedColorMask(regs, result.mrt_mask);
     switch (regs.stage_enable.raw) {
     case AmdGpu::ShaderStageEnable::VgtStages::Vs:
         bind(HwStage::Vertex, SwStage::Vertex); break;

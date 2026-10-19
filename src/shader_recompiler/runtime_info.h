@@ -216,6 +216,7 @@ struct PsColorBuffer {
 struct HwFragmentRuntimeInfo {
     struct OrderedColorTarget {
         AmdGpu::BlendControl blend{};
+        AmdGpu::ColorControl::LogicOp logic_op{AmdGpu::ColorControl::LogicOp::Copy};
         u8 write_mask{};
         u8 shader_mask{};
         bool enabled{};
