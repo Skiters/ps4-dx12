@@ -422,26 +422,36 @@ void GuestRasterizer::OnFence(){
 }
 void GuestRasterizer::ResolveImage(GuestTextureCache::Entry& image){
     std::lock_guard lock(execution_mutex_);ValidateIndependentImageWatches();if(!image.gpu_owned)return;
+    Diagnostics::Scope resolve_diagnostic(Diagnostics::Kind::Readback,"resolve-owned-image");
+    resolve_diagnostic.Detail("address=%llx bytes=%llu size=%ux%u levels=%u layers=%u tile=%u independent=%u",
+        (unsigned long long)image.desc.address,(unsigned long long)image.layout.guest_bytes,
+        image.desc.width,image.desc.height,image.desc.levels,image.desc.layers,image.desc.tile_mode,
+        unsigned(image.buffer_alias_version));
     if(image.buffer_alias_version){
         if((image.desc.tile_mode!=8&&image.desc.width>8)||image.desc.samples!=1||
            (image.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(image.desc,image.layout))||
            (image.desc.depth_target&&!IsGuestDepthPlaneStorage(image.desc,image.layout))||
            (image.desc.stencil_address&&!image.desc.depth_target))
             throw std::runtime_error("Independent buffer/image version needs a domain-preserving format/pressure resolver");
+        resolve_diagnostic.Stage("independent-linear-download");
         DownloadIndependentImage(image);
         ReleaseIndependentImageWatches(image);
         return;
     }
     ApiTrace::Call("MEMORY","ResolveGpuOwnedImage",[&]{
+        resolve_diagnostic.Stage("full-retirement-wait");
         Rasterizer::Finish();
         std::vector<std::byte> result(size_t(image.layout.guest_bytes));
         if(!read_backing_(image.desc.address,result))throw std::runtime_error("GPU-owned image backing was removed before retirement");
         std::vector<std::byte> stencil;
         if(image.desc.stencil_address){stencil.resize(size_t(image.stencil_layout.guest_bytes));
             if(!read_backing_(image.desc.stencil_address,stencil))throw std::runtime_error("GPU-owned stencil backing was removed before retirement");}
+        resolve_diagnostic.Stage("full-retirement-copy");
         GuestImageReadback readback(device_.Get(),image,RecordingList());
         const auto fence=Flush();textures_.Submitted(fence);readback.Submitted(fence);Rasterizer::Finish();
+        resolve_diagnostic.Stage("full-retirement-retile");
         readback.Resolve(CompletedFence(),result,stencil);
+        resolve_diagnostic.Stage("full-retirement-commit");
         if(!write_backing_(image.desc.address,result))throw std::runtime_error("Cannot commit GPU-owned image through physical backing");
         if(image.desc.stencil_address&&!write_backing_(image.desc.stencil_address,stencil))throw std::runtime_error("Cannot commit GPU-owned stencil through physical backing");
         if(!image.desc.writable)image.RememberSnapshot(result,stencil);image.SetGpuOwned(false);
