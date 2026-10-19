@@ -64,8 +64,13 @@ int main(int argc,char** argv){try{
         std::string_view(argv[3])=="rgba16-float-mixed-constants-owned"?3:0;
     const bool r11_edges=std::string_view(argv[3])=="r11-mixed-edges-owned";
     const bool r11_mixed_constants=r11_edges||std::string_view(argv[3])=="r11-mixed-constants-owned";
-    const bool float_mixed_constants=r11_mixed_constants||rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
-    const bool mixed_constant_blend=rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
+    const u32 scalar_kind=std::string_view(argv[3])=="r8-unorm-mixed-constants-owned"?1:
+        std::string_view(argv[3])=="r8-snorm-mixed-constants-owned"?2:
+        std::string_view(argv[3])=="r16-unorm-mixed-constants-owned"?3:
+        std::string_view(argv[3])=="r16-snorm-mixed-constants-owned"?4:
+        std::string_view(argv[3])=="r16-float-mixed-constants-owned"?5:0;
+    const bool float_mixed_constants=scalar_kind==5||r11_mixed_constants||rgba16_kind==3||wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
+    const bool mixed_constant_blend=scalar_kind||rgba16_kind||unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned";
@@ -1023,7 +1028,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,1u,2u,3u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
+        if(!scalar_kind&&!rgba16_kind&&!float_mixed_constants&&!snorm_mixed_constants&&!rg16_normalized_constants&&!unorm10_mixed_constants&&(log2_samples==1||log2_samples==3))continue;
         if(linear_attachment&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -1048,8 +1053,8 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=r11_mixed_constants?6:rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
-            cb.info.number_type=rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=scalar_kind?(scalar_kind<=2?1:2):r11_mixed_constants?6:rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
+            cb.info.number_type=scalar_kind?(scalar_kind==5?7:(scalar_kind==2||scalar_kind==4)?1:0):rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
@@ -1058,7 +1063,7 @@ int main(int argc,char** argv){try{
         }
         if(mixed_constant_blend){
             using BF=AmdGpu::BlendControl::BlendFactor;
-            regs.blend_constants=(rgba16_kind||float_mixed_constants||snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
+            regs.blend_constants=(scalar_kind||rgba16_kind||float_mixed_constants||snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)?decltype(regs.blend_constants){.25f,.5f,.75f,.5f}:
                 decltype(regs.blend_constants){.2f,.4f,.6f,.8f};
             for(auto& blend:regs.blend_control){
                 blend.enable=1;blend.separate_alpha_blend=1;
@@ -1091,9 +1096,12 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
+        const unsigned iterations=scalar_kind?3:r11_edges?unsigned(NativeDX12::Tests::UfloatBoundaries.size()*2):
             (r11_mixed_constants||rgba16_kind||wide_float_format)?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
+            if(scalar_kind){regs.color_target_mask.raw=warm==1?0xfa1:0xfff;
+                regs.blend_control[0].color_src_factor=warm==2?AmdGpu::BlendControl::BlendFactor::DstAlpha:
+                    AmdGpu::BlendControl::BlendFactor::ConstantColor;}
             if(r11_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(r11_edges){
                 regs.color_target_mask.raw=(warm&1)?4:1;
@@ -1106,7 +1114,7 @@ int main(int argc,char** argv){try{
             if(rgba16_kind)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(wide_float_format)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
-            if(float_mixed_constants&&!wide_float_format&&!rgba16_kind&&!r11_mixed_constants){
+            if(float_mixed_constants&&!wide_float_format&&!rgba16_kind&&!r11_mixed_constants&&!scalar_kind){
                 regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
                 regs.num_indices=!half_edges&&warm>=4?6:3;
                 input.num_records=regs.num_indices;
@@ -1138,6 +1146,20 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
+                if(scalar_kind){
+                    const u32 bytes=scalar_kind<=2?1:2;
+                    const u16 initial[]{0,100,u16(u8(-100)),1000,u16(-1000),0x3800};
+                    const u16 after[5][3]{{114,75,50},{u16(u8(-18)),u16(u8(-75)),u16(u8(-50))},
+                        {16884,750,500},{7692,u16(-750),u16(-500)},{0x3800,0x3600,0x3400}};
+                    // DstAlpha is1: unsigned donors saturate, signed negative
+                    // donors stay below1, and FLOAT preserves1.25.
+                    const u16 saturated[]{0,255,77,65535,32267,0x3d00};
+                    const u16 before=warm==1&&i==1&&scalar_kind==5?0x7e35:initial[scalar_kind];
+                    const u16 result=!(regs.color_target_mask.GetMask(i)&1)?before:
+                        warm==2&&i==0?saturated[scalar_kind]:after[scalar_kind-1][i];
+                    memcpy(memory+4096+offset,&before,bytes);memcpy(expected.data()+4096+offset,&result,bytes);
+                    continue;
+                }
                 if(r11_mixed_constants){
                     const auto mini=[](u32 r,u32 g,u32 b){return r|(g<<11)|(b<<22);};
                     u32 before=mini(0x380,0x340,0x1d0); // .5,.25,.75

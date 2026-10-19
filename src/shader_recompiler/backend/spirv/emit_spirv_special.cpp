@@ -279,6 +279,28 @@ void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_var
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
     const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8;
     const bool unorm = target.number_format == AmdGpu::NumberFormat::Unorm;
+    const bool scalar8=target.data_format==AmdGpu::DataFormat::Format8;
+    const bool scalar16=target.data_format==AmdGpu::DataFormat::Format16;
+    if(scalar8||scalar16){
+        const u32 bits=scalar8?8:16;
+        const bool floating=target.number_format==AmdGpu::NumberFormat::Float;
+        const Id old_value=floating?ctx.OpCompositeExtract(ctx.F32[1],ctx.OpUnpackHalf2x16(ctx.F32[2],old_word),0):
+            unorm?ctx.OpFDiv(ctx.F32[1],ctx.OpConvertUToF(ctx.F32[1],old_word),ctx.ConstF32(float((1u<<bits)-1))):
+                OrderedSnormDecode(ctx,old_word,0,bits);
+        const Id destination=ctx.OpCompositeConstruct(ctx.F32[4],old_value,ctx.f32_zero_value,
+            ctx.f32_zero_value,ctx.ConstF32(1.f));
+        Id result=old_word;
+        if(target.write_mask&1u){
+            const Id value=logic?ctx.OpCompositeExtract(ctx.F32[1],source,0):
+                OrderedBlendChannel(ctx,target,source,destination,constants,0);
+            result=floating?OrderedHalfCode(ctx,value):unorm?OrderedUnormCode(ctx,value,bits):OrderedSnormCode(ctx,value,bits);
+            if(logic)result=OrderedLogicWord(ctx,target.logic_op,result,old_word);
+        }
+        result=ctx.OpBitwiseAnd(ctx.U32[1],result,ctx.ConstU32((1u<<bits)-1));
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],result,
+            ctx.u32_zero_value,ctx.u32_zero_value,ctx.u32_zero_value));
+        return;
+    }
     if(target.data_format==AmdGpu::DataFormat::Format10_11_11&&target.number_format==AmdGpu::NumberFormat::Float){
         std::array<Id,4> channels{};
         for(u32 component=0;component<3;++component){
