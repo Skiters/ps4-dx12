@@ -78,6 +78,10 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     result.pins=std::make_shared<std::vector<std::shared_ptr<void>>>();
     struct Domain {GuestTextureDesc desc;GuestTextureLayout layout;GuestTextureCache::Entry* bound{};
         uint64_t generation{},bound_generation{},initial_bytes{};Resource initial_tiled;
+        struct ConvertedView {GuestTextureDesc desc;GuestTextureLayout layout;
+            GuestTextureCache::Entry* bound{};uint64_t bound_generation{};};
+        std::vector<ConvertedView> converted_views;
+        bool has_converted_views{};
         std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> cached_plan;};
     std::map<VAddr,Domain> domains;
     const auto add_domain=[&](const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool cached=false){
@@ -110,12 +114,15 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     // Complete validation precedes cache mutations, captures or descriptor views.
     for(const auto& image:images)if(!image.null_resource){
         if(auto found=domains.find(image.storage.address);found!=domains.end()){
-            const auto& domain=found->second;
+            auto& domain=found->second;
             if(!CompatibleGuestShaderStorage(domain.desc,image.storage)&&
                !textures.CanShareReadonlyWordStorage(domain.desc,image.storage)&&
                !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)&&
-               !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout)))
-                throw std::runtime_error("Ordered stage converted image views require their domain transfer plan");
+               !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout))){
+                if(!CompatibleGuestPackedStorage(domain.desc,image.storage))
+                    throw std::runtime_error("Ordered stage converted image views require their domain transfer plan");
+                domain.has_converted_views=true;
+            }
         }
     }
     for(const auto& [address,domain]:domains){
@@ -164,6 +171,12 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             }
         }
         for(auto& [address,domain]:domains){
+            // A converted view may precede the canonical domain image in the
+            // original stage order. Converting here would retire that source I
+            // before its descriptor is bound. Exact-size converted domains do
+            // not need allocation growth; create each representation at its
+            // actual BindTextures position instead.
+            if(domain.has_converted_views)continue;
             if(domain.cached_plan){
                 // Preserve ORIGINAL I for an earlier formatted BindBuffers.
                 // Recreating its future class here would expose new metadata;
@@ -296,10 +309,39 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             for(size_t i=stage.first_image;i<stage.end_image;++i){
                 const auto& image=images[i];if(image.null_resource)continue;
                 auto found=domains.find(image.storage.address);if(found==domains.end())continue;
-                auto& domain=found->second;GuestTextureCache::Entry* entry=domain.bound;
-                if(!entry||domain.bound_generation!=domain.generation){
+                auto& domain=found->second;
+                const bool canonical=CompatibleGuestShaderStorage(domain.desc,image.storage)||
+                    textures.CanShareReadonlyWordStorage(domain.desc,image.storage)||
+                    CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)||
+                    (domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout));
+                Domain::ConvertedView* converted{};
+                if(!canonical){
+                    if(!CompatibleGuestPackedStorage(domain.desc,image.storage))
+                        throw std::runtime_error("Ordered image view lost its validated converted domain");
+                    auto it=std::ranges::find_if(domain.converted_views,[&](const auto& view){
+                        return view.desc==image.storage;});
+                    if(it==domain.converted_views.end()){
+                        domain.converted_views.push_back({image.storage,image.layout});
+                        converted=&domain.converted_views.back();
+                    }else converted=&*it;
+                }
+                GuestTextureCache::Entry* entry=converted?converted->bound:domain.bound;
+                auto& bound_generation=converted?converted->bound_generation:domain.bound_generation;
+                if(!entry||bound_generation!=domain.generation){
                     arm();GuestTextureCache::Entry* refreshed{};
-                    if(domain.cached_plan){
+                    if(converted){
+                        if(!domain.generation&&textures.FindIndependentUploadSource(image.storage,image.layout)){
+                            const auto guest=std::span(reinterpret_cast<const std::byte*>(image.storage.address),
+                                size_t(image.layout.guest_bytes));
+                            refreshed=&textures.Upload(image.storage,guest,rasterizer.RecordingList(),
+                                rasterizer.CompletedFence());
+                        }else{
+                            auto snapshot=rasterizer.CapturePreparedShaderBuffer(image.storage.address,
+                                image.layout.guest_bytes);
+                            refreshed=&textures.Upload(image.storage,{},rasterizer.RecordingList(),
+                                rasterizer.CompletedFence(),{},true,&snapshot,image.storage.writable,true);
+                        }
+                    }else if(domain.cached_plan){
                         refreshed=&textures.BindPlannedImage(*domain.cached_plan,rasterizer.RecordingList(),rasterizer.CompletedFence());
                     }else if(textures.FindIndependentUploadSource(domain.desc,domain.layout)){
                         const auto guest=std::span(reinterpret_cast<const std::byte*>(domain.desc.address),size_t(domain.layout.guest_bytes));
@@ -312,8 +354,10 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                             true,&snapshot,domain.desc.writable,true);
                     }
                     result.pins->push_back(textures.PinBinding(*refreshed));
-                    if(entry)RefreshBoundImage(rasterizer,*entry,*refreshed);else entry=domain.bound=refreshed;
-                    domain.bound_generation=domain.generation;arm();
+                    if(entry)RefreshBoundImage(rasterizer,*entry,*refreshed);
+                    else if(converted)entry=converted->bound=refreshed;
+                    else entry=domain.bound=refreshed;
+                    bound_generation=domain.generation;arm();
                 }
                 result.images[i]=entry;
                 textures.PublishBufferResidency(*entry);
