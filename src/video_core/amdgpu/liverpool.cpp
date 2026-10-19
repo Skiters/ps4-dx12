@@ -45,16 +45,31 @@ void Liverpool::TraceGuestWrite(void* address, u32 size, u32 kind, u64 value) {
 }
 
 void Liverpool::TraceBackingWrite(VAddr address, u64 size) {
-    TraceGuestWrite(reinterpret_cast<void*>(address),
-                    static_cast<u32>(std::min<u64>(size, std::numeric_limits<u32>::max())),
-                    0x100);
+    const auto& pages = Core::Memory::Instance()->GetAddressSpace().BackingPages();
+    while (size) {
+        const u64 amount = std::min<u64>(16_KB - address % 16_KB, size);
+        if (const auto* entry = pages.find(address >> 14); entry && *entry) {
+            TraceGuestWrite(*entry + address % 16_KB, static_cast<u32>(amount), 0x100);
+        }
+        address += amount;
+        size -= amount;
+    }
 }
 
 void Liverpool::DumpGuestWritesAt(uintptr_t address) const {
-    std::string matches = fmt::format("Recent PM4 guest writes covering {:#x}:", address);
+    const auto& pages = Core::Memory::Instance()->GetAddressSpace().BackingPages();
+    uintptr_t backing_address{};
+    if (const auto* entry = pages.find(address >> 14); entry && *entry) {
+        backing_address = reinterpret_cast<uintptr_t>(*entry + address % 16_KB);
+    }
+    std::string matches = fmt::format(
+        "Recent guest writes covering virtual={:#x} backing={:#x}:", address, backing_address);
     u32 count{};
     for (const auto& trace : guest_write_traces) {
-        if (trace.serial == 0 || address < trace.address || address - trace.address >= trace.size) {
+        const bool virtual_match = address >= trace.address && address - trace.address < trace.size;
+        const bool backing_match = backing_address && backing_address >= trace.address &&
+                                   backing_address - trace.address < trace.size;
+        if (trace.serial == 0 || (!virtual_match && !backing_match)) {
             continue;
         }
         matches += fmt::format("\nwrite serial={} kind={:#x} target={:#x} bytes={} value={:#x}",
