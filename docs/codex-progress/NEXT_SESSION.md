@@ -1,3 +1,5 @@
+Latest:c60debe projects prepared descriptors into per-pass reflected layouts; CPU plan/shader checks and clean Release PASS. GPU/game NOT_RUN. Merged GS/PS logical resource preparation/completion remains pending; see SESSION_HANDOFF.md.
+
 Latest:1460b0b recognizes real buffered-GS t1/space33 as callback-owned. CPU classification/shader checks and clean Release PASS; GPU/game NOT_RUN. Shared cross-layout GS/PS resource context remains pending. See SESSION_HANDOFF.md.
 
 Prepared partition-rect-* modes now use real complete GS capture partitions and descriptor forks, with common per-stage resource completion. Compiled; CPU shader checks PASS; GPU NOT_RUN. Next: shared GS/PS formatted alias context before main activation. See SESSION_HANDOFF.md.
