@@ -37,6 +37,7 @@ struct GuestTextureDesc {
     bool native_raw32=false;
     bool render_target=false;
     bool depth_target=false;
+    bool sampled_depth=false; // Original ImageResource::is_depth, before host format promotion.
     uint64_t stencil_address=0;
     bool one_dimensional=false;
     uint32_t volume_depth=0;

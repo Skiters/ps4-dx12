@@ -341,6 +341,8 @@ add_test(NAME native_dirty_owned_depth_refresh COMMAND native-independent-versio
 set_tests_properties(native_dirty_owned_depth_refresh PROPERTIES TIMEOUT 120)
 add_test(NAME native_chance_depth_overlap COMMAND native-independent-version-transfer-test --chance-depth-overlap)
 set_tests_properties(native_chance_depth_overlap PROPERTIES TIMEOUT 120)
+add_test(NAME native_shifted_depth_subresources COMMAND native-independent-version-transfer-test --shifted-depth-subresources)
+set_tests_properties(native_shifted_depth_subresources PROPERTIES TIMEOUT 120)
 set_tests_properties(native_dirty_cached_depth_recreation PROPERTIES TIMEOUT 180)
 add_test(NAME native_dirty_cached_color_depth COMMAND native-independent-version-transfer-test --dirty-cached-color-depth)
 set_tests_properties(native_dirty_cached_color_depth PROPERTIES TIMEOUT 180)

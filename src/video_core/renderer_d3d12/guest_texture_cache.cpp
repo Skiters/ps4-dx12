@@ -26,6 +26,8 @@
 #include <thread>
 namespace NativeDX12 {
 namespace {
+std::optional<std::pair<UINT,UINT>> ReadonlyDepthSubresource(
+    const GuestTextureDesc&,const GuestTextureLayout&,const GuestTextureDesc&,const GuestTextureLayout&);
 bool GuestAltTile(bool enabled){
 #ifdef SHADPS4_NATIVE_DX12_CORE
     return enabled&&Libraries::Kernel::sceKernelIsNeoMode();
@@ -390,6 +392,7 @@ bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc samp
     if(source.render_target&&source.data_format==9&&(source.number_format==1||source.number_format==5))return false;
     source.stencil_address=0;
     source.render_target=source.depth_target=false;
+    source.sampled_depth=sampled.sampled_depth=false;
     source.storage_height=sampled.storage_height=0;
     source.storage_slice_bytes=sampled.storage_slice_bytes=0;
     source.pow2_padding=sampled.pow2_padding=false;
@@ -440,6 +443,7 @@ bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc vie
     return source==view;
 }
 bool CompatibleGuestShaderStorage(GuestTextureDesc source,GuestTextureDesc view) {
+    source.sampled_depth=view.sampled_depth=false;
     const bool depth_storage=source.depth_target||view.depth_target;
     if(source.depth_target||view.depth_target){
         // A sampled view can use the same exact single depth plane. This does
@@ -548,6 +552,7 @@ bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc v
 }
 bool CompatibleGuestDepthSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
     const GuestTextureDesc& view,const GuestTextureLayout& view_layout){
+    if(ReadonlyDepthSubresource(source,physical,view,view_layout))return true;
     // ResolveDepthOverlap returns the existing image when a smaller binding
     // needs no aspect/format recreation. Keep its full mip-major guest layout:
     // fewer requested layers change guest mip offsets but NOT the cached I.
@@ -1114,6 +1119,14 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv()const{
 }
 D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTextureDesc& sampled_view)const{
     if(sampled_view==desc)return Srv();
+    if(auto sub=ReadonlyDepthSubresource(desc,layout,sampled_view,LayoutGuestTexture(sampled_view))){
+        auto native=desc;
+        native.first_mip=sub->first;native.levels=sub->first+1;
+        native.first_layer=sub->second+sampled_view.first_layer;
+        native.view_layers=sampled_view.view_layers;
+        native.min_lod=sub->first*256+sampled_view.min_lod;native.swizzle=sampled_view.swizzle;
+        return Srv(native);
+    }
     const bool depth_alias=desc.depth_target&&
         CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool color_alias=CompatibleGuestColorSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
@@ -1682,19 +1695,35 @@ bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLa
 }
 namespace {
 bool HasPossibleReferenceSubresourceBase(const GuestTextureDesc& child,
-    const GuestTextureDesc& parent,const GuestTextureLayout& physical){
+    const GuestTextureLayout& child_layout,const GuestTextureDesc& parent,const GuestTextureLayout& physical){
+    // ImageInfo::MipOf first applies IsCompatible, including the promoted
+    // depth format class. A raw color word at a depth slice boundary is still
+    // a chance overlap; equal texel bits alone cannot make it a depth view.
+    const bool child_depth=child.depth_target||child.sampled_depth;
+    const bool parent_depth=parent.depth_target||parent.sampled_depth;
+    if((child_depth||parent_depth)&&(child_depth!=parent_depth||
+       child.data_format!=parent.data_format||child.number_format!=parent.number_format||
+       bool(child.stencil_address)!=bool(parent.stencil_address)))return false;
+    if(child.tile_mode<=26&&parent.tile_mode<=26&&
+       AmdGpu::GetArrayMode(AmdGpu::TileMode(child.tile_mode))!=
+           AmdGpu::GetArrayMode(AmdGpu::TileMode(parent.tile_mode)))return false;
     // A necessary condition from pinned ImageInfo::MipOf: a one-level
     // subresource starts exactly at a physical mip/slice boundary. Keep
     // unclassified volume/1D domains on the existing explicit transfer path.
     if(child.volume_depth||parent.volume_depth||child.one_dimensional||parent.one_dimensional||
-       physical.block_extent!=1||physical.mips.size()!=parent.levels)return true;
+       physical.block_extent!=1||child_layout.block_extent!=1||physical.mips.size()!=parent.levels)return true;
+    if(child.samples!=parent.samples||child_layout.bytes_per_pixel!=physical.bytes_per_pixel)return false;
     if(child.levels!=1||child.address<parent.address)return false;
     const auto delta=child.address-parent.address;
     for(size_t mip=0;mip<physical.mips.size();++mip){
         const auto& part=physical.mips[mip];
         if(!part.slice_bytes)return true;
         const auto end=mip+1<physical.mips.size()?physical.mips[mip+1].offset:physical.guest_bytes;
-        if(delta>=part.offset&&delta<end&&(delta-part.offset)%part.slice_bytes==0)return true;
+        if(delta>=part.offset&&delta<end&&(delta-part.offset)%part.slice_bytes==0&&
+           child.width==std::max(parent.width>>mip,1u)&&child.height==std::max(parent.height>>mip,1u)&&
+           child.pitch==(mip?part.pitch:parent.pitch)&&child_layout.guest_bytes&&
+           child_layout.guest_bytes%part.slice_bytes==0&&
+           (delta-part.offset)%child_layout.guest_bytes==0)return true;
     }
     return false;
 }
@@ -1739,6 +1768,7 @@ bool MatchesReferenceDepthImage(GuestTextureDesc source,const GuestTextureLayout
     // exact physical/sample geometry here; other overlap domains need their
     // explicit mapping plan rather than a byte-prefix reinterpretation.
     source.depth_target=view.depth_target=false;source.render_target=view.render_target=false;
+    source.sampled_depth=view.sampled_depth=false;
     source.stencil_address=view.stencil_address=0;
     return MatchesReferenceColorImage(source,source_layout,view,view_layout);
 }
@@ -1752,6 +1782,39 @@ bool MatchesReferenceOverlapClass(const GuestTextureDesc& source,const GuestText
         source.height/source_layout.block_extent==target.height/target_layout.block_extent&&
         uint64_t(source_layout.bytes_per_pixel)*source.samples==
             uint64_t(target_layout.bytes_per_pixel)*target.samples;
+}
+std::optional<std::pair<UINT,UINT>> ReadonlyDepthSubresource(
+    const GuestTextureDesc& source,const GuestTextureLayout& physical,
+    const GuestTextureDesc& view,const GuestTextureLayout& local){
+    // Pinned ResolveOverlap's right-overlap path retains the parent and
+    // returns MipOf/SliceOf. Bind that native subresource without converting,
+    // reading a standalone child envelope or replacing the parent owner.
+    if(!IsGuestDepthPlaneStorage(source,physical)||source.stencil_address||
+       !view.sampled_depth||view.data_format!=source.data_format||view.number_format!=source.number_format||
+       view.depth_target||view.render_target||view.writable||
+       view.stencil_address||source.volume_depth||view.volume_depth||source.one_dimensional||view.one_dimensional||
+       view.address<=source.address||view.levels!=1||view.first_mip||!view.layers||
+       view.first_layer>=view.layers||!view.view_layers||view.view_layers>view.layers-view.first_layer||
+       view.samples!=source.samples||physical.mips.size()!=source.levels||local.mips.size()!=1||
+       !IsDirectDepthWordClass(view,local)||physical.bytes_per_pixel!=local.bytes_per_pixel||
+       !MatchesGuestMipLayout(LayoutGuestTexture(view),local)||
+       source.tile_mode>26||view.tile_mode>26||
+       AmdGpu::GetArrayMode(AmdGpu::TileMode(source.tile_mode))!=
+           AmdGpu::GetArrayMode(AmdGpu::TileMode(view.tile_mode)))return std::nullopt;
+    const auto delta=view.address-source.address;
+    for(UINT mip=0;mip<source.levels;++mip){const auto& part=physical.mips[mip];
+        if(!part.slice_bytes||delta<part.offset||
+           view.width!=std::max(source.width>>mip,1u)||view.height!=std::max(source.height>>mip,1u)||
+           view.pitch!=(mip?part.pitch:source.pitch)||
+           local.guest_bytes%part.slice_bytes)continue;
+        const auto relative=delta-part.offset;
+        // SliceOf also aligns the address to the complete child extent.
+        if(!local.guest_bytes||relative%local.guest_bytes)continue;
+        const auto layer=relative/part.slice_bytes;
+        if(layer>=source.layers||view.layers>source.layers-layer)continue;
+        return std::pair(mip,UINT(layer));
+    }
+    return std::nullopt;
 }
 bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextureLayout& source_layout,
     const GuestTextureDesc& target,const GuestTextureLayout& target_layout){
@@ -2036,8 +2099,12 @@ void GuestTextureCache::RememberNativeImageStorage(Entry& entry){
 GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestTextureDesc& requested,
     const GuestTextureLayout& layout)const{
     if(requested.writable||requested.render_target)return nullptr;
-    if(auto* live=FindValidIndependentImage(requested,layout);live&&
-       CompatibleGuestDepthSubview(live->desc,live->layout,requested,layout))return live;
+    if(auto* live=FindValidIndependentImage(requested,layout)){
+        if(CompatibleGuestDepthSubview(live->desc,live->layout,requested,layout))return live;
+        // A current independent version at the requested base cannot be
+        // replaced by a broader cached parent's older contents.
+        return nullptr;
+    }
     // Dirtying invalidates contents, not the cached allocation's extent. Keep
     // that extent for full-parent B refresh and existing descriptor lifetimes.
     // A different current render/storage class clears this geometry identity.
@@ -2046,6 +2113,13 @@ GuestTextureCache::Entry* GuestTextureCache::FindDepthViewParent(const GuestText
         if(candidate->cached_native_current&&CompatibleGuestDepthSubview(candidate->desc,candidate->layout,requested,layout)&&
            (!parent||std::pair(candidate->desc.levels,candidate->desc.layers)>
                      std::pair(parent->desc.levels,parent->desc.layers)))parent=candidate;
+    }
+    if(!parent&&requested.sampled_depth)for(const auto& candidate:entries_){
+        if(!candidate->cached_native_current||
+           !ReadonlyDepthSubresource(candidate->desc,candidate->layout,requested,layout))continue;
+        if(parent&&parent->texture.handle.Get()!=candidate->texture.handle.Get())
+            throw std::runtime_error("Ambiguous shifted depth view parent");
+        parent=candidate.get();
     }
     return parent;
 }
@@ -2232,6 +2306,10 @@ GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDe
         auto storage=parent->desc;
         storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;
         storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
+        if(auto sub=ReadonlyDepthSubresource(parent->desc,parent->layout,requested,layout)){
+            storage.first_mip+=sub->first;storage.first_layer+=sub->second;
+            storage.min_lod+=sub->first*256;
+        }
         return storage;
     }
     if(!requested.depth_target&&!requested.render_target&&!requested.writable)return requested;
@@ -2702,8 +2780,8 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             if(existing->desc.address!=d.address&&
                overlaps(d.address,layout.guest_bytes,existing->desc.address,existing->layout.guest_bytes)&&
                !(d.address>existing->desc.address?
-                 HasPossibleReferenceSubresourceBase(d,existing->desc,existing->layout):
-                 HasPossibleReferenceSubresourceBase(existing->desc,d,layout))){
+                 HasPossibleReferenceSubresourceBase(d,layout,existing->desc,existing->layout):
+                 HasPossibleReferenceSubresourceBase(existing->desc,existing->layout,d,layout))){
                 // ResolveOverlap leaves chance overlaps independent. The new
                 // image refreshes from B; a recent/pinned old I stays intact.
                 // A possible mip/slice is NOT ignored: its mapping must still

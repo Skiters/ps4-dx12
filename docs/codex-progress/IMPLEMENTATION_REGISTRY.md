@@ -1,3 +1,10 @@
+## Shifted sampled depth views — 2026-10-19
+
+- Upstream: ImageResource::is_depth -> promoted ImageInfo depth compatibility; MipOf/SliceOf and ResolveOverlap right branch -> keep native parent and return selected mip/layer.
+- Connected DX12: sampled_depth propagation in ExecuteGuestResources; ReadonlyDepthSubresource/CompatibleGuestDepthSubview/FindDepthViewParent; full-parent ResolveDepthViewStorage; Entry::Srv remap. Current independent child takes priority. Normal-2D chance classification includes format role and complete child-extent alignment.
+- Verified: actual D32 shader SRV loads/GetDimensions for shifted array layer and micro-tail mip; parent content/ownership preserved without capture/retirement; incompatible UINT and misaligned child extent use independent B; current child wins. Focused6/6 GPU tests pass in80.96s, including existing same-base PageWatch/depth-subview scenarios. New shifted fixtures use ownership adapters, not complete shifted PageWatch acceptance.
+- Remaining production gaps: shifted depth DSV writes and left-overlap parent merge; do not replace these with snapshot success. New shifted MSAA/D16/paired-S scope needs independent proof; paired formats must retain original compatibility classes. Game/control/visual/performance parity remains OPEN. Evidence F:/PS4Dev/handoff/depth-subresources-20261019.
+
 ## Runtime integration delta — 2026-10-19
 
 - Pinned TextureCache::ResolveOverlap / ImageInfo::MipOf -> HasPossibleReferenceSubresourceBase + GuestTextureCache::UploadVersion (7f32403): provably unaligned unequal-base chance overlaps preserve independent I and initialize the separate image from current B. Connected; four depth/color left/right GPU readback cases and related transfer/recreation cases pass. Real slice-boundary mapping remains explicitly rejected; full PageWatch/padding/game proof is not implied by these adapters.

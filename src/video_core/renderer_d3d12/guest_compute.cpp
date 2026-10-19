@@ -289,6 +289,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 *reflected_dimension==D3D_SRV_DIMENSION_TEXTURE2DARRAY||
                 *reflected_dimension==D3D_SRV_DIMENSION_TEXTURE2DMSARRAY);
             auto desc=DescribeGuestTexture(sharp);desc.writable=source.is_written;
+            desc.sampled_depth=source.is_depth;
             desc.native_packed10_raw=source.native_packed10_raw;
             desc.native_raw32=source.native_raw32;
             // Original GCN IR lowers PS4 1D image operations to 2D with Y=0.

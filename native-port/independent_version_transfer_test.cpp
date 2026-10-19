@@ -808,7 +808,10 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--chance-depth-overlap")==0){
         for(const bool color:{false,true})for(const int direction:{1,-1})
             RunDirtyOwnedDepthFixture(device.Get(),color,direction);
-        RunDirtyOwnedDepthFixture(device.Get(),false,2);return 0;}
+        RunDirtyOwnedDepthFixture(device.Get(),false,4);
+        RunDirtyOwnedDepthFixture(device.Get(),false,7);return 0;}
+    if(argc==2&&strcmp(argv[1],"--shifted-depth-subresources")==0){
+        for(const int variant:{2,3,5,6})RunDirtyOwnedDepthFixture(device.Get(),false,variant);return 0;}
     if(argc==2&&strcmp(argv[1],"--dirty-cached-depth")==0){RunDirtyCachedDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--dirty-cached-color-depth")==0){RunDirtyCachedDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--cached-depth-uav")==0){RunDirtyCachedDepthFixture(device.Get(),false,false,0,true);return 0;}
