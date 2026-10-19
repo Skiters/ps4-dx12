@@ -264,14 +264,19 @@ void ResourceBindings::TrackShaderTextureRange(ID3D12Resource* resource,ShaderTe
     if(resource&&range.planes){range.descriptor=descriptor;shader_texture_ranges_[resource].push_back(range);}
 }
 void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_SHADER_RESOURCE_VIEW_DESC& desc,UINT index,const Resource* capture_source) {
-    // Ordinary buffers/color images do not need depth attachment range data.
-    // Unknown DS views retain conservative whole-resource access.
+    // Track actual texture subresources for color as well as depth. Unknown
+    // texture views retain conservative whole-resource shader access.
     ShaderTextureRange range{};
     if(resource){
         const auto texture=DX12_API_CALL(resource->GetDesc());
-        if(texture.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL){
+        if(texture.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER){
             range={0,UINT_MAX,0,UINT_MAX,3};bool known=true;
             switch(desc.ViewDimension){
+            case D3D12_SRV_DIMENSION_TEXTURE1D:range={desc.Texture1D.MostDetailedMip,desc.Texture1D.MipLevels,0,1,1};break;
+            case D3D12_SRV_DIMENSION_TEXTURE1DARRAY:
+                range={desc.Texture1DArray.MostDetailedMip,desc.Texture1DArray.MipLevels,
+                    desc.Texture1DArray.FirstArraySlice,desc.Texture1DArray.ArraySize,1};break;
+            case D3D12_SRV_DIMENSION_TEXTURE3D:range={desc.Texture3D.MostDetailedMip,desc.Texture3D.MipLevels,0,1,1};break;
             case D3D12_SRV_DIMENSION_TEXTURE2D:
                 range={desc.Texture2D.MostDetailedMip,desc.Texture2D.MipLevels,0,1,3};break;
             case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
@@ -288,13 +293,20 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
             default:known=false;break;
             }
             if(known){
-                if(range.mip>=texture.MipLevels)throw std::out_of_range("Native depth SRV first mip");
+                if(range.mip>=texture.MipLevels)throw std::out_of_range("Native texture SRV first mip");
                 if(range.mips==UINT_MAX)range.mips=texture.MipLevels-range.mip;
-                if(!range.mips||range.mips>texture.MipLevels-range.mip||range.layer>=texture.DepthOrArraySize||
-                    !range.layers||range.layers>texture.DepthOrArraySize-range.layer)
-                    throw std::out_of_range("Native depth SRV range exceeds resource");
+                const auto layers=texture.Dimension==D3D12_RESOURCE_DIMENSION_TEXTURE3D?1u:UINT(texture.DepthOrArraySize);
+                if(!range.mips||range.mips>texture.MipLevels-range.mip||range.layer>=layers||
+                    !range.layers||range.layers>layers-range.layer)
+                    throw std::out_of_range("Native texture SRV range exceeds resource");
             }
-            if(desc.Format==DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS||desc.Format==DXGI_FORMAT_R24_UNORM_X8_TYPELESS)range.planes=1;
+            if(!(texture.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)){
+                const UINT plane=desc.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2D?desc.Texture2D.PlaneSlice:
+                    desc.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY?desc.Texture2DArray.PlaneSlice:0;
+                if(plane>=2)throw std::out_of_range("Native shader texture plane");
+                range.planes=1u<<plane;
+            }
+            else if(desc.Format==DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS||desc.Format==DXGI_FORMAT_R24_UNORM_X8_TYPELESS)range.planes=1;
             else if(desc.Format==DXGI_FORMAT_X32_TYPELESS_G8X24_UINT||desc.Format==DXGI_FORMAT_X24_TYPELESS_G8_UINT)range.planes=2;
         }
     }
@@ -324,8 +336,30 @@ void ResourceBindings::Uav(UINT reg,UINT space,ID3D12Resource* resource,const D3
         reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_UAV,desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER?desc.Buffer.FirstElement*4:0,
         desc.ViewDimension==D3D12_UAV_DIMENSION_BUFFER?uint64_t(desc.Buffer.NumElements)*4:0,slot.ptr});
     if(resource)shader_planes_[resource]|=3;
-    TrackShaderTextureRange(resource,resource&&(DX12_API_CALL(resource->GetDesc()).Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)?
-        ShaderTextureRange{0,UINT_MAX,0,UINT_MAX,3}:ShaderTextureRange{},slot.ptr);
+    ShaderTextureRange range{};range.access=D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    if(resource){const auto texture=resource->GetDesc();
+        if(texture.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER){
+            range={0,UINT_MAX,0,UINT_MAX,3,0,D3D12_RESOURCE_STATE_UNORDERED_ACCESS};
+            if(!(texture.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))switch(desc.ViewDimension){
+            case D3D12_UAV_DIMENSION_TEXTURE1D:range.mip=desc.Texture1D.MipSlice;range.mips=1;range.layer=0;range.layers=1;range.planes=1;break;
+            case D3D12_UAV_DIMENSION_TEXTURE1DARRAY:range.mip=desc.Texture1DArray.MipSlice;range.mips=1;range.layer=desc.Texture1DArray.FirstArraySlice;range.layers=desc.Texture1DArray.ArraySize;range.planes=1;break;
+            case D3D12_UAV_DIMENSION_TEXTURE2D:range.mip=desc.Texture2D.MipSlice;range.mips=1;range.layer=0;range.layers=1;range.planes=1;break;
+            case D3D12_UAV_DIMENSION_TEXTURE2DARRAY:range.mip=desc.Texture2DArray.MipSlice;range.mips=1;range.layer=desc.Texture2DArray.FirstArraySlice;range.layers=desc.Texture2DArray.ArraySize;range.planes=1;break;
+            case D3D12_UAV_DIMENSION_TEXTURE3D:range.mip=desc.Texture3D.MipSlice;range.mips=1;range.layer=0;range.layers=1;range.planes=1;break;
+            default:break;
+            }
+            if(range.mips!=UINT_MAX){
+                const auto layers=texture.Dimension==D3D12_RESOURCE_DIMENSION_TEXTURE3D?1u:UINT(texture.DepthOrArraySize);
+                if(range.mip>=texture.MipLevels||!range.layers||range.layer>=layers||range.layers>layers-range.layer)
+                    throw std::out_of_range("Native UAV range exceeds texture");
+                const UINT plane=desc.ViewDimension==D3D12_UAV_DIMENSION_TEXTURE2D?desc.Texture2D.PlaneSlice:
+                    desc.ViewDimension==D3D12_UAV_DIMENSION_TEXTURE2DARRAY?desc.Texture2DArray.PlaneSlice:0;
+                if(plane>=2)throw std::out_of_range("Native UAV texture plane");
+                range.planes=1u<<plane;
+            }
+        }
+    }
+    TrackShaderTextureRange(resource,range,slot.ptr);
 }
 void ResourceBindings::UnreachableUavTail(UINT reg,UINT space,UINT first){
     if(sealed_||recycled_)throw std::logic_error("Cannot alter recorded descriptor coverage");

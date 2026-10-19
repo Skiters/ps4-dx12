@@ -6590,6 +6590,15 @@
           "limits": "At most four lazy workers, 64MiB retained-source accounting; submit thread assists. Snapshot copy-on-write costs and real game speedup not measured. Direct guest-to-worker copying, texture upload workers and full asynchronous raw-buffer frame readback remain unimplemented; do not infer game acceptance or close formatted-alias-ordering.",
           "verification_prepared": "native_host_copy_queue: gated immutable source and pool reuse, source/destination lifetime, failure drains and rejection, oversize budget and invalid task. native_scheduler_lifetime: four actual 1MiB GPU readbacks across DIRECT/COPY and persistent/worker-unmapped uploads after snapshot mutation. Compile/link only. Existing buffer-envelope/residency/CPU-window/independent-image regressions require execution before publication."
         },
+        "shader_subresource_access_20261019": {
+          "implementation": "connected_compile_linked",
+          "verification": "gpu_runtime_not_run",
+          "upstream_contract": "Pinned BindTextures/SetupRenderState keep shader and attachment views on the same cached image. D3D12 needs access roles and actual mip/layer/plane ranges before selecting a legal shared-storage path.",
+          "native_symbols": "ResourceBindings::Srv/Uav -> typed ShaderTextureRange/ShaderAccess/HasShaderUav. Native ExecuteGraphics validates exact attachment overlap and transitions disjoint color shader subresources separately; depth planning retains UAV versus SRV access rather than treating every descriptor as shader-read. GuestRasterizer::DrawInternal skips CPU snapshot only for proven compatible disjoint color sampled views and non-ordered-ROV targets.",
+          "contents_and_lifetime": "Descriptor replacement removes the previous active range despite COM retention. Unknown texture views remain conservative; known mip/array/cube/volume/plane ranges are tracked. Same-subresource color feedback remains rejected by the native path, while existing guest snapshot fallback is retained. Writable depth feedback/SRV-UAV collisions remain explicit; no combined illegal read/write state or skipped draw is introduced.",
+          "limits": "This is shared access infrastructure and legal disjoint-view support, not full same-draw live color feedback. Overlapping sampled/RT storage still needs shader/attachment unified ordering and format/filter semantics. No game/FPS claim; main feedback gap stays open.",
+          "verification_prepared": "native_guest_color_shader_subresources: eight actual GPU draws across two mips/two source-layer directions/cold-warm, same-resource Texture2DArray Load and distinct RTV, descriptor rewrite, compatible guest plan/invalid view negatives, same-subresource rejection, exact RGBA32 float/padding readback and Debug Layer. Compile/link only. Existing depth plane/range/shared MRT plus UAV-state/descriptor geometry regressions remain required."
+        },
         "immutable_readonly_detile_input_20261019": {
           "implementation": "connected_compile_linked",
           "verification": "runtime_not_run_user_pc_in_use",

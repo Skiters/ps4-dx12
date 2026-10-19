@@ -254,6 +254,74 @@ Result main(){Result r;r.a=float4(1,0,0,1);r.b=float4(0,1,0,1);r.c=float4(0,0,1,
     }
     puts("PASS: actual shared MRT backing, layer permutations, single/MSAA samples, cold/warm and padding");
 }
+void CheckColorShaderSubresources(ID3D12Device* device,const wchar_t* compiler){
+    auto vs=Shader::Backend::DX12::CompileDxil(compiler,R"(
+float4 main(uint id:SV_VertexID):SV_Position{return float4(id==1?3:-1,id==2?3:-1,0,1);}
+)",Shader::Backend::DX12::Stage::Vertex);
+    auto ps=Shader::Backend::DX12::CompileDxil(compiler,R"(
+Texture2DArray<float4> source:register(t0);
+float4 main(float4 p:SV_Position):SV_Target0{return source.Load(int4(int2(p.xy),0,0))+float4(.125,0,0,0);}
+)",Shader::Backend::DX12::Stage::Pixel);
+    if(!vs.success||!ps.success)throw std::runtime_error(vs.diagnostics+ps.diagnostics);
+    for(UINT mip:{0u,1u})for(UINT source_layer:{0u,1u}){
+        GuestTextureDesc desc;desc.address=0x40000;desc.width=desc.height=desc.pitch=8;
+        desc.data_format=14;desc.number_format=7;desc.tile_mode=8;desc.levels=2;
+        desc.layers=2;desc.view_layers=1;desc.render_target=true;
+        const auto layout=LayoutGuestTexture(desc);
+        std::vector<std::byte> initial(size_t(layout.guest_bytes),std::byte{0xee});
+        for(UINT level=0;level<2;++level)for(UINT layer=0;layer<2;++layer)
+            for(UINT y=0;y<(8u>>level);++y)for(UINT x=0;x<(8u>>level);++x){
+                const float rgba[]{layer?.5f:.25f,.5f,0,1};
+                memcpy(initial.data()+GuestPixelOffset(desc,layout,level,layer,x,y),rgba,sizeof(rgba));}
+        auto expected=initial;const UINT target_layer=source_layer^1;
+        for(UINT y=0;y<(8u>>mip);++y)for(UINT x=0;x<(8u>>mip);++x){
+            const float rgba[]{(source_layer?.5f:.25f)+.125f,.5f,0,1};
+            memcpy(expected.data()+GuestPixelOffset(desc,layout,mip,target_layer,x,y),rgba,sizeof(rgba));}
+        Rasterizer rasterizer(device);GuestTextureCache textures(device);
+        auto& entry=textures.Upload(desc,initial,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+        regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+        regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;regs.color_target_mask.SetMask(0,15);
+        const DXGI_FORMAT formats[]{layout.format};const auto state=BuildGuestGraphicsState(regs,formats);
+        ShaderPipeline pipeline(device,compiler,{vs.bytecode,ps.bytecode},state.pipeline);
+        auto target=desc;target.first_mip=mip;target.first_layer=target_layer;
+        auto sampled=desc;sampled.render_target=false;sampled.first_mip=mip;sampled.first_layer=source_layer;
+        auto overlapping=sampled;overlapping.first_layer=target_layer;
+        auto invalid=sampled;invalid.view_layers=0;
+        if(!DisjointGuestColorSampledViews(target,sampled)||DisjointGuestColorSampledViews(target,overlapping)||
+           DisjointGuestColorSampledViews(target,invalid))throw std::runtime_error("Guest color subresource overlap plan mismatch");
+        const Rasterizer::ColorAttachment attachment{&entry.texture,entry.Rtv(target)};
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=layout.format;
+        srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srv.Texture2DArray.MostDetailedMip=mip;srv.Texture2DArray.MipLevels=1;srv.Texture2DArray.ArraySize=1;
+        const D3D12_VIEWPORT viewport{0,0,float(8u>>mip),float(8u>>mip),0,1};
+        const D3D12_RECT scissor{0,0,LONG(8u>>mip),LONG(8u>>mip)};const std::array<float,4> blend{};
+        for(unsigned warm=0;warm<2;++warm){
+            ResourceBindings table(device,pipeline.Layout());srv.Texture2DArray.FirstArraySlice=target_layer;
+            table.Srv(0,0,entry.texture.handle.Get(),srv);
+            bool rejected{};
+            try{rasterizer.ExecuteGraphics(pipeline,table,state,std::span(&attachment,1),nullptr,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);}
+            catch(const std::runtime_error&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Same-subresource color feedback escaped its guard");
+            // Rewriting t0 must remove its old active range despite retained COM references.
+            srv.Texture2DArray.FirstArraySlice=source_layer;table.Srv(0,0,entry.texture.handle.Get(),srv);
+            if(table.ShaderReferences(entry.texture.handle.Get(),mip,target_layer,0)||
+               table.ShaderAccess(entry.texture.handle.Get(),mip,source_layer,0)!=
+                   (D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
+                throw std::runtime_error("Shader descriptor rewrite/range/access classification mismatch");
+            entry.texture.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATES(
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+            rasterizer.ExecuteGraphics(pipeline,table,state,std::span(&attachment,1),nullptr,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);
+            GuestImageReadback readback(device,entry,rasterizer.RecordingList());
+            const auto fence=rasterizer.Flush();readback.Submitted(fence);textures.Submitted(fence);rasterizer.Finish();
+            auto observed=initial;readback.Resolve(rasterizer.CompletedFence(),observed);
+            if(observed!=expected)throw std::runtime_error("Shared color SRV/RTV lost exact layer/mip data or padding");
+        }
+    }
+    puts("PASS: disjoint same-resource SRV/RTV layers/mips, descriptor rewrite, overlap negative and exact GPU bytes");
+}
 int wmain(int argc,wchar_t** argv){try {
     const std::array<u32,5> sequence{10,11,12,13,14};
     if(ExpandGuestPrimitive(AmdGpu::PrimitiveType::TriangleFan,sequence)!=
@@ -364,6 +432,7 @@ int wmain(int argc,wchar_t** argv){try {
     const bool shared_layers=argc==3&&std::wstring_view(argv[2])==L"shared-layers";
     const bool plane_feedback=argc==3&&std::wstring_view(argv[2])==L"plane-feedback";
     const bool depth_ranges=argc==3&&std::wstring_view(argv[2])==L"depth-view-ranges";
+    const bool color_ranges=argc==3&&std::wstring_view(argv[2])==L"color-shader-ranges";
     const bool attachments_only=argc==3&&std::wstring_view(argv[2])==L"attachments";
     const bool readonly_alias=argc==3&&std::wstring_view(argv[2])==L"readonly-alias";
     const bool linear_color=argc==3&&std::wstring_view(argv[2])==L"linear-color";
@@ -377,7 +446,7 @@ int wmain(int argc,wchar_t** argv){try {
     const bool index_dma=resident_indices&&std::wstring_view(argv[2]).find(L"-dma")!=std::wstring_view::npos;
     const bool bounds=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bounds");
     const bool bounds_reject=bounds&&std::wstring_view(argv[2])==L"depth-bounds-reject";
-    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges&&!late_growth;
+    const bool use_depth=argc==3&&!attachments_only&&!readonly_alias&&!linear_color&&!cross_stage_alias&&!resident_indices&&!shared_layers&&!plane_feedback&&!depth_ranges&&!color_ranges&&!late_growth;
     const bool stale_stencil=argc==3&&std::wstring_view(argv[2])==L"depth-stale-stencil";
     const bool bias=argc==3&&std::wstring_view(argv[2]).starts_with(L"depth-bias");
     const bool fractional_bias=bias&&std::wstring_view(argv[2])==L"depth-bias-fractional";
@@ -451,9 +520,10 @@ float4 main(float4 position:SV_Position,float4 tint:COLOR0):SV_Target0{return im
     for(UINT i=0;;++i){ComPtr<IDXGIAdapter1>a;auto hr=DX12_API_CALL(factory->EnumAdapterByGpuPreference(i,DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&a)));if(hr==DXGI_ERROR_NOT_FOUND)break;Check(hr);DXGI_ADAPTER_DESC1 d{};Check(DX12_API_CALL(a->GetDesc1(&d)));if(d.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)continue;if(SUCCEEDED(DX12_API_CALL(D3D12CreateDevice(a.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)))))break;}
     if(!device)throw std::runtime_error("No hardware device");
     DX12_API_CALL(device.As(&debug_queue));
-    if(shared_layers||plane_feedback||depth_ranges){
+    if(shared_layers||plane_feedback||depth_ranges||color_ranges){
         if(!debug||!debug_queue)throw std::runtime_error("Shared color validation requires the D3D12 debug layer");
-        if(depth_ranges)CheckDepthStencilViewRanges(device.Get(),argv[1]);
+        if(color_ranges)CheckColorShaderSubresources(device.Get(),argv[1]);
+        else if(depth_ranges)CheckDepthStencilViewRanges(device.Get(),argv[1]);
         else if(plane_feedback)CheckDepthStencilShaderPlanes(device.Get(),argv[1]);
         else CheckSharedColorLayers(device.Get(),argv[1]);
         for(UINT64 i=0;i<debug_queue->GetNumStoredMessages();++i){

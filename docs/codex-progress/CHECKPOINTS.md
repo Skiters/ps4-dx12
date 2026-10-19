@@ -1251,3 +1251,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19: 5b44a38 clean Release reproduced; identity matches/EXEa39474fe/PDBf2237bfe. Runtime NOT_RUN/not installed. Report readonly-detile-snapshot-5b44a38.json; app6b8104d unchanged; next existing DrawInternal feedback contract.
 
 2026-10-19: CPU host-copy/snapshot helper EXECUTED/PASS0.102s231922-20088; GPU/game not run. Pinned same-storage color feedback differs from current pre-draw snapshot; overclaiming comment corrected, behavior unchanged. Exact next production contract in SESSION_HANDOFF.
+
+2026-10-19: Typed SRV/UAV subresource graph + native disjoint color states + guest proven-disjoint snapshot bypass connected. Core/GCN compile+link PASS23.694s; final checks compile/link PASS12.645s; GPU/game NOT_RUN. Full live feedback remains open.

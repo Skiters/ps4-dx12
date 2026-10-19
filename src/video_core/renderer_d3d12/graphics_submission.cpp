@@ -117,12 +117,14 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         if(!color.resource){if(expected!=DXGI_FORMAT_UNKNOWN)throw std::invalid_argument("Native draw missing color target");continue;}
         if(!color.resource->handle)throw std::invalid_argument("Null native draw color resource");
         const auto d=DX12_API_CALL(color.resource->handle->GetDesc());
-        if(bindings.References(color.resource->handle.Get()))throw std::runtime_error("Native draw attachment also bound as shader resource needs alias handling");
         const auto format=color.view.Format==DXGI_FORMAT_UNKNOWN?d.Format:color.view.Format;
         if(d.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||!(d.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||
            d.SampleDesc.Count!=pipeline.SampleCount()||format!=expected)
             throw std::invalid_argument("Native draw color target format/sample/usage/alias mismatch");
         const auto range=ColorRange(d,color.view);
+        for(UINT layer=range.first;layer<range.first+range.count;++layer)
+            if(bindings.ShaderReferences(color.resource->handle.Get(),range.mip,layer,0))
+                throw std::runtime_error("Native color attachment/shader access overlaps the same subresource");
         for(const auto& [resource,previous]:color_ranges)
             if(resource==color.resource->handle.Get()&&range.mip==previous.mip&&
                 range.first<previous.first+previous.count&&previous.first<range.first+range.count)
@@ -138,7 +140,9 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         depth_view=DepthView(*depth->resource,depth->view,pipeline.DepthFormat(),depth->read_only_depth,depth->read_only_stencil);
         depth_range=DepthRange(resource_desc,depth_view);
         for(UINT layer=depth_range.first;layer<depth_range.first+depth_range.count;++layer)
-            if((!depth->read_only_depth&&bindings.ShaderReferences(depth->resource->handle.Get(),depth_range.mip,layer,0))||
+            if((bindings.ShaderAccess(depth->resource->handle.Get(),depth_range.mip,layer,0)&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)||
+               (has_stencil&&(bindings.ShaderAccess(depth->resource->handle.Get(),depth_range.mip,layer,1)&D3D12_RESOURCE_STATE_UNORDERED_ACCESS))||
+               (!depth->read_only_depth&&bindings.ShaderReferences(depth->resource->handle.Get(),depth_range.mip,layer,0))||
                (has_stencil&&!depth->read_only_stencil&&bindings.ShaderReferences(depth->resource->handle.Get(),depth_range.mip,layer,1)))
                 throw std::runtime_error("Native writable depth/stencil feedback is not a valid D3D12 attachment state");
         auto d=DX12_API_CALL(depth->resource->handle->GetDesc());auto format=depth->view.Format==DXGI_FORMAT_UNKNOWN?d.Format:depth->view.Format;
@@ -198,7 +202,25 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
                 (preclear_depth?D3D12_CLEAR_FLAG_DEPTH:0)|(preclear_stencil?D3D12_CLEAR_FLAG_STENCIL:0)),
                 depth->clear_value,depth->stencil_value,0,nullptr));
         }
-        for(const auto& color:colors)if(color.resource)dependencies.Transition(*color.resource,D3D12_RESOURCE_STATE_RENDER_TARGET);
+        std::set<ID3D12Resource*> transitioned_colors;
+        for(const auto& color:colors)if(color.resource&&transitioned_colors.insert(color.resource->handle.Get()).second){
+            auto* native=color.resource->handle.Get();
+            if(!bindings.ShaderPlanes(native)){dependencies.Transition(*color.resource,D3D12_RESOURCE_STATE_RENDER_TARGET);continue;}
+            const auto desc=native->GetDesc();
+            if(bindings.HasShaderUav(native))color.resource->UavBarrier(list);
+            for(UINT sub=0;sub<color.resource->SubresourceCount();++sub){
+                const auto mip=sub%desc.MipLevels,layer=(sub/desc.MipLevels)%desc.DepthOrArraySize;
+                const auto plane=sub/(UINT(desc.MipLevels)*desc.DepthOrArraySize);
+                bool attached=false;
+                for(const auto& [resource,range]:color_ranges)if(resource==native&&plane==0&&mip==range.mip&&
+                    layer>=range.first&&layer-range.first<range.count)attached=true;
+                const auto access=bindings.ShaderAccess(native,mip,layer,plane);
+                if((access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)&&access!=D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+                    throw std::runtime_error("Native shader SRV/UAV texture aliases overlap the same subresource");
+                if(attached||access)dependencies.Transition(*color.resource,
+                    attached?D3D12_RESOURCE_STATE_RENDER_TARGET:access,sub);
+            }
+        }
         if(depth&&depth->resource) {
             const auto desc=depth->resource->handle->GetDesc();
             const auto plane_size=UINT(desc.MipLevels)*UINT(desc.DepthOrArraySize);
@@ -210,7 +232,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             const bool uniform_access=count==plane_size||depth->read_only_depth==depth->read_only_stencil;
             const bool uniform_shader=single_layer&&(count==plane_size||sampled_depth==sampled_stencil);
             const bool no_shader=bindings.ShaderPlanes(depth->resource->handle.Get())==0;
-            if(whole_attachment&&uniform_access&&(uniform_shader||no_shader)){
+            if(whole_attachment&&uniform_access&&(uniform_shader||no_shader)&&!bindings.HasShaderUav(depth->resource->handle.Get())){
                 const auto access=depth->read_only_depth?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE;
                 dependencies.Transition(*depth->resource,D3D12_RESOURCE_STATES(access|
                     (sampled_depth?(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):0)));
@@ -218,12 +240,14 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
                 const auto mip=subresource%desc.MipLevels,layer=(subresource/desc.MipLevels)%desc.DepthOrArraySize;
                 const auto plane=subresource/plane_size;
                 const bool attached=mip==depth_range.mip&&layer>=depth_range.first&&layer-depth_range.first<depth_range.count;
-                const bool sampled=bindings.ShaderReferences(depth->resource->handle.Get(),mip,layer,plane);
+                const auto shader_access=bindings.ShaderAccess(depth->resource->handle.Get(),mip,layer,plane);
+                const bool sampled=shader_access!=D3D12_RESOURCE_STATE_COMMON;
+                if((shader_access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)&&shader_access!=D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+                    throw std::runtime_error("Native shader SRV/UAV depth aliases overlap the same subresource");
                 if(!attached&&!sampled)continue;
                 const bool read_only=plane==0?depth->read_only_depth:depth->read_only_stencil;
                 const auto access=read_only?D3D12_RESOURCE_STATE_DEPTH_READ:D3D12_RESOURCE_STATE_DEPTH_WRITE;
-                dependencies.Transition(*depth->resource,D3D12_RESOURCE_STATES((attached?access:0)|
-                    (sampled?(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE):0)),subresource);
+                dependencies.Transition(*depth->resource,D3D12_RESOURCE_STATES((attached?access:0)|shader_access),subresource);
             }
         }
         // Read usages combine. An IA buffer can also be fetched by a shader;

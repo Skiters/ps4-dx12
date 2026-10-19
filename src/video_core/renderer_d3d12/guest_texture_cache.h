@@ -98,6 +98,7 @@ GuestTextureDesc DescribeGuestStencil(const GuestTextureDesc& depth);
 GuestTextureLayout LayoutGuestTexture(const GuestTextureDesc& desc,
     std::source_location caller=std::source_location::current());
 bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc sampled);
+bool DisjointGuestColorSampledViews(const GuestTextureDesc&,const GuestTextureDesc&);
 // Logical readonly BC view compatibility, including numeric variants/prefixes.
 // Actual native resource casting and ownership must be proved by the cache.
 bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTextureLayout&,

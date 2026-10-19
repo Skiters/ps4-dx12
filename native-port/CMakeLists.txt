@@ -687,6 +687,8 @@ add_test(NAME native_guest_late_private_buffer COMMAND dx12-guest-graphics-resou
 add_test(NAME native_guest_depth_stencil_shader_planes COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" plane-feedback)
 add_test(NAME native_guest_depth_stencil_view_ranges COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" depth-view-ranges)
 add_test(NAME native_guest_shared_color_layers COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" shared-layers)
+add_test(NAME native_guest_color_shader_subresources COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" color-shader-ranges)
+set_tests_properties(native_guest_color_shader_subresources PROPERTIES TIMEOUT 60)
 add_test(NAME native_guest_resident_indices16 COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices16)
 add_test(NAME native_guest_resident_indices32 COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices32)
 add_test(NAME native_guest_resident_indices_uav COMMAND dx12-guest-graphics-resources-test "${DXC_DLL}" indices-uav)

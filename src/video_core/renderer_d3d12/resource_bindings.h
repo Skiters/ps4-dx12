@@ -59,7 +59,8 @@ class ResourceBindings {
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
     std::unordered_map<ID3D12Resource*,UINT> shader_planes_;
-    struct ShaderTextureRange {UINT mip,mips,layer,layers,planes;SIZE_T descriptor{};};
+    struct ShaderTextureRange {UINT mip,mips,layer,layers,planes;SIZE_T descriptor{};
+        D3D12_RESOURCE_STATES access=D3D12_RESOURCE_STATES(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);};
     std::unordered_map<ID3D12Resource*,std::vector<ShaderTextureRange>> shader_texture_ranges_;
     std::vector<std::shared_ptr<void>> allocation_leases_;
     struct BufferView {ID3D12Resource* resource;UINT reg,space,index;D3D12_DESCRIPTOR_RANGE_TYPE type;
@@ -112,11 +113,21 @@ public:
         const auto it=shader_planes_.find(resource);return it==shader_planes_.end()?0:it->second;
     }
     bool ShaderReferences(ID3D12Resource* resource,UINT mip,UINT layer,UINT plane)const {
-        if(plane>=2)return false;
+        return ShaderAccess(resource,mip,layer,plane)!=D3D12_RESOURCE_STATE_COMMON;
+    }
+    D3D12_RESOURCE_STATES ShaderAccess(ID3D12Resource* resource,UINT mip,UINT layer,UINT plane)const {
+        if(plane>=2)return D3D12_RESOURCE_STATE_COMMON;
         const auto found=shader_texture_ranges_.find(resource);
-        if(found==shader_texture_ranges_.end())return false;
+        if(found==shader_texture_ranges_.end())return D3D12_RESOURCE_STATE_COMMON;
+        auto access=D3D12_RESOURCE_STATE_COMMON;
         for(const auto& range:found->second)if((range.planes&(1u<<plane))&&
-            mip>=range.mip&&mip-range.mip<range.mips&&layer>=range.layer&&layer-range.layer<range.layers)return true;
+            mip>=range.mip&&mip-range.mip<range.mips&&layer>=range.layer&&layer-range.layer<range.layers)
+                access=D3D12_RESOURCE_STATES(access|range.access);
+        return access;
+    }
+    bool HasShaderUav(ID3D12Resource* resource)const {
+        const auto found=shader_texture_ranges_.find(resource);if(found==shader_texture_ranges_.end())return false;
+        for(const auto& range:found->second)if(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)return true;
         return false;
     }
     void Srv(UINT reg,UINT space,ID3D12Resource*,const D3D12_SHADER_RESOURCE_VIEW_DESC&,UINT index=0,const Resource* capture_source=nullptr);

@@ -1119,7 +1119,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         for(const auto& stage:stages) {
             for(const auto& image:stage.info->images) {
                 const auto d=DescribeGuestTexture(image.GetSharp(*stage.info));const auto l=LayoutGuestTexture(d);
-                if(!image.is_written&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
+                const auto ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
+                const bool disjoint=!(ordered_mask&(1u<<i))&&DisjointGuestColorSampledViews(descriptions[i],d);
+                if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
                     color_feedback[i]=true;
             }
         }

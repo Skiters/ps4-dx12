@@ -547,6 +547,15 @@ bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc a,const GuestTextureLayou
     a.levels=b.levels=std::max(a.levels,b.levels);
     return CompatibleGuestShaderStorage(a,b);
 }
+bool DisjointGuestColorSampledViews(const GuestTextureDesc& target,const GuestTextureDesc& sampled){
+    if(!target.render_target||target.depth_target||!CompatibleGuestSampledStorage(target,sampled)||
+       target.first_mip>=target.levels||sampled.first_mip>=sampled.levels||
+       !target.view_layers||!sampled.view_layers||target.first_layer>=target.layers||sampled.first_layer>=sampled.layers||
+       target.view_layers>target.layers-target.first_layer||sampled.view_layers>sampled.layers-sampled.first_layer)return false;
+    return target.first_mip<sampled.first_mip||target.first_mip>=sampled.levels||
+        target.first_layer>=sampled.first_layer+sampled.view_layers||
+        sampled.first_layer>=target.first_layer+target.view_layers;
+}
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view){
     if((!source.render_target&&!source.depth_target)||(!view.render_target&&!view.depth_target))return false;
     source.first_mip=view.first_mip=0;
