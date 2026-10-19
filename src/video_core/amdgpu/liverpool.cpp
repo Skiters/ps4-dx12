@@ -4,6 +4,8 @@
 #include <boost/preprocessor/stringize.hpp>
 #include <boost/container/small_vector.hpp>
 
+#include <cstdio>
+
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/polyfill_thread.h"
@@ -235,7 +237,21 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         RESUME_GFX(ce_task);
     }
 
+    const auto submission = dcb;
     const auto base_addr = reinterpret_cast<uintptr_t>(dcb.data());
+    const auto dump_packet_window = [&](size_t current_word) {
+        constexpr size_t WindowRadius = 16;
+        const size_t first_word = current_word > WindowRadius ? current_word - WindowRadius : 0;
+        const size_t last_word = std::min(submission.size(), current_word + WindowRadius + 1);
+        std::fprintf(stderr,
+                     "PM4 raw dword window: current=%zu range=[%zu,%zu) total=%zu\n",
+                     current_word, first_word, last_word, submission.size());
+        for (size_t word = first_word; word < last_word; ++word) {
+            std::fprintf(stderr, "PM4[%zu]%s=0x%08x\n", word,
+                         word == current_word ? "*" : " ", submission[word]);
+        }
+        std::fflush(stderr);
+    };
     std::array<u32, 3> packet_history{};
     while (!dcb.empty()) {
         ProcessCommands();
@@ -248,6 +264,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
 
         switch (type) {
         default:
+            dump_packet_window((reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32));
             UNREACHABLE_MSG(
                 "Wrong PM4 type {} at dword {}: raw={:#010x} available={} prior=[{:#010x},"
                 "{:#010x},{:#010x}] next=[{:#010x},{:#010x},{:#010x}]",
@@ -256,6 +273,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 packet_word(1), packet_word(2), packet_word(3));
             break;
         case 0: {
+            dump_packet_window((reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32));
             UNREACHABLE_MSG(
                 "Unimplemented PM4 type 0 at dword {}: raw={:#010x} base={:#x} size={} "
                 "available={} prior=[{:#010x},{:#010x},{:#010x}] next=[{:#010x},"
