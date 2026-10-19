@@ -7,6 +7,104 @@
 #include <string>
 
 namespace NativeDX12 {
+inline void RunOrderedBcWordStages(ID3D12Device* device){
+    struct Allocation {
+        std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+        ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
+    } memory;
+    if(!memory.bytes)throw std::runtime_error("BC/word ordered-stage fixture allocation failed");
+    const auto base=reinterpret_cast<VAddr>(memory.bytes);
+    const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
+    struct FixtureRasterizer final:Rasterizer {
+        GuestTextureCache* cache{};
+        using Rasterizer::Rasterizer;
+        void NotifyGpuBufferWrite(VAddr address,u64 size)override{
+            for(const auto& image:cache->Entries())if(image->desc.address==address&&size){
+                image->MarkLogicalDirty();image->SetGpuOwned(false);
+                image->buffer_alias_version=image->buffer_alias_watch=false;
+            }
+        }
+    } rasterizer(device);
+    GuestTextureCache textures(device);rasterizer.cache=&textures;rasterizer.MapMemory(base,65536);
+    rasterizer.SetBufferOwnership([](VAddr,u64){return true;},
+        [](VAddr address,std::span<const std::byte> data){
+            memcpy(reinterpret_cast<void*>(address),data.data(),data.size());return true;},[](VAddr,u64){});
+    textures.SetBufferAliasRetention([](const auto&,const auto&){return true;});
+    textures.SetIndependentImageRetention([](const auto&,const auto&){return true;});
+    const auto acquire=[](auto& image){
+        image.buffer_alias_version=image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;};
+    textures.SetOwnershipAcquirer(acquire);
+    textures.SetIndependentVersionTransfer([&](auto& image,VAddr address,u64 bytes){
+        auto initial=rasterizer.CaptureShaderBuffer(image.desc.address,image.layout.guest_bytes);
+        auto tiled=textures.RetileBufferVersion(image,initial,rasterizer.RecordingList(),rasterizer.CompletedFence());
+        if(address!=image.desc.address||bytes!=image.layout.guest_bytes)
+            throw std::runtime_error("BC/word ordered-stage source changed physical guest envelope");
+        tiled.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);return tiled;
+    },acquire,[](auto& image){image.SetGpuOwned(false);image.buffer_alias_version=false;});
+    textures.SetOwnershipResolver([](auto&){
+        throw std::runtime_error("BC/word ordered-stage fixture unexpectedly downloaded I into B");});
+
+    AmdGpu::Image word{};word.base_address=base>>8;word.type=u64(AmdGpu::ImageType::Color2DArray);
+    word.data_format=14;word.num_format=4;word.width=word.height=11;word.pitch=15;
+    word.depth=word.last_array=1;word.tiling_index=5;
+    word.dst_sel_x=4;word.dst_sel_y=5;word.dst_sel_z=6;word.dst_sel_w=7;
+    auto bc=word;bc.width=bc.height=47;bc.pitch=63;bc.data_format=37;bc.num_format=0;
+    auto writable=DescribeGuestTexture(word);writable.writable=true;
+    auto sampled=DescribeGuestTexture(bc);
+    const auto writable_layout=LayoutGuestTexture(writable),sampled_layout=LayoutGuestTexture(sampled);
+    require(sampled.levels==1&&writable.levels==1&&sampled_layout.block_extent==4&&
+        writable_layout.block_extent==1&&sampled_layout.guest_bytes==8192&&
+        writable_layout.guest_bytes==sampled_layout.guest_bytes,
+        "BC/word ordered-stage physical domain changed");
+    require(CompatibleGuestBlockWordStorage(sampled,sampled_layout,writable,writable_layout),
+        "Exact one-level BC/word storage was not recognized");
+    auto shifted=writable;shifted.address+=256;
+    auto multilevel=sampled;multilevel.levels=2;
+    require(!CompatibleGuestBlockWordStorage(sampled,sampled_layout,shifted,writable_layout)&&
+        !CompatibleGuestBlockWordStorage(multilevel,LayoutGuestTexture(multilevel),writable,writable_layout),
+        "BC/word ordered-stage guard admitted shifted or multilevel storage");
+    std::vector<std::byte> initial(size_t(sampled_layout.guest_bytes),std::byte{0xa6});
+    std::vector<std::byte> current(size_t(sampled_layout.guest_bytes),std::byte{0x5c});
+    for(size_t offset=0;offset<initial.size();offset+=4){
+        const u32 old_word=0x07e0f800u^u32(offset*0x1041u);
+        const u32 new_word=0x13579bdfu^u32(offset*0x2081u);
+        memcpy(initial.data()+offset,&old_word,4);memcpy(current.data()+offset,&new_word,4);
+    }
+    memcpy(memory.bytes,current.data(),current.size());
+    auto& seed=textures.Upload(sampled,initial,rasterizer.RecordingList(),rasterizer.CompletedFence(),
+        {},true,nullptr,true,true);
+    require(textures.Own(seed),"BC/word ordered-stage seed could not retain I");
+    std::vector<Rasterizer::ShaderBufferRequest> requests{{base,sampled_layout.guest_bytes,true,true,true}};
+    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,sampled_layout.guest_bytes}};
+    const std::vector<OrderedGuestImage> images{{sampled,sampled_layout,false,false},
+        {writable,writable_layout,true,false}};
+    const std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
+    auto prepared=PrepareOrderedGuestStages(device,rasterizer,textures,stages,requests,buffers,images,true,
+        [](VAddr,u64)->VAddr{throw std::runtime_error("BC/word ordered-stage fixture requested a CPU stream");});
+    require(prepared.images[0]&&prepared.images[1]&&prepared.images[0]!=prepared.images[1],
+        "BC/word ordered-stage views did not retain separate native allocations");
+    require(prepared.images[0]->texture.handle->GetDesc().Format==DXGI_FORMAT_BC3_TYPELESS&&
+        prepared.images[1]->texture.handle->GetDesc().Format==DXGI_FORMAT_R32G32B32A32_TYPELESS,
+        "BC/word ordered-stage views changed native formats");
+    GuestImageReadback early(device,*prepared.images[0],rasterizer.RecordingList());
+    GuestImageReadback late(device,*prepared.images[1],rasterizer.RecordingList());
+    const auto fence=rasterizer.Flush();textures.Submitted(fence);early.Submitted(fence);late.Submitted(fence);rasterizer.Finish();
+    // Vulkan's ExpandImage copies the logical block image. Physical padding
+    // remains in current guest B, so resolve both native representations over
+    // that independent padding oracle.
+    auto expected_early=current;
+    for(UINT layer=0;layer<sampled.layers;++layer)
+    for(UINT y=0;y<(sampled.height+3)/4;++y)for(UINT x=0;x<(sampled.width+3)/4;++x){
+        const auto offset=GuestPixelOffset(sampled,sampled_layout,0,layer,x,y);
+        memcpy(expected_early.data()+offset,initial.data()+offset,sampled_layout.bytes_per_pixel);
+    }
+    auto observed_early=current,observed_late=current;
+    early.Resolve(rasterizer.CompletedFence(),observed_early);late.Resolve(rasterizer.CompletedFence(),observed_late);
+    require(observed_early==expected_early,"Early BC sampled view did not preserve original logical I or current B padding");
+    require(observed_late==current,"Late word writable view did not use current B and padding");
+    rasterizer.ValidateDebugMessages();
+}
+
 inline void RunOrderedConvertedPackedStages(ID3D12Device* device){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
@@ -206,6 +304,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         rasterizer.ValidateDebugMessages();
     }
     RunOrderedConvertedPackedStages(device);
+    RunOrderedBcWordStages(device);
     puts("PASS: ordered stage I/B refreshes preserve shared views, dirty state, streams and complete tiled padding");
     return 0;
 }

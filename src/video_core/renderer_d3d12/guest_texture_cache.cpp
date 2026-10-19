@@ -1898,6 +1898,11 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextu
     return MatchesReadonlyBcMipPrefix(a,al,b,bl)||MatchesReadonlyBcMipPrefix(b,bl,a,al)||
         MatchesExpandedReadonlyBc(a,al,b,bl);
 }
+bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
+    const GuestTextureDesc& b,const GuestTextureLayout& bl){
+    if(a.levels!=1||b.levels!=1||(al.block_extent==4)==(bl.block_extent==4))return false;
+    return MatchesReferenceBlockImage(a,al,b,bl)&&MatchesReferenceBlockImage(b,bl,a,al);
+}
 GuestTextureCache::Entry* GuestTextureCache::FindValidIndependentImage(const GuestTextureDesc& desc,
     const GuestTextureLayout& layout)const{
     Entry* result{};bool ambiguous=false;auto [first,last]=address_index_.equal_range(desc.address);

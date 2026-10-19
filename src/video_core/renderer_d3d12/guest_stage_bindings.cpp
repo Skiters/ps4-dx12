@@ -119,7 +119,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                !textures.CanShareReadonlyWordStorage(domain.desc,image.storage)&&
                !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)&&
                !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout))){
-                if(!CompatibleGuestPackedStorage(domain.desc,image.storage))
+                if(!CompatibleGuestPackedStorage(domain.desc,image.storage)&&
+                   !CompatibleGuestBlockWordStorage(domain.desc,domain.layout,image.storage,image.layout))
                     throw std::runtime_error("Ordered stage converted image views require their domain transfer plan");
                 domain.has_converted_views=true;
             }
@@ -316,7 +317,8 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                     (domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout));
                 Domain::ConvertedView* converted{};
                 if(!canonical){
-                    if(!CompatibleGuestPackedStorage(domain.desc,image.storage))
+                    if(!CompatibleGuestPackedStorage(domain.desc,image.storage)&&
+                       !CompatibleGuestBlockWordStorage(domain.desc,domain.layout,image.storage,image.layout))
                         throw std::runtime_error("Ordered image view lost its validated converted domain");
                     auto it=std::ranges::find_if(domain.converted_views,[&](const auto& view){
                         return view.desc==image.storage;});

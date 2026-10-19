@@ -96,6 +96,10 @@ bool CompatibleGuestSampledStorage(GuestTextureDesc source,GuestTextureDesc samp
 // Actual native resource casting and ownership must be proved by the cache.
 bool CompatibleGuestBlockSampledViews(const GuestTextureDesc&,const GuestTextureLayout&,
     const GuestTextureDesc&,const GuestTextureLayout&);
+// Exact one-level BC parent and UINT block-word views describe the same guest
+// bytes but require distinct native D3D12 resources.
+bool CompatibleGuestBlockWordStorage(const GuestTextureDesc&,const GuestTextureLayout&,
+    const GuestTextureDesc&,const GuestTextureLayout&);
 // Writable descriptors may differ in mip/layer ranges and compatible numeric
 // interpretations while sharing one typeless allocation.
 bool CompatibleGuestWritableStorage(GuestTextureDesc source,GuestTextureDesc view);
