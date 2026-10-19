@@ -24,6 +24,8 @@ void ConfigureOrderedColorTargets(Shader::RuntimeInfo& runtime, const AmdGpu::Re
         target.enabled = true;
         target.blend = regs.blend_control[i];
         target.logic_op = regs.color_control.rop3;
+        target.data_format = regs.color_buffers[i].GetDataFmt();
+        target.number_format = regs.color_buffers[i].GetNumberFmt();
         target.write_mask = u8(regs.color_buffers[i].Swizzle().ApplyMask(
             regs.color_target_mask.GetMask(i)));
         target.shader_mask = u8(regs.color_shader_mask.GetMask(i));

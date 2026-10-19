@@ -132,10 +132,13 @@ std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool su
     return {};
 }
 std::span<const DXGI_FORMAT> OrderedColorCasts(const GuestTextureDesc& d,bool supported){
-    static constexpr std::array formats{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array packed10{DXGI_FORMAT_R10G10B10A2_UINT,DXGI_FORMAT_R32_UINT};
+    static constexpr std::array rgba8{DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R32_UINT};
     if(!supported||!d.render_target||d.writable||d.depth_target||d.stencil_address||d.samples!=1||
-       d.data_format!=9||d.number_format!=1)return {};
-    return formats;
+       d.first_mip||d.levels!=1)return {};
+    if(d.data_format==9&&d.number_format==1)return packed10;
+    if(d.data_format==10&&d.number_format==0)return rgba8;
+    return {};
 }
 bool CanBindNativeWordFormat(const GuestTextureCache::Entry& entry,const GuestTextureDesc& view){
     if(!entry.texture.handle)return false;
@@ -1138,17 +1141,22 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
         throw std::invalid_argument("Native texture resource does not allow UAV views");
     Entry view;view.desc=writable_view;view.layout=LayoutGuestTexture(writable_view);return view.Uav(mip);
 }
-D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav()const {
-    if(!desc.render_target||desc.writable||desc.depth_target||desc.stencil_address||desc.samples!=1||
-       desc.data_format!=9||desc.number_format!=1||desc.first_mip||desc.levels!=1||
-       !desc.view_layers||desc.first_layer>=desc.layers||desc.view_layers>desc.layers-desc.first_layer)
+D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
+    const GuestTextureDesc& attachment)const {
+    if(!CompatibleGuestAttachmentStorage(desc,attachment)||!attachment.render_target||
+       attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
+       !((attachment.data_format==9&&attachment.number_format==1)||
+         (attachment.data_format==10&&attachment.number_format==0))||
+       attachment.first_mip||attachment.levels!=1||!attachment.view_layers||
+       attachment.first_layer>=attachment.layers||
+       attachment.view_layers>attachment.layers-attachment.first_layer)
         throw std::invalid_argument("Invalid native ordered color view");
     if(!texture.handle||!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)||
        !texture.AllowsCast(DXGI_FORMAT_R32_UINT))
-        throw std::runtime_error("Native packed10 ordered color requires R32_UINT format casting");
+        throw std::runtime_error("Native ordered color requires R32_UINT format casting");
     D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=DXGI_FORMAT_R32_UINT;
     view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-    view.Texture2DArray={0,desc.first_layer,desc.view_layers,0};
+    view.Texture2DArray={0,attachment.first_layer,attachment.view_layers,0};
     return view;
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::StorageUav(const GuestTextureDesc& writable_view,uint32_t sample)const{

@@ -45,6 +45,7 @@ int main(int argc,char** argv){try{
     const bool shared_exponent_word=std::string_view(argv[3])=="shared-exponent-word-donor-owned";
     const bool shared_exponent=shared_exponent_msaa_writer||shared_exponent_msaa||shared_exponent_sample||shared_exponent_extremes||shared_exponent_word||std::string_view(argv[3])=="shared-exponent-owned";
     const bool signed_logic=std::string_view(argv[3])=="signed-logic";
+    const bool independent_unorm_logic=std::string_view(argv[3])=="unorm-independent-logic-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool snorm_color=mode=="snorm-color-owned";
@@ -85,7 +86,7 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
-    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
+    if(!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
@@ -929,7 +930,7 @@ int main(int argc,char** argv){try{
             }
         }
     }else for(uint32_t log2_samples:{0u,2u})for(const auto order:{std::array<uint32_t,3>{0,1,2},std::array<uint32_t,3>{2,0,1}}){
-        if(linear_attachment&&log2_samples)continue;
+        if((linear_attachment||independent_unorm_logic)&&log2_samples)continue;
         const u32 width=linear_attachment?56:8,height=linear_attachment?16:8;
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
@@ -938,8 +939,9 @@ int main(int argc,char** argv){try{
         const auto format=u32(AmdGpu::ShaderExportFormat::ABGR_32);
         regs.color_export_format.raw=format|(format<<4)|(format<<8);
         regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
-        regs.color_control.rop3=signed_logic?AmdGpu::ColorControl::LogicOp::Xor:AmdGpu::ColorControl::LogicOp::Copy;
-        regs.color_target_mask.raw=regs.color_shader_mask.raw=0xfff;
+        regs.color_control.rop3=(signed_logic||independent_unorm_logic)?AmdGpu::ColorControl::LogicOp::Xor:AmdGpu::ColorControl::LogicOp::Copy;
+        regs.color_shader_mask.raw=0xfff;
+        regs.color_target_mask.raw=independent_unorm_logic?0xfa1:0xfff;
         regs.clipper_control.clip_space=AmdGpu::ClipSpace::ZeroToW;
         auto& control=regs.viewport_control;
         control.xscale_enable=control.yscale_enable=control.xoffset_enable=control.yoffset_enable=control.zscale_enable=1;
@@ -961,7 +963,24 @@ int main(int argc,char** argv){try{
             gpu.last_cb_extent[i]={u16(width),u16(height)};descriptions[i]=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[i]);
         }
         MergeGuestColorAttachmentLayers(descriptions);const auto layout=LayoutGuestTexture(descriptions[0]);
-        for(unsigned warm=0;warm<2;++warm){
+        using Logic=AmdGpu::ColorControl::LogicOp;
+        constexpr std::array logic_operations{Logic::Clear,Logic::Nor,Logic::AndInverted,Logic::CopyInverted,
+            Logic::AndReverse,Logic::Invert,Logic::BrushXor,Logic::Xor,Logic::Nand,Logic::And,
+            Logic::Equiv,Logic::Noop,Logic::OrInverted,Logic::Copy,Logic::OrReverse,Logic::Or,Logic::Set};
+        const auto apply_logic=[](Logic operation,u32 source,u32 destination){switch(operation){
+            case Logic::Clear:return 0u;case Logic::Nor:return~(source|destination);
+            case Logic::AndInverted:return(~source)&destination;case Logic::CopyInverted:return~source;
+            case Logic::AndReverse:return source&(~destination);case Logic::Invert:return~destination;
+            case Logic::BrushXor:case Logic::Xor:return source^destination;
+            case Logic::Nand:return~(source&destination);case Logic::And:return source&destination;
+            case Logic::Equiv:return~(source^destination);case Logic::Noop:return destination;
+            case Logic::OrInverted:return(~source)|destination;case Logic::Copy:return source;
+            case Logic::OrReverse:return source|(~destination);case Logic::Or:return source|destination;
+            case Logic::Set:return~0u;}throw std::runtime_error("Invalid fixture logic operation");};
+        const unsigned iterations=independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        for(unsigned warm=0;warm<iterations;++warm){
+            const auto operation=independent_unorm_logic?logic_operations[warm/2]:regs.color_control.rop3;
+            regs.color_control.rop3=operation;
             rasterizer.ReadMemory(base,65536);rasterizer.InvalidateMemory(base,65536);memset(memory,0xee,65536);
             const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
             for(unsigned i=0;i<3;++i){const float position[]{xy[i][0],xy[i][1],0.5f,1.f};memcpy(memory+i*32,position,sizeof(position));}
@@ -972,7 +991,11 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
-                const auto word=signed_logic?(values[i]^0xeeeeeeee):values[i];
+                u32 word=values[i];
+                if(signed_logic)word^=0xeeeeeeee;
+                if(independent_unorm_logic){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;
+                    u32 raw_mask{};for(u32 channel=0;channel<4;++channel)if(target_mask&(1u<<channel))raw_mask|=0xffu<<(channel*8);
+                    word=(0xeeeeeeee&~raw_mask)|(apply_logic(operation,values[i],0xeeeeeeee)&raw_mask);}
                 memcpy(expected.data()+4096+offset,&word,4);
             }
             if(linear_attachment){
@@ -1010,7 +1033,13 @@ int main(int argc,char** argv){try{
                 continue;
             }
             rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
-            if(memcmp(memory,expected.data(),65536))throw std::runtime_error("Actual GCN Draw shared MRT layer/sample/padding mismatch");
+            if(memcmp(memory,expected.data(),65536)){size_t byte{};while(byte<65536&&memory[byte]==expected[byte])++byte;
+                u32 actual_word{},expected_word{};if(byte<65536){const auto word=byte&~size_t(3);
+                    memcpy(&actual_word,memory+word,4);memcpy(&expected_word,expected.data()+word,4);}
+                fprintf(stderr,"MISMATCH byte=%zu actual=%02x expected=%02x actual_word=%08x expected_word=%08x\n",byte,
+                    byte<65536?std::to_integer<unsigned>(memory[byte]):0,
+                    byte<65536?std::to_integer<unsigned>(expected[byte]):0,actual_word,expected_word);
+                throw std::runtime_error("Actual GCN Draw shared MRT layer/sample/padding mismatch");}
         }
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T size{};Check(messages->GetMessage(i,nullptr,&size));
@@ -1018,7 +1047,7 @@ int main(int argc,char** argv){try{
         Check(messages->GetMessage(i,message,&size));if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)
             throw std::runtime_error(message->pDescription);
     }
-    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
+    puts(snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 68 actual GCN RGBA8 UNORM draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?
         "PASS: eight actual GCN D16 to packed RAW32 storage transfers, full image_store, formatted R16 input before bind, raw B/native word probes, source S/HTILE and full physical padding":cached_depth_cmask_packed?
         "PASS: eight actual GCN D16/packed16/CMASK original component cases,69 UINT word probes over all64 tiles, old I versus B, source S/HTILE, original format18 remap and full physical padding":cached_depth_cmask6?
         "PASS: eight actual GCN native depth/R11G11B10/CMASK clear/draw cases, independent finite mini-float channel probes over every logical tile, old I versus B, optional S/HTILE and full physical padding":cached_depth_cmask?

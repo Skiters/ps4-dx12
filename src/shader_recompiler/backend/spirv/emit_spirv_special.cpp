@@ -176,6 +176,14 @@ Id OrderedSnormCode(EmitContext& ctx, Id value, u32 bits) {
                             ctx.ConstU32((1u << bits) - 1));
 }
 
+Id OrderedUnormCode(EmitContext& ctx, Id value, u32 bits) {
+    const Id input = ctx.OpSelect(ctx.F32[1], ctx.OpIsNan(ctx.U1[1], value),
+                                  ctx.ConstF32(0.f), value);
+    const Id clamped = ctx.OpFClamp(ctx.F32[1], input, ctx.ConstF32(0.f), ctx.ConstF32(1.f));
+    const Id scaled = ctx.OpFMul(ctx.F32[1], clamped, ctx.ConstF32(float((1u << bits) - 1)));
+    return ctx.OpConvertFToU(ctx.U32[1], ctx.OpRoundEven(ctx.F32[1], scaled));
+}
+
 Id OrderedLogicWord(EmitContext& ctx, AmdGpu::ColorControl::LogicOp operation,
                     Id source, Id destination) {
     using L = AmdGpu::ColorControl::LogicOp;
@@ -222,21 +230,26 @@ void EmitOrderedColor(EmitContext& ctx) {
         const Id image = ctx.OpLoad(ctx.ordered_color_image_type, ctx.ordered_color_images[index]);
         const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
         const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
-        std::array<Id, 4> destination_channels{};
-        for (u32 component = 0; component < 4; ++component)
-            destination_channels[component] = OrderedSnormDecode(ctx, old_word,
-                component * 10, component == 3 ? 2 : 10);
-        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
         const Id source = ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[index].id);
         const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
+        Id destination{};
+        if (!logic) {
+            std::array<Id, 4> destination_channels{};
+            for (u32 component = 0; component < 4; ++component)
+                destination_channels[component] = OrderedSnormDecode(ctx, old_word,
+                    component * 10, component == 3 ? 2 : 10);
+            destination = ctx.OpCompositeConstruct(ctx.F32[4], destination_channels);
+        }
         Id packed = ctx.u32_zero_value;
         u32 raw_mask{};
+        const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8 &&
+                           target.number_format == AmdGpu::NumberFormat::Unorm;
         for (u32 component = 0; component < 4; ++component) {
-            const u32 bits = component == 3 ? 2 : 10;
-            const u32 shift = component * 10;
+            const u32 bits = rgba8 ? 8 : component == 3 ? 2 : 10;
+            const u32 shift = rgba8 ? component * 8 : component * 10;
             const Id value = logic ? ctx.OpCompositeExtract(ctx.F32[1], source, component) :
                                      OrderedBlendChannel(ctx, target, source, destination, constants, component);
-            const Id code = OrderedSnormCode(ctx, value, bits);
+            const Id code = rgba8 ? OrderedUnormCode(ctx, value, bits) : OrderedSnormCode(ctx, value, bits);
             packed = ctx.OpBitwiseOr(ctx.U32[1], packed,
                 shift ? ctx.OpShiftLeftLogical(ctx.U32[1], code, ctx.ConstU32(shift)) : code);
             if (target.write_mask & (1u << component)) raw_mask |= ((1u << bits) - 1) << shift;

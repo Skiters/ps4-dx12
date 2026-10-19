@@ -282,6 +282,8 @@ int wmain(int argc,wchar_t** argv){try {
         throw std::runtime_error("Custom strip restart lost a legal fixed-cut index");
     AmdGpu::Regs logic_regs{};logic_regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
     logic_regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Xor;logic_regs.color_target_mask.raw=0xf;
+    for(u32 i=0;i<2;++i){logic_regs.color_buffers[i].base_address=1+i;
+        logic_regs.color_buffers[i].info.format=10;logic_regs.color_buffers[i].info.number_type=0;}
     const std::array<DXGI_FORMAT,1> logic_format{DXGI_FORMAT_R8G8B8A8_UNORM};
     const auto logic_state=BuildGuestGraphicsState(logic_regs,logic_format);
     if(logic_state.pipeline.BlendState.IndependentBlendEnable||!logic_state.pipeline.BlendState.RenderTarget[0].LogicOpEnable||
@@ -292,8 +294,14 @@ int wmain(int argc,wchar_t** argv){try {
     if(BuildGuestGraphicsState(logic_regs,logic_mrt).pipeline.BlendState.IndependentBlendEnable)
         throw std::runtime_error("Shared MRT logic state is invalid in D3D12");
     logic_regs.color_target_mask.raw=0x1f;
+    const auto ordered_unorm=BuildGuestGraphicsState(logic_regs,logic_mrt);
+    if(ordered_unorm.ordered_color_mask!=3||ordered_unorm.pipeline.NumRenderTargets)
+        throw std::runtime_error("RGBA8 independent MRT logic did not select ordered UAVs");
+    for(u32 i=0;i<2;++i){logic_regs.color_buffers[i].info.format=12;
+        logic_regs.color_buffers[i].info.number_type=0;}
+    const std::array unsupported_mrt{DXGI_FORMAT_R16G16B16A16_UNORM,DXGI_FORMAT_R16G16B16A16_UNORM};
     bool independent_logic_rejected=false;
-    try{(void)BuildGuestGraphicsState(logic_regs,logic_mrt);}
+    try{(void)BuildGuestGraphicsState(logic_regs,unsupported_mrt);}
     catch(const std::runtime_error& error){independent_logic_rejected=std::string_view(error.what()).find("independent write masks")!=std::string_view::npos;}
     if(!independent_logic_rejected)throw std::runtime_error("Independent MRT logic masks silently collapsed");
     AmdGpu::Regs ordered_logic_regs{};

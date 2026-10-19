@@ -1398,7 +1398,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 for(UINT layer=first;layer<first+count;++layer)
                     entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                              layer*entry.desc.levels);
-                const auto view=entry.OrderedColorUav();
+                const auto view=entry.OrderedColorUav(descriptions[i]);
                 bindings.Uav(Shader::NativeOrderedColor::Binding+i,
                              Shader::NativeOrderedColor::DescriptorSet,
                              entry.texture.handle.Get(),view);

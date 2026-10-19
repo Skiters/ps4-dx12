@@ -29,6 +29,12 @@ inline GuestDepthActivity GuestDepthTests(const AmdGpu::Regs& regs) {
     result.bounds=regs.depth_control.depth_bounds_enable&&regs.depth_buffer.DepthValid()&&result.HasAttachment();
     return result;
 }
+inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
+    return (color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) ||
+           (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm);
+}
 inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = ~0u) {
     u32 result{};
     if (regs.color_control.mode != AmdGpu::ColorControl::OperationMode::Normal) return result;
@@ -54,11 +60,12 @@ inline u32 GuestOrderedColorMask(const AmdGpu::Regs& regs, u32 active_targets = 
         const auto& color = regs.color_buffers[i];
         const auto& blend = regs.blend_control[i];
         const bool writes = color && color.Swizzle().ApplyMask(regs.color_target_mask.GetMask(i));
-        const bool ordered_blend = !logic && blend.enable && !color.info.blend_bypass;
-        const bool ordered_logic = logic && independent_logic;
-        if (writes && (ordered_blend || ordered_logic) &&
+        const bool ordered_blend = !logic && blend.enable && !color.info.blend_bypass &&
             color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
-            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm) result |= 1u << i;
+            color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm;
+        const bool ordered_logic = logic && independent_logic;
+        if (writes && (ordered_blend || ordered_logic) && GuestOrderedColorSupported(color))
+            result |= 1u << i;
     }
     return result;
 }

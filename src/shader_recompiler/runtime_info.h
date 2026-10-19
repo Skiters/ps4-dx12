@@ -217,6 +217,8 @@ struct HwFragmentRuntimeInfo {
     struct OrderedColorTarget {
         AmdGpu::BlendControl blend{};
         AmdGpu::ColorControl::LogicOp logic_op{AmdGpu::ColorControl::LogicOp::Copy};
+        AmdGpu::DataFormat data_format{};
+        AmdGpu::NumberFormat number_format{};
         u8 write_mask{};
         u8 shader_mask{};
         bool enabled{};
