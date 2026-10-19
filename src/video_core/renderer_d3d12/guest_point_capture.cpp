@@ -121,20 +121,33 @@ void NativePointCapturePass::BindInputStream(ResourceBindings& table,Resource& b
     table.RetainAllocation(buffer.allocation);
     table.Srv(binding,Shader::NativePointCapture::DescriptorSet,buffer.handle.Get(),view);
 }
+std::shared_ptr<Resource> NativePointCapturePass::Reserve(Rasterizer& rasterizer,u64 bytes){
+    if(!bytes||bytes>UINT32_MAX||bytes%Shader::NativePointCapture::RecordBytes)
+        throw std::invalid_argument("Invalid reusable capture arena extent");
+    std::lock_guard lock(rasterizer.ExecutionMutex());return Acquire(rasterizer,bytes);
+}
 void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::NativePointCapture::Plan& plan,
     const DrawArguments& original,D3D_PRIMITIVE_TOPOLOGY topology,
     const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
-    const std::function<void(Resource&,const DrawArguments&)>& replay){
+    const std::function<void(Resource&,const DrawArguments&)>& replay,const std::shared_ptr<Resource>& reusable){
     if(!original.count||!original.instances)return;
     const auto checked=Shader::NativePointCapture::Plan::Make(plan.primitive_bound,plan.invocations,plan.emissions,plan.instances);
     if(checked.records!=plan.records||checked.bytes!=plan.bytes||plan.instances!=original.instances||
        plan.primitive_bound<std::max(1u,PrimitiveBound(topology,original.count))||
        u64(original.first_instance)+original.instances-1>std::numeric_limits<u32>::max())
         throw std::invalid_argument("Invalid native point capture plan or instance range");
-    auto buffer=Acquire(rasterizer,plan.bytes);
+    auto buffer=reusable?reusable:Reserve(rasterizer,plan.bytes);
+    if(!buffer->handle)throw std::invalid_argument("Missing reusable capture allocation");
+    const auto desc=buffer->handle->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||desc.Width<plan.bytes||
+       !(desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+        throw std::invalid_argument("Reusable capture allocation cannot hold the complete plan");
+    ComPtr<ID3D12Device> owner,expected;
+    Check(buffer->handle->GetDevice(IID_PPV_ARGS(&owner)));Check(clear_root_->GetDevice(IID_PPV_ARGS(&expected)));
+    if(owner.Get()!=expected.Get())throw std::invalid_argument("Capture allocation belongs to another device");
     // A BeforeBind callback can Finish during guest ownership resolution.
     // Retain here for clear; descriptor allocation leases cover later passes.
-    rasterizer.RetainUntilFinish([buffer](u64){});
+    rasterizer.RetainUntilFinish([buffer,root=clear_root_,pipeline=clear_pipeline_](u64){});
     try{
         auto* list=rasterizer.RecordingList();buffer->Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         DX12_API_CALL(list->SetPipelineState(clear_pipeline_.Get()));DX12_API_CALL(list->SetComputeRootSignature(clear_root_.Get()));

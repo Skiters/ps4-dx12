@@ -1458,11 +1458,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool probe=GetTickCount64()-probe_start>=30000&&probe_count<512&&
         std::filesystem::exists("scene-probe.enabled",probe_error);
     ComPtr<ID3D12QueryHeap> probe_heap;
-    Resource probe_result;
+    std::vector<Resource> probe_results;
     if(probe){
         D3D12_QUERY_HEAP_DESC query{};query.Type=D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;query.Count=1;
         Check(device_->CreateQueryHeap(&query,IID_PPV_ARGS(&probe_heap)));
-        probe_result=Buffer(device_.Get(),sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS),D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
     }
     diagnostic.Stage("resource-upload-and-draw");
     DrawArguments output_draw=draw;
@@ -1479,14 +1478,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // execution is partitioned. Keep the first snapshot, not each slice's
     // partially updated render target.
     std::map<ID3D12Resource*,Resource> replay_feedback_snapshots;
-    const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true) {
+    std::array<ColorAttachment,8> attachments{};
+    DepthAttachment depth{};
+    struct OrderedMultisampleTransfer {
+        GuestTextureCache::Entry* entry{};
+        std::shared_ptr<GuestMultisample::StorageLease> lease;
+    };
+    std::vector<OrderedMultisampleTransfer> ordered_multisample;
+    bool replay_prepared{};
+    const auto prepare_replay=[&](ResourceBindings& bindings) {
+        if(replay_prepared)return;
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
-        std::array<ColorAttachment,8> attachments{};
-        struct OrderedMultisampleTransfer {
-            GuestTextureCache::Entry* entry{};
-            std::shared_ptr<GuestMultisample::StorageLease> lease;
-        };
-        std::vector<OrderedMultisampleTransfer> ordered_multisample;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
             auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return textures_.Upload(descriptions[i],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
@@ -1541,7 +1543,6 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 }
             }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
-        DepthAttachment depth{};
         if(has_depth) {
             const auto depth_bytes=depth_attachment_snapshot?std::span<const std::byte>(depth_guest_snapshot):
                 std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes));
@@ -1627,8 +1628,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             replay_feedback_snapshots.emplace(native,std::move(copy));
             Diagnostics::Count("image-feedback.gpu-snapshot");
         }
-        if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
-        if(probe)RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+        if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+        replay_prepared=true;
+    };
+    const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true) {
+        prepare_replay(bindings);bindings.Prepare();
+        if(!replay_attachments.Beginning())depth.clear_depth=depth.clear_stencil=false;
         static std::set<u64> captured_bound_draws,capture_producers;
         static bool capture_root_added{};
         static u64 capture_bytes{};
@@ -1764,10 +1769,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             const auto& dxil=shaders_.Graphics(guest).stages[u32(Shader::SwStage::Fragment)].bytecode;
             DisplayCapture::Save(capture_id,pass_name+"-fragment.dxil",std::as_bytes(std::span(dxil)),"Linked production fragment DXIL");
         }
+        if(probe){
+            probe_results.push_back(Buffer(device_.Get(),sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS),
+                D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST));
+            RecordingList()->BeginQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+        }
         ExecuteGraphics(pipeline,bindings,state,
             std::span(attachments.data(),pipeline.TargetFormats().size()),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
             !capture&&index_view.resource?&index_view:nullptr,false);
+        if(probe){
+            RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+            RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_results.back().handle.Get(),0);
+        }
         replay_attachments.Submitted();
         for(UINT i=0;i<target_count;++i)if(targets[i]&&(state.ordered_color_mask&(1u<<i))&&
             descriptions[i].samples==1)targets[i]->texture.UavBarrier(RecordingList());
@@ -1792,10 +1806,6 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         if(capture_bound)for(UINT i=0;i<target_count;++i)if(targets[i])
             record_capture(*targets[i],"output"+std::to_string(i),0);
-        if(probe){
-            RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
-            RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_result.handle.Get(),0);
-        }
         // Keep readback recording inside the resource callback, before its
         // post-draw ownership finalization, as in the original single draw.
         // A multipart caller records only the final attachment contents.
@@ -1816,48 +1826,59 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // effects still execute, while the GPU count correctly stays zero.
         const auto range=AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
         const u32 primitives=range.capacity_vertices/3,stride=range.stride;
-        const auto plan=Shader::NativePointCapture::Plan::Make(primitives,geometry.num_invocations,geometry.output_vertices,1);
+        const auto one=Shader::NativePointCapture::Plan::Make(1,geometry.num_invocations,geometry.output_vertices,1);
+        const u64 capture_budget=std::max<u64>(64*1024*1024,one.bytes);
+        const PrimitiveStreamPartitions partitions(range,geometry.num_invocations,geometry.output_vertices,capture_budget);
         const auto stream_layout=pipelines_.PrimitiveStreamLayout(capture->stream_producer);
         auto stream_state=NativePointCapturePass::ProducerState(source_state);
         stream_state.pipeline.StreamOutput=stream_layout.Desc();
         const auto& stream_pipeline=pipelines_.Graphics(capture->stream_producer,stream_state.pipeline);
         const auto consumer_state=NativePointCapturePass::StreamConsumerState(source_state,range.vertices_per_primitive);
         const auto& consumer_pipeline=pipelines_.Graphics(capture->producer,consumer_state.pipeline);
-        std::vector<GuestResourceStage> stream_stages,consumer_stages,replay_stages;
-        for(const auto* stage:capture->stream_producer.stages)if(stage)stream_stages.push_back({&stage->info,stage->bindings_start});
-        for(const auto* stage:capture->producer.stages)if(stage)consumer_stages.push_back({&stage->info,stage->bindings_start});
-        for(const auto* stage:capture->replay.stages)if(stage)replay_stages.push_back({&stage->info,stage->bindings_start});
+        std::vector<GuestResourceStage> logical_stages;
+        for(const auto* stage:capture->stream_producer.stages)if(stage)logical_stages.push_back({&stage->info,stage->bindings_start});
+        for(const auto* stage:capture->producer.stages)if(stage)logical_stages.push_back({&stage->info,stage->bindings_start});
+        for(const auto* stage:capture->replay.stages)if(stage)logical_stages.push_back({&stage->info,stage->bindings_start});
+        const std::array<const ShaderPipeline*,3> domains{&stream_pipeline,&consumer_pipeline,&pipeline};
+        const auto logical_layout=pipelines_.LogicalLayout(domains);
         if(!primitive_stream_)primitive_stream_=std::make_unique<PrimitiveStreamPass>(device_.Get());
-        const auto stream=primitive_stream_->Capture(*this,stride,u32(primitives)*3,3,[&](PrimitiveStreamLease& lease){
-            ExecuteGuestGraphicsResources(device_.Get(),*this,stream_pipeline,stream_stages,push,runtime,
-                [&](ResourceBindings& bindings){
-                    bindings.Prepare();
-                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
-                    if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
-                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*u32(primitives)*3,0};
-                    ExecuteGraphics(stream_pipeline,bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
-                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,nullptr,&target);
-                },textures_,r.ta_bc_base.Address(),index_requests);
-        });
         if(!point_capture_)point_capture_=std::make_unique<NativePointCapturePass>(device_.Get());
-        point_capture_->Execute(*this,plan,DrawArguments{u32(primitives)*3,1},consumer_state.topology,
-            [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
-                auto consumer_runtime=runtime;consumer_runtime.first_vertex=consumer_runtime.base_instance=consumer_runtime.indexed=0;
-                ExecuteGuestGraphicsResources(device_.Get(),*this,consumer_pipeline,consumer_stages,push,consumer_runtime,
-                    [&](ResourceBindings& bindings){
-                        NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
-                        NativePointCapturePass::BindInputStream(bindings,stream->data,0,u64(stride)*u32(primitives)*3);
-                        const StreamDrawArguments indirect{&stream->arguments,0};
-                        ExecuteGraphics(consumer_pipeline,bindings,consumer_state,{},nullptr,viewport.viewports,
-                            viewport.scissors,r.blend_constants,bounds,{},nullptr,false,&indirect);
-                    },textures_,r.ta_bc_base.Address());
-            },[&](Resource& buffer,const DrawArguments& replay){
-                output_draw=replay;auto replay_runtime=runtime;
-                replay_runtime.first_vertex=replay_runtime.base_instance=replay_runtime.indexed=0;
-                ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,replay_stages,push,replay_runtime,
-                    [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit_replay(bindings);},
-                    textures_,r.ta_bc_base.Address());
-            });
+        ExecuteGuestGraphicsResources(device_.Get(),*this,stream_pipeline,logical_stages,push,runtime,
+            [&](ResourceBindings& common){
+                // Attachment preparation can grow B. Freeze the common shader
+                // views only after it has selected/initialized the targets.
+                prepare_replay(common);
+                auto arena=point_capture_->Reserve(*this,partitions.At(0).capture.bytes);
+                const auto stream=primitive_stream_->Capture(*this,stride,range.capacity_vertices,range.vertices_per_primitive,
+                    [&](PrimitiveStreamLease& lease){
+                    auto bindings=common.ForkForReplay(stream_pipeline.Layout());
+                    RetainUntilFinish([bindings](u64){});
+                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+                    if(index_view.resource){bindings->Retain(index_view.resource->handle.Get());bindings->RetainAllocation(index_view.resource->allocation);}
+                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*u32(primitives)*3,0};
+                    ExecuteGraphics(stream_pipeline,*bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
+                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,nullptr,&target);
+                });
+                auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
+                primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
+                    [&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
+                        point_capture_->Execute(*this,part.capture,DrawArguments{part.input.limit,1},consumer_state.topology,
+                            [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
+                                auto bindings=common.ForkForReplay(consumer_pipeline.Layout());
+                                BindGuestGraphicsRuntime(*bindings,local_runtime);RetainUntilFinish([bindings](u64){});
+                                NativePointCapturePass::BindProducer(*bindings,buffer,offset,bytes);
+                                NativePointCapturePass::BindInputStream(*bindings,lease.data,u64(part.input.first)*stride,u64(part.input.limit)*stride);
+                                const StreamDrawArguments indirect{&lease.arguments,0};
+                                ExecuteGraphics(consumer_pipeline,*bindings,consumer_state,{},nullptr,viewport.viewports,
+                                    viewport.scissors,r.blend_constants,bounds,{},nullptr,false,&indirect);
+                            },[&](Resource& buffer,const DrawArguments& replay){
+                                output_draw=replay;auto bindings=common.ForkForReplay(pipeline.Layout());
+                                BindGuestGraphicsRuntime(*bindings,local_runtime);RetainUntilFinish([bindings](u64){});
+                                NativePointCapturePass::BindReplay(*bindings,buffer,part.capture.bytes);
+                                submit_replay(*bindings,part.last);
+                            },arena);
+                    });
+            },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout);
     }else if(capture){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
         // No GS invocation exists for an incomplete primitive, but retain one
@@ -1913,10 +1934,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     if(probe){
         Finish();
-        void* data{};D3D12_RANGE range{0,sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS)};
-        Check(probe_result.handle->Map(0,&range,&data));
-        const auto statistics=*static_cast<const D3D12_QUERY_DATA_PIPELINE_STATISTICS*>(data);
-        D3D12_RANGE empty{};probe_result.handle->Unmap(0,&empty);
+        D3D12_QUERY_DATA_PIPELINE_STATISTICS statistics{};
+        for(auto& result:probe_results){
+            void* data{};D3D12_RANGE range{0,sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS)};
+            Check(result.handle->Map(0,&range,&data));
+            const auto sample=*static_cast<const D3D12_QUERY_DATA_PIPELINE_STATISTICS*>(data);
+            D3D12_RANGE empty{};result.handle->Unmap(0,&empty);
+            statistics.IAVertices+=sample.IAVertices;statistics.IAPrimitives+=sample.IAPrimitives;
+            statistics.VSInvocations+=sample.VSInvocations;statistics.GSInvocations+=sample.GSInvocations;
+            statistics.GSPrimitives+=sample.GSPrimitives;statistics.CInvocations+=sample.CInvocations;
+            statistics.CPrimitives+=sample.CPrimitives;statistics.PSInvocations+=sample.PSInvocations;
+            statistics.HSInvocations+=sample.HSInvocations;statistics.DSInvocations+=sample.DSInvocations;
+            statistics.CSInvocations+=sample.CSInvocations;
+        }
         static FILE* output=[](){std::filesystem::create_directories("user/log");return fopen(("user/log/scene-probe-"+std::to_string(GetCurrentProcessId())+".txt").c_str(),"w");}();
         if(output){
             const auto* vs=guest.stages[u32(Shader::SwStage::Vertex)];

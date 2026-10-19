@@ -831,7 +831,7 @@ int main(int argc,char** argv){try{
             GuestReplayAttachments replay_attachment_scope;
             const ShaderPipeline* replay_pipeline=&pipeline;
             u32 color_initializations{},depth_initializations{};
-            const auto submit=[&](ResourceBindings& bindings){
+            const auto prepare_attachments=[&](ResourceBindings& bindings){
                 target=&replay_attachment_scope.Select(textures,0,[&]() -> GuestTextureCache::Entry& {
                     ++color_initializations;
                     return textures.Upload(color,color_memory,rasterizer.RecordingList(),rasterizer.CompletedFence());});
@@ -842,6 +842,9 @@ int main(int argc,char** argv){try{
                     return textures.Upload(depth,depth_memory,rasterizer.RecordingList(),rasterizer.CompletedFence(),stencil_memory,multipart_replay);});
                 bindings.RetainAllocation(replay_attachment_scope.BindingPin(0));
                 bindings.RetainAllocation(replay_attachment_scope.BindingPin(8));
+            };
+            const auto submit=[&](ResourceBindings& bindings){
+                prepare_attachments(bindings);
                 const Rasterizer::ColorAttachment attachment[]{ {&target->texture,target->Rtv()} };
                 Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
                 dsv.clear_depth=dsv.clear_stencil=multipart_replay&&replay_attachment_scope.Beginning();
@@ -858,6 +861,7 @@ int main(int argc,char** argv){try{
                 const auto& producer_pipeline=pipelines.Graphics(capture->producer,producer_state.pipeline);
                 Resource stream;
                 std::shared_ptr<PrimitiveStreamLease> captured_stream;
+                std::shared_ptr<Resource> capture_arena;
                 GuestGraphicsState stream_state;
                 StreamOutputLayout stream_layout;
                 const ShaderPipeline* stream_pipeline{};
@@ -978,7 +982,7 @@ int main(int argc,char** argv){try{
                         part(0,first_records*Shader::NativePointCapture::RecordBytes);
                         part(first_records*Shader::NativePointCapture::RecordBytes,(active_plan.records-first_records)*Shader::NativePointCapture::RecordBytes);
                     }else part(0,active_plan.bytes);
-                });
+                },capture_arena);
                 };
                 if(partition_replay){
                     // Original source stages, GS and PS share one preparation
@@ -993,8 +997,11 @@ int main(int argc,char** argv){try{
                     common_resources.insert(common_resources.end(),replay_resources.begin(),replay_resources.end());
                     ExecuteGuestGraphicsResources(device.Get(),rasterizer,producer_pipeline,common_resources,push,runtime,
                         [&](ResourceBindings& common){
+                            prepare_attachments(common);
                             capture_stream(&common);
                             const u64 budget=u64(2)*gs.num_invocations*gs.output_vertices*Shader::NativePointCapture::RecordBytes;
+                            const PrimitiveStreamPartitions parts(captured_stream->range,gs.num_invocations,gs.output_vertices,budget);
+                            capture_arena=capture_pass->Reserve(rasterizer,parts.At(0).capture.bytes);
                             serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
                                 [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
                                     if(!partition.first){

@@ -31,10 +31,14 @@ public:
     // SRV view starts at a complete primitive boundary; GS PrimitiveId is
     // relative to this slice, while record word zero retains the guest ID.
     static void BindInputStream(ResourceBindings&,Resource&,u64 offset,u64 bytes);
+    // One direct-queue batch may reuse this arena after each preceding PS
+    // replay. Execute records the SRV->UAV transition before overwriting it.
+    std::shared_ptr<Resource> Reserve(Rasterizer&,u64 bytes);
     // All original instances run once with disjoint UAV views, then one replay
     // draw preserves record order and clears attachments only once.
     void Execute(Rasterizer&,const Shader::NativePointCapture::Plan&,const DrawArguments&,D3D_PRIMITIVE_TOPOLOGY,
         const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
-        const std::function<void(Resource&,const DrawArguments&)>& replay);
+        const std::function<void(Resource&,const DrawArguments&)>& replay,
+        const std::shared_ptr<Resource>& reusable={});
 };
 }
