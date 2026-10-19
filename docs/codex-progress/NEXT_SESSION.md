@@ -2,7 +2,7 @@
 
 ## Current continuation boundary - independent SNORM MRT logic
 
-Production **bcc852b** completed independent write masks for single-sample packed-SNORM logic operations and passed the 44-case real GCN/GPU fixture plus shared SINT/MSAA and graphics-resource regressions. Finish the clean detached Release build and publish it as the sole `dx12-current` core, then continue a recorded open mechanism. Packed-SNORM MSAA lacks per-sample UAV access; ordinary/non-castable independent MRT logic still rejects. Do not repeat this audit or transfer the focused result to a rebuilt executable without running its exact fixture.
+Production **bcc852b** completed independent write masks for single-sample packed-SNORM logic operations and passed the 44-case real GCN/GPU fixture plus shared SINT/MSAA and graphics-resource regressions. Clean source **88c9326** repeated the exact 44-case fixture and is installed as the sole identity-validated `dx12-current` core. Continue a recorded open mechanism. Packed-SNORM MSAA lacks per-sample UAV access; ordinary/non-castable independent MRT logic still rejects. Do not repeat this audit without new evidence.
 
 ## Current continuation boundary - 2026-10-19
 

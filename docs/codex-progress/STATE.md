@@ -2,7 +2,7 @@
 
 ## Independent packed-SNORM MRT logic - 2026-10-19
 
-Commit **bcc852b** is connected and narrowly verified. Packed 10:10:10:2 SNORM now executes all represented logic operations through ordered raw-word read/modify/write when active MRTs require different scattered write masks. The real GCN/GPU fixture passed 44 cases over three MRTs and complete 64 KiB readback; shared SINT logic/MSAA and graphics-resource regressions also passed. Ordinary/non-castable independent logic masks and packed-SNORM MSAA remain concrete gaps. The installed core remains clean commit **825905c** pending the new clean build.
+Commit **bcc852b** is connected and narrowly verified. Packed 10:10:10:2 SNORM now executes all represented logic operations through ordered raw-word read/modify/write when active MRTs require different scattered write masks. The real GCN/GPU fixture passed 44 cases over three MRTs and complete 64 KiB readback; shared SINT logic/MSAA and graphics-resource regressions also passed. Ordinary/non-castable independent logic masks and packed-SNORM MSAA remain concrete gaps. Clean source **88c9326** is installed as the sole validated `dx12-current` core: EXE **47ea2051e7550be9213390c87f6577cc1ad14c6a77a7fc0b93ecb8a098155d46**, PDB **d001421e7987d2abab3d31108a23109a1ccf777813a979a66dded0c3d94daa2f**; game/final suite not run.
 
 ## Current production ordered packed-SNORM checkpoint - 2026-10-19
 

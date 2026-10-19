@@ -5,7 +5,8 @@
 - Source: **bcc852b**.
 - Connected: actual-fragment-MRT specialization, per-target logic metadata, all 17 represented raw-word logic operations, and independent scattered channel merge through ordered UAVs.
 - Verified: 44 production GCN/GPU cases with three simultaneous masks and full 64 KiB comparison; shared SINT logic/MSAA; guest graphics resources; incremental Release core link.
-- Open: clean detached build/publication, final suite and game acceptance; packed-SNORM MSAA; ordinary/non-castable independent MRT logic.
+- Clean publication: source **88c9326**, EXE **47ea2051e7550be9213390c87f6577cc1ad14c6a77a7fc0b93ecb8a098155d46**, PDB **d001421e7987d2abab3d31108a23109a1ccf777813a979a66dded0c3d94daa2f**; sole core and selected-file validation passed.
+- Open: final suite and game acceptance; packed-SNORM MSAA; ordinary/non-castable independent MRT logic.
 
 ## Production ordered packed-SNORM checkpoint - 2026-10-19
 

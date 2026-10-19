@@ -2,7 +2,7 @@
 
 ## Independent packed-SNORM MRT logic verification - 2026-10-19
 
-The exact production GCN fixture completed 44 GPU/readback cases in 5.041 s: all represented logic operations, three simultaneous packed-SNORM MRT masks, every logical pixel, and all 64 KiB including padding. The existing shared SINT logic/MSAA GPU fixture passed. `native_guest_graphics_resources` passed in 4.00 s and the incremental Release core linked. These are mechanism correctness results for **bcc852b**; no game or FPS claim applies.
+The exact production GCN fixture completed 44 GPU/readback cases in 5.041 s: all represented logic operations, three simultaneous packed-SNORM MRT masks, every logical pixel, and all 64 KiB including padding. The existing shared SINT logic/MSAA GPU fixture passed. `native_guest_graphics_resources` passed in 4.00 s and the incremental Release core linked. Clean detached source **88c9326** built in 29.028 s and repeated the exact fixture in 5.054 s before publication. These are mechanism correctness results; no game or FPS claim applies.
 
 ## Production ordered packed-SNORM verification - 2026-10-19
 
