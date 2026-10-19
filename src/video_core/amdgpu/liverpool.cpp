@@ -236,11 +236,14 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
     }
 
     const auto base_addr = reinterpret_cast<uintptr_t>(dcb.data());
+    std::array<u32, 3> packet_history{};
     while (!dcb.empty()) {
         ProcessCommands();
 
         const auto* header = reinterpret_cast<const PM4Header*>(dcb.data());
         const u32 type = header->type;
+        const auto previous_headers = packet_history;
+        packet_history = {header->raw, previous_headers[0], previous_headers[1]};
 
         switch (type) {
         default:
@@ -248,9 +251,15 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             break;
         case 0: {
             const u32 type0_words = ApplyType0RegisterWrite(regs.reg_array, dcb);
+            const auto packet_word = [&](size_t index) { return index < dcb.size() ? dcb[index] : 0; };
             ASSERT_MSG(type0_words != 0,
-                       "Invalid PM4 type 0 packet, base reg: {}, size: {}, available: {}",
-                       header->type0.base.Value(), header->type0.NumWords(), dcb.size());
+                       "Invalid PM4 type 0 packet at dword {}: raw={:#010x} base={:#x} size={} "
+                       "available={} prior=[{:#010x},{:#010x},{:#010x}] next=[{:#010x},"
+                       "{:#010x},{:#010x}]",
+                       (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32), header->raw,
+                       header->type0.base.Value(), header->type0.NumWords(), dcb.size(),
+                       previous_headers[0], previous_headers[1], previous_headers[2], packet_word(1),
+                       packet_word(2), packet_word(3));
             dcb = NextPacket(dcb, type0_words);
             continue;
         }
