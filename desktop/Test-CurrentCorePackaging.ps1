@@ -35,10 +35,12 @@ try{
  Reject {& $publisher @arguments}
  Require ((Sha (Join-Path $current 'core.exe')) -eq $oldHash) 'Failed staging replaced current'
  '{}' | Set-Content -LiteralPath (Join-Path $source 'native-contract.json')
+ $arguments.Remove('IsolatedProfile')
  'second core' | Set-Content -LiteralPath (Join-Path $source 'core.exe')
  & $publisher @arguments | Out-Null
  $manifest=Get-Content -LiteralPath (Join-Path $current 'core-version.json') -Raw | ConvertFrom-Json
  Require ($manifest.Sha256 -eq (Sha (Join-Path $source 'core.exe')) -and $manifest.Sha256 -ne $oldHash) 'New core identity incorrect'
+ Require ($manifest.IsolatedProfile -eq $true) 'Isolated profile mode lost on replacement'
  Require ($manifest.Results -eq '' -and $manifest.ProfileId -eq 'previous-selected-profile') 'Old acceptance transferred or profile lost'
  Require ((Get-ChildItem -LiteralPath $catalog -Directory).Count -eq 1) 'Temporary/previous package retained'
  $wrong=@{}+$arguments;$wrong.Id='another-version';Reject {& $publisher @wrong}

@@ -105,6 +105,9 @@ if (Test-Path -LiteralPath $destination) {
     $oldManifest = Assert-OwnedPackage $destination
     Assert-NotRunning $destination
     if (!$ProfileId) { $ProfileId = $oldManifest.ProfileId }
+    if (!$PSBoundParameters.ContainsKey('IsolatedProfile')) {
+        $IsolatedProfile = [bool]$oldManifest.IsolatedProfile
+    }
 }
 if ($Backend -eq 'dx12') {
     $pdb = [IO.Path]::ChangeExtension($Executable,'.pdb')
