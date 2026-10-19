@@ -1267,3 +1267,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-19 4fda58d: production SRV-scoped feedback copies integrated and clean Release reproduced; source identity/hashes in scoped-feedback-4fda58d.json. GPU/game NOT_RUN; app unchanged. SESSION_HANDOFF authoritative.
 
 2026-10-19: actual GCN color-feedback-owned CPU texel replacement and color-feedback-buffer-owned32KiB raw B/native I probe cases prepared; compile/link9.539s PASS, runtime NOT_RUN. Details in SESSION_HANDOFF.
+
+2026-10-20 f10bc6c: RGBA8 SNORM ordered blending connected;16 GCN scenarios prepared/compiled, runtime NOT_RUN; clean Release identities in snorm8-ordered-f10bc6c.json. No app replacement/FPS claim.
