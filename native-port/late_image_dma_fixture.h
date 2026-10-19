@@ -25,6 +25,8 @@ inline void RunLateImageDmaFixture(ID3D12Device* device,const ShaderPipeline& pi
         textures.SetIndependentImageRetention([](const auto&,const auto&){return true;});
         textures.SetBufferAliasRetention([](const auto&,const auto&){return true;});
         textures.SetOwnershipAcquirer([](auto& image){image.SetGpuOwned(true);return true;});
+        textures.SetIndependentVersionTransfer({},
+            [](auto& image){image.SetGpuOwned(true);return true;},{});
         const u32 old_cpu=*reinterpret_cast<const u32*>(address);
         Rasterizer::ShaderBufferRequest tiny{address,4,false,true,true};tiny.publish_dma_residency=false;
         rasterizer.PrepareShaderBuffers(std::span(&tiny,1));

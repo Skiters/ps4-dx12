@@ -119,6 +119,7 @@ int wmain(int argc,wchar_t** argv){try{
         i+=count;
     }
     Shader::Backend::DX12::SpirvConvertOptions options;options.stage=Shader::Backend::DX12::SpirvStage::Compute;
+    options.shader_model_minor=6; // Match production DMA's 64-bit atomic contract.
     options.native_storage_buffer_uavs=true;
     auto dxil=Shader::Backend::DX12::ConvertSpirv(argv[1],spirv,options);
     if(!dxil.success)throw std::runtime_error(dxil.diagnostics);
