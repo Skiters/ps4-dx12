@@ -1,6 +1,14 @@
 # Implementation and verification registry — 2026-10-17
 
 
+## Registry delta - multilevel BC/word prefix - 2026-10-19
+
+Connected and focused GPU verified: pinned BC parent / terminal block-word prefix preservation -> `MatchesReadonlyBlockMipPrefix` admission through `CompatibleGuestBlockWordStorage` -> ordered early full-parent I and late current-B UINT prefix with padding and untouched tail. Exact and multilevel focused checks plus the complete ordered-stage matrix pass; whole-game/final-suite behavior is open.
+
+Concrete gap remains: pinned shifted/rebased block mip/layer view -> `RebaseBlockSubresource` and writable parent alias code exist, but the full ordered multi-stage GCN path is not yet accepted by a focused contents/commit oracle. MSAA, clipped and large-domain variants remain separate.
+
+
+
 ## Registry delta - ordered BC/word domain - 2026-10-19
 
 Connected and focused GPU verified: pinned `TextureCache::ResolveOverlap` / `ExpandImage` one-level BC-parent/block-word contract -> `CompatibleGuestBlockWordStorage` and converted-view handling in `PrepareOrderedGuestStages` -> separate native BC sampled I and UINT writable B allocations, original bind order, guest padding, ownership and lifetime verified by `native_ordered_bc_word_stage_bindings` and the full ordered-stage matrix.

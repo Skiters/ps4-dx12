@@ -1,6 +1,15 @@
 # Vulkan / native D3D12 parity audit
 
 
+## Multilevel BC parent / word-prefix parity - 2026-10-19
+
+- Upstream contract: `ResolveOverlap` / `ExpandImage` materializes a block-word interpretation without losing unselected BC parent mips.
+- DX12 connected: exact-base terminal UINT prefixes use the cache-proved physical prefix and ordered converted allocations; the parent tail remains authoritative.
+- Focused behavior verified: one-level plus four-mip parent/through-mip2 GPU readback, full ordered-stage matrix, independent image transfer and BC hardware pass.
+- Concrete remaining gap: shifted/rebased mip/layer block subresources through the full frontend and writable-parent commit path. MSAA/clipped/large variants remain explicit.
+
+
+
 ## Ordered BC parent / block-word parity - 2026-10-19
 
 - Upstream contract: `TextureCache::ResolveOverlap` / `ExpandImage` preserves the logical BC image while a block-word interpretation is materialized in binding order.

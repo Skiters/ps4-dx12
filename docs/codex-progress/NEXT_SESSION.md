@@ -1,6 +1,14 @@
 # Next session
 
 
+## Current continuation boundary - multilevel BC/word terminal prefix
+
+Production **10e19f15c44dd6313b4d5afa6911c23abeb885e9** is pushed, clean-built and focused GPU verified. Exact one-level and multilevel terminal UINT prefixes now preserve the early BC parent I, late current B, padding, untouched tail, ownership and lifetime. The focused test and complete ordered-stage matrix pass. The sole installed `dx12-current` has EXE SHA256 **be5b93e9f625041ea388bad028511f9741f5153445b54860ccfba932e9775457**; game/final suite were not run.
+
+Continue with shifted/rebased mip and layer block views already present in `gcn_bc_writable_alias_fixture.h`. Exercise the real frontend `RebaseBlockSubresource` -> ordered-stage -> `BeginWritableBlockAlias` / `CommitWritableBlockAlias` chain, including parent tail preservation and actual GPU writes. Do not repeat exact-base or terminal-prefix work. MSAA, clipped and large domains remain separate gaps.
+
+
+
 ## Current continuation boundary - one-level BC/word ordered domain
 
 Production **4def6f26aca64357010b160cc512270acf0fef57** is pushed, clean-built and focused GPU verified. Exact one-level BC parent and UINT block-word views now use ordered converted allocations and preserve early logical I, late current B, guest padding, ownership and fence lifetime. The focused test, full ordered-stage matrix, independent transfer and BC hardware checks pass. The sole installed `dx12-current` has EXE SHA256 **480282eac32fd2f3d5235309fad387aec5f6bda0103b9f902fd95e1db065ebf4**. Game/final suite were not run.

@@ -1,6 +1,16 @@
 # Native DX12 state
 
 
+## Ordered multilevel BC/word terminal prefixes - 2026-10-19
+
+Production **10e19f15c44dd6313b4d5afa6911c23abeb885e9** extends the verified BC/word converted domain to a terminal UINT block-word prefix of a multilevel BC parent. Admission reuses the cache's strict `MatchesReadonlyBlockMipPrefix` proof: identical base, codec block size, mip-major offsets, pitch, height, slice geometry and complete prefix envelope. Nonterminal and shifted descriptors remain rejected by this path.
+
+Focused GPU verification passed for exact one-level and four-mip-parent/through-mip2 prefix cases in 7.93 s. The latter independently reads the complete early BC parent I and late current-B UINT prefix while preserving padding and the untouched parent tail. The complete ordered-stage matrix passed in 201.34 s; independent image transfer and BC hardware checks pass. Clean detached Release succeeded. The sole installed `dx12-current` is EXE SHA256 **be5b93e9f625041ea388bad028511f9741f5153445b54860ccfba932e9775457**, PDB SHA256 **fc411dd494ca961bcf7ce69b7870ba0acb72b477070de5b2905a7e0d506bcdda**. Runtime/game/final suite remain not run.
+
+Next concrete gap: shifted/rebased BC block subresources and layer subsets from the existing `gcn_bc_writable_alias_fixture.h` variants. Prove the full frontend-to-ordered-stage descriptor path and parent commit with actual GPU writes before widening any shifted-domain guard.
+
+
+
 ## Ordered one-level BC/word stage domain - 2026-10-19
 
 Production **4def6f26aca64357010b160cc512270acf0fef57** is connected and focused GPU verified. `PrepareOrderedGuestStages` now recognizes exact same-address, one-level BC parent and UINT block-word storage as a converted physical domain. The original stage order is preserved with separate BC3 typeless sampled and RGBA32 typeless writable allocations: the early sampled bind retains logical I, an exact-base buffer writer selects current B, and the late writable bind receives B without retiring the pinned early allocation. Shifted addresses and multilevel BC parents remain rejected.

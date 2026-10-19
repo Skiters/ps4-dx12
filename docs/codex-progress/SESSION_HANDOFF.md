@@ -1,6 +1,22 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
 
+## Current ordered multilevel BC/word prefix checkpoint - 2026-10-19
+
+Production **10e19f15c44dd6313b4d5afa6911c23abeb885e9** is pushed on `fix/mixed-cmask`. `CompatibleGuestBlockWordStorage` now admits the cache-proved terminal UINT block-word prefix of a multilevel BC parent, in addition to the exact one-level case. The proof requires the same base, physical block size, mip-major offsets, pitch, height, slice geometry and complete terminal prefix. `PrepareOrderedGuestStages` retains the early full BC I allocation, selects current B after the intervening exact-base buffer write, and creates the late writable prefix allocation at its original stage position. Nonterminal and shifted descriptors remain rejected by this path.
+
+Focused GPU verification passed: exact one-level and four-mip BC parent/through-mip2 UINT prefix in 7.93 s, full ordered-stage matrix in 201.34 s, independent image transfer in 3.86 s, and BC hardware in 3.97 s. Readback checks all early logical BC mips, the late current-B word prefix, guest padding and the untouched parent tail. A clean detached Release build from the exact commit and pinned dependencies linked successfully.
+
+The sole application package is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, source **10e19f15c44dd6313b4d5afa6911c23abeb885e9**, EXE SHA256 **be5b93e9f625041ea388bad028511f9741f5153445b54860ccfba932e9775457**, PDB SHA256 **fc411dd494ca961bcf7ce69b7870ba0acb72b477070de5b2905a7e0d506bcdda**, preserved profile `external-7e8fca7a1bd828c19629fdd9`. The catalogue contains exactly one core and selects `dx12-current`. Runtime/game/final suite are `NOT_RUN` for this identity.
+
+Next production work is the shifted/rebased mip and layer block-view path already represented by `gcn_bc_writable_alias_fixture.h`. Exercise the real `RebaseBlockSubresource` -> ordered stage -> `BeginWritableBlockAlias` / `CommitWritableBlockAlias` chain with actual GPU writes, full parent-tail/padding comparison and fence-safe pins. Do not broaden shifted-domain admission from descriptor overlap alone. MSAA, clipped and large domains remain separate gaps.
+
+### NEXT CODEX SESSION - START HERE
+
+Continue `fix/mixed-cmask` from current HEAD after reading this section and verifying the sole installed `dx12-current` identity above. Resume at the shifted/rebased BC block-subresource variants in `gcn_bc_writable_alias_fixture.h`. Build one focused real-GCN case that traverses `RebaseBlockSubresource`, ordered stage binding and writable-parent commit; preserve all untouched parent mips/layers, exact words and padding, I/B authority, barriers, ownership and lifetime. Run focused GPU/readback regressions, clean-build committed source, replace the one current core and push normally. Do not repeat exact-base or terminal-prefix work; defer full suite and game/XInput/FPS acceptance until the integration boundary.
+
+
+
 ## Current ordered one-level BC/word checkpoint - 2026-10-19
 
 Production **4def6f26aca64357010b160cc512270acf0fef57** is pushed on `fix/mixed-cmask`. `PrepareOrderedGuestStages` now admits an exact same-address, one-level BC parent and UINT block-word view as a converted domain. It creates separate BC3 typeless sampled and RGBA32 typeless writable allocations at their original stage positions, pins the early logical I allocation, selects current B after exact-base invalidation, and publishes writable ownership only at the late image bind. Shifted addresses and multilevel BC parents remain explicitly rejected.
