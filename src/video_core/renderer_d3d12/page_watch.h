@@ -19,7 +19,8 @@ namespace NativeDX12 {
 // permissions happens only AFTER the GPU result has been committed.
 class PageWatch {
     struct Protection{uint64_t begin,size;DWORD original,watched;};
-    struct Range{uint64_t end;std::vector<Protection> protection;bool read_only;uint64_t generation;};
+    struct Range{uint64_t end;std::vector<Protection> protection;bool read_only;uint64_t generation;
+        uint64_t backing_generation{};}; // Physical writes are not ownership/fault-resolution progress.
     std::map<uint64_t,Range> ranges;
     std::map<uint64_t,uint64_t> retired;
     std::mutex mutex;
@@ -122,6 +123,33 @@ class PageWatch {
         }
     }
 public:
+    // A non-owning CPU-write exclusion witness. NOACCESS is sufficient here:
+    // callers read physical B, never dereference protected guest VA. Returning
+    // an epoch does not acquire/release/demote any image or buffer guard.
+    uint64_t ProtectedBackingEpoch(uint64_t address,uint64_t size){
+        if(!address||!size||address>UINT64_MAX-size)return 0;
+        std::lock_guard lock(mutex);const auto end=address+size;auto cursor=address;
+        auto it=ranges.upper_bound(address);
+        if(it!=ranges.begin())--it;
+        uint64_t epoch{};
+        for(;it!=ranges.end()&&cursor<end;++it){
+            if(it->second.end<=cursor)continue;
+            if(it->first>cursor)return 0;
+            epoch=std::max({epoch,it->second.generation,it->second.backing_generation});
+            cursor=std::min(end,it->second.end);
+        }
+        return cursor==end?epoch:0;
+    }
+    // Host writes through the physical alias bypass the guest VEH. Invalidate
+    // matching witnesses even if OS protection and native I stay unchanged.
+    void InvalidateBackingEpoch(uint64_t address,uint64_t size){
+        if(!size)return;
+        if(address>UINT64_MAX-size)throw std::out_of_range("Physical backing epoch range overflow");
+        std::lock_guard lock(mutex);auto it=ranges.upper_bound(address);
+        if(it!=ranges.begin())--it;
+        for(;it!=ranges.end()&&it->first<address+size;++it)
+            if(it->second.end>address)it->second.backing_generation=++next_generation;
+    }
     explicit PageWatch(std::function<void(uint64_t,bool)> callback):resolve(std::move(callback)){
         PageWatch* expected{};if(!active.compare_exchange_strong(expected,this))throw std::runtime_error("Multiple native page watcher owners");
         handler=AddVectoredExceptionHandler(1,Fault);
@@ -152,7 +180,7 @@ public:
             }
         }
         const auto slice=[](const Range& range,uint64_t begin,uint64_t stop,uint64_t generation){
-            Range result{stop,{},true,generation};
+            Range result{stop,{},true,generation,range.backing_generation};
             for(const auto& p:range.protection){const auto a=std::max(begin,p.begin),b=std::min(stop,p.begin+p.size);
                 if(a<b)result.protection.push_back({a,b-a,p.original,p.watched});}
             return result;
@@ -260,7 +288,7 @@ public:
                 // owners retain NOACCESS, including shared page boundaries.
                 const bool read_only=original.read_only||(selected&&!strong&&
                     (demote_exclusive||contains(transfer_exclusive,begin)));
-                Range part{end,{},read_only,selected?++generation:original.generation};
+                Range part{end,{},read_only,selected?++generation:original.generation,original.backing_generation};
                 for(const auto& p:original.protection){
                     const auto a=std::max(begin,p.begin),b=std::min(end,p.begin+p.size);
                     if(a<b)part.protection.push_back({a,b-a,p.original,p.watched});
@@ -342,7 +370,7 @@ public:
         }
         if(cursor!=end)return false;
         const auto slice=[](const Range& source,uint64_t begin,uint64_t stop){
-            Range result{stop,{},source.read_only,source.generation};
+            Range result{stop,{},source.read_only,source.generation,source.backing_generation};
             for(const auto& p:source.protection){const auto a=std::max(begin,p.begin),b=std::min(stop,p.begin+p.size);
                 if(a<b)result.protection.push_back({a,b-a,p.original,p.watched});}
             return result;
@@ -394,7 +422,7 @@ public:
         auto last=first;while(last!=ranges.end()&&last->first<end)++last;
         std::map<uint64_t,Range> replacement;
         const auto slice=[](const Range& source,uint64_t begin,uint64_t stop){
-            Range result{stop,{},source.read_only,source.generation};
+            Range result{stop,{},source.read_only,source.generation,source.backing_generation};
             for(const auto& p:source.protection){const auto a=std::max(begin,p.begin),b=std::min(stop,p.begin+p.size);
                 if(a<b)result.protection.push_back({a,b-a,p.original,p.watched});}
             return result;

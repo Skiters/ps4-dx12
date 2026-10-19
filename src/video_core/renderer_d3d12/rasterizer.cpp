@@ -475,6 +475,7 @@ void Rasterizer::TrimPools(){
     }
 }
 void Rasterizer::ResizeSnapshot(Mapping& mapping){
+    mapping.protected_backing_epoch=0;
     if(memory_perf_.enabled&&mapping.cpu_snapshot.capacity()<mapping.size){
         auto best=snapshot_pool_.end();
         for(auto it=snapshot_pool_.begin();it!=snapshot_pool_.end();++it)
@@ -572,6 +573,7 @@ void Rasterizer::InvalidateCpuBufferPages(VAddr address,u64 size){
     if(!size)return;
     if(address>UINT64_MAX-size)throw std::out_of_range("CPU dirty page range overflow");
     const auto invalidate=[&](Mapping& m){
+        m.protected_backing_epoch=0;
         const auto forget=[&]{
             if(&m!=preparing_buffer_envelope_){ReleaseCpuBufferWatches(m.base,m.size);return;}
             // This private target has not acquired its own guard yet. Current
@@ -870,7 +872,11 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     diagnostic.Detail("address=%llx bytes=%llu fresh=%u written=%u",(unsigned long long)base,
         (unsigned long long)mapping.size,unsigned(fresh),unsigned(written));
     ValidateGpuBacking(base,mapping.size,written);
-    bool cpu_proven_unchanged=mapping.cpu_watched;
+    auto backing_epoch=protected_backing_epoch_?protected_backing_epoch_(base,mapping.size):0;
+    bool borrowed_proof=backing_epoch&&backing_epoch==mapping.protected_backing_epoch&&
+        mapping.cpu_snapshot.size()==mapping.size&&mapping.cpu_upload_ranges.empty();
+    mapping.protected_backing_epoch=0; // Failed/reentrant preparation cannot publish an unfinished proof.
+    bool cpu_proven_unchanged=mapping.cpu_watched||borrowed_proof;
     if(written&&mapping.cpu_watched){
         if(transfer_buffer_watch_&&transfer_buffer_watch_(base,mapping.size,false)){
             mapping.cpu_watched=false;MarkGpuOwned(mapping,0,mapping.size);
@@ -892,6 +898,12 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     const auto& compare_watch=mapping.cpu_partial_proof&&rewatch_buffer_?rewatch_buffer_:watch_buffer_;
     const bool protected_compare=!mapping.gpu_owned&&!mapping.cpu_watched&&
         compare_watch&&compare_watch(base,mapping.size);
+    // Guard acquisition can reenter the memory owner. A physical publication
+    // during that callback invalidates this command's hit, not just future hits.
+    if(borrowed_proof&&protected_backing_epoch_(base,mapping.size)!=backing_epoch){
+        borrowed_proof=false;cpu_proven_unchanged=mapping.cpu_watched;
+    }
+    if(borrowed_proof)Diagnostics::Count("buffer-snapshot.protected-backing-hit.bytes",mapping.size);
     if(protected_compare)mapping.cpu_watch_pending=true;
     bool proof_published=false;
     SCOPE_EXIT {
@@ -907,10 +919,15 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
         // resolve I into B. Original CopySparseMemory uploads physical B only;
         // take that same backing without changing I's class/history/ownership.
         physical_cpu.resize(size_t(mapping.size));
-        if(!ReadDmaBacking(base,physical_cpu))
-            throw std::runtime_error("Buffer envelope lost physical backing beside a native image");
+        for(;;){
+            const auto before=protected_backing_epoch_?protected_backing_epoch_(base,mapping.size):0;
+            if(!ReadDmaBacking(base,physical_cpu))
+                throw std::runtime_error("Buffer envelope lost physical backing beside a native image");
+            Diagnostics::Count("buffer-snapshot.physical-image-overlap.bytes",mapping.size);
+            if(before&&protected_backing_epoch_(base,mapping.size)!=before)continue;
+            backing_epoch=before;break;
+        }
         cpu=physical_cpu.data();
-        Diagnostics::Count("buffer-snapshot.physical-image-overlap.bytes",mapping.size);
     }
     diagnostic.Stage("snapshot-compare");
     if(!mapping.cpu_upload_ranges.empty()){
@@ -1012,6 +1029,9 @@ void Rasterizer::PrepareBufferContents(Mapping& mapping,bool written,bool uav,bo
     else if(!mapping.gpu_owned)InstallCpuWatch(mapping);
     mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
         D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    if(backing_epoch&&!mapping.gpu_owned&&mapping.cpu_snapshot.size()==mapping.size&&
+       mapping.cpu_upload_ranges.empty()&&protected_backing_epoch_(base,mapping.size)==backing_epoch)
+        mapping.protected_backing_epoch=backing_epoch;
     proof_published=true;
 }
 bool Rasterizer::RematerializeBufferEnvelope(VAddr address,u64 size,bool physical_dma,bool defer_owned){
@@ -1619,6 +1639,15 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
     for(const auto& [base,uav]:active){
         auto& mapping=mappings_.at(base);
         if(!mapping.gpu_owned&&!mapping.cpu_watched&&HasGpuImageOverlap(base,mapping.size)){
+            auto epoch=protected_backing_epoch_?protected_backing_epoch_(base,mapping.size):0;
+            if(epoch&&epoch==mapping.protected_backing_epoch&&mapping.cpu_snapshot.size()==mapping.size&&
+               mapping.cpu_upload_ranges.empty()){
+                Diagnostics::Count("buffer-snapshot.protected-backing-hit.bytes",mapping.size);
+                mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                continue;
+            }
+            mapping.protected_backing_epoch=0;
             // Legacy opaque images can still own NOACCESS guest pages. Read
             // physical B without resolving/downloading that I through a CPU
             // fault. Stream comparisons in bounded chunks, retaining B1 when
@@ -1626,6 +1655,7 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
             const bool unknown=mapping.cpu_snapshot.size()!=mapping.size;
             if(unknown)ResizeSnapshot(mapping);
             for(;;){
+                epoch=protected_backing_epoch_?protected_backing_epoch_(base,mapping.size):0;
                 const auto generation=mapping.cpu_upload_generation;
                 const auto stores=mapping.cpu_upload_ranges;
                 std::array<std::byte,4096> physical;
@@ -1639,8 +1669,13 @@ void Rasterizer::SynchronizePreparedDmaBuffers(std::span<const ShaderBufferReque
                     if(unknown||stored||memcmp(mapping.cpu_snapshot.data()+offset,physical.data(),size_t(bytes)))
                         Upload(mapping,offset,bytes,physical.data());
                 }
-                if(generation==mapping.cpu_upload_generation){mapping.cpu_upload_ranges.clear();break;}
+                if(generation==mapping.cpu_upload_generation&&
+                   (!epoch||protected_backing_epoch_(base,mapping.size)==epoch)){
+                    mapping.cpu_upload_ranges.clear();break;
+                }
             }
+            if(epoch&&protected_backing_epoch_(base,mapping.size)==epoch)
+                mapping.protected_backing_epoch=epoch;
             mapping.gpu.Transition(RecordingList(),uav?D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }else PrepareBufferContents(mapping,false,uav,false,{},std::span<const BufferWrite>{},diagnostic);

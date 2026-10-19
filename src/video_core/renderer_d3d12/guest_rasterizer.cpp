@@ -100,7 +100,11 @@ GuestRasterizer::~GuestRasterizer(){try{DrainPriorityOperations();}catch(...) {}
 void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     std::function<bool(VAddr,std::span<std::byte>)> read,std::function<bool(VAddr,std::span<const std::byte>)> write){
     std::lock_guard lock(execution_mutex_);
-    read_backing_=std::move(read);write_backing_=std::move(write);
+    read_backing_=std::move(read);
+    write_backing_=[this,write=std::move(write)](VAddr address,std::span<const std::byte> bytes){
+        if(page_watch_)page_watch_->InvalidateBackingEpoch(address,bytes.size());
+        return write(address,bytes);
+    };
     SetBufferBackingAccess(std::move(has),write_backing_);
     EnableBufferStreaming(true);
     EnableBufferArenas(true);

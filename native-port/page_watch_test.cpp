@@ -26,6 +26,14 @@ int main(){try{
     HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,bytes,nullptr);Require(section!=nullptr);
     auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));
     auto* alias=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,bytes));Require(guest&&alias);
+    {
+        unsigned callbacks{};PageWatch* unresolved{};
+        PageWatch watch([&](uint64_t address,bool){++callbacks;unresolved->InvalidateBackingEpoch(address,1);});
+        unresolved=&watch;const auto base=reinterpret_cast<uint64_t>(guest);
+        Require(watch.Track(base,4096));
+        Require(!DispatchWriteFault(reinterpret_cast<volatile unsigned char*>(guest))&&callbacks==1);
+        watch.Untrack(base,4096); // A physical epoch bump cannot suppress an unresolved access violation.
+    }
     std::recursive_mutex execution;std::mutex gate;std::condition_variable condition;bool entered=false,release=false;
     std::atomic<unsigned> resolutions{},finished{};PageWatch* watcher{};
     {
@@ -37,6 +45,18 @@ int main(){try{
             memset(alias,0x7a,bytes);++resolutions;watcher->Untrack(reinterpret_cast<uint64_t>(guest),bytes);
         });watcher=&watch;
         Require(watch.Track(reinterpret_cast<uint64_t>(guest),bytes));
+        const auto base=reinterpret_cast<uint64_t>(guest);
+        const auto epoch=watch.ProtectedBackingEpoch(base,bytes);
+        Require(epoch&&watch.ProtectedBackingEpoch(base+17,4096)==epoch);
+        Require(!watch.ProtectedBackingEpoch(base,bytes+4096));
+        Require(!watch.ProtectedBackingEpoch(UINT64_MAX-1,4));
+        watch.InvalidateBackingEpoch(base+17,1);
+        Require(watch.ProtectedBackingEpoch(base,bytes)>epoch);
+        Require(watch.ChangeMode(base+4096,4096,true));
+        Require(watch.ProtectedBackingEpoch(base,4096)>epoch); // Splits retain physical-write history.
+        Require(watch.ChangeMode(base+4096,4096,false));
+        MEMORY_BASIC_INFORMATION protected_state{};VirtualQuery(guest,&protected_state,sizeof(protected_state));
+        Require(protected_state.Protect==PAGE_NOACCESS); // Epoch invalidation never demotes I.
         Require(!watch.Track(reinterpret_cast<uint64_t>(guest)+4096,bytes-4096));
         std::vector<std::jthread> readers;
         for(unsigned i=0;i<4;++i)readers.emplace_back([&,i]{auto* pointer=reinterpret_cast<volatile unsigned char*>(guest+i*4096);

@@ -55,6 +55,7 @@ private:
         std::map<u64,u64> gpu_owned_ranges;
         bool cpu_watch_pending=false; // Protected while comparing; not yet a CPU/GPU equality proof.
         bool cpu_partial_proof=false;
+        u64 protected_backing_epoch{}; // Non-owning physical-B proof; never a readable VA/ownership promise.
         std::map<u64,u64> cpu_dirty_ranges; // Unprotected CPU pages; the remaining snapshot is proved.
         bool gpu_cpu_diverged=false; // Readonly image/metadata synthesis changed the GPU arena only.
         std::map<u64,u64> cpu_upload_ranges; // Actual CPU stores require upload even for identical bytes.
@@ -90,6 +91,7 @@ private:
     std::function<bool(VAddr,u64)> rewatch_buffer_;
     std::function<bool(VAddr,u64)> release_cpu_pages_;
     std::function<bool(VAddr,u64,bool)> transfer_buffer_watch_;
+    std::function<u64(VAddr,u64)> protected_backing_epoch_;
     Resource AcquireBuffer(u64);
     void RetireBuffer(Mapping&);
     void InstallCpuWatch(Mapping&);
@@ -210,6 +212,7 @@ public:
     void SetBufferPageRewatch(std::function<bool(VAddr,u64)> watch){rewatch_buffer_=std::move(watch);}
     void SetCpuPageRelease(std::function<bool(VAddr,u64)> release){release_cpu_pages_=std::move(release);}
     void SetBufferWatchTransfer(std::function<bool(VAddr,u64,bool)> transfer){transfer_buffer_watch_=std::move(transfer);}
+    void SetProtectedBackingEpoch(std::function<u64(VAddr,u64)> epoch){protected_backing_epoch_=std::move(epoch);}
     void EnableBufferStreaming(bool enabled){stream_buffers_enabled_=enabled;}
     void EnableBufferArenas(bool enabled){buffer_arenas_enabled_=enabled;}
     struct BufferWrite {VAddr address;u64 size;};

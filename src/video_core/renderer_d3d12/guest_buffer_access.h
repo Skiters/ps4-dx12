@@ -58,6 +58,9 @@ protected:
             std::lock_guard lock(execution_mutex_);
             ResolveCpuFault(address,writing);
         });
+        SetProtectedBackingEpoch([this](VAddr address,u64 size){
+            return has_backing_(address,size)?page_watch_->ProtectedBackingEpoch(address,size):0;
+        });
         SetBufferOwnership([this](VAddr address,u64 size){
             if(address%4096||size%4096){Diagnostics::Count("buffer-own.unaligned");return false;}
             if(!has_backing_(address,size)){Diagnostics::Count("buffer-own.no-backing");return false;}
@@ -66,7 +69,10 @@ protected:
             Diagnostics::Count(tracked?"buffer-own.accepted":"buffer-own.track-conflict");
             Diagnostics::Count(tracked?"buffer-own.accepted-bytes":"buffer-own.rejected-bytes",size);
             return tracked;
-        },std::move(write),[this](VAddr address,u64 size){ReleaseBufferPageWatch(address,size);});
+        },[this,write=std::move(write)](VAddr address,std::span<const std::byte> bytes){
+            page_watch_->InvalidateBackingEpoch(address,bytes.size());
+            return write(address,bytes);
+        },[this](VAddr address,u64 size){ReleaseBufferPageWatch(address,size);});
         SetBufferWriteWatch([this](VAddr address,u64 size){
             if(address%4096||size%4096||!has_backing_(address,size))return false;
             return page_watch_->TrackReadOnly(address,size);

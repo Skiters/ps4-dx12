@@ -27,6 +27,7 @@ public:
     using GuestBufferAccess::SetBufferBackingAccess;
     bool TrackReadOnly(VAddr address,u64 bytes){return page_watch_->TrackReadOnly(address,bytes);}
     bool TrackOpaque(VAddr address,u64 bytes){return page_watch_->Track(address,bytes);}
+    void PhysicalBackingChanged(VAddr address,u64 bytes){page_watch_->InvalidateBackingEpoch(address,bytes);}
     void Opaque(bool value,std::function<bool(VAddr,std::span<std::byte>)> physical={}){
         opaque_=value;physical_=std::move(physical);
     }
@@ -56,12 +57,14 @@ static void ProtectedDmaBacking(ID3D12Device* device,std::byte* guest,std::byte*
     const auto views=renderer.PrepareShaderBuffers(ranges);
     renderer.FillPreparedShaderBuffer(base,bytes,0x6b6b6b6b,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     renderer.ReleaseCpuBufferWatches(base,bytes);
+    u64 physical_reads{};
     renderer.Opaque(true,[&](VAddr a,std::span<std::byte> out){
         if(a<base||a-base>bytes||out.size()>bytes-(a-base))return false;
+        ++physical_reads;
         memcpy(out.data(),physical+a-base,out.size());return true;});
     Require(renderer.TrackOpaque(base,bytes),"opaque image guard setup");
-    const auto probe=[&](bool cpu_store){
-        renderer.SynchronizePreparedDmaBuffers(ranges,views);
+    const auto probe=[&](bool cpu_store,bool synchronize=true){
+        if(synchronize)renderer.SynchronizePreparedDmaBuffers(ranges,views);
         MEMORY_BASIC_INFORMATION state{};VirtualQuery(guest,&state,sizeof(state));
         Require(state.Protect==PAGE_NOACCESS,"DMA CPU synchronization resolved an opaque I guard");
         auto snapshot=renderer.CapturePreparedShaderBuffer(base,bytes);
@@ -74,7 +77,26 @@ static void ProtectedDmaBacking(ID3D12Device* device,std::byte* guest,std::byte*
         else for(u64 i=0;i<bytes;++i)Require(static_cast<std::byte*>(data)[i]==std::byte{0x6b},
             "DMA replaced GPU-only B with an unchanged physical CPU snapshot");
     };
-    probe(false);physical[17]=std::byte{0x88};renderer.NotifyCpuWrite(base+17,1);probe(true);
+    probe(false);const auto established=physical_reads;Require(established,"Missing initial physical comparison");
+    probe(false);(void)renderer.PrepareShaderBuffers(ranges);probe(false);
+    Require(physical_reads==established,"Warm protected B repeated full physical reads beside opaque I");
+    renderer.ReleaseCpuBufferWatches(base,bytes);probe(false);
+    Require(physical_reads==established,"Non-owning B proof retired or rescanned the opaque image guard");
+    physical[17]=std::byte{0x88};renderer.PhysicalBackingChanged(base+17,1);probe(true);
+    Require(physical_reads>established,"Physical image publication retained a stale B epoch");
+    renderer.FillPreparedShaderBuffer(base,bytes,0x6b6b6b6b,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.NotifyCpuWrite(base+17,1);probe(true); // Same-value store still restores the CPU page.
+    const auto before_rearm=physical_reads;
+    renderer.Untrack(base,bytes);physical[23]=std::byte{0x39};
+    Require(renderer.TrackOpaque(base,bytes),"opaque guard rearm");probe(true);
+    Require(physical_reads>before_rearm,"Retired/rearmed image guard reused an obsolete physical proof");
+    bool published=false;
+    renderer.BeforeWatch([&](VAddr,u64){if(!published){published=true;
+        physical[29]=std::byte{0xc7};renderer.PhysicalBackingChanged(base+29,1);
+    }});
+    (void)renderer.PrepareShaderBuffers(ranges);probe(true,false);
+    Require(published,"Missing reentrant physical publication during guard acquisition");
+    puts("PASS: opaque-I physical B epoch, warm direct/DMA zero rereads, independent GPU contents, host publication, same-value store and guard rearm");
     renderer.ValidateDebugMessages();
 }
 void Run(ID3D12Device* device,bool f2){
@@ -457,5 +479,13 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
+    if(argc>1&&std::string_view(argv[1])=="physical-proof"){
+        HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,65536,nullptr);
+        Require(section,"Physical proof section");SCOPE_EXIT {CloseHandle(section);};
+        auto* guest=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
+        auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,65536));
+        Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
+        memset(physical,0x4d,65536);ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
+    }
     Run(device.Get(),argc>1&&std::string_view(argv[1])=="f2");puts("PASS: production guest buffer access");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

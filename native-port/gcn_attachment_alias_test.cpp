@@ -93,7 +93,8 @@ int main(int argc,char** argv){try{
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
     EmulatorSettings.SetPipelineCacheEnabled(false);EmulatorSettings.SetShaderCollect(false);EmulatorSettings.SetDumpShaders(false);
     if(linear_download)EmulatorSettings.SetReadbackLinearImagesEnabled(false);
-    if(linear_attachment)EmulatorSettings.SetReadbackLinearImagesEnabled(true);
+    if(linear_attachment){EmulatorSettings.SetReadbackLinearImagesEnabled(true);
+        _putenv_s("SHADPS4_NATIVE_DIAGNOSTICS","1");} // This mode verifies queued-download counters.
     _putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
     auto device=HardwareDevice(cached_depth_cmask_packed==19?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
@@ -465,13 +466,20 @@ int main(int argc,char** argv){try{
                 memcpy(memory+16384+GuestPixelOffset(desc,layout,mip,layer,x,y)+component,&initial_bits,
                     std::min(layout.bytes_per_pixel-component,4u));
             std::vector<std::byte> expected(backing,backing+65536);
+            unsigned color_check{};
             const auto check_color=[&](u8 red){
+                ++color_check;
                 const u32 rgba=u32(red)|0xff000000;
                 for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
                     memcpy(expected.data()+61440+GuestPixelOffset(color,cl,0,0,x,y),&rgba,4);
                 rasterizer.Finish();
-                if(memcmp(backing,expected.data(),65536))
+                if(memcmp(backing,expected.data(),65536)){
+                    size_t byte{};while(byte<65536&&backing[byte]==expected[byte])++byte;
+                    fprintf(stderr,"Independent GCN mismatch data=%u number=%u layers=%u mip=%u writer=%llu initial=%g check=%u red=%u byte=%zu actual=%02x expected=%02x\n",
+                        data_format,number_format,layers,selected_mip,(unsigned long long)writer_extent,double(initial),color_check,
+                        unsigned(red),byte,unsigned(backing[byte]),unsigned(expected[byte]));
                     throw std::runtime_error("Independent GCN buffer/image versions, CPU visibility or full-allocation padding mismatch");
+                }
             };
             const auto read_buffer=[&](u32 value,bool image_contents=false){
                 if(*reinterpret_cast<volatile u32*>(memory+16384+store_offset)!=value)
