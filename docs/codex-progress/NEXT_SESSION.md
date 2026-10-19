@@ -1,8 +1,10 @@
 # Next session
 
-## Latest continuation — 2026-10-19, f4f6729
+## Latest continuation — 2026-10-19, source 61c88ea
 
-Authoritative current binary: sole application `dx12-current`, source f4f6729e7c3ee2b71deda3d1862613ae8b2833b0, EXE SHA256 298d89b0ad557d34aedf2f4dfa2bd417b5aa79a46d763d50f9f95e548be5ecff. Separate clean Release built; all 19 installed runtime hashes verified. Reentrant Flush callbacks, writable page envelopes, color array attachment subviews and converted-clear pressure retirement have focused GPU/readback acceptance. Title/menu/Continue input observed on exact binary; world loading still fails at guest_stage_bindings.cpp146: ordered formatted readers require exact-base image contract. No world, movement or world FPS acceptance. Next work is this shifted formatted-reader domain, using pinned original texel-buffer synchronization; retain B/I contents, range offsets, ordering and lifetime. See SESSION_HANDOFF.md for exact evidence. Older sections below are historical checkpoints.
+Main source 61c88eaf9fd238d4fbd876bd21570163758af97c is pushed. Original formatted address-bucket lookup, page-aligned partial proof retirement, R32 native copy family, and rearmed dirty-page invalidation have focused GPU/readback acceptance; related PageWatch and DMA pass. Clean Release built. Continue still fails before world: CPU CMASK clear writes guest 0x2688f8000 while its tracked readonly generation remains unchanged after coherence callback. The dirty-page fix is a proven defect but did not resolve this game AV. Next: bounded post-callback owner report in GuestRasterizer::ResolveCpuFault, outside PageWatch mutex, then fix the actual retained owner with a focused regression. Do not bypass protection or infer heap corruption from the nearest symbol.
+
+Sole installed dx12-current preserves exact unresolved crash source 799644a837a27cbde2043ba80f3539f90d419c6f, EXE 27c8504692e8a7d1f19786b14509d8980912750bba672ad383731052c79ca3b2 and matching PDB; all 19 runtime hashes verified. Clean tree holds experimental 61c88ea, main build holds diagnostic 8d5ce68. No binary archives. Own game/debugger/XInput processes ended. No world, movement or world FPS acceptance. SESSION_HANDOFF.md is authoritative for exact identities/reports and continuation. Older sections below are historical checkpoints.
 
 ## Current continuation boundary - remaining BC block domains
 
