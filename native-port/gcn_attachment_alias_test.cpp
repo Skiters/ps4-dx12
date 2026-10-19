@@ -56,7 +56,9 @@ int main(int argc,char** argv){try{
     const bool rg16_snorm_constants=std::string_view(argv[3])=="rg16-snorm-mixed-constants-owned";
     const bool rg16_normalized_constants=rg16_snorm_constants||std::string_view(argv[3])=="rg16-unorm-mixed-constants-owned";
     const bool half_mixed_constants=half_edges||std::string_view(argv[3])=="half-mixed-constants-owned";
-    const bool float_mixed_constants=half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
+    const u32 wide_float_format=std::string_view(argv[3])=="rg32-mixed-constants-owned"?11:
+        std::string_view(argv[3])=="rgba32-mixed-constants-owned"?14:0;
+    const bool float_mixed_constants=wide_float_format||half_mixed_constants||std::string_view(argv[3])=="float-mixed-constants-owned";
     const bool mixed_constant_blend=unorm10_mixed_constants||rg16_normalized_constants||snorm_mixed_constants||float_mixed_constants||std::string_view(argv[3])=="unorm-mixed-constants-owned";
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
@@ -1039,7 +1041,7 @@ int main(int argc,char** argv){try{
         memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=u32((base+4096)>>8);cb.info.format=(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
+            cb.base_address=u32((base+4096)>>8);cb.info.format=wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
             cb.info.number_type=float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
@@ -1082,10 +1084,11 @@ int main(int argc,char** argv){try{
             {0x387fc000,0x03ff},{0x387fe000,0x0400},{0x38800000,0x0400},
             {0x3f801000,0x3c00},{0x3f803000,0x3c02},{0x477fe000,0x7bff},
             {0x477ff000,0x7c00},{0xc77ff000,0xfc00},{0x7f800000,0x7c00},{0xff800000,0xfc00}};
-        const unsigned iterations=half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
+        const unsigned iterations=wide_float_format?2:half_edges?std::size(half_boundaries):half_mixed_constants?7:float_mixed_constants?6:independent_unorm_logic?unsigned(logic_operations.size()*2):2;
         for(unsigned warm=0;warm<iterations;++warm){
+            if(wide_float_format)regs.color_target_mask.raw=warm?0xfa1:0xfff;
             if(snorm_mixed_constants||rg16_normalized_constants||unorm10_mixed_constants)regs.color_target_mask.raw=warm?0xfa1:0xfff;
-            if(float_mixed_constants){
+            if(float_mixed_constants&&!wide_float_format){
                 regs.color_target_mask.raw=half_edges||warm==2?0x001:warm==3?0x011:0xfff;
                 regs.num_indices=!half_edges&&warm>=4?6:3;
                 input.num_records=regs.num_indices;
@@ -1117,6 +1120,21 @@ int main(int argc,char** argv){try{
             for(size_t i=0;i<descriptions.size();++i)for(uint32_t sample=0;sample<descriptions[i].samples;++sample)
             for(uint32_t y=0;y<height;++y)for(uint32_t x=0;x<width;++x){
                 const auto offset=GuestPixelOffset(descriptions[i],layout,0,order[i],x,y,sample);
+                if(wide_float_format){
+                    const u32 components=wide_float_format==11?2:4;
+                    u32 initial[]{0x3f000000,0x3e800000,0x3f400000,0x3f000000};
+                    if(warm&&i==0)initial[1]=0x7fc12345; // Masked NaN payload.
+                    if(warm&&i==1)initial[0]=0x80000000; // Masked negative zero.
+                    const float after[3][4]{{.5f,.125f,.375f,1.f},
+                        {.375f,.625f,.1875f,1.f},{.25f,.125f,.875f,1.f}};
+                    for(u32 component=0;component<components;++component){
+                        memcpy(memory+4096+offset+component*4,&initial[component],4);
+                        const u32 result=(regs.color_target_mask.GetMask(i)&(1u<<component))?
+                            std::bit_cast<u32>(after[i][component]):initial[component];
+                        memcpy(expected.data()+4096+offset+component*4,&result,4);
+                    }
+                    continue;
+                }
                 u32 word=values[i];
                 if(signed_logic)word^=0xeeeeeeee;
                 if(independent_unorm_logic){const u32 target_mask=(regs.color_target_mask.raw>>(i*4))&15;

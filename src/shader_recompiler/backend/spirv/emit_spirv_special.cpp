@@ -255,27 +255,34 @@ Id OrderedHalfCode(EmitContext& ctx, Id value) {
 
 template <typename Target>
 void EmitOrderedColorSample(EmitContext& ctx, const Target& target, Id image_variable,
-                            Id coordinates, Id constants, Id source) {
-    const Id image = ctx.OpLoad(ctx.ordered_color_image_type, image_variable);
+                            Id image_type, Id coordinates, Id constants, Id source) {
+    const Id image = ctx.OpLoad(image_type, image_variable);
     const Id old_texel = ctx.OpImageRead(ctx.U32[4], image, coordinates);
     const Id old_word = ctx.OpCompositeExtract(ctx.U32[1], old_texel, 0);
     const bool logic = target.logic_op != AmdGpu::ColorControl::LogicOp::Copy;
     const bool rgba8 = target.data_format == AmdGpu::DataFormat::Format8_8_8_8;
     const bool unorm = target.number_format == AmdGpu::NumberFormat::Unorm;
-    const bool r32_float = target.data_format == AmdGpu::DataFormat::Format32 &&
-                           target.number_format == AmdGpu::NumberFormat::Float;
+    const u32 float_components=target.data_format==AmdGpu::DataFormat::Format32?1:
+        target.data_format==AmdGpu::DataFormat::Format32_32?2:
+        target.data_format==AmdGpu::DataFormat::Format32_32_32_32?4:0;
+    const bool r32_float = float_components&&target.number_format == AmdGpu::NumberFormat::Float;
     if (r32_float) {
         // The ordinary R32 typeless family exposes the same bits through a
         // rasterizer-ordered UINT view. Blend in floating point, without the
         // normalized encoders used by the packed targets below. Missing RGB/A
         // channels retain the format-defined (0,0,1) destination values.
-        const Id destination = ctx.OpCompositeConstruct(ctx.F32[4],
-            ctx.OpBitcast(ctx.F32[1], old_word), ctx.f32_zero_value,
-            ctx.f32_zero_value, ctx.ConstF32(1.f));
-        const Id result = (target.write_mask & 1u) ? ctx.OpBitcast(ctx.U32[1],
-            OrderedBlendChannel(ctx, target, source, destination, constants, 0)) : old_word;
-        ctx.OpImageWrite(image, coordinates, ctx.OpCompositeConstruct(ctx.U32[4],
-            result, ctx.u32_zero_value, ctx.u32_zero_value, ctx.u32_zero_value));
+        std::array<Id,4> before{},channels{},after{};
+        for(u32 component=0;component<4;++component){
+            before[component]=ctx.OpCompositeExtract(ctx.U32[1],old_texel,component);
+            channels[component]=component<float_components?ctx.OpBitcast(ctx.F32[1],before[component]):
+                component==3?ctx.ConstF32(1.f):ctx.f32_zero_value;
+        }
+        const Id destination=ctx.OpCompositeConstruct(ctx.F32[4],channels);
+        for(u32 component=0;component<4;++component)
+            after[component]=component>=float_components?ctx.u32_zero_value:
+                (target.write_mask&(1u<<component))?ctx.OpBitcast(ctx.U32[1],
+                    OrderedBlendChannel(ctx,target,source,destination,constants,component)):before[component];
+        ctx.OpImageWrite(image,coordinates,ctx.OpCompositeConstruct(ctx.U32[4],after));
         return;
     }
     const bool rg16_float = target.data_format == AmdGpu::DataFormat::Format16_16 &&
@@ -381,7 +388,7 @@ void EmitOrderedColor(EmitContext& ctx) {
         const Id source = ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[index].id);
         if (target.num_samples == 1) {
             EmitOrderedColorSample(ctx, target, ctx.ordered_color_images[index][0],
-                                   coordinates, constants, source);
+                                   ctx.ordered_color_image_types[index], coordinates, constants, source);
             continue;
         }
         if (!Sirit::ValidId(invocation_sample))
@@ -394,7 +401,7 @@ void EmitOrderedColor(EmitContext& ctx) {
             ctx.OpBranchConditional(selected, active, merge);
             ctx.AddLabel(active);
             EmitOrderedColorSample(ctx, target, ctx.ordered_color_images[index][sample],
-                                   coordinates, constants, source);
+                                   ctx.ordered_color_image_types[index], coordinates, constants, source);
             ctx.OpBranch(merge);
             ctx.AddLabel(merge);
         }

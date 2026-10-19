@@ -279,7 +279,7 @@ public:
     Id sample_mask_in{};
     Id helper_invocation{};
     Id sample_index{};
-    Id ordered_color_image_type{};
+    std::array<Id, MaxColorBuffers> ordered_color_image_types{};
     std::array<std::array<Id, NativeOrderedColor::MaxSamples>, MaxColorBuffers>
         ordered_color_images{};
     Id clip_distances{};

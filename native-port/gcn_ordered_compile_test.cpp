@@ -64,7 +64,7 @@ int main(int argc,char** argv){try{
     input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
     unsigned cases{};
     std::set<u64> fragment_variants;
-    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1}})
+    for(const auto shape:{std::array<u32,2>{10,0},{10,1},{5,0},{5,1},{4,7},{5,7},{9,0},{9,1},{11,7},{14,7},{0,7}})
     for(u32 sample_log:{0u,1u,2u,3u})for(u32 mask:{0xfffu,0xfa1u})for(u32 operation:{0u,1u,2u}){
         if(operation&&(shape[1]==7||mask==0xfff))continue;
         AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
@@ -82,7 +82,8 @@ int main(int argc,char** argv){try{
         regs.blend_constants={.25f,.5f,.75f,.5f};
         using F=AmdGpu::BlendControl::BlendFactor;
         for(u32 i=0;i<3;++i){auto& cb=regs.color_buffers[i];
-            cb.base_address=(0x100000u+i*4096)>>8;cb.info.format=shape[0];cb.info.number_type=shape[1];
+            const u32 mixed_formats[]{4,11,14};
+            cb.base_address=(0x100000u+i*4096)>>8;cb.info.format=shape[0]?shape[0]:mixed_formats[i];cb.info.number_type=shape[1];
             cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=sample_log;cb.pitch.tile_max=cb.slice.tile_max=1;
             auto& blend=regs.blend_control[i];blend.enable=1;blend.separate_alpha_blend=1;
@@ -101,7 +102,8 @@ int main(int argc,char** argv){try{
         if(!fragment||!fragment_variants.insert(fragment->id).second)
             throw std::runtime_error("Ordered shader reused a different format/sample/mask/logic specialization");
         for(u32 i=0;i<3;++i){const auto& target=fragment->runtime.hw.fs.ordered_color_targets[i];
-            if(!target.enabled||u32(target.data_format)!=shape[0]||u32(target.number_format)!=shape[1]||
+            const u32 mixed_formats[]{4,11,14};
+            if(!target.enabled||u32(target.data_format)!=(shape[0]?shape[0]:mixed_formats[i])||u32(target.number_format)!=shape[1]||
                target.num_samples!=(1u<<sample_log)||target.logic_op!=regs.color_control.rop3)
                 throw std::runtime_error("Ordered shader runtime does not match the requested specialization");
         }

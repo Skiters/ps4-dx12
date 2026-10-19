@@ -930,12 +930,15 @@ void EmitContext::DefineOrderedColorImages() {
     const bool any = std::ranges::any_of(runtime_info.hw.fs.ordered_color_targets,
         [](const auto& target) { return target.enabled; });
     if (!any) return;
-    ordered_color_image_type = TypeImage(U32[1], spv::Dim::Dim2D, false, true, false, 2,
-                                         spv::ImageFormat::R32ui);
-    const Id pointer = TypePointer(spv::StorageClass::UniformConstant, ordered_color_image_type);
     for (u32 target = 0; target < ordered_color_images.size(); ++target) {
         const auto samples = runtime_info.hw.fs.ordered_color_targets[target].num_samples;
         if (!runtime_info.hw.fs.ordered_color_targets[target].enabled) continue;
+        const auto format=runtime_info.hw.fs.ordered_color_targets[target].data_format;
+        const auto image_format=format==AmdGpu::DataFormat::Format32_32?spv::ImageFormat::Rg32ui:
+            format==AmdGpu::DataFormat::Format32_32_32_32?spv::ImageFormat::Rgba32ui:spv::ImageFormat::R32ui;
+        const Id type=TypeImage(U32[1],spv::Dim::Dim2D,false,true,false,2,image_format);
+        ordered_color_image_types[target]=type;
+        const Id pointer=TypePointer(spv::StorageClass::UniformConstant,type);
         if (!std::has_single_bit(samples) || samples > NativeOrderedColor::MaxSamples)
             throw std::runtime_error("Invalid ordered color sample count");
         for (u32 sample = 0; sample < samples; ++sample) {
