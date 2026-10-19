@@ -464,7 +464,7 @@ void GuestRasterizer::ResolveMemory(VAddr address,u64 size){
     ValidateIndependentImageWatches();
     for(auto& image:textures_.Entries())if(image->gpu_owned&&!image->buffer_alias_version&&ImageOverlap(address,size,*image))ResolveImage(*image);
 }
-void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu_write){
+void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu_write, std::source_location origin){
     std::lock_guard lock(execution_mutex_);std::vector<GuestTextureCache::Entry*> versions;
     if(!size)return;
     for(auto& image:textures_.Entries())if(ImageOverlap(address,size,*image)&&
@@ -472,7 +472,7 @@ void GuestRasterizer::DiscardBufferImageVersions(VAddr address,u64 size,bool gpu
         // Pinned CPU/GPU dirty invalidation retains GpuModified even after the
         // old version has lost ownership. A later readonly refresh can validate
         // that same logical image again; pressure retirement alone cannot.
-        image->MarkLogicalDirty();
+        image->MarkLogicalDirty(origin);
         image->linear_download_pending=false;
         if(image->gpu_owned&&image->buffer_alias_version)versions.push_back(image.get());
     }

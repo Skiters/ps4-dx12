@@ -38,7 +38,7 @@ class GuestRasterizer : public GuestBufferAccess {
     void ResolveImage(GuestTextureCache::Entry&);
     void ResolveMemory(VAddr,u64);
     void ReleaseImmutableWatch(VAddr,u64);
-    void DiscardBufferImageVersions(VAddr,u64,bool gpu_write);
+    void DiscardBufferImageVersions(VAddr,u64,bool gpu_write, std::source_location origin=std::source_location::current());
     void WatchBufferImageVersions(VAddr,u64);
     void ResolveCpuFault(VAddr,bool) override;
     void ReleaseBufferPageWatch(VAddr,u64) override;
