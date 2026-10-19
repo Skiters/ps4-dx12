@@ -1,5 +1,10 @@
 # Next session
 
+## Current continuation boundary - RGBA8 independent MRT logic
+
+Production **48c9795b6901e94087b1b795ccfeb43bb08e6563** is pushed, clean-built and narrowly GPU verified: 68 actual GCN draws cover all 17 logic operations, three independent masks, disjoint array layers and full backing/padding. `OrderedColorUav` now preserves the actual attachment view. The one installed `dx12-current` matches that commit and EXE hash `47a3eb7b55311362e42302e075296271b5398647cb018c3529a04654733af3dd`; game/full suite remain not run. Continue packed-SNORM MSAA per-sample ordered blend/logic through the existing storage-plane path. Preserve exact sample bits, masks, ordering, ownership and lifetime. Do not repeat the completed ROV, single-sample SNORM or RGBA8 audits.
+
+
 ## Current continuation boundary - independent SNORM MRT logic
 
 Production **bcc852b** completed independent write masks for single-sample packed-SNORM logic operations and passed the 44-case real GCN/GPU fixture plus shared SINT/MSAA and graphics-resource regressions. Clean source **88c9326** repeated the exact 44-case fixture and is installed as the sole identity-validated `dx12-current` core. Continue a recorded open mechanism. Packed-SNORM MSAA lacks per-sample UAV access; ordinary/non-castable independent MRT logic still rejects. Do not repeat this audit without new evidence.

@@ -1,5 +1,10 @@
 # Vulkan / native D3D12 parity audit
 
+## 2026-10-19 - RGBA8 independent MRT logic
+
+Connected and focused-verified at **48c9795b6901e94087b1b795ccfeb43bb08e6563**. Single-sample `RGBA8_UNORM` now uses the ordered raw-word path when active MRTs require independent logic write masks. All 17 represented operations, masks `0x1/0xA/0xF`, both disjoint layer orders and the complete 64 KiB allocation passed in 68 real GCN/D3D12 draws. Ordered UAV creation now uses the actual attachment view rather than the merged cache-entry layer range. Existing packed-SNORM, shared SINT/MSAA and graphics-resource checks pass. Implementation state: connected. Behavior state: focused GPU verified; game/final suite not run. Remaining concrete ordered-color gaps are packed-SNORM MSAA per-sample access and other non-castable independent logic formats.
+
+
 ## 2026-10-19 - independent packed-SNORM MRT logic
 
 Connected and focused-verified at bcc852b: actual fragment MRT specialization, all 17 represented raw-word logic operations, and three independent packed-SNORM write masks through ordered R32_UINT UAVs. The production GCN/GPU fixture passed 44 cases with complete 64 KiB comparisons; shared SINT logic/MSAA also passed. Behavior state: narrow mechanism verified; game/final suite not run. Remaining concrete gaps: packed-SNORM MSAA per-sample access and ordinary/non-castable independent MRT logic masks.

@@ -1,5 +1,10 @@
 # Native DX12 state
 
+## RGBA8 independent MRT logic - 2026-10-19
+
+Production **48c9795b6901e94087b1b795ccfeb43bb08e6563** connects single-sample `RGBA8_UNORM` independent MRT logic through ordered `R32_UINT` read/modify/write. All 17 operations and masks `0x1/0xA/0xF` passed 68 actual GCN draws with disjoint array layers and full 64 KiB comparison. The fix also makes ordered UAV descriptors use each actual attachment layer view. Packed-SNORM, shared signed logic and graphics-resource regressions pass. Clean Release reproduced the focused GPU result. The sole installed `dx12-current` has EXE **47a3eb7b55311362e42302e075296271b5398647cb018c3529a04654733af3dd** and PDB **340c1ab9d8d316277023c42283e3c170a901842b8e6883f4bfba0fc95d9820fc**. Game/final-suite behavior is not verified for it. Next production gap: packed-SNORM MSAA per-sample ordered blend/logic; other non-castable independent logic formats remain explicit.
+
+
 ## Independent packed-SNORM MRT logic - 2026-10-19
 
 Commit **bcc852b** is connected and narrowly verified. Packed 10:10:10:2 SNORM now executes all represented logic operations through ordered raw-word read/modify/write when active MRTs require different scattered write masks. The real GCN/GPU fixture passed 44 cases over three MRTs and complete 64 KiB readback; shared SINT logic/MSAA and graphics-resource regressions also passed. Ordinary/non-castable independent logic masks and packed-SNORM MSAA remain concrete gaps. Clean source **88c9326** is installed as the sole validated `dx12-current` core: EXE **47ea2051e7550be9213390c87f6577cc1ad14c6a77a7fc0b93ecb8a098155d46**, PDB **d001421e7987d2abab3d31108a23109a1ccf777813a979a66dded0c3d94daa2f**; game/final suite not run.

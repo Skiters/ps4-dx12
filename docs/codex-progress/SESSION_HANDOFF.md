@@ -1,5 +1,20 @@
 # SESSION HANDOFF — active full-port checkpoint, 2026-10-17
 
+## Current RGBA8 independent MRT logic checkpoint - 2026-10-19
+
+Production commit **48c9795b6901e94087b1b795ccfeb43bb08e6563** extends the ordered raw-word color path to single-sample `RGBA8_UNORM`. All represented logic operations preserve the guest source conversion, destination bits and each MRT's independently scattered write mask. `OrderedColorUav` now takes the actual attachment view, so simultaneous views of disjoint array layers no longer collapse onto the cache entry's merged layer range. Stage persistence is version 30.
+
+Focused behavior verification passed. The production GCN/D3D12 fixture executed **68 draws** covering all 17 logic operations, masks `0x1`, `0xA`, `0xF`, both target-to-layer orders and complete 64 KiB contents/padding. The existing 44-case packed-SNORM fixture, shared signed logic/MSAA fixture and `native_guest_graphics_resources` also passed. A clean detached checkout built Release in 21.065 s and repeated the exact 68-draw fixture in 4.635 s. This proves the mechanism only; Bloodborne and the final suite were not run for this identity.
+
+The sole application core is `C:/Users/skei/AppData/Local/PS4Desktop/cores/dx12-current`, source **48c9795b6901e94087b1b795ccfeb43bb08e6563**, EXE SHA256 **47a3eb7b55311362e42302e075296271b5398647cb018c3529a04654733af3dd**, PDB SHA256 **340c1ab9d8d316277023c42283e3c170a901842b8e6883f4bfba0fc95d9820fc**, preserved profile `external-7e8fca7a1bd828c19629fdd9`. The catalogue contains exactly one core and the manifest hash matches the installed executable. No game/core process was running during replacement; the existing PS4Desktop process was left running.
+
+Next concrete production gap is per-sample packed-SNORM MSAA ordered blend/logic. The current texture UAV path is single-sample; adapt the existing per-sample storage-plane mechanism through `GuestTextureCache::StorageUav`, ordered shader bindings and `EmitOrderedColor`, preserving exact sample contents, target masks, visibility, ownership and lifetime. Other non-castable independent logic formats remain explicit gaps. Reuse the completed ROV/logic evidence and do not repeat the broad audit.
+
+### NEXT CODEX SESSION — START HERE
+
+Continue `fix/mixed-cmask` from current HEAD after reading this first section. Verify upstream and the single installed `dx12-current` identity. Resume packed 10:10:10:2 SNORM MSAA ordered blend/logic by connecting per-sample storage planes to the ordered shader path; preserve raw sample bits, masks, ordering, ownership and fences. Run only focused GPU/readback regressions, reproduce committed Release from the clean checkout, atomically replace the one current core, update the independent implementation/behavior records and push normally. Keep non-castable logic formats and the remaining registry gaps explicit; defer the full suite and game/XInput/FPS acceptance until the integration boundary.
+
+
 ## Current independent packed-SNORM MRT logic checkpoint - 2026-10-19
 
 Production commit **bcc852b** executes packed 10:10:10:2 SNORM logic operations with independent MRT write masks through the ordered `R32_UINT` UAV path. Shader specialization now uses the fragment program's actual MRT mask, carries the guest logic operation per target, applies all 17 represented logic operations to the raw packed source/destination word, and merges each target's scattered channel mask without replaying the guest draw. Pipeline persistence is version 29. Ordinary/non-castable targets with incompatible masks still reject explicitly; packed-SNORM MSAA remains an explicit gap because the current UAV path has no per-sample access.
