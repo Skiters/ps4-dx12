@@ -2067,10 +2067,17 @@ u64 Rasterizer::Flush(){
     std::lock_guard lock(execution_mutex_);
     if(recorded_marker_scopes_){auto* list=scheduler_.Begin();
         while(recorded_marker_scopes_){GpuMarkers::End(list);--recorded_marker_scopes_;}}
-    const auto submitted=scheduler_.Submit(deferred_retirements_,submission_callbacks_);
-    deferred_retirements_.clear();
-    submission_callbacks_.clear();
-    return submitted;
+    // Publication and completed-retirement callbacks can submit internal GPU
+    // transfers recursively. Detach this batch before invoking any of them:
+    // a nested Flush must not replay its outer leases/publications, nor may
+    // the outer Flush erase callbacks added for the next command list.
+    auto retirements=std::move(deferred_retirements_);
+    auto publications=std::move(submission_callbacks_);
+    deferred_retirements_={};submission_callbacks_={};
+    // Submit copies all leases before execution and latches any failure. If
+    // it throws, executed work retains its scheduler-owned copies; an uncopied
+    // batch was never executed and cannot be retried through the failure latch.
+    return scheduler_.Submit(retirements,publications);
 }
 void Rasterizer::CommitImageBacking(VAddr address,std::span<const std::byte> bytes,
     const std::function<bool(VAddr,std::span<std::byte>)>& read,

@@ -427,10 +427,32 @@ void Run(ID3D12Device* device,bool f2){
     }
     UnmapViewOfFile(physical);UnmapViewOfFile(guest);CloseHandle(section);
 }
+static void ReentrantSubmission(ID3D12Device* device){
+    Rasterizer renderer(device);
+    auto upload=Buffer(device,4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+    auto readback=Buffer(device,4,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+    void* data{};D3D12_RANGE empty{};Check(upload.handle->Map(0,&empty,&data));
+    const u32 expected=0x7193a5c7;memcpy(data,&expected,4);upload.handle->Unmap(0,nullptr);
+    renderer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,upload.handle.Get(),0,4);
+    unsigned publications{},retirements{};
+    renderer.RetainUntilFinish([&](u64){++retirements;});
+    renderer.NotifyOnSubmission([&](u64){
+        // A nested publication/retirement can submit internal transfer work.
+        // It must not publish or retain the outer batch a second time.
+        if(++publications==1)renderer.Flush();
+    });
+    renderer.Flush();renderer.Finish();
+    Require(publications==1&&retirements==1,"Reentrant Flush duplicated submission or retirement callbacks");
+    D3D12_RANGE range{0,4};Check(readback.handle->Map(0,&range,&data));u32 actual{};
+    memcpy(&actual,data,4);readback.handle->Unmap(0,&empty);
+    Require(actual==expected,"Reentrant submission lost GPU copy contents");
+    renderer.ValidateDebugMessages();
+}
 int main(int argc,char** argv){try{
     _putenv_s("SHADPS4_NATIVE_DIAGNOSTICS","1");
     auto& hub=Diagnostics::Hub::Get();hub.worker.request_stop();hub.wake.notify_all();hub.worker.join();
     ComPtr<ID3D12Debug> debug;Check(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));debug->EnableDebugLayer();
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
+    ReentrantSubmission(device.Get());
     Run(device.Get(),argc>1&&std::string_view(argv[1])=="f2");puts("PASS: production guest buffer access");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}
