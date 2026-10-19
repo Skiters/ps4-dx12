@@ -364,8 +364,14 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 result.images[i]=entry;
                 textures.PublishBufferResidency(*entry);
                 if(image.written){
-                    entry->buffer_alias_version=true;
-                    if(!textures.Own(*entry))throw std::runtime_error("Ordered stage writable I cannot keep independent ownership");
+                    // The writable image must acquire/demote its actual page
+                    // guard before publishing the independent I/B class.  A
+                    // pre-set buffer_alias_version makes OwnImage take its
+                    // warm fast path and can leave the old exclusive I guard
+                    // behind; later image retirement then cannot untrack the
+                    // supposedly read-only tail.
+                    if(!textures.OwnIndependentShaderImage(*entry))
+                        throw std::runtime_error("Ordered stage writable I cannot keep independent ownership");
                 }else if(textures.CanRevalidateReadonly(*entry)&&!textures.RevalidateReadonly(*entry))
                     throw std::runtime_error("Ordered stage refreshed readonly I cannot retain its logical history");
             }

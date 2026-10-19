@@ -1109,7 +1109,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                     b.space==30?256:UINT((runtime.size()+255)&~size_t(255)));
         }
     });
-    std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers,independent_stream_writers;
+    std::vector<GuestTextureCache::Entry*> uploaded,uploaded_writers,independent_image_writers;
     const auto staged_image=[&](const GuestTextureCache::Entry* entry){return stage_bindings&&
         std::ranges::find(stage_bindings->images,entry)!=stage_bindings->images.end();};
     const auto needs_readback=[&](const GuestTextureCache::Entry* entry){return !entry->gpu_owned&&!staged_image(entry);};
@@ -1222,9 +1222,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
             }
             if(!image.null_resource&&image.desc.writable&&!block_alias_view&&
                std::ranges::find(uploaded_writers,entry)==uploaded_writers.end())uploaded_writers.push_back(entry);
-            if(image.independent_cpu_stream&&!block_alias_view&&
-               std::ranges::find(independent_stream_writers,entry)==independent_stream_writers.end())
-                independent_stream_writers.push_back(entry);
+            if((image.independent_cpu_stream||
+                (!image.null_resource&&separate_input&&!image.ordered_entry))&&!block_alias_view&&
+               std::ranges::find(independent_image_writers,entry)==independent_image_writers.end())
+                independent_image_writers.push_back(entry);
             if(!image.null_resource){
                 if(image.buffer_source_residency){
                     const Rasterizer::ShaderBufferRequest resident{storage_desc(image).address,
@@ -1233,7 +1234,6 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 }
                 textures->PublishBufferResidency(*entry);
             }
-            if(!image.null_resource&&separate_input&&!block_alias_view&&!image.ordered_entry)entry->buffer_alias_version=true;
             const bool direct_bc_view=!image.null_resource&&!image.desc.writable&&image.layout.block_extent==4&&
                 textures->FindReadonlyBlockParent(image.desc,image.layout)==entry;
             if(!image.null_resource){
@@ -1294,7 +1294,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 bindings.Sampler(b.reg,0,sampler.desc,sampler.reg-b.reg);
         diagnostic.Stage("draw-or-dispatch-recording");
         bool owned_images=false;
-        if(retained_image_buffer_writer||std::ranges::any_of(uploaded,[](const auto* entry){return entry->buffer_alias_version;})){
+        if(retained_image_buffer_writer||!independent_image_writers.empty()||
+           std::ranges::any_of(uploaded,[](const auto* entry){return entry->buffer_alias_version;})){
             rasterizer.MarkShaderBufferWrites(requests);
             if(!rasterizer.BuffersMayDefer(requests))
                 throw std::runtime_error("Independent image version lost its writable buffer ownership before execution");
@@ -1307,7 +1308,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 textures->RevalidateReadonly(*entry);
         for(auto* entry:uploaded_writers){
             if(staged_image(entry))owned_images|=entry->gpu_owned;
-            else if(std::ranges::find(independent_stream_writers,entry)!=independent_stream_writers.end()){
+            else if(std::ranges::find(independent_image_writers,entry)!=independent_image_writers.end()){
                 if(!textures->OwnIndependentShaderImage(*entry))
                     throw std::runtime_error("Physical CPU stream/image writer could not retain independent ownership");
                 owned_images=true;

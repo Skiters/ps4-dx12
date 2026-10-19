@@ -7,6 +7,53 @@
 #include <string>
 
 namespace NativeDX12 {
+inline void RunOrderedWritableOwnershipAcquisition(ID3D12Device* device){
+    struct Allocation {
+        std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+        ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
+    } memory;
+    if(!memory.bytes)throw std::runtime_error("Ordered writable ownership allocation failed");
+    const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
+    const auto base=reinterpret_cast<VAddr>(memory.bytes);memset(memory.bytes,0x4d,65536);
+    Rasterizer rasterizer(device);GuestTextureCache textures(device);rasterizer.MapMemory(base,65536);
+    rasterizer.SetBufferOwnership([](VAddr,u64){return true;},
+        [](VAddr address,std::span<const std::byte> data){
+            memcpy(reinterpret_cast<void*>(address),data.data(),data.size());return true;},[](VAddr,u64){});
+    textures.SetBufferAliasRetention([](const auto&,const auto&){return true;});
+    textures.SetIndependentImageRetention([](const auto&,const auto&){return true;});
+    unsigned exclusive_acquires{},independent_acquires{};
+    textures.SetOwnershipAcquirer([&](auto& image){
+        ++exclusive_acquires;image.SetGpuOwned(true);return true;
+    });
+    textures.SetIndependentVersionTransfer({},[&](auto& image){
+        require(!image.buffer_alias_version,
+            "Ordered writable image published its independent class before acquiring page ownership");
+        ++independent_acquires;image.buffer_alias_version=image.buffer_alias_watch=true;
+        image.SetGpuOwned(true);return true;
+    },[](auto& image){image.buffer_alias_version=image.buffer_alias_watch=false;image.SetGpuOwned(false);});
+
+    AmdGpu::Image sharp{};sharp.base_address=base>>8;sharp.width=sharp.height=sharp.pitch=15;
+    sharp.type=u64(AmdGpu::ImageType::Color2D);sharp.data_format=4;sharp.num_format=4;
+    sharp.tiling_index=8;sharp.dst_sel_x=4;sharp.dst_sel_y=5;sharp.dst_sel_z=6;sharp.dst_sel_w=7;
+    auto desc=DescribeGuestTexture(sharp);desc.writable=true;const auto layout=LayoutGuestTexture(desc);
+    require(layout.guest_bytes<=65536,"Ordered writable ownership image exceeds fixture backing");
+    std::vector<Rasterizer::ShaderBufferRequest> requests{{base,layout.guest_bytes,true,true,true}};
+    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,layout.guest_bytes}};
+    const std::vector<OrderedGuestImage> images{{desc,layout,true,false}};
+    const std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1}};
+    auto prepared=PrepareOrderedGuestStages(device,rasterizer,textures,stages,requests,buffers,images,true,
+        [](VAddr,u64)->VAddr{throw std::runtime_error("Ordered writable ownership requested a CPU stream");});
+    require(prepared.images[0]&&prepared.images[0]->gpu_owned&&prepared.images[0]->buffer_alias_version,
+        "Ordered writable image did not publish independent ownership");
+    require(independent_acquires==1&&!exclusive_acquires,
+        "Ordered writable image bypassed independent ownership acquisition");
+    GuestImageReadback readback(device,*prepared.images[0],rasterizer.RecordingList());
+    const auto fence=rasterizer.Flush();textures.Submitted(fence);readback.Submitted(fence);rasterizer.Finish();
+    std::vector<std::byte> observed(size_t(layout.guest_bytes));readback.Resolve(rasterizer.CompletedFence(),observed);
+    require(std::ranges::all_of(observed,[](std::byte value){return value==std::byte{0x4d};}),
+        "Ordered writable independent acquisition changed GPU image contents");
+    rasterizer.ValidateDebugMessages();
+}
 inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
@@ -312,6 +359,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         require(!memcmp(scratch.bytes,original.data(),64));
         rasterizer.ValidateDebugMessages();
     }
+    RunOrderedWritableOwnershipAcquisition(device);
     RunOrderedConvertedPackedStages(device);
     RunOrderedBcWordStages(device);
     RunOrderedBcWordStages(device,true);
