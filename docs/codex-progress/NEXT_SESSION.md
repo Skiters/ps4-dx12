@@ -1,3 +1,7 @@
+## Automatic RectList validation preparation — 2026-10-20
+
+Source a2c0c71 shares normalized GS consumer list topology in GuestRasterizer and native fixtures. Real automatic RectList frontend stages now drive prepared rect-capture2/rect-capture3 runtime tests without manual HS/DS substitution. CPU signed-DXIL/state-count/boundary checks PASS; clean Release a2c0c71 PASS20.720s. GPU/game NOT_RUN; automatic Draw execution not validated, app unchanged. Exact hashes/logs and next attachment continuation/generic-capacity work: SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/automatic-rect-a2c0c71.json. Full port incomplete.
+
 ## Auxiliary capture guest integration checkpoint — 2026-10-20
 
 302aec1 connects fixed auxiliary-tessellation point capture to GuestRasterizer with checked patch/instance bounds, original producer reflection/index preparation, GPU indirect GS and one PS replay.835b047 preserves declared stream inputs for replacement shaders; ordinary writer uses post-DCE GS component liveness. CPU automatic RectList/sparse input/bound checks and compilation PASS; clean final Release835b047 PASS16.230s. GPU/game NOT_RUN; automatic draw execution not validated, app unchanged. One-output-arena address bounds, partitioned attachments and generic LsHsEsGs remain gaps. Exact evidence/next work in SESSION_HANDOFF.md and F:/PS4Dev/handoff/native-port-comparison-20261019/auxiliary-guest-capture-835b047.json.
