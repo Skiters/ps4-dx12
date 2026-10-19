@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "resources.h"
+#include "texture_resources.h"
 #include <span>
 #include <string>
 #include <functional>
@@ -64,6 +65,8 @@ class ResourceBindings {
     struct BufferView {ID3D12Resource* resource;UINT reg,space,index;D3D12_DESCRIPTOR_RANGE_TYPE type;
         uint64_t offset,bytes;SIZE_T descriptor;};
     std::vector<BufferView> capture_buffers_;
+    struct TextureView {Resource source;D3D12_SHADER_RESOURCE_VIEW_DESC view;UINT reg,space,index;SIZE_T descriptor;};
+    std::vector<TextureView> capture_textures_;
     void TrackCaptureBuffer(BufferView);
     bool sealed_{};
     bool recycled_{};
@@ -98,6 +101,9 @@ public:
     // ownership and restore source states. Retire with this table.
     std::vector<BufferCapture> CaptureBufferInputs(ID3D12GraphicsCommandList*,
         uint64_t per_buffer_bytes,uint64_t total_bytes,D3D12_RESOURCE_STATES raw_state);
+    struct TextureCapture {Resource source;D3D12_SHADER_RESOURCE_VIEW_DESC view;UINT reg,space,index;
+        TextureTransfer transfer;std::string omitted;};
+    std::vector<TextureCapture> CaptureTextureInputs(ID3D12GraphicsCommandList*,uint64_t total_bytes);
     bool References(ID3D12Resource* resource)const {
         for(const auto& held:keep_alive_)if(held.Get()==resource)return true;
         return false;
@@ -113,7 +119,7 @@ public:
             mip>=range.mip&&mip-range.mip<range.mips&&layer>=range.layer&&layer-range.layer<range.layers)return true;
         return false;
     }
-    void Srv(UINT reg,UINT space,ID3D12Resource*,const D3D12_SHADER_RESOURCE_VIEW_DESC&,UINT index=0);
+    void Srv(UINT reg,UINT space,ID3D12Resource*,const D3D12_SHADER_RESOURCE_VIEW_DESC&,UINT index=0,const Resource* capture_source=nullptr);
     void Uav(UINT reg,UINT space,ID3D12Resource*,const D3D12_UNORDERED_ACCESS_VIEW_DESC&,UINT index=0);
     // Tier 3 only: the shader must guard every descriptor index against the
     // populated prefix. Used by DMA's GPU-visible active-bank count contract.

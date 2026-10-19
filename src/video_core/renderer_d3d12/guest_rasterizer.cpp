@@ -1607,13 +1607,39 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 capture_bytes+=buffer.bytes;
                 bound_buffer_captures.push_back({std::move(name),metadata.str(),std::move(buffer)});
             }
+            std::unordered_set<ID3D12Resource*> actual_inputs;
+            auto texture_captures=bindings.CaptureTextureInputs(RecordingList(),256*1024*1024-capture_bytes);
+            for(auto& input:texture_captures){
+                const auto native=input.source.handle->GetDesc();actual_inputs.insert(input.source.handle.Get());
+                std::ostringstream metadata;
+                metadata<<"group="<<capture_id<<" role=input pass_ps="<<std::hex<<fragment->info.pgm_hash
+                    <<" resource="<<input.source.handle.Get()<<std::dec<<" srv_reg="<<input.reg
+                    <<" space="<<input.space<<" index="<<input.index<<" view_format="<<input.view.Format
+                    <<" view_dimension="<<input.view.ViewDimension<<" width="<<native.Width<<" height="<<native.Height
+                    <<" levels="<<native.MipLevels<<" layers="<<native.DepthOrArraySize<<" samples="<<native.SampleDesc.Count
+                    <<" native_format="<<native.Format;
+                const auto cached=std::ranges::find_if(textures_.Entries(),[&](const auto& image){return image->texture.handle.Get()==input.source.handle.Get();});
+                if(cached!=textures_.Entries().end()){
+                    metadata<<" address="<<std::hex<<(*cached)->desc.address<<" writer_ps="<<(*cached)->diagnostic_ps
+                        <<std::dec<<" uid="<<(*cached)->image_uid;
+                    if((*cached)->diagnostic_ps)capture_producers.insert((*cached)->diagnostic_ps);
+                }else metadata<<" cache_entry=not-enumerated";
+                auto name=pass_name+"-srv-"+std::to_string(input.reg)+"-"+std::to_string(input.space)+"-"+std::to_string(input.index);
+                if(!input.omitted.empty()){
+                    DisplayCapture::Save(capture_id,name,{},metadata.str()+" readback="+input.omitted);continue;
+                }
+                metadata<<" subresource="<<input.transfer.subresource<<" copied_width="<<input.transfer.footprint.Footprint.Width
+                    <<" copied_height="<<input.transfer.footprint.Footprint.Height;
+                capture_bytes+=input.transfer.total_bytes;
+                bound_captures.push_back({std::move(name),metadata.str(),std::move(input.transfer)});
+            }
             UINT captured_inputs{};
             for(auto& entry:textures_.Entries())if(const auto planes=bindings.ShaderPlanes(entry->texture.handle.Get());planes&&
                 (entry->desc.levels!=1||entry->desc.layers!=1||
                  bindings.ShaderReferences(entry->texture.handle.Get(),0,0,0)||
                  bindings.ShaderReferences(entry->texture.handle.Get(),0,0,1))&&captured_inputs++<16){
                 if(entry->diagnostic_ps)capture_producers.insert(entry->diagnostic_ps);
-                record_capture(*entry,"input",planes);
+                if(!actual_inputs.contains(entry->texture.handle.Get()))record_capture(*entry,"input",planes);
             }
             // ROP reads of destination contents are dependencies too. A blur
             // can add black bloom to an already fogged target; its sampled

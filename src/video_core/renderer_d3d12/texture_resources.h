@@ -19,6 +19,7 @@ inline Resource Texture2D(ID3D12Device* device,UINT width,UINT height,DXGI_FORMA
 // until the command-list submission fence completes, just as for upload arenas.
 struct TextureTransfer {
     Resource staging;
+    UINT subresource=0;
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
     UINT rows=0;
     UINT64 row_bytes=0,total_bytes=0;
@@ -26,10 +27,23 @@ struct TextureTransfer {
         return Create(device,DX12_API_CALL(texture.handle->GetDesc()),readback);
     }
     static TextureTransfer Create(ID3D12Device* device,const D3D12_RESOURCE_DESC& desc,bool readback) {
-        TextureTransfer t;
         if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.MipLevels!=1||desc.DepthOrArraySize!=1||desc.SampleDesc.Count!=1)
             throw std::invalid_argument("transfer supports single-subresource non-MSAA 2D textures");
-        DX12_API_CALL(device->GetCopyableFootprints(&desc,0,1,0,&t.footprint,&t.rows,&t.row_bytes,&t.total_bytes));
+        return CreateSubresource(device,desc,0,readback);
+    }
+    static TextureTransfer CreateSubresource(ID3D12Device* device,const D3D12_RESOURCE_DESC& desc,UINT subresource,bool readback) {
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.SampleDesc.Count!=1||!desc.MipLevels||!desc.DepthOrArraySize)
+            throw std::invalid_argument("transfer requires non-MSAA 2D texture storage");
+        uint64_t count=uint64_t(desc.MipLevels)*desc.DepthOrArraySize;
+        if(subresource>=count){
+            D3D12_FEATURE_DATA_FORMAT_INFO format{desc.Format,0};
+            Check(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO,&format,sizeof(format)));
+            count*=format.PlaneCount;
+        }
+        if(subresource>=count)
+            throw std::out_of_range("texture transfer subresource exceeds storage");
+        TextureTransfer t;t.subresource=subresource;
+        DX12_API_CALL(device->GetCopyableFootprints(&desc,subresource,1,0,&t.footprint,&t.rows,&t.row_bytes,&t.total_bytes));
         if(!t.total_bytes||t.total_bytes==UINT64_MAX)throw std::runtime_error("invalid texture footprint");
         t.staging=Buffer(device,t.total_bytes,readback?D3D12_HEAP_TYPE_READBACK:D3D12_HEAP_TYPE_UPLOAD,
                          readback?D3D12_RESOURCE_STATE_COPY_DEST:D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -48,23 +62,26 @@ struct TextureTransfer {
     }
     void Upload(ID3D12GraphicsCommandList* list,Resource& texture) {
         if(staging.state!=D3D12_RESOURCE_STATE_GENERIC_READ)throw std::logic_error("not upload staging");
-        texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        texture.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST,
+            texture.SubresourceCount()==1?D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES:subresource);
         D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=staging.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;src.PlacedFootprint=footprint;
-        D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=texture.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;dst.SubresourceIndex=subresource;
         DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,nullptr));
     }
     void Readback(ID3D12GraphicsCommandList* list,Resource& texture,const D3D12_BOX* region=nullptr) {
         if(staging.state!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::logic_error("not readback staging");
         if(region){
             const auto source=texture.handle->GetDesc();
+            const auto mip=subresource%source.MipLevels;
             if(region->right<=region->left||region->bottom<=region->top||region->front||region->back!=1||
-               region->right>source.Width||region->bottom>source.Height||
+               region->right>std::max<UINT64>(source.Width>>mip,1)||region->bottom>std::max(source.Height>>mip,1u)||
                region->right-region->left!=footprint.Footprint.Width||
                region->bottom-region->top!=footprint.Footprint.Height)
                 throw std::invalid_argument("Texture readback region/footprint mismatch");
         }
-        texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
-        D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=texture.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE,
+            texture.SubresourceCount()==1?D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES:subresource);
+        D3D12_TEXTURE_COPY_LOCATION src{};src.pResource=texture.handle.Get();src.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;src.SubresourceIndex=subresource;
         D3D12_TEXTURE_COPY_LOCATION dst{};dst.pResource=staging.handle.Get();dst.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;dst.PlacedFootprint=footprint;
         DX12_API_CALL(list->CopyTextureRegion(&dst,0,0,0,&src,region));
     }

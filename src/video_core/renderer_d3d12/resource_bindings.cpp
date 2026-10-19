@@ -52,6 +52,45 @@ std::vector<ResourceBindings::BufferCapture> ResourceBindings::CaptureBufferInpu
     }
     return result;
 }
+std::vector<ResourceBindings::TextureCapture> ResourceBindings::CaptureTextureInputs(
+    ID3D12GraphicsCommandList* list,uint64_t total_bytes){
+    if(!list||recycled_)throw std::invalid_argument("Invalid bound-texture capture");
+    Prepare();std::vector<TextureCapture> result;result.reserve(capture_textures_.size());
+    for(const auto& input:capture_textures_){
+        result.push_back({input.source,input.view,input.reg,input.space,input.index,{},{}});
+        auto& capture=result.back();const auto desc=capture.source.handle->GetDesc();
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||desc.SampleDesc.Count!=1){
+            capture.omitted="unsupported-dimension-or-msaa";continue;
+        }
+        UINT mip{},layer{},plane{};
+        switch(input.view.ViewDimension){
+        case D3D12_SRV_DIMENSION_TEXTURE2D:
+            mip=input.view.Texture2D.MostDetailedMip;plane=input.view.Texture2D.PlaneSlice;break;
+        case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
+            mip=input.view.Texture2DArray.MostDetailedMip;layer=input.view.Texture2DArray.FirstArraySlice;
+            plane=input.view.Texture2DArray.PlaneSlice;break;
+        case D3D12_SRV_DIMENSION_TEXTURECUBE:mip=input.view.TextureCube.MostDetailedMip;break;
+        case D3D12_SRV_DIMENSION_TEXTURECUBEARRAY:
+            mip=input.view.TextureCubeArray.MostDetailedMip;layer=input.view.TextureCubeArray.First2DArrayFace;break;
+        default:capture.omitted="unsupported-view";continue;
+        }
+        const uint64_t subresource=mip+uint64_t(layer)*desc.MipLevels+
+            uint64_t(plane)*desc.MipLevels*desc.DepthOrArraySize;
+        if(mip>=desc.MipLevels||layer>=desc.DepthOrArraySize||subresource>=capture.source.SubresourceCount())
+            throw std::out_of_range("Bound SRV capture exceeds native storage");
+        UINT64 needed{};device_->GetCopyableFootprints(&desc,UINT(subresource),1,0,nullptr,nullptr,nullptr,&needed);
+        if(!needed||needed==UINT64_MAX)throw std::runtime_error("Invalid bound SRV capture footprint");
+        if(needed>total_bytes){capture.omitted="capture-budget";continue;}
+        capture.transfer=TextureTransfer::CreateSubresource(device_.Get(),desc,UINT(subresource),true);
+        Retain(capture.transfer.staging.handle.Get());
+        const auto prior=capture.source.State(UINT(subresource));
+        capture.transfer.Readback(list,capture.source);
+        capture.source.Transition(list,prior,capture.source.SubresourceCount()==1?
+            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES:UINT(subresource));
+        total_bytes-=needed;
+    }
+    return result;
+}
 DescriptorHeapPool::Slice DescriptorHeapPool::Acquire(UINT count,D3D12_DESCRIPTOR_HEAP_TYPE type) {
     if(!count)return {};
     const UINT maximum=type==D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER?D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE:1000000;
@@ -203,7 +242,7 @@ void ResourceBindings::RecycleRetiredHeaps(){
     if(!pool_)return;
     if(recycled_)throw std::logic_error("Descriptor heaps already recycled");
     pool_->Release(resources_);pool_->Release(samplers_);
-    keep_alive_.clear();sealed_=recycled_=true;
+    keep_alive_.clear();capture_textures_.clear();capture_buffers_.clear();sealed_=recycled_=true;
 }
 D3D12_CPU_DESCRIPTOR_HANDLE ResourceBindings::Slot(D3D12_DESCRIPTOR_RANGE_TYPE type,UINT reg,UINT space,UINT index) {
     if(sealed_)throw std::logic_error("Cannot mutate descriptors after recording their use");
@@ -224,7 +263,7 @@ void ResourceBindings::TrackShaderTextureRange(ID3D12Resource* resource,ShaderTe
         std::erase_if(ranges,[descriptor](const auto& previous){return previous.descriptor==descriptor;});
     if(resource&&range.planes){range.descriptor=descriptor;shader_texture_ranges_[resource].push_back(range);}
 }
-void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_SHADER_RESOURCE_VIEW_DESC& desc,UINT index) {
+void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3D12_SHADER_RESOURCE_VIEW_DESC& desc,UINT index,const Resource* capture_source) {
     // Ordinary buffers/color images do not need depth attachment range data.
     // Unknown DS views retain conservative whole-resource access.
     ShaderTextureRange range{};
@@ -260,6 +299,16 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
         }
     }
     auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,reg,space,index);DX12_API_CALL(device_->CreateShaderResourceView(resource,&desc,slot));Retain(resource);
+    if(CaptureBuffersEnabled()){
+        std::erase_if(capture_textures_,[&](const auto& old){return old.descriptor==slot.ptr;});
+        if(resource&&capture_source&&capture_textures_.size()<128){
+            if(capture_source->handle.Get()!=resource)throw std::logic_error("Capture source differs from actual SRV binding");
+            // Later views may transition another mip of the same resource.
+            // Refresh all recorded copies to the latest real state map.
+            for(auto& old:capture_textures_)if(old.source.handle.Get()==resource)old.source=*capture_source;
+            capture_textures_.push_back({*capture_source,desc,reg,space,index,slot.ptr});
+        }
+    }
     TrackShaderTextureRange(resource,range,slot.ptr);
     if(resource){
         UINT planes=3; // Unknown views conservatively reference both DS planes.

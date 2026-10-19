@@ -706,6 +706,7 @@ add_test(NAME native_guest_attachment_retirement COMMAND dx12-guest-graphics-res
 add_executable(dx12-shader-pipeline-test "${PORT_ROOT}/src/video_core/renderer_d3d12/shader_pipeline_test.cpp")
 target_link_libraries(dx12-shader-pipeline-test PRIVATE shadps4_native_d3d12 shadps4_dxil_compiler)
 add_test(NAME native_sampled_graphics_pipeline COMMAND dx12-shader-pipeline-test "${DXC_DLL}")
+add_test(NAME native_actual_depth_srv_capture COMMAND dx12-shader-pipeline-test "${DXC_DLL}" srv-capture)
 add_executable(native-dma-shader-test dma_shader_test.cpp
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_compute.cpp"
     "${PORT_ROOT}/src/video_core/renderer_d3d12/guest_stage_bindings.cpp"

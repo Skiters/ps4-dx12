@@ -9,6 +9,8 @@
 #include <d3d12sdklayers.h>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <string_view>
 using namespace NativeDX12;
 namespace DXIL=Shader::Backend::DX12;
 static ComPtr<ID3D12InfoQueue> debug_queue;
@@ -66,8 +68,100 @@ static void CheckGuestColorWriteMasks(){
     if(BuildGuestGraphicsState(regs,formats).pipeline.BlendState.RenderTarget[1].RenderTargetWriteMask!=5)
         throw std::runtime_error("Native-only target without guest CB format lost its explicit mask");
 }
+static void CheckActualSrvCapture(ID3D12Device* device,const wchar_t* dxc,std::span<const uint8_t> vertex){
+    const auto require=[](bool value,const char* reason){if(!value)throw std::runtime_error(reason);};
+    auto pixel=DXIL::CompileDxil(dxc,R"(
+Texture2DArray<float> image:register(t5,space4);
+float4 main():SV_Target0 {float v=image.Load(int4(0,0,0,0));return float4(v,v,v,1);}
+)",DXIL::Stage::Pixel);
+    require(pixel.success,pixel.diagnostics.c_str());
+    Rasterizer renderer(device);auto* list=renderer.RecordingList();
+    D3D12_RESOURCE_DESC desc{};desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D;desc.Width=8;desc.Height=4;
+    desc.DepthOrArraySize=2;desc.MipLevels=3;desc.Format=DXGI_FORMAT_R32_TYPELESS;desc.SampleDesc.Count=1;
+    desc.Flags=D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    D3D12_HEAP_PROPERTIES heap{};heap.Type=D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_CLEAR_VALUE clear{};clear.Format=DXGI_FORMAT_D32_FLOAT;clear.DepthStencil.Depth=1;
+    Resource depth;depth.state=D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    Check(device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&desc,depth.state,&clear,IID_PPV_ARGS(&depth.handle)));
+    Descriptors dsvs(device,D3D12_DESCRIPTOR_HEAP_TYPE_DSV,6,false);
+    for(UINT layer=0;layer<2;++layer)for(UINT mip=0;mip<3;++mip){
+        const auto sub=mip+layer*3;D3D12_DEPTH_STENCIL_VIEW_DESC dsv{};dsv.Format=DXGI_FORMAT_D32_FLOAT;
+        dsv.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2DARRAY;dsv.Texture2DArray={mip,layer,1};
+        device->CreateDepthStencilView(depth.handle.Get(),&dsv,dsvs.Cpu(sub));
+        list->ClearDepthStencilView(dsvs.Cpu(sub),D3D12_CLEAR_FLAG_DEPTH,float(sub+1)/8,0,0,nullptr);
+    }
+    AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+    regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
+    regs.color_target_mask.SetMask(0,15);regs.color_shader_mask.SetMask(0,15);
+    const std::array formats{DXGI_FORMAT_R32G32B32A32_FLOAT};const auto state=BuildGuestGraphicsState(regs,formats);
+    ShaderPipeline pipeline(device,dxc,{vertex,pixel.bytecode},state.pipeline);ResourceBindings bindings(device,pipeline.Layout());
+    constexpr auto read_state=D3D12_RESOURCE_STATE_DEPTH_READ|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    depth.Transition(list,read_state,4);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv{};srv.Format=DXGI_FORMAT_R32_FLOAT;srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;srv.Texture2DArray={1,1,1,1,0,0};
+    bindings.Srv(5,4,depth.handle.Get(),srv,0,&depth);
+    auto first=bindings.CaptureTextureInputs(list,4096);
+    require(first.size()==1&&first[0].omitted.empty()&&first[0].transfer.subresource==4,"SRV capture selected wrong depth mip/layer");
+    require(depth.State(4)==read_state&&depth.State(0)==D3D12_RESOURCE_STATE_DEPTH_WRITE,"SRV capture changed original state bookkeeping");
+    const auto limited=bindings.CaptureTextureInputs(list,0);
+    require(limited.size()==1&&limited[0].omitted=="capture-budget","SRV capture ignored budget");
+    bool rejected=false;try{(void)TextureTransfer::CreateSubresource(device,desc,6,true);}catch(const std::out_of_range&){rejected=true;}
+    require(rejected,"Texture transfer accepted nonexistent plane");
+    depth.Transition(list,read_state,0);auto alternate=srv;alternate.Texture2DArray={0,1,0,1,0,0};
+    bindings.Srv(5,4,depth.handle.Get(),alternate,0,&depth);
+    auto second=bindings.CaptureTextureInputs(list,4096);
+    require(second.size()==1&&second[0].transfer.subresource==0,"SRV replacement retained stale capture");
+    bindings.Srv(5,4,nullptr,alternate);
+    require(bindings.CaptureTextureInputs(list,4096).empty(),"Null SRV retained old capture source");
+    bindings.Srv(5,4,depth.handle.Get(),srv,0,&depth);
+    auto target=Texture2D(device,4,2,formats[0],D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,D3D12_RESOURCE_STATE_RENDER_TARGET);
+    const Rasterizer::ColorAttachment attachments[]{{&target}};D3D12_VIEWPORT viewport{0,0,4,2,0,1};D3D12_RECT scissor{0,0,4,2};
+    depth.handle.Reset(); // No TextureCache entry or external source handle keeps it alive.
+    const float blend[4]{};renderer.ExecuteGraphics(pipeline,bindings,state,attachments,nullptr,
+        std::span(&viewport,1),std::span(&scissor,1),blend,{3});
+    auto output=TextureTransfer::Create(device,target,true);output.Readback(renderer.RecordingList(),target);renderer.Finish();
+    for(auto* captures:{&first,&second})for(auto& capture:*captures){
+        std::vector<float> data(size_t(capture.transfer.row_bytes)*capture.transfer.rows/4);
+        capture.transfer.ReadRows(data.data(),data.size()*4,capture.transfer.row_bytes);
+        const float expected=capture.transfer.subresource==4?.625f:.125f;
+        require(std::ranges::all_of(data,[&](float value){return value==expected;}),"SRV capture read wrong GPU depth contents");
+    }
+    std::array<float,32> pixels{};output.ReadRows(pixels.data(),sizeof(pixels),4*16);
+    for(size_t i=0;i<pixels.size();++i)require(pixels[i]==(i%4==3?1.f:.625f),"Capture changed subsequent depth SRV sampling");
+    // The selected plane must also be independent: stencil capture must not
+    // transition or overwrite the neighbouring depth plane.
+    auto ds_desc=desc;ds_desc.Width=4;ds_desc.Height=2;ds_desc.MipLevels=ds_desc.DepthOrArraySize=1;
+    ds_desc.Format=DXGI_FORMAT_R32G8X24_TYPELESS;
+    auto ds_clear=clear;ds_clear.Format=DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+    Resource ds;ds.state=D3D12_RESOURCE_STATE_DEPTH_WRITE;
+    Check(device->CreateCommittedResource(&heap,D3D12_HEAP_FLAG_NONE,&ds_desc,ds.state,&ds_clear,IID_PPV_ARGS(&ds.handle)));
+    D3D12_DEPTH_STENCIL_VIEW_DESC ds_view{};ds_view.Format=ds_clear.Format;ds_view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2D;
+    device->CreateDepthStencilView(ds.handle.Get(),&ds_view,dsvs.Cpu(0));list=renderer.RecordingList();
+    list->ClearDepthStencilView(dsvs.Cpu(0),D3D12_CLEAR_FLAGS(D3D12_CLEAR_FLAG_DEPTH|D3D12_CLEAR_FLAG_STENCIL),.75f,37,0,nullptr);
+    ds.Transition(list,read_state,1);
+    ResourceBindings plane_bindings(device,pipeline.Layout());auto stencil=srv;
+    stencil.Format=DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;stencil.Texture2DArray={0,1,0,1,1,0};
+    plane_bindings.Srv(5,4,ds.handle.Get(),stencil,0,&ds);
+    auto planes=plane_bindings.CaptureTextureInputs(list,4096);
+    require(planes.size()==1&&planes[0].transfer.subresource==1&&ds.State(0)==D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        "Stencil capture selected or transitioned the depth plane");
+    renderer.Finish();auto& transfer=planes[0].transfer;
+    std::vector<std::byte> stencil_bytes(size_t(transfer.row_bytes)*transfer.rows);
+    transfer.ReadRows(stencil_bytes.data(),stencil_bytes.size(),transfer.row_bytes);
+    const auto format=transfer.footprint.Footprint.Format;
+    const UINT stride=format==DXGI_FORMAT_X32_TYPELESS_G8X24_UINT?8:format==DXGI_FORMAT_X24_TYPELESS_G8_UINT?4:1;
+    require(stride!=1||format==DXGI_FORMAT_R8_TYPELESS||format==DXGI_FORMAT_R8_UINT||format==DXGI_FORMAT_R8_UNORM,
+        "Unexpected stencil-plane copy format");
+    const UINT component=stride==8?4:stride==4?3:0;
+    for(UINT y=0;y<2;++y)for(UINT x=0;x<4;++x)
+        require(stencil_bytes[size_t(y)*transfer.row_bytes+x*stride+component]==std::byte{37},"Captured stencil value differs");
+    renderer.ValidateDebugMessages();
+    puts("PASS: actual private depth SRV, selected mip/layer/stencil-plane readback, bounds/budget/null/replacement, lifetime and subsequent GPU sampling");
+}
 int wmain(int argc,wchar_t** argv) {try {
-    if(argc!=2)throw std::invalid_argument("usage: native-pipeline-test dxcompiler.dll");
+    const bool capture=argc==3&&std::wstring_view(argv[2])==L"srv-capture";
+    if(argc!=2&&!capture)throw std::invalid_argument("usage: native-pipeline-test dxcompiler.dll [srv-capture]");
+    if(capture&&_putenv_s("SHADPS4_NATIVE_DISPLAY_CAPTURE","srv-fixture"))throw std::runtime_error("Cannot enable capture fixture");
     CheckGuestColorWriteMasks();
     ComPtr<ID3D12Debug> debug;
     if(SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))debug->EnableDebugLayer();
@@ -92,6 +186,7 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     }
     if(!device)throw std::runtime_error("No hardware D3D12 device");
     device.As(&debug_queue);
+    if(capture){CheckActualSrvCapture(device.Get(),argv[1],vertex.bytecode);return 0;}
     AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
     regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     regs.color_target_mask.SetMask(0,15);

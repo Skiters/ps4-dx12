@@ -1308,7 +1308,7 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                             view.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2DARRAY;view.Texture2DArray={source.MostDetailedMip,source.MipLevels,0,1,source.PlaneSlice,source.ResourceMinLODClamp};}
                     }
                     bindings.RetainAllocation(entry->texture.allocation);
-                    bindings.Srv(b.reg,0,entry->texture.handle.Get(),view,reg-b.reg);
+                    bindings.Srv(b.reg,0,entry->texture.handle.Get(),view,reg-b.reg,&entry->texture);
                 }
             }
         }
