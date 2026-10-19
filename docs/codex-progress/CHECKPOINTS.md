@@ -1,3 +1,5 @@
+Latest: ca59465 freezes logical draw color feedback; clean Release PASS; GPU/game NOT_RUN. See SESSION_HANDOFF.md. Partition scheduling remains pending.
+
 Latest checkpoint: a4771ef attachment continuation; clean Release and CPU shader checks PASS, GPU/game NOT_RUN. See SESSION_HANDOFF.md and attachment-continuation-a4771ef.json. Multipart scheduling remains pending.
 
 ## Automatic RectList validation preparation — 2026-10-20

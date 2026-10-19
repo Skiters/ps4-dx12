@@ -1,3 +1,10 @@
+## Immutable color feedback continuation — 2026-10-20
+
+Production ca59465 freezes each color feedback snapshot for the entire logical draw. First submission copies active source SRVs once, retaining the source and destination through retirement. Later submissions remap descriptors to the saved Resource without recopying partially modified render targets. A newly introduced feedback source after beginning is rejected explicitly. Existing UAV overlap/layout checks remain. This supplies continuation plumbing; multipart GS/PS scheduling is still NOT activated.
+
+Core and GCN fixture compile/link PASS18.758s command-20261020-033541-38368.log. Separate tracked-clean Release PASS20.676s033612-10756. Exact source/EXE/PDB identity: F:/PS4Dev/handoff/native-port-comparison-20261019/feedback-continuation-ca59465.json. GPU/game NOT_RUN, installed app unchanged. No FPS/image fix claimed. Existing color-feedback-copy fixture covers initial snapshot semantics only; immutable continuation still needs an exact GPU contents regression when PC use permits.
+
+NEXT: prepare continuation feedback regression, then integrate ordered GS/PS partitions with MSAA/alias/query lifetime preserved. Generic tessellation capacity/LsHsEsGs and QuadList GS-input gaps remain. Do not repeat native-port/129-group audits. Full port and game acceptance incomplete.
 ## Logical draw attachment continuation — 2026-10-20
 
 Production a4771ef3b166969234df02057e7419413606c678 adds scoped attachment selection/pins across replay slices. Color/depth entries initialize once; CMASK/HTILE, clears and backing sample conversion are beginning-only. Depth write planes accumulate. Pins survive final readback retirement and release before CPU reconciliation. Final readbacks remain inside the original resource callback, preserving post-draw alias/DMA ordering. BindReplay now accepts checked whole-record SRV subranges.
