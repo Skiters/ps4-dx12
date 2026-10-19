@@ -1275,3 +1275,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 e830b9c:80 CPU-only actual GCN/SPIR-V/signed DXIL variants PASS1.113s, exact identities ordered-cpu-compiler-e830b9c.json; GPU/game NOT_RUN.
 
 2026-10-20 fadb22b: topology-aware point capture reservation and CPU bounds checks PASS; winding compiled only; clean Release identities point-bound-fadb22b.json. Tessellation capture stays open, GPU/game NOT_RUN.
+
+2026-10-20 40e0738: restore internal3/4-patch conservative reservation, CPU checks PASS, clean Release reproduced; identities point-patch-reservation-40e0738.json. GPU/game NOT_RUN.
