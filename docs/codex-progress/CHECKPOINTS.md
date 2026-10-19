@@ -1277,3 +1277,5 @@ duration and executable SHA256. This addendum changes documentation only.
 2026-10-20 fadb22b: topology-aware point capture reservation and CPU bounds checks PASS; winding compiled only; clean Release identities point-bound-fadb22b.json. Tessellation capture stays open, GPU/game NOT_RUN.
 
 2026-10-20 40e0738: restore internal3/4-patch conservative reservation, CPU checks PASS, clean Release reproduced; identities point-patch-reservation-40e0738.json. GPU/game NOT_RUN.
+
+2026-10-20 d0f6118: packed10 UNORM ordered color connected;112 CPU shader variants PASS,16 GPU cases prepared only; clean Release identities packed10-unorm-d0f6118.json. App unchanged/GPU-game NOT_RUN.
