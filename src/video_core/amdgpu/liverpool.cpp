@@ -242,13 +242,16 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
 
     const auto submission = dcb;
     const auto base_addr = reinterpret_cast<uintptr_t>(dcb.data());
+    const auto source_base_addr = owned_buffers ? owned_buffers->dcb_source_addr : base_addr;
     const auto dump_packet_window = [&](size_t current_word) {
         constexpr size_t WindowRadius = 16;
         const size_t first_word = current_word > WindowRadius ? current_word - WindowRadius : 0;
         const size_t last_word = std::min(submission.size(), current_word + WindowRadius + 1);
         std::string packet_window = fmt::format(
-            "PM4 raw dword window: current={} range=[{},{}) total={} owned={}", current_word,
-            first_word, last_word, submission.size(), owned_buffers != nullptr);
+            "PM4 raw dword window: current={} range=[{},{}) total={} owned={} source={:#x} "
+            "copy={:#x}",
+            current_word, first_word, last_word, submission.size(), owned_buffers != nullptr,
+            source_base_addr, base_addr);
         for (size_t word = first_word; word < last_word; ++word) {
             packet_window += fmt::format("\nPM4[{}]{}={:#010x}", word,
                                          word == current_word ? "*" : " ", submission[word]);
@@ -737,6 +740,17 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             }
             case PM4ItOpcode::EventWriteEop: {
                 const auto event_eop = *reinterpret_cast<const PM4CmdEventWriteEop*>(header);
+                const auto write_addr = reinterpret_cast<uintptr_t>(event_eop.Address<void*>());
+                const auto source_end = source_base_addr + submission.size_bytes();
+                if (write_addr >= source_base_addr && write_addr < source_end) {
+                    LOG_ERROR(Lib_GnmDriver,
+                              "EOP writes into current PM4 source: source={:#x} bytes={} "
+                              "packet_dw={} target={:#x} target_dw={}",
+                              source_base_addr, submission.size_bytes(),
+                              (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32),
+                              write_addr, (write_addr - source_base_addr) / sizeof(u32));
+                    Common::Log::Flush();
+                }
                 if (rasterizer) {
                     rasterizer->OnFence();
                 }

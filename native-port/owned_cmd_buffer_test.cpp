@@ -10,6 +10,10 @@ int main() {
     std::array<u32, 5> first_source{0xc0016900, 0x292, 0, 0xc0016900, 0x293};
     std::array<u32, 3> first_ccb{0xc0011000, 7, 9};
     auto first = AmdGpu::OwnCmdBuffers(first_source, first_ccb);
+    if (first.storage->dcb_source_addr != reinterpret_cast<uintptr_t>(first_source.data()) ||
+        first.storage->ccb_source_addr != reinterpret_cast<uintptr_t>(first_ccb.data())) {
+        throw std::runtime_error("owned command buffer lost its guest source identity");
+    }
 
     first_source.fill(0x1e9);
     first_ccb.fill(0x8);
