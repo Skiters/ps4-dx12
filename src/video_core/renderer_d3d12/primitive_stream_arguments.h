@@ -18,6 +18,10 @@ struct PrimitiveStreamRange {
     static PrimitiveStreamRange Make(u32 stride,u32 capacity,u32 vertices_per_primitive,u32 first,u32 limit);
 };
 PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch_vertices,u32 input_vertices,u32 instances,u32 vertex_words);
+// Conservative complete source-SO bound for arbitrary hardware tessellation,
+// distinct from the auxiliary two-triangles-per-patch construction.
+PrimitiveStreamRange TessellatedPointStreamRange(u32 patch_vertices,u32 input_vertices,u32 instances,
+    u32 vertex_words,u32 vertices_per_primitive);
 struct PrimitiveStreamPartition {
     PrimitiveStreamRange input;
     Shader::NativePointCapture::Plan capture;

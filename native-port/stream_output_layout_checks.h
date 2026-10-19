@@ -13,6 +13,24 @@ inline void CheckStreamOutputLayout(){
         if(complete.capacity_vertices!=24||complete.stride!=32||incomplete.capacity_vertices!=3)
             throw std::runtime_error("Fixed auxiliary tessellation bound lost complete patches/instances or incomplete producer effects");
     }
+    for(const u32 width:std::array<u32,3>{1,2,3}){
+        const auto tessellated=TessellatedPointStreamRange(3,7,2,4,width);
+        const auto incomplete=TessellatedPointStreamRange(3,2,1,4,width);
+        if(tessellated.capacity_vertices!=98304||tessellated.stride!=32||tessellated.vertices_per_primitive!=width||
+           incomplete.capacity_vertices!=width)
+            throw std::runtime_error("Generic tessellation bound lost complete patches, instances or primitive alignment");
+    }
+    const u32 fitting_patches=(UINT32_MAX/32)/24576;
+    if(TessellatedPointStreamRange(1,fitting_patches,1,4,3).capacity_vertices!=fitting_patches*24576)
+        throw std::runtime_error("Tessellation source rejected its exact addressable boundary");
+    for(unsigned invalid=0;invalid<5;++invalid){bool rejected{};
+        try{if(invalid==0)(void)TessellatedPointStreamRange(1,fitting_patches+1,1,4,3);
+            else if(invalid==1)(void)TessellatedPointStreamRange(1,UINT32_MAX,UINT32_MAX,4,3);
+            else (void)TessellatedPointStreamRange(invalid==2?0:invalid==3?33:3,3,1,4,invalid==4?4:3);}
+        catch(const std::overflow_error&){if(invalid>1)throw;rejected=true;}
+        catch(const std::invalid_argument&){if(invalid<2)throw;rejected=true;}
+        if(!rejected)throw std::runtime_error("Invalid or oversized tessellated source bound was accepted");
+    }
     bool overflow{};try{(void)AuxiliaryPointStreamRange(3,UINT32_MAX,UINT32_MAX,4);}
     catch(const std::overflow_error&){overflow=true;}
     if(!overflow)throw std::runtime_error("Auxiliary tessellation count multiplication wrapped");

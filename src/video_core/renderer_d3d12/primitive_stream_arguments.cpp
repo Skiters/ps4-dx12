@@ -42,6 +42,25 @@ PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch,u32 vertices,u32 instan
     const u32 capacity=u32(primitives)*3;
     return PrimitiveStreamRange::Make(Shader::NativePointCapture::StreamRecordWords(words)*4,capacity,3,0,capacity);
 }
+PrimitiveStreamRange TessellatedPointStreamRange(u32 patch,u32 vertices,u32 instances,u32 words,u32 primitive){
+    if(!patch||patch>32||(primitive!=1&&primitive!=2&&primitive!=3))
+        throw std::invalid_argument("Invalid tessellated source patch or primitive width");
+    // D3D hardware tessellation is bounded by factor64. Microsoft's fixed
+    // function reference (bundled Mesa tessellator.hpp MAX_INDEX_COUNT) reserves
+    // 64*64*2*3 indices and at most65*65 domain points. Serializing complete
+    // GS input primitives duplicates their vertices: use the index bound for
+    // every output topology, including point/line modes, rather than a unique
+    // domain-point count.
+    constexpr u32 serialized_vertices_per_patch=64*64*2*3;
+    const u32 stride=Shader::NativePointCapture::StreamRecordWords(words)*4;
+    const u64 patches=u64(vertices/patch)*instances;
+    // Check before multiplying; UINT32_MAX input counts and instance counts
+    // must not wrap a 64-bit product or silently drop later patches.
+    if(patches>(UINT32_MAX/stride)/serialized_vertices_per_patch)
+        throw std::overflow_error("Complete tessellated source exceeds 32-bit SO byte addressing");
+    const u32 capacity=u32(std::max<u64>(primitive,patches*serialized_vertices_per_patch));
+    return PrimitiveStreamRange::Make(stride,capacity,primitive,0,capacity);
+}
 PrimitiveStreamPartitions::PrimitiveStreamPartitions(const PrimitiveStreamRange& input,u32 calls,u32 emissions,u64 budget)
     :input_(PrimitiveStreamRange::Make(input.stride,input.capacity_vertices,input.vertices_per_primitive,input.first,input.limit)),
     calls_(calls),emissions_(emissions){
