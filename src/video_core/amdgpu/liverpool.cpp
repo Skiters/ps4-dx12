@@ -244,14 +244,19 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
         const u32 type = header->type;
         const auto previous_headers = packet_history;
         packet_history = {header->raw, previous_headers[0], previous_headers[1]};
+        const auto packet_word = [&](size_t index) { return index < dcb.size() ? dcb[index] : 0; };
 
         switch (type) {
         default:
-            UNREACHABLE_MSG("Wrong PM4 type {}", type);
+            UNREACHABLE_MSG(
+                "Wrong PM4 type {} at dword {}: raw={:#010x} available={} prior=[{:#010x},"
+                "{:#010x},{:#010x}] next=[{:#010x},{:#010x},{:#010x}]",
+                type, (reinterpret_cast<uintptr_t>(header) - base_addr) / sizeof(u32), header->raw,
+                dcb.size(), previous_headers[0], previous_headers[1], previous_headers[2],
+                packet_word(1), packet_word(2), packet_word(3));
             break;
         case 0: {
             const u32 type0_words = ApplyType0RegisterWrite(regs.reg_array, dcb);
-            const auto packet_word = [&](size_t index) { return index < dcb.size() ? dcb[index] : 0; };
             ASSERT_MSG(type0_words != 0,
                        "Invalid PM4 type 0 packet at dword {}: raw={:#010x} base={:#x} size={} "
                        "available={} prior=[{:#010x},{:#010x},{:#010x}] next=[{:#010x},"
