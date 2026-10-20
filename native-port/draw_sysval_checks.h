@@ -39,10 +39,10 @@ struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
         auto output=renderer.AcquireTransientBuffer(bytes+16),counter=renderer.AcquireTransientBuffer(4);
         auto result=Buffer(device,bytes+16,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));memset(mapped,0xcd,32+bytes+16);
-        const u32 indices[]{7,8,8,9,9,7};memcpy(mapped,indices,sizeof(indices));const u32 zero=0;memcpy(static_cast<std::byte*>(mapped)+24,&zero,4);seed.handle->Unmap(0,nullptr);
+        const u32 indices[]{0,1,1,2,2,0};memcpy(mapped,indices,sizeof(indices));const u32 zero=0;memcpy(static_cast<std::byte*>(mapped)+24,&zero,4);seed.handle->Unmap(0,nullptr);
         auto* list=renderer.RecordingList();output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),32,bytes+16);list->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),24,4);
-        GraphicsRuntime runtime{};runtime.first_vertex=expanded?0:7;runtime.base_instance=11;
+        GraphicsRuntime runtime{};runtime.first_vertex=7;runtime.base_instance=11;
         ResourceBindings bindings(device,pipeline.Layout());auto constants=Buffer(device,1024,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         Check(constants.handle->Map(0,&none,&mapped));memset(mapped,0,1024);memcpy(mapped,&runtime,sizeof(runtime));constants.handle->Unmap(0,nullptr);
         bindings.Cbv(0,31,constants.handle.Get(),0,1024);
@@ -54,7 +54,8 @@ struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
         output.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,bytes+16);renderer.Finish();
         std::vector<std::byte> expected(bytes+16,std::byte{0xcd});
-        for(u32 instance=0;instance<2;++instance)for(u32 i=0;i<count;++i){const u32 words[]{expanded?indices[i]:7+i,7,11+instance,11};memcpy(expected.data()+(instance*count+i)*16,words,16);}
+        constexpr u32 expanded_vertices[]{7,8,8,9,9,7};
+        for(u32 instance=0;instance<2;++instance)for(u32 i=0;i<count;++i){const u32 words[]{expanded?expanded_vertices[i]:7+i,7,11+instance,11};memcpy(expected.data()+(instance*count+i)*16,words,16);}
         D3D12_RANGE all{0,bytes+16};Check(result.handle->Map(0,&all,&mapped));const bool equal=!memcmp(mapped,expected.data(),expected.size());
         if(!equal)for(u32 record=0;record<records;++record){
             std::array<u32,4> actual{},wanted{};memcpy(actual.data(),static_cast<std::byte*>(mapped)+record*16,16);memcpy(wanted.data(),expected.data()+record*16,16);

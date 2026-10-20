@@ -17,6 +17,7 @@
 #include <d3d12sdklayers.h>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 
 using namespace NativeDX12;
 namespace DXIL=Shader::Backend::DX12;
@@ -44,6 +45,12 @@ int main(int argc,char** argv){try{
     DXIL::SpirvConvertOptions sysval_options;sysval_options.stage=DXIL::SpirvStage::Vertex;
     const auto sysval_vertex=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),Tests::DrawSysvalVertex(),sysval_options);
     if(!sysval_vertex.success)throw std::runtime_error(sysval_vertex.diagnostics);
+    if(std::string_view(argv[3])=="compile-sysvals"){
+        std::ofstream file("draw-sysvals-vertex.dxil",std::ios::binary);
+        file.write(reinterpret_cast<const char*>(sysval_vertex.bytecode.data()),sysval_vertex.bytecode.size());
+        if(!file)throw std::runtime_error("Cannot save draw sysval DXIL");
+        puts("PASS: draw sysval SPIR-V converted to signed DXIL; GPU NOT_RUN");return 0;
+    }
     const auto vertex=DXIL::CompileDxil(dxc,R"(
 struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
 V main(uint id:SV_VertexID,uint instance:SV_InstanceID){

@@ -1375,7 +1375,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
     std::optional<GuestIndexExpansion> gpu_expansion;
-    const u32 generated_index_first=draw.first;
+    const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
     if(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
        r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None))){
         const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count);
@@ -1473,7 +1473,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     push.xoffset=c.xoffset_enable?v.xoffset:0;push.xscale=c.xscale_enable?v.xscale:1;
     push.yoffset=c.yoffset_enable?v.yoffset:0;push.yscale=c.yscale_enable?v.yscale:1;
     push.blend_constants=r.blend_constants;
-    GraphicsRuntime runtime{};runtime.first_vertex=indexed?u32(draw.base_vertex):draw.first;
+    GraphicsRuntime runtime{};runtime.first_vertex=guest_first_vertex;
     runtime.base_instance=draw.first_instance;runtime.indexed=indexed;
     runtime.yz_flip_mask=viewport.flip_mask;runtime.SetViewports(viewport.viewports,expanded_points,viewport.clip_transforms);
     std::array<GuestTextureCache::Entry*,9> targets{};
@@ -1528,7 +1528,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
                 index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
                     resident_index_bytes/element,element,index_storage);
-            }else index_expand_->RecordGenerated(*this,*gpu_expansion,generated_index_first,index_storage);
+            }else{
+                // The translated VS adds original firstVertex to native
+                // VertexID and exposes it independently as BaseVertex. Keep
+                // the generated native indices relative to avoid adding twice.
+                index_expand_->RecordGenerated(*this,*gpu_expansion,0,index_storage);
+            }
             index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
             expanded_indices_prepared=true;
         }else if(resident_index_address)
