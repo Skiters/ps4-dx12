@@ -1658,9 +1658,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             bindings.Prepare();
             if(!index_expand_)index_expand_=std::make_unique<GuestIndexExpandPass>(device_.Get());
             index_storage=AcquireTransientBuffer(u64(gpu_expansion->output_count)*4);
-            const auto source=resident_index_bytes?std::optional{BorrowPreparedShaderBuffer(resident_index_address,resident_index_bytes)}:std::nullopt;
+            // Preserve the original index source policy: clean small ranges
+            // use physical B0, while GPU-modified ranges use prepared B (or
+            // its UAV-safe snapshot). A shader sharp alias is not the source.
+            const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
+            RetainUntilFinish([source](u64){});
             const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
-            index_expand_->Record(*this,*gpu_expansion,source?source->resource:nullptr,source?source->offset:0,
+            index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
                 resident_index_bytes/element,element,index_storage);
             index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
         }else if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
