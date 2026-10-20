@@ -40,16 +40,19 @@ class ResourceLayout {
     std::vector<ShaderBinding> bindings_;
     UINT resource_count_{},sampler_count_{};
     UINT resource_parameter_=UINT_MAX,sampler_parameter_=UINT_MAX;
+    UINT graphics_runtime_parameter_=UINT_MAX;
+    bool root_graphics_runtime_{};
     D3D12_RESOURCE_BINDING_TIER binding_tier_{};
     void Build(ID3D12Device*,std::span<const ShaderBinding>);
     friend class ResourceBindings;
 public:
     ResourceLayout(ID3D12Device*,const std::wstring& dxc_dll,
-        std::span<const std::span<const uint8_t>> shader_bytecodes);
-    ResourceLayout(ID3D12Device*,std::span<const ResourceLayout* const> domains);
+        std::span<const std::span<const uint8_t>> shader_bytecodes,bool root_graphics_runtime=false);
+    ResourceLayout(ID3D12Device*,std::span<const ResourceLayout* const> domains,bool root_graphics_runtime=false);
     ResourceLayout(const ResourceLayout&)=delete;
     ResourceLayout& operator=(const ResourceLayout&)=delete;
     ID3D12RootSignature* Root()const{return root_.Get();}
+    UINT GraphicsRuntimeParameter()const{return graphics_runtime_parameter_;}
     const std::vector<ShaderBinding>& Bindings()const{return bindings_;}
     struct DescriptorProjection {bool sampler;UINT source,target,count;};
     // Match reflected register identities, independent of table/root offsets.
@@ -71,6 +74,7 @@ class ResourceBindings {
     std::unordered_map<SIZE_T,ID3D12Resource*> replay_descriptor_resources_;
     std::unordered_set<ID3D12Resource*> projected_references_;
     bool projected_{};
+    D3D12_GPU_VIRTUAL_ADDRESS graphics_runtime_address_{};
     std::vector<bool> written_resources_,written_samplers_;
     std::vector<ComPtr<ID3D12Resource>> keep_alive_;
     std::unordered_map<ID3D12Resource*,UINT> shader_planes_;

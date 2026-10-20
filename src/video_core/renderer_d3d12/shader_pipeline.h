@@ -19,6 +19,7 @@ public:
     };
     struct GraphicsShaders {
         std::span<const uint8_t> vertex,pixel,hull,domain,geometry;
+        bool root_graphics_runtime{};
         std::array<std::span<const uint8_t>,5> All() const {
             return {vertex,pixel,hull,domain,geometry};
         }

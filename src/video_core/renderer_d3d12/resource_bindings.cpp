@@ -151,7 +151,7 @@ D3D12_DESCRIPTOR_RANGE_TYPE RangeType(D3D_SHADER_INPUT_TYPE type) {
 }
 }
 ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
-    std::span<const std::span<const uint8_t>> shaders) {
+    std::span<const std::span<const uint8_t>> shaders,bool root_graphics_runtime):root_graphics_runtime_(root_graphics_runtime) {
     if(!device||shaders.empty())throw std::invalid_argument("Resource layout needs device and shader bytecode");
     Module module(dxc_dll);
     auto create=reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module.handle,"DxcCreateInstance"));
@@ -216,7 +216,8 @@ std::vector<ShaderBinding> ResourceLayout::MergeBindings(std::span<const ShaderB
     }
     return merged;
 }
-ResourceLayout::ResourceLayout(ID3D12Device* device,std::span<const ResourceLayout* const> domains){
+ResourceLayout::ResourceLayout(ID3D12Device* device,std::span<const ResourceLayout* const> domains,bool root_graphics_runtime)
+    :root_graphics_runtime_(root_graphics_runtime){
     if(!device||domains.empty())throw std::invalid_argument("Logical resource layout needs device and domains");
     std::vector<ShaderBinding> bindings;
     for(const auto* domain:domains){
@@ -243,10 +244,14 @@ void ResourceLayout::Build(ID3D12Device* device,std::span<const ShaderBinding> r
         if(binding.count>budget||count>budget-binding.count)throw std::runtime_error("DXIL descriptor layout exceeds supported budget");
         binding.offset=count;count+=binding.count;
         auto& ranges=sampler?sampler_ranges:resource_ranges;
-        ranges.push_back({binding.type,binding.count,binding.reg,binding.space,binding.offset});
+        // Keep its descriptor slot/identity for ordinary<->root replay
+        // projection, but expose b0/space31 only once in the root signature.
+        const bool runtime=root_graphics_runtime_&&binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.space==31;
+        if(runtime){if(binding.count!=1)throw std::invalid_argument("Root graphics runtime must be a single CBV");}
+        else ranges.push_back({binding.type,binding.count,binding.reg,binding.space,binding.offset});
         bindings_.push_back(binding);
     }
-    D3D12_ROOT_PARAMETER parameters[2]{};UINT parameter_count=0;
+    D3D12_ROOT_PARAMETER parameters[3]{};UINT parameter_count=0;
     auto table=[&](const std::vector<D3D12_DESCRIPTOR_RANGE>& ranges,UINT& index) {
         if(ranges.empty())return;
         index=parameter_count++;auto& parameter=parameters[index];
@@ -255,6 +260,14 @@ void ResourceLayout::Build(ID3D12Device* device,std::span<const ShaderBinding> r
         parameter.ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
     };
     table(resource_ranges,resource_parameter_);table(sampler_ranges,sampler_parameter_);
+    if(root_graphics_runtime_){
+        const auto runtime=std::find_if(bindings_.begin(),bindings_.end(),[](const auto& b){
+            return b.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&b.reg==0&&b.space==31&&b.count==1;});
+        if(runtime==bindings_.end())throw std::invalid_argument("Root graphics runtime is absent from shader reflection");
+        graphics_runtime_parameter_=parameter_count++;
+        auto& parameter=parameters[graphics_runtime_parameter_];parameter.ParameterType=D3D12_ROOT_PARAMETER_TYPE_CBV;
+        parameter.Descriptor={0,31};parameter.ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
+    }
     D3D12_ROOT_SIGNATURE_DESC desc{parameter_count,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAGS(
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT|D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT)};
     ComPtr<ID3DBlob> blob,errors;auto hr=DX12_API_CALL(D3D12SerializeRootSignature(&desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors));
@@ -351,6 +364,7 @@ std::shared_ptr<ResourceBindings> ResourceBindings::ForkForReplay(const Resource
         }
     }
     child->keep_alive_=keep_alive_;child->allocation_leases_=allocation_leases_;
+    child->graphics_runtime_address_=graphics_runtime_address_;
     child->projected_=true;
     const auto rebase=[&](SIZE_T descriptor)->std::optional<SIZE_T>{
         if(!replay_resources_)throw std::logic_error("Replay metadata without a resource descriptor heap");
@@ -617,6 +631,7 @@ void ResourceBindings::Cbv(UINT reg,UINT space,ID3D12Resource* resource,UINT64 o
     const auto slot=Slot(D3D12_DESCRIPTOR_RANGE_TYPE_CBV,reg,space,index);
     if(replayable_)replay_descriptor_resources_[slot.ptr]=resource;
     DX12_API_CALL(device_->CreateConstantBufferView(&desc,slot));Retain(resource);
+    if(reg==0&&space==31&&index==0)graphics_runtime_address_=desc.BufferLocation;
     if(CaptureBuffersEnabled())TrackCaptureBuffer({resource,reg,space,index,D3D12_DESCRIPTOR_RANGE_TYPE_CBV,offset,bytes,slot.ptr});
 }
 void ResourceBindings::Sampler(UINT reg,UINT space,const D3D12_SAMPLER_DESC& desc,UINT index) {
@@ -653,11 +668,17 @@ void ResourceBindings::Bind(ID3D12GraphicsCommandList* list,bool compute) {
     if(count)DX12_API_CALL(list->SetDescriptorHeaps(count,heaps));
     if(compute)DX12_API_CALL(list->SetComputeRootSignature(layout_.Root()));else DX12_API_CALL(list->SetGraphicsRootSignature(layout_.Root()));
     auto bind=[&](ID3D12DescriptorHeap* heap,UINT parameter,UINT offset,D3D12_DESCRIPTOR_HEAP_TYPE type) {
-        if(!heap)return;auto handle=DX12_API_CALL(heap->GetGPUDescriptorHandleForHeapStart());
+        if(!heap||parameter==UINT_MAX)return;auto handle=DX12_API_CALL(heap->GetGPUDescriptorHandleForHeapStart());
         handle.ptr+=UINT64(offset)*DX12_API_CALL(device_->GetDescriptorHandleIncrementSize(type));
         if(compute)DX12_API_CALL(list->SetComputeRootDescriptorTable(parameter,handle));else DX12_API_CALL(list->SetGraphicsRootDescriptorTable(parameter,handle));
     };
     bind(resource_heap,layout_.resource_parameter_,resources_?resources_.offset:0,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    bind(sampler_heap,layout_.sampler_parameter_,samplers_?samplers_.offset:0,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);sealed_=true;
+    bind(sampler_heap,layout_.sampler_parameter_,samplers_?samplers_.offset:0,D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+    if(layout_.graphics_runtime_parameter_!=UINT_MAX){
+        if(!graphics_runtime_address_)throw std::logic_error("Missing root graphics runtime CBV");
+        if(compute)DX12_API_CALL(list->SetComputeRootConstantBufferView(layout_.graphics_runtime_parameter_,graphics_runtime_address_));
+        else DX12_API_CALL(list->SetGraphicsRootConstantBufferView(layout_.graphics_runtime_parameter_,graphics_runtime_address_));
+    }
+    sealed_=true;
 }
 }

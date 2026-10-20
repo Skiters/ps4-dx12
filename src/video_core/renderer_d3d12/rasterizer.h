@@ -8,6 +8,7 @@
 #include "common/fair_recursive_mutex.h"
 #include "video_core/rasterizer_interface.h"
 #include <map>
+#include <tuple>
 #include <array>
 #include <span>
 #include <mutex>
@@ -29,7 +30,8 @@ struct GuestGraphicsState;
 class Rasterizer : public VideoCore::RasterizerInterface {
 protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
-    std::map<std::pair<bool,u32>,ComPtr<ID3D12CommandSignature>> indirect_draw_signatures_;
+    struct IndirectSignature {ComPtr<ID3D12CommandSignature> signature;ComPtr<ID3D12RootSignature> root;};
+    std::map<std::tuple<bool,u32,ID3D12RootSignature*>,IndirectSignature> indirect_draw_signatures_;
     virtual std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const{return {};}
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
@@ -419,6 +421,9 @@ public:
         Resource* resource{};u64 offset{};
         u32 max_count=1,stride=0; // Zero stride selects the DRAW/INDEXED ABI size.
         Resource* count_resource{};u64 count_offset{};
+        // Each command starts with a GPU address for b0/space31, then DRAW.
+        // Caller proves every address lies in this retained constant buffer.
+        Resource* runtime_constants{};
     };
     struct StreamOutputBinding {
         Resource* data{};Resource* filled_size{};

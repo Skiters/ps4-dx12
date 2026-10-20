@@ -142,7 +142,7 @@ ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
 ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
     const GraphicsShaders& shaders,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& fixed_state,bool depth_bounds,
     StencilFaces stencil)
-    :layout_(device,dxc,shaders.All()),compute_(false) {
+    :layout_(device,dxc,shaders.All(),shaders.root_graphics_runtime),compute_(false) {
     Validate(shaders.vertex,true);
     for(auto code:{shaders.pixel,shaders.hull,shaders.domain,shaders.geometry})Validate(code,false);
     if(shaders.hull.empty()!=shaders.domain.empty())
@@ -166,6 +166,7 @@ ShaderPipeline::ShaderPipeline(ID3D12Device* device,const std::wstring& dxc,
     desc.DS={shaders.domain.data(),shaders.domain.size()};
     desc.GS={shaders.geometry.data(),shaders.geometry.size()};
     auto key=PsoKey(device,dxc);key.Text("graphics");key.Add(depth_bounds);key.Add(stencil.separate);
+    if(shaders.root_graphics_runtime)key.Text("root-graphics-runtime-v1");
     key.Add(stencil.front_read);key.Add(stencil.front_write);key.Add(stencil.back_read);key.Add(stencil.back_write);AddGraphicsState(key,desc);
     for(const auto code:shaders.All())key.Blob(std::as_bytes(code));
     const bool nv_clock=std::ranges::any_of(layout_.Bindings(),[](const auto& b){return b.nv_clock;});

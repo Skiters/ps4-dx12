@@ -39,9 +39,13 @@ inline void CheckGuestIndirectArguments(){
     require(NativeIndirectLayout::Make(false,0,0,2).bytes==32);
     require(NativeIndirectLayout::Make(true,0,0,2).bytes==40);
     require(NativeIndirectLayout::Make(false,0,0,0).bytes==0);
+    require(NativeIndirectLayout::Make(false,8,0,3,true).bytes==72);
+    require(NativeIndirectLayout::Make(true,8,0,3,true).bytes==96);
     reject([]{(void)NativeIndirectLayout::Make(true,0,16,1);});
     reject([]{(void)NativeIndirectLayout::Make(false,2,16,1);});
     reject([]{(void)NativeIndirectLayout::Make(false,0,18,1);});
     reject([]{(void)NativeIndirectLayout::Make(false,UINT64_MAX-15,16,1);});
+    reject([]{(void)NativeIndirectLayout::Make(true,0,24,1,true);});
+    reject([]{(void)NativeIndirectLayout::Make(false,4,24,1,true);});
 }
 } // namespace NativeDX12::Tests
