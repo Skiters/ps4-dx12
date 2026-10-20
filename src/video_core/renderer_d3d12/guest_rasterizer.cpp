@@ -8,6 +8,7 @@
 #include "guest_point_capture.h"
 #include "guest_indirect_arguments.h"
 #include "guest_index_range.h"
+#include "guest_index_expand.h"
 #include "guest_indirect_pack.h"
 #include "primitive_stream_arguments.h"
 #include "guest_image_readback.h"
@@ -1373,7 +1374,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
-    const bool resident_indices=indexed&&!expand_primitive&&!rewrite_restart&&
+    std::optional<GuestIndexExpansion> gpu_expansion;
+    if(indexed&&expand_primitive&&!r.enable_primitive_restart&&!capture&&
+       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None){
+        const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count);
+        if(!plan.output_count)return;
+        gpu_expansion=plan;
+    }
+    const bool resident_indices=indexed&&(!expand_primitive||gpu_expansion.has_value())&&!rewrite_restart&&
         r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None;
     const auto index_range=[&](UINT element){
         const auto range=GuestIndexRange::Make(r.index_base_address.Address<VAddr>(),index_offset,
@@ -1406,6 +1414,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             index_view={&index_storage,0,0,resident_index_format};
         }
         draw.first=0;
+        if(gpu_expansion)draw.count=gpu_expansion->output_count;
     }else if(indexed||expand_primitive) {
         const bool narrow=r.index_buffer_type.index_type==AmdGpu::IndexType::Index16;
         if(indexed&&!narrow&&r.index_buffer_type.index_type!=AmdGpu::IndexType::Index32)
@@ -1643,7 +1652,18 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             replay_feedback_snapshots.emplace(native,std::move(copy));
             Diagnostics::Count("image-feedback.gpu-snapshot");
         }
-        if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+        if(gpu_expansion){
+            // Complete ownership preparation before borrowing B; the output
+            // allocation may Finish, but must precede the authoritative borrow.
+            bindings.Prepare();
+            if(!index_expand_)index_expand_=std::make_unique<GuestIndexExpandPass>(device_.Get());
+            index_storage=AcquireTransientBuffer(u64(gpu_expansion->output_count)*4);
+            const auto source=resident_index_bytes?std::optional{BorrowPreparedShaderBuffer(resident_index_address,resident_index_bytes)}:std::nullopt;
+            const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
+            index_expand_->Record(*this,*gpu_expansion,source?source->resource:nullptr,source?source->offset:0,
+                resident_index_bytes/element,element,index_storage);
+            index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
+        }else if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         replay_prepared=true;
     };
     const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true,
