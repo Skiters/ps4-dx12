@@ -2,6 +2,7 @@
 #include "guest_indirect_pack.h"
 #include "guest_indirect_pack_shader.h"
 #include "guest_indirect_dispatch_shader.h"
+#include "compute_pipeline.h"
 #include <cstring>
 namespace NativeDX12 {
 static_assert(offsetof(GraphicsRuntime,first_vertex)==0&&offsetof(GraphicsRuntime,base_instance)==4&&
@@ -24,6 +25,7 @@ GuestIndirectPackPass::GuestIndirectPackPass(ID3D12Device* device){
     D3D12_INDIRECT_ARGUMENT_DESC argument{};argument.Type=D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
     const D3D12_COMMAND_SIGNATURE_DESC signature{sizeof(D3D12_DISPATCH_ARGUMENTS),1,&argument,0};
     Check(device->CreateCommandSignature(&signature,nullptr,IID_PPV_ARGS(&dispatch_signature_)));
+    dispatch_=UavBuffer(device,sizeof(D3D12_DISPATCH_ARGUMENTS));
 }
 void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackPlan& plan,
     Resource& source,u64 offset,Resource* count,u64 count_offset,const GraphicsRuntime& runtime,
@@ -62,7 +64,9 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
     auto seed=Buffer(device.Get(),plan.runtime_stride,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
     void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));
     memset(mapped,0,plan.runtime_stride);memcpy(mapped,&runtime,sizeof(runtime));seed.handle->Unmap(0,nullptr);
-    auto dispatch=renderer.AcquireTransientBuffer(sizeof(D3D12_DISPATCH_ARGUMENTS));
+    // A reused queue-ordered packet avoids allocation/Finish after the caller
+    // has borrowed authoritative prepared input Resource references.
+    auto& dispatch=dispatch_;
     renderer.RetainUntilFinish([source,count_value=count?*count:seed,commands,constants,output_count,seed,
         dispatch,root=root_,pipeline=pipeline_,builder=dispatch_pipeline_,signature=dispatch_signature_](u64){});
     const auto source_state=source.State(0),count_state=count?count->State(0):D3D12_RESOURCE_STATE_COMMON;

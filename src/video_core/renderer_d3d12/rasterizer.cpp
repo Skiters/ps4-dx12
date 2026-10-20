@@ -1784,6 +1784,17 @@ void Rasterizer::ValidatePreparedShaderBufferRange(VAddr address,u64 bytes){
     if(address-source.base>source.size||bytes>source.size-(address-source.base))
         throw std::logic_error("Late image binding exceeds the prepared buffer envelope");
 }
+Rasterizer::PreparedBufferBinding Rasterizer::BorrowPreparedShaderBuffer(VAddr address,u64 bytes){
+    std::lock_guard lock(execution_mutex_);
+    const auto view=PreparedDmaBuffer(address,bytes);
+    if(!view||address%4||bytes%4)throw std::logic_error("Indirect input is not a prepared aligned B range");
+    auto found=mappings_.upper_bound(address);--found;
+    auto& mapping=found->second;
+    if(view->resource.Get()!=mapping.gpu.handle.Get()||view->backing_version!=mapping.backing_version)
+        throw std::logic_error("Prepared B backing version changed during selection");
+    RetainUntilFinish([backing=mapping.gpu,version=mapping.backing_version](u64){});
+    return {&mapping.gpu,view->offset,bytes,view->backing_version};
+}
 Resource Rasterizer::CapturePreparedShaderBuffer(VAddr address,u64 bytes){
     std::lock_guard lock(execution_mutex_);
     if(!bytes||address%4||bytes%4||bytes>UINT64_MAX-D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT+1)

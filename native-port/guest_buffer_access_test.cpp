@@ -4,6 +4,7 @@
 #include "buffer_envelope_fixture.h"
 #include "semantic_buffer_residency_fixture.h"
 #include "video_core/renderer_d3d12/guest_indirect_arguments.h"
+#include "video_core/renderer_d3d12/guest_indirect_pack.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -284,6 +285,44 @@ static void IndirectArguments(ID3D12Device* device,std::byte* guest,std::byte* p
     for(u32 word=0;word<generated.size();++word)
         renderer.FillPreparedShaderBuffer(base+word*4,4,generated[word],D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     renderer.MarkShaderBufferWrites(std::span(&arguments,1));
+    {
+        // Real prepared B -> pack, before any CPU argument reconciliation.
+        // Both sharps must borrow the same authoritative mapping/version.
+        const auto plan=GuestIndirectPackPlan::Make(false,16,3);
+        GuestIndirectPackPass pack(device);
+        auto native=renderer.AcquireTransientBuffer(plan.command_bytes);
+        auto runtimes=renderer.AcquireTransientBuffer(plan.runtime_bytes);
+        auto native_count=renderer.AcquireTransientBuffer(4);
+        const auto input=renderer.BorrowPreparedShaderBuffer(base+4,48);
+        const auto input_count=renderer.BorrowPreparedShaderBuffer(base,4);
+        if(input.resource!=input_count.resource||input.version!=input_count.version||!input.version)
+            throw std::runtime_error("Prepared indirect source/count lost their shared B version");
+        const auto state=input.resource->State(0);
+        GraphicsRuntime runtime{};runtime.yz_flip_mask=0xa5;runtime.viewport_width=17;runtime.draw_id=11;
+        pack.Record(renderer,plan,*input.resource,input.offset,input_count.resource,input_count.offset,
+            runtime,native,runtimes,native_count);
+        if(input.resource->State(0)!=state||!renderer.IsGpuBufferModified(base,page))
+            throw std::runtime_error("Prepared indirect packing lost B state/dirty ownership");
+        auto packed=Buffer(device,48+2048+4,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto* commands=renderer.RecordingList();native.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        runtimes.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);native_count.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        commands->CopyBufferRegion(packed.handle.Get(),0,native.handle.Get(),0,48);
+        commands->CopyBufferRegion(packed.handle.Get(),48,runtimes.handle.Get(),0,2048);
+        commands->CopyBufferRegion(packed.handle.Get(),2096,native_count.handle.Get(),0,4);renderer.Finish();
+        std::array<std::byte,2100> expected{};
+        const u32 original[2][4]{{12,5,17,19},{23,6,29,31}};
+        for(u32 command=0;command<2;++command){
+            const u64 address=runtimes.handle->GetGPUVirtualAddress()+command*1024;
+            memcpy(expected.data()+command*24,&address,8);memcpy(expected.data()+command*24+8,original[command],16);
+            auto value=runtime;value.first_vertex=command?29:17;value.base_instance=command?31:19;value.draw_id=11+command;
+            memcpy(expected.data()+48+command*1024,&value,sizeof(value));
+        }
+        const u32 two=2;memcpy(expected.data()+2096,&two,4);
+        void* data{};D3D12_RANGE all{0,expected.size()};Check(packed.handle->Map(0,&all,&data));
+        const bool equal=!memcmp(data,expected.data(),expected.size());D3D12_RANGE none{};packed.handle->Unmap(0,&none);
+        if(!equal||!renderer.IsGpuBufferModified(base,page)||!renderer.IsGpuBufferModified(unrelated.address,page))
+            throw std::runtime_error("Prepared B -> GPU argument/runtime packing lost contents or published guest ownership");
+    }
     Require(renderer.ReadMemory(base,4),"GPU indirect count reconciliation failed");
     memcpy(&count,guest,4);count=std::min(count,3u);
     const auto layout=GuestIndirectLayout::Make(false,base,4,16,count);

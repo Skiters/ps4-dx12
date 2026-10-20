@@ -66,6 +66,12 @@ V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
     V o;o.position=float4(0,0,0,1);o.payload=uint4(vertex,instance,0x7fc12345u^tag,0x80000000u);return o;
 })",DXIL::Stage::Vertex);
     if(!batch_vertex.success)throw std::runtime_error(batch_vertex.diagnostics);
+    const std::array<std::span<const u8>,1> runtime_code{batch_vertex.bytecode},plain_code{vertex.bytecode};
+    const auto reflected=ResourceLayout::ReflectBindings(dxc,runtime_code);
+    if(reflected.size()!=1||reflected[0].type!=D3D12_DESCRIPTOR_RANGE_TYPE_CBV||
+       reflected[0].reg||reflected[0].space!=31||reflected[0].count!=1||
+       !ResourceLayout::ReflectBindings(dxc,plain_code).empty())
+        throw std::runtime_error("CPU indirect admission reflection lost the runtime CBV or invented a binding");
     if(!vertex.success||!geometry.success||!reader_vertex.success||!reader_geometry.success)
         throw std::runtime_error(vertex.diagnostics+geometry.diagnostics+reader_vertex.diagnostics+reader_geometry.diagnostics);
     const auto serialized_vertex=DXIL::CompileDxil(dxc,R"(

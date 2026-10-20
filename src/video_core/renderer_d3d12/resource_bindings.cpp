@@ -153,6 +153,10 @@ D3D12_DESCRIPTOR_RANGE_TYPE RangeType(D3D_SHADER_INPUT_TYPE type) {
 ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
     std::span<const std::span<const uint8_t>> shaders,bool root_graphics_runtime):root_graphics_runtime_(root_graphics_runtime) {
     if(!device||shaders.empty())throw std::invalid_argument("Resource layout needs device and shader bytecode");
+    Build(device,ReflectBindings(dxc_dll,shaders));
+}
+std::vector<ShaderBinding> ResourceLayout::ReflectBindings(const std::wstring& dxc_dll,
+    std::span<const std::span<const uint8_t>> shaders){
     Module module(dxc_dll);
     auto create=reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module.handle,"DxcCreateInstance"));
     if(!create)throw std::runtime_error("DXC reflection entry point unavailable");
@@ -186,7 +190,7 @@ ResourceLayout::ResourceLayout(ID3D12Device* device,const std::wstring& dxc_dll,
     }
     std::vector<ShaderBinding> reflected;
     for(const auto& [key,value]:unique)reflected.push_back(value);
-    Build(device,reflected);
+    return reflected;
 }
 std::vector<ShaderBinding> ResourceLayout::MergeBindings(std::span<const ShaderBinding> domains){
     std::vector<ShaderBinding> sorted(domains.begin(),domains.end()),merged;

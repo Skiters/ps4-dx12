@@ -54,6 +54,8 @@ public:
     ID3D12RootSignature* Root()const{return root_.Get();}
     UINT GraphicsRuntimeParameter()const{return graphics_runtime_parameter_;}
     const std::vector<ShaderBinding>& Bindings()const{return bindings_;}
+    static std::vector<ShaderBinding> ReflectBindings(const std::wstring& dxc,
+        std::span<const std::span<const uint8_t>> shaders);
     struct DescriptorProjection {bool sampler;UINT source,target,count;};
     // Match reflected register identities, independent of table/root offsets.
     static std::vector<DescriptorProjection> ProjectBindings(std::span<const ShaderBinding> source,

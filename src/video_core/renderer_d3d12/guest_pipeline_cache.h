@@ -27,6 +27,7 @@ class GuestPipelineCache {
         GraphicsRecord(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces,bool);
     };
     std::map<std::string,std::unique_ptr<GraphicsRecord>> graphics_;
+    std::map<std::array<u64,Shader::MaxStageTypes>,bool> root_runtime_support_;
     struct LogicalLayoutRecord {
         std::vector<ComPtr<ID3D12RootSignature>> roots;
         std::shared_ptr<ResourceLayout> layout;
@@ -58,6 +59,7 @@ public:
     StreamOutputLayout PrimitiveStreamLayout(const GuestGraphicsStages&);
     std::shared_ptr<ResourceLayout> LogicalLayout(std::span<const ShaderPipeline* const> domains);
     size_t GraphicsCount()const{return graphics_.size();}
+    bool SupportsRootGraphicsRuntime(const GuestGraphicsStages&);
     const ShaderPipeline& Graphics(AmdGpu::Liverpool&,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,
         u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0);

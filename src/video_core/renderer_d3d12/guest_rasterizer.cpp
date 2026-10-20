@@ -7,6 +7,7 @@
 #include "guest_viewports.h"
 #include "guest_point_capture.h"
 #include "guest_indirect_arguments.h"
+#include "guest_indirect_pack.h"
 #include "primitive_stream_arguments.h"
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
@@ -1008,11 +1009,12 @@ void GuestRasterizer::Draw(bool indexed,u32 index_offset) {
     catch(const std::exception& e){fprintf(stderr,"Native DX12 Draw failed: %s\n",e.what());fflush(stderr);throw;}
 }
 void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArguments* indirect,
-    u16 vertex_sgpr,u16 instance_sgpr) {
+    u16 vertex_sgpr,u16 instance_sgpr,const NativeIndirectBatch* batch) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Draw,"execution-lock");
     std::lock_guard lock(execution_mutex_);
     ValidateIndependentImageWatches();
     const auto& r=gpu_.regs;
+    const bool indirect_draw=indirect||batch;
     diagnostic.Detail("primitive=%u count=%u indexed=%u cb0=%llx",u32(r.primitive_type),r.num_indices,
         unsigned(indexed),(unsigned long long)r.color_buffers[0].Address());
     diagnostic.Stage("guest-state");
@@ -1058,7 +1060,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         r.depth_control.depth_enable,r.depth_control.stencil_enable);fflush(stderr);}
     DrawArguments draw=indirect?*indirect:DrawArguments{r.num_indices,r.num_instances.NumInstances(),
         indexed?0:r.index_offset,0,indexed?s32(r.index_offset):0};
-    if(!draw.count||!draw.instances||r.primitive_type==AmdGpu::PrimitiveType::None)return;
+    // A native batch has no CPU draw-count approximation. Only GPU packets
+    // determine its counts/instances; fixed preparation uses explicit bounds.
+    if(batch)draw={0,0};
+    if((!batch&&(!draw.count||!draw.instances))||r.primitive_type==AmdGpu::PrimitiveType::None)return;
     const auto depth_tests=GuestDepthTests(r);
     const bool has_depth=depth_tests.HasAttachment();
     if(Diagnostics::Enabled()&&((r.depth_control.stencil_enable&&!depth_tests.stencil)||
@@ -1081,9 +1086,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     diagnostic.Stage("shader-translation");
     std::optional<GuestPointCaptureStages> capture;
     GuestGraphicsStages guest;
-    try{guest=frontend_.BuildGraphics(gpu_,vertex_sgpr,instance_sgpr,indirect != nullptr);}
+    try{guest=frontend_.BuildGraphics(gpu_,vertex_sgpr,instance_sgpr,indirect_draw);}
     catch(const Shader::NativePointCapture::Required&){
-        capture=frontend_.BuildPointCaptureGraphics(r,vertex_sgpr,instance_sgpr,indirect != nullptr);
+        if(batch)throw std::logic_error("Native indirect batch was admitted with an unbounded capture stage");
+        capture=frontend_.BuildPointCaptureGraphics(r,vertex_sgpr,instance_sgpr,indirect_draw);
         guest=capture->stream_patch_vertices?capture->stream_producer:capture->producer;
         // Keep original producer reflection for ownership/feedback analysis,
         // even though the GS-only consumer no longer contains those stages.
@@ -1345,6 +1351,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     VAddr resident_index_address{};UINT resident_index_bytes{};
     DXGI_FORMAT resident_index_format=DXGI_FORMAT_UNKNOWN;
     std::vector<ShaderBufferRequest> index_requests;
+    if(batch){
+        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count);
+        index_requests.push_back({batch->address,plan.source_bytes,false,false,true});
+        index_requests.back().publish_dma_residency=false;
+        if(batch->count_address){index_requests.push_back({batch->count_address,4,false,false,true});
+            index_requests.back().publish_dma_residency=false;}
+    }
     const bool expand_primitive=GuestPrimitiveNeedsExpansion(r.primitive_type);
     const bool strip=state.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||state.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
     const bool custom_strip_restart=indexed&&r.enable_primitive_restart&&strip&&
@@ -1364,12 +1377,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const auto index_range=[&](UINT element){
         const u64 offset=u64(index_offset)*element;const auto base=r.index_base_address.Address<VAddr>();
         if(base>UINT64_MAX-offset)throw std::out_of_range("Guest index address overflow");
-        u64 available=u64(indirect?r.max_index_size:std::min(draw.count,r.max_index_size))*element;
+        u64 available=u64(indirect_draw?r.max_index_size:std::min(draw.count,r.max_index_size))*element;
 #ifdef SHADPS4_NATIVE_DX12_CORE
-        available=ClampMemoryRange(indirect?base:base+offset,available);
+        available=ClampMemoryRange(indirect_draw?base:base+offset,available);
 #endif
-        if(indirect)available=offset>=available?0:available-offset;
-        available=std::min(available,u64(draw.count)*element)&~u64(element-1);
+        if(indirect_draw)available=offset>=available?0:available-offset;
+        if(!batch)available=std::min(available,u64(draw.count)*element);
+        available&=~u64(element-1);
         if(available>UINT_MAX||base+offset>UINT64_MAX-available-3)
             throw std::out_of_range("Guest index range or native view size overflow");
         return std::pair{base+offset,UINT(available)};
@@ -1441,7 +1455,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     if(capture){state.topology=D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
         state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;}
-    const auto& pipeline=pipelines_.Graphics(capture?capture->replay:guest,state.pipeline,state.depth_bounds,stencil);
+    const auto& pipeline=pipelines_.Graphics(capture?capture->replay:guest,state.pipeline,state.depth_bounds,stencil,batch!=nullptr);
     if(trace){fprintf(stderr,"DX12 startup draw %u: native pipeline ready\n",traced_draws);fflush(stderr);}
     Shader::PushData push{};const auto& c=r.viewport_control;const auto& v=r.viewports[0];
     push.xoffset=c.xoffset_enable?v.xoffset:0;push.xscale=c.xscale_enable?v.xscale:1;
@@ -1923,6 +1937,24 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit_replay(bindings);},
                 textures_,r.ta_bc_base.Address());
         });
+    }else if(batch){
+        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count);
+        if(!indirect_pack_)indirect_pack_=std::make_unique<GuestIndirectPackPass>(device_.Get());
+        ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,
+            [&](ResourceBindings& bindings){
+                // Select attachments/index storage and freeze the complete B
+                // envelope before borrowing its authoritative native inputs.
+                prepare_replay(bindings);bindings.Prepare();
+                auto commands=AcquireTransientBuffer(plan.command_bytes);
+                auto constants=AcquireTransientBuffer(plan.runtime_bytes);
+                auto count=AcquireTransientBuffer(4);
+                const auto source=BorrowPreparedShaderBuffer(batch->address,plan.source_bytes);
+                const auto counter=batch->count_address?std::optional{BorrowPreparedShaderBuffer(batch->count_address,4)}:std::nullopt;
+                indirect_pack_->Record(*this,plan,*source.resource,source.offset,
+                    counter?counter->resource:nullptr,counter?counter->offset:0,runtime,commands,constants,count);
+                const StreamDrawArguments packet{&commands,0,batch->max_count,plan.command_stride,&count,0,&constants};
+                submit_replay(bindings,true,&packet);
+            },textures_,r.ta_bc_base.Address(),index_requests,true);
     }else ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,submit_replay,
         textures_,r.ta_bc_base.Address(),index_requests);
     if(bound_capture_id){
@@ -2019,6 +2051,31 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
     // Validate the command ABI before reading the optional GPU count. The
     // actual count, not max_count, determines the argument memory extent.
     (void)GuestIndirectLayout::Make(indexed,address,offset,stride,0);
+    const auto& r=gpu_.regs;
+    const bool strip=r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip||r.primitive_type==AmdGpu::PrimitiveType::LineStrip;
+    const bool native_restart=!indexed||!r.enable_primitive_restart||(strip&&
+        r.primitive_restart_index==(r.index_buffer_type.index_type==AmdGpu::IndexType::Index16?0xffffu:0xffffffffu));
+    bool native=ClassifyGuestDraw(r)==GuestDrawOperation::Rasterize&&!GuestPrimitiveNeedsExpansion(r.primitive_type)&&
+        !(r.depth_render_override.force_z_dirty&&r.depth_render_override.force_z_valid)&&
+        !(r.depth_render_override.force_stencil_dirty&&r.depth_render_override.force_stencil_valid)&&
+        native_restart&&(!indexed||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None)&&
+        (address+offset)%4==0&&count_address%4==0;
+    if(native){
+        // Private raw-buffer addressing is bounded; larger batches retain
+        // the complete CPU path rather than clipping commands to fit.
+        try{const auto plan=GuestIndirectPackPlan::Make(indexed,stride,max_count);
+            if(address+offset>UINT64_MAX-plan.source_bytes)native=false;}
+        catch(const std::overflow_error&){native=false;}
+    }
+    if(native){
+        GuestGraphicsStages stages;
+        try{stages=frontend_.BuildGraphics(gpu_,vertex_sgpr,instance_sgpr,true);}
+        catch(const Shader::NativePointCapture::Required&){native=false;}
+        if(native&&pipelines_.SupportsRootGraphicsRuntime(stages)){
+            const NativeIndirectBatch batch{address+offset,count_address,stride,max_count};
+            DrawInternal(indexed,0,nullptr,vertex_sgpr,instance_sgpr,&batch);return;
+        }
+    }
     u32 count=max_count;
     if(count_address) {
         if(!ReadMemory(count_address,4))throw std::out_of_range("Unmapped native indirect count");

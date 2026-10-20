@@ -28,6 +28,7 @@ class GuestIndirectPackPass {
     ComPtr<ID3D12PipelineState> pipeline_;
     ComPtr<ID3D12PipelineState> dispatch_pipeline_;
     ComPtr<ID3D12CommandSignature> dispatch_signature_;
+    Resource dispatch_;
 public:
     explicit GuestIndirectPackPass(ID3D12Device*);
     void Record(Rasterizer&,const GuestIndirectPackPlan&,Resource& source,u64 source_offset,

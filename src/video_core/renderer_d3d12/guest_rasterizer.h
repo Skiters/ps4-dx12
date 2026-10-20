@@ -9,6 +9,7 @@ namespace NativeDX12 {
 class NativePointCapturePass;
 class PrimitiveStreamPass;
 class GuestRawColorClear;
+class GuestIndirectPackPass;
 // Actual Liverpool dispatch entry points, distinct from the isolated probe's
 // buffer-only rasterizer. Unsupported guest states fail before GPU submission.
 class GuestRasterizer : public GuestBufferAccess {
@@ -21,6 +22,7 @@ class GuestRasterizer : public GuestBufferAccess {
     std::unique_ptr<NativePointCapturePass> point_capture_;
     std::unique_ptr<PrimitiveStreamPass> primitive_stream_;
     std::unique_ptr<GuestRawColorClear> raw_color_clear_;
+    std::unique_ptr<GuestIndirectPackPass> indirect_pack_;
     bool native_alpha_factor_{};
     bool image_watch_pending_{},validating_image_watches_{};
     std::function<bool(VAddr,std::span<std::byte>)> read_backing_;
@@ -62,7 +64,8 @@ class GuestRasterizer : public GuestBufferAccess {
     void ResolveColorTargets();
     void Dispatch(const u32 (&groups)[3]);
     bool ComputeImageOperation(const Shader::Info&,const u32 (&groups)[3]);
-    void DrawInternal(bool,u32,const DrawArguments*,u16,u16);
+    struct NativeIndirectBatch {VAddr address,count_address;u32 stride,max_count;};
+    void DrawInternal(bool,u32,const DrawArguments*,u16,u16,const NativeIndirectBatch* = nullptr);
 public:
     GuestRasterizer(ID3D12Device*,AmdGpu::Liverpool&,const Shader::Profile&,
         std::wstring converter,std::wstring dxc);

@@ -94,6 +94,8 @@ int main(int argc,char** argv){try{
     std::vector<u8> saved;
     {
         GuestPipelineCache pipelines(device.Get(),std::filesystem::path(argv[2]).wstring(),frontend,shaders);
+        if(!pipelines.SupportsRootGraphicsRuntime(guest)||!pipelines.SupportsRootGraphicsRuntime(guest))
+            throw std::runtime_error("Guest indirect runtime admission rejected the reflected runtime CBV");
         const auto* first=&pipelines.Graphics(guest,state.pipeline);
         const auto* second=&pipelines.Graphics(guest,alternate);draw(*first,0.25f);draw(*second,0.25f);
         const auto* first_root=&pipelines.Graphics(guest,state.pipeline,false,{},true);
