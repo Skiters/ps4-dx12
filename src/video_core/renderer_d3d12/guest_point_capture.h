@@ -19,6 +19,7 @@ class NativePointCapturePass {
     std::shared_ptr<Resource> Acquire(Rasterizer&,u64);
 public:
     using DrawArguments=Rasterizer::DrawArguments;
+    struct IndirectClear { Resource* resource;u64 offset; };
     explicit NativePointCapturePass(ID3D12Device*);
     // These descriptors belong to the host capture graph, not guest sharps.
     static constexpr bool IsInternalDescriptor(D3D12_DESCRIPTOR_RANGE_TYPE type,u32 reg,u32 space,u32 count){
@@ -44,6 +45,7 @@ public:
         const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
         const std::function<void(Resource&,const DrawArguments&)>& replay,
         const std::shared_ptr<Resource>& reusable={},
-        const Rasterizer::StreamDrawArguments* actual_records=nullptr);
+        const Rasterizer::StreamDrawArguments* actual_records=nullptr,
+        const IndirectClear* prepared_clear=nullptr);
 };
 }

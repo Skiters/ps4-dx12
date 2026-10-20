@@ -48,8 +48,8 @@ public:
     void RecordPartition(Rasterizer&,Resource& filled_size,Resource& arguments,const PrimitiveStreamPartition&);
 };
 struct PrimitiveStreamLease {
-    // Two DRAW packets: original slice at0, capture replay at16. One wrapper
-    // owns their shared state and lifetime, including both indirect consumers.
+    // DRAW packets at0/16 and clear DISPATCH at32. One wrapper owns the
+    // shared state/lifetime of all indirect consumers.
     Resource data,filled_size,arguments;
     PrimitiveStreamRange range;
 };

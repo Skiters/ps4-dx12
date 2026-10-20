@@ -123,7 +123,7 @@ void PrimitiveStreamArguments::RecordCount(Rasterizer& renderer,Resource& filled
     const auto source=filled.handle->GetDesc(),destination=arguments.handle->GetDesc();
     if(source.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||source.Width<4||
        (source.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE)||
-       destination.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||destination.Width<sizeof(D3D12_DRAW_ARGUMENTS)*(primitive_width?2:1)||
+       destination.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||destination.Width<(primitive_width?48:sizeof(D3D12_DRAW_ARGUMENTS))||
        !(destination.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
         throw std::invalid_argument("Primitive stream counter/argument resource extent or usage");
     // Retain both native objects and placed allocations through actual queue
@@ -168,7 +168,7 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         arena=std::make_shared<PrimitiveStreamLease>();
         arena->data=renderer.AcquireTransientBuffer(bytes);
         arena->filled_size=renderer.AcquireTransientBuffer(4);
-        arena->arguments=renderer.AcquireTransientBuffer(2*sizeof(D3D12_DRAW_ARGUMENTS));
+        arena->arguments=renderer.AcquireTransientBuffer(48);
         arenas_.push_back(arena);
     }
     arena->range=range;

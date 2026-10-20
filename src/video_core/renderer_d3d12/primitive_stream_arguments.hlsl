@@ -21,5 +21,7 @@ void partition() {
     uint available=vertices>first_vertex?vertices-first_vertex:0;
     uint active=min(available,vertex_limit);
     draw_arguments.Store4(0,uint4(active,1,first_vertex,0));
-    draw_arguments.Store4(16,uint4((active/primitive_width)*output_multiplier,1,0,0));
+    uint records=(active/primitive_width)*output_multiplier;
+    draw_arguments.Store4(16,uint4(records,1,0,0));
+    draw_arguments.Store3(32,uint3((records+255)/256,1,1));
 }

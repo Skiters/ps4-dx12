@@ -142,7 +142,7 @@ void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::Native
     const DrawArguments& original,D3D_PRIMITIVE_TOPOLOGY topology,
     const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
     const std::function<void(Resource&,const DrawArguments&)>& replay,const std::shared_ptr<Resource>& reusable,
-    const Rasterizer::StreamDrawArguments* actual_records){
+    const Rasterizer::StreamDrawArguments* actual_records,const IndirectClear* prepared_clear){
     if(!original.count||!original.instances)return;
     const auto checked=Shader::NativePointCapture::Plan::Make(plan.primitive_bound,plan.invocations,plan.emissions,plan.instances);
     if(checked.records!=plan.records||checked.bytes!=plan.bytes||plan.instances!=original.instances||
@@ -172,22 +172,43 @@ void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::Native
         if(owner.Get()!=expected.Get())throw std::invalid_argument("Capture count belongs to another device");
     }
     // Allocation may retire work; obtain it before borrowing RecordingList.
-    if(actual_records&&!clear_arguments_.handle)
+    if(prepared_clear){
+        if(!actual_records||!prepared_clear->resource||!prepared_clear->resource->handle||
+           prepared_clear->resource->handle.Get()==buffer->handle.Get())
+            throw std::invalid_argument("Invalid prepared capture clear resource");
+        auto& packet=*prepared_clear->resource;const auto desc=packet.handle->GetDesc();
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||prepared_clear->offset%4||
+           prepared_clear->offset>desc.Width||sizeof(D3D12_DISPATCH_ARGUMENTS)>desc.Width-prepared_clear->offset||
+           (packet.handle.Get()==count.handle.Get() && &packet!=&count))
+            throw std::invalid_argument("Invalid prepared capture clear packet extent/state");
+        Check(packet.handle->GetDevice(IID_PPV_ARGS(&owner)));
+        if(owner.Get()!=expected.Get())throw std::invalid_argument("Prepared capture clear belongs to another device");
+    }
+    if(actual_records&&!prepared_clear&&!clear_arguments_.handle)
         clear_arguments_=rasterizer.AcquireTransientBuffer(sizeof(D3D12_DISPATCH_ARGUMENTS));
     // A BeforeBind callback can Finish during guest ownership resolution.
     // Retain here for clear; descriptor allocation leases cover later passes.
     rasterizer.RetainUntilFinish([buffer,count,root=clear_root_,pipeline=clear_pipeline_](u64){});
     try{
         auto* list=rasterizer.RecordingList();buffer->Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        if(actual_records&&!(count.State(0)&D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
-            count.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        if(actual_records){
+            auto state=D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            if(prepared_clear&&prepared_clear->resource==&count)
+                state=D3D12_RESOURCE_STATES(state|D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+            if((count.State(0)&state)!=state)count.Transition(list,state);
+        }
         DX12_API_CALL(list->SetPipelineState(clear_pipeline_.Get()));DX12_API_CALL(list->SetComputeRootSignature(clear_root_.Get()));
         DX12_API_CALL(list->SetComputeRootUnorderedAccessView(0,buffer->handle->GetGPUVirtualAddress()));
         DX12_API_CALL(list->SetComputeRootShaderResourceView(2,count.handle->GetGPUVirtualAddress()));
         const u32 clear[]{u32(plan.records),u32(Shader::NativePointCapture::RecordBytes),actual_records?1u:0u,
             actual_records?u32(actual_records->offset):0u};
         DX12_API_CALL(list->SetComputeRoot32BitConstants(1,4,clear,0));
-        if(actual_records){
+        if(prepared_clear){
+            auto& packet=*prepared_clear->resource;
+            if(&packet!=&count)packet.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+            rasterizer.RetainUntilFinish([packet,signature=dispatch_signature_](u64){});
+            DX12_API_CALL(list->ExecuteIndirect(dispatch_signature_.Get(),1,packet.handle.Get(),prepared_clear->offset,nullptr,0));
+        }else if(actual_records){
             // Reuse on the same direct queue: the previous indirect read must
             // finish before this packet is overwritten. Keep the allocation
             // and both pipeline objects even if the pass owner is destroyed.

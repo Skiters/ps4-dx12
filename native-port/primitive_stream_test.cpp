@@ -428,15 +428,15 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     // Fused packets retain the old independent oracle, including incomplete
     // primitives and an oversized hardware count; trailing bytes are guards.
     for(const auto sample:std::array<std::pair<u32,u32>,6>{{{0,0},{6,0},{7,1},{9,3},{12,6},{99,6}}}){
-        auto seed=Buffer(device.Get(),52,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
-        auto filled=renderer.AcquireTransientBuffer(4),packets=renderer.AcquireTransientBuffer(48);
-        auto readback=Buffer(device.Get(),48,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto seed=Buffer(device.Get(),68,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto filled=renderer.AcquireTransientBuffer(4),packets=renderer.AcquireTransientBuffer(64);
+        auto readback=Buffer(device.Get(),64,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));
-        memset(mapped,0xcd,52);const u32 bytes=sample.first*16;memcpy(mapped,&bytes,4);seed.handle->Unmap(0,nullptr);
+        memset(mapped,0xcd,68);const u32 bytes=sample.first*16;memcpy(mapped,&bytes,4);seed.handle->Unmap(0,nullptr);
         auto* list=renderer.RecordingList();filled.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         packets.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyBufferRegion(filled.handle.Get(),0,seed.handle.Get(),0,4);
-        list->CopyBufferRegion(packets.handle.Get(),0,seed.handle.Get(),4,48);
+        list->CopyBufferRegion(packets.handle.Get(),0,seed.handle.Get(),4,64);
         const PrimitiveStreamPartition part{PrimitiveStreamRange::Make(16,18,3,6,6),
             Shader::NativePointCapture::Plan::Make(2,2,256,1),false,false};
         {
@@ -447,24 +447,29 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             generate.RecordPartition(renderer,filled,packets,part);
         } // The fused PSO and resources must survive their owner.
         packets.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
-        list->CopyBufferRegion(readback.handle.Get(),0,packets.handle.Get(),0,48);renderer.Finish();
-        std::array<std::byte,48> expected;expected.fill(std::byte{0xcd});
+        list->CopyBufferRegion(readback.handle.Get(),0,packets.handle.Get(),0,64);renderer.Finish();
+        std::array<std::byte,64> expected;expected.fill(std::byte{0xcd});
         const D3D12_DRAW_ARGUMENTS draws[]{{sample.second,1,6,0},{(sample.second/3)*512,1,0,0}};
-        memcpy(expected.data(),draws,sizeof(draws));D3D12_RANGE all{0,48};Check(readback.handle->Map(0,&all,&mapped));
-        const bool equal=!memcmp(mapped,expected.data(),48);readback.handle->Unmap(0,&none);
+        const D3D12_DISPATCH_ARGUMENTS dispatch{(sample.second/3)*2,1,1};
+        memcpy(expected.data(),draws,sizeof(draws));memcpy(expected.data()+32,&dispatch,sizeof(dispatch));
+        D3D12_RANGE all{0,64};Check(readback.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),64);readback.handle->Unmap(0,&none);
         if(!equal)throw std::runtime_error("Fused partition lost count/first vertex, primitive rounding, lifetime or guards");
     }
     // Clear-only GPU regression: empty/partial indirect replay must leave
     // unused records, payload words and the following record unchanged.
+    for(const bool prepared:std::array{false,true})
     for(const u32 active:std::array<u32,9>{0,1,2,255,256,257,258,259,UINT32_MAX}){
         constexpr u32 capacity=258;
         constexpr UINT bytes=UINT(Shader::NativePointCapture::RecordBytes*(capacity+1));
-        auto seed=Buffer(device.Get(),bytes+16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto seed=Buffer(device.Get(),bytes+32,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         void* data{};D3D12_RANGE no_read{};Check(seed.handle->Map(0,&no_read,&data));
-        memset(data,0x6d,bytes+16);const D3D12_DRAW_ARGUMENTS count{active,1,0,0};
+        memset(data,0x6d,bytes+32);const D3D12_DRAW_ARGUMENTS count{active,1,0,0};
         memcpy(static_cast<std::byte*>(data)+bytes,&count,sizeof(count));
-        D3D12_RANGE written{0,bytes+16};seed.handle->Unmap(0,&written);
-        auto counter=renderer.AcquireTransientBuffer(16);
+        const D3D12_DISPATCH_ARGUMENTS dispatch{(std::min(active,capacity)+255)/256,1,1};
+        memcpy(static_cast<std::byte*>(data)+bytes+16,&dispatch,sizeof(dispatch));
+        D3D12_RANGE written{0,bytes+32};seed.handle->Unmap(0,&written);
+        auto counter=renderer.AcquireTransientBuffer(32);
         auto result=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         ComPtr<ID3D12QueryHeap> query;
         const D3D12_QUERY_HEAP_DESC query_desc{D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS,1,0};
@@ -477,13 +482,26 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             auto* commands=renderer.RecordingList();arena->Transition(commands,D3D12_RESOURCE_STATE_COPY_DEST);
             counter.Transition(commands,D3D12_RESOURCE_STATE_COPY_DEST);
             commands->CopyBufferRegion(arena->handle.Get(),0,seed.handle.Get(),0,bytes);
-            commands->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),bytes,16);
-            commands->BeginQuery(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+            commands->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),bytes,32);
             const Rasterizer::StreamDrawArguments actual{&counter,0};
+            const NativePointCapturePass::IndirectClear clear_dispatch{&counter,16};
+            if(prepared){
+                auto alias=counter;
+                const NativePointCapturePass::IndirectClear invalids[]{{&counter,24},{&alias,16}};
+                for(const auto& invalid:invalids){
+                    bool rejected{};
+                    try{clear.Execute(renderer,Shader::NativePointCapture::Plan::Make(capacity,1,1,1),{capacity,1},D3D_PRIMITIVE_TOPOLOGY_POINTLIST,
+                        [](Resource&,const Rasterizer::DrawArguments&,u64,u64){},
+                        [](Resource&,const Rasterizer::DrawArguments&){},arena,&actual,&invalid);}
+                    catch(const std::invalid_argument&){rejected=true;}
+                    if(!rejected)throw std::runtime_error("Prepared clear accepted truncated packet or duplicate authoritative state");
+                }
+            }
+            commands->BeginQuery(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             for(u32 repeat=0;repeat<2;++repeat)
             clear.Execute(renderer,Shader::NativePointCapture::Plan::Make(capacity,1,1,1),{capacity,1},D3D_PRIMITIVE_TOPOLOGY_POINTLIST,
                 [](Resource&,const Rasterizer::DrawArguments&,u64,u64){},
-                [](Resource&,const Rasterizer::DrawArguments&){},arena,&actual);
+                [](Resource&,const Rasterizer::DrawArguments&){},arena,&actual,prepared?&clear_dispatch:nullptr);
         } // Queued clear root/PSO survives owner destruction before submission.
         renderer.RecordingList()->EndQuery(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
         renderer.RecordingList()->ResolveQueryData(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,statistics.handle.Get(),0);
@@ -500,7 +518,7 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         statistics.handle->Unmap(0,&no_read);
         // Two one-thread argument builders plus exactly the active clear
         // groups. A capacity-sized dispatch would fail empty/partial cases.
-        const u64 expected_invocations=2*(1+u64((std::min(active,capacity)+255)/256)*256);
+        const u64 expected_invocations=2*((prepared?0:1)+u64((std::min(active,capacity)+255)/256)*256);
         if(invocations!=expected_invocations)
             throw std::runtime_error("Capture clear dispatched capacity instead of the actual GPU prefix");
     }

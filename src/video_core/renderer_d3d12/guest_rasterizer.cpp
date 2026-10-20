@@ -1887,6 +1887,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
                     [&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
                         const StreamDrawArguments actual_records{&lease.arguments,sizeof(D3D12_DRAW_ARGUMENTS)};
+                        const NativePointCapturePass::IndirectClear clear_dispatch{&lease.arguments,32};
                         point_capture_->Execute(*this,part.capture,DrawArguments{part.input.limit,1},consumer_state.topology,
                             [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
                                 auto bindings=common.ForkForReplay(consumer_pipeline.Layout());
@@ -1901,7 +1902,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                                 BindGuestGraphicsRuntime(*bindings,local_runtime);RetainUntilFinish([bindings](u64){});
                                 NativePointCapturePass::BindReplay(*bindings,buffer,part.capture.bytes);
                                 submit_replay(*bindings,part.last,&actual_records);
-                            },arena,&actual_records);
+                            },arena,&actual_records,&clear_dispatch);
                     });
             },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout);
     }else if(capture){
