@@ -240,6 +240,9 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
     case IR::Attribute::BaseVertex:
         return ctx.OpLoad(ctx.U32[1], ctx.base_vertex);
     case IR::Attribute::BaseInstance:
+        if(ctx.sw_stage==SwStage::Vertex&&ctx.runtime_info.sw.vs.native_capture_base_instance)
+            return ctx.OpLoad(ctx.U32[1],ctx.OpAccessChain(
+                ctx.TypePointer(spv::StorageClass::Uniform,ctx.U32[1]),ctx.native_point_runtime,ctx.ConstU32(13u)));
         return ctx.OpLoad(ctx.U32[1], ctx.base_instance);
     case IR::Attribute::WorkgroupIndex:
         return ctx.workgroup_index_id;

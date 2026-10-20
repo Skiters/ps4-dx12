@@ -45,10 +45,15 @@ int main(int argc,char** argv){try{
     DXIL::SpirvConvertOptions sysval_options;sysval_options.stage=DXIL::SpirvStage::Vertex;
     const auto sysval_vertex=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),Tests::DrawSysvalVertex(),sysval_options);
     if(!sysval_vertex.success)throw std::runtime_error(sysval_vertex.diagnostics);
+    const auto capture_sysval_vertex=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),Tests::DrawSysvalVertex(true),sysval_options);
+    if(!capture_sysval_vertex.success)throw std::runtime_error(capture_sysval_vertex.diagnostics);
     if(std::string_view(argv[3])=="compile-sysvals"){
         std::ofstream file("draw-sysvals-vertex.dxil",std::ios::binary);
         file.write(reinterpret_cast<const char*>(sysval_vertex.bytecode.data()),sysval_vertex.bytecode.size());
         if(!file)throw std::runtime_error("Cannot save draw sysval DXIL");
+        std::ofstream capture_file("capture-sysvals-vertex.dxil",std::ios::binary);
+        capture_file.write(reinterpret_cast<const char*>(capture_sysval_vertex.bytecode.data()),capture_sysval_vertex.bytecode.size());
+        if(!capture_file)throw std::runtime_error("Cannot save capture sysval DXIL");
         puts("PASS: draw sysval SPIR-V converted to signed DXIL; GPU NOT_RUN");return 0;
     }
     const auto vertex=DXIL::CompileDxil(dxc,R"(
@@ -127,8 +132,10 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     auto state=BuildGuestGraphicsState(regs,{});state.rasterizer_discard=true;
     Rasterizer renderer(device.Get());
-    if(std::string_view(argv[3])=="draw-sysvals"){
+    if(std::string_view(argv[3])=="draw-sysvals"||std::string_view(argv[3])=="capture-instance-sysvals"){
         Tests::CheckDrawSysvalsGpu(device.Get(),renderer,dxc,sysval_vertex.bytecode);
+        if(std::string_view(argv[3])=="capture-instance-sysvals")
+            Tests::CheckDrawSysvalsGpu(device.Get(),renderer,dxc,capture_sysval_vertex.bytecode,true);
         renderer.ValidateDebugMessages();puts("PASS: Vulkan direct/expanded draw sysvals");return 0;
     }
     Tests::CheckGuestIndexExpansionGpu(device.Get(),renderer);

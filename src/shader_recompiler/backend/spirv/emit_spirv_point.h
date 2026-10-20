@@ -13,13 +13,15 @@ inline Sirit::Id DefinePointRuntime(Sirit::Module& ctx){
     const auto extents=ctx.TypeArray(ctx.TypeVector(f32_type,4),ctx.Constant(u32_type,16u));
     ctx.Decorate(extents,spv::Decoration::ArrayStride,16u);
     const auto type=ctx.TypeStruct(u32_type,u32_type,u32_type,u32_type,u32_type,
-        f32_type,f32_type,u32_type,f32_type,u32_type,extents,extents,extents);
+        f32_type,f32_type,u32_type,f32_type,u32_type,extents,extents,extents,u32_type);
     ctx.Decorate(type,spv::Decoration::Block);
     for(u32 member=0;member<9;++member)ctx.MemberDecorate(type,member,spv::Decoration::Offset,member*4);
     ctx.MemberDecorate(type,9u,spv::Decoration::Offset,36u);
     ctx.MemberDecorate(type,10u,spv::Decoration::Offset,48u);
     ctx.MemberDecorate(type,11u,spv::Decoration::Offset,304u);
     ctx.MemberDecorate(type,12u,spv::Decoration::Offset,560u);
+    // Keep existing member indices/offsets and use the original padding word.
+    ctx.MemberDecorate(type,13u,spv::Decoration::Offset,40u);
     const auto variable=ctx.AddGlobalVariable(ctx.TypePointer(spv::StorageClass::Uniform,type),spv::StorageClass::Uniform);
     ctx.Decorate(variable,spv::Decoration::DescriptorSet,31u);ctx.Decorate(variable,spv::Decoration::Binding,0u);
     return variable;

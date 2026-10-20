@@ -1958,6 +1958,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(!point_capture_)point_capture_=std::make_unique<NativePointCapturePass>(device_.Get());
         point_capture_->Execute(*this,plan,draw,source_state.topology,[&](Resource& buffer,const DrawArguments& instance,u64 offset,u64 bytes){
             auto producer_runtime=runtime;producer_runtime.base_instance=instance.first_instance;
+            producer_runtime.capture_base_instance=runtime.base_instance;
             ExecuteGuestGraphicsResources(device_.Get(),*this,producer_pipeline,producer_stages,push,producer_runtime,
                 [&](ResourceBindings& bindings){
                     NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);

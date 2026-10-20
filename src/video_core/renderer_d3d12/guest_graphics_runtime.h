@@ -15,6 +15,9 @@ struct GraphicsRuntime {
     // Keep Mesa's 36-byte prefix unchanged. Expanded points perform the final
     // viewport transform themselves so their footprint can cross its edges.
     u32 native_point_flip_mask{};
+    // Split capture draws advance base_instance for InstanceIndex, while
+    // guest BaseInstance/SGPR remains that of the original logical draw.
+    u32 capture_base_instance{};
     alignas(16) std::array<std::array<float,4>,16> viewport_extents{};
     alignas(16) std::array<std::array<float,4>,16> viewport_depths{};
     alignas(16) std::array<std::array<float,4>,16> viewport_clip_transforms{};
@@ -38,6 +41,7 @@ struct GraphicsRuntime {
 };
 static_assert(offsetof(GraphicsRuntime,depth_bias)==32);
 static_assert(offsetof(GraphicsRuntime,native_point_flip_mask)==36);
+static_assert(offsetof(GraphicsRuntime,capture_base_instance)==40);
 static_assert(offsetof(GraphicsRuntime,viewport_extents)==48);
 static_assert(offsetof(GraphicsRuntime,viewport_depths)==304);
 static_assert(offsetof(GraphicsRuntime,viewport_clip_transforms)==560);

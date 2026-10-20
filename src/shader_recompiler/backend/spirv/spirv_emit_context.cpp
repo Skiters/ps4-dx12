@@ -330,6 +330,9 @@ void EmitContext::DefineInputs() {
     }
     switch (sw_stage) {
     case SwStage::Vertex: {
+        if(runtime_info.sw.vs.native_capture_base_instance&&info.loads.Get(IR::Attribute::BaseInstance)){
+            native_point_runtime=DefinePointRuntime(*this);interfaces.push_back(native_point_runtime);
+        }
         vertex_index = DefineVariable(U32[1], spv::BuiltIn::VertexIndex, spv::StorageClass::Input);
         instance_id = DefineVariable(U32[1], spv::BuiltIn::InstanceIndex, spv::StorageClass::Input);
         if (info.loads.Get(IR::Attribute::BaseVertex)) {
@@ -651,7 +654,9 @@ void EmitContext::DefineVertexBlock() {
     if(profile.native_viewport_clip_conversion&&
        ((hw_stage==HwStage::Vertex&&runtime_info.hw.vs.clip_disable)||
         (sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_expansion&&runtime_info.hw.gs.native_point_clip_disable))){
-        native_point_runtime=DefinePointRuntime(*this);interfaces.push_back(native_point_runtime);
+        if(!ValidId(native_point_runtime)){
+            native_point_runtime=DefinePointRuntime(*this);interfaces.push_back(native_point_runtime);
+        }
     }
     const bool needs_clip_distance_emulation = sw_stage == SwStage::Vertex &&
                                                hw_stage == HwStage::Vertex &&

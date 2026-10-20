@@ -3,8 +3,9 @@
 #include <sirit/sirit.h>
 #include <cstdio>
 #include "video_core/renderer_d3d12/guest_graphics_runtime.h"
+#include "shader_recompiler/backend/spirv/emit_spirv_point.h"
 namespace NativeDX12::Tests {
-inline std::vector<u32> DrawSysvalVertex(){
+inline std::vector<u32> DrawSysvalVertex(bool split_capture=false){
     Sirit::Module m(0x00010500);m.AddCapability(spv::Capability::Shader);m.AddCapability(spv::Capability::DrawParameters);
     const auto u=m.TypeUInt(32),f=m.TypeFloat(32),u4=m.TypeVector(u,4),f4=m.TypeVector(f,4),v=m.TypeVoid();
     const auto input=[&](spv::BuiltIn builtin){auto id=m.AddGlobalVariable(m.TypePointer(spv::StorageClass::Input,u),spv::StorageClass::Input);
@@ -16,13 +17,17 @@ inline std::vector<u32> DrawSysvalVertex(){
     const auto data=m.AddGlobalVariable(m.TypePointer(spv::StorageClass::Output,u4),spv::StorageClass::Output);
     m.Decorate(data,spv::Decoration::Location,0u);
     const auto main=m.OpFunction(v,spv::FunctionControlMask::MaskNone,m.TypeFunction(v));
-    const std::array interfaces{vertex,base,instance,base_instance,position,data};m.AddEntryPoint(spv::ExecutionModel::Vertex,main,"main",interfaces);
-    m.AddLabel(m.OpLabel());const std::array words{m.OpLoad(u,vertex),m.OpLoad(u,base),m.OpLoad(u,instance),m.OpLoad(u,base_instance)};
+    const auto runtime=split_capture?Shader::Backend::SPIRV::DefinePointRuntime(m):Sirit::Id{};
+    std::vector<Sirit::Id> interfaces{vertex,base,instance,base_instance,position,data};if(split_capture)interfaces.push_back(runtime);
+    m.AddEntryPoint(spv::ExecutionModel::Vertex,main,"main",interfaces);
+    m.AddLabel(m.OpLabel());
+    const auto logical_base=split_capture?m.OpLoad(u,m.OpAccessChain(m.TypePointer(spv::StorageClass::Uniform,u),runtime,m.Constant(u,13u))):m.OpLoad(u,base_instance);
+    const std::array words{m.OpLoad(u,vertex),m.OpLoad(u,base),m.OpLoad(u,instance),logical_base};
     m.OpStore(data,m.OpCompositeConstruct(u4,words));
     const auto zero=m.Constant(f,0.f),one=m.Constant(f,1.f);const std::array point{zero,zero,zero,one};
     m.OpStore(position,m.OpCompositeConstruct(f4,point));m.OpReturn();m.OpFunctionEnd();return m.Assemble();
 }
-inline void CheckDrawSysvalsGpu(ID3D12Device* device,Rasterizer& renderer,const std::wstring& dxc,std::span<const u8> vertex){
+inline void CheckDrawSysvalsGpu(ID3D12Device* device,Rasterizer& renderer,const std::wstring& dxc,std::span<const u8> vertex,bool split_capture=false){
     namespace D=Shader::Backend::DX12;
     const auto gs=D::CompileGeometryDxil(dxc,R"(
 struct V {float4 position:SV_Position;uint4 value:TEXCOORD0;};
@@ -42,15 +47,18 @@ struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
         const u32 indices[]{0,1,1,2,2,0};memcpy(mapped,indices,sizeof(indices));const u32 zero=0;memcpy(static_cast<std::byte*>(mapped)+24,&zero,4);seed.handle->Unmap(0,nullptr);
         auto* list=renderer.RecordingList();output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),32,bytes+16);list->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),24,4);
-        GraphicsRuntime runtime{};runtime.first_vertex=7;runtime.base_instance=11;
-        ResourceBindings bindings(device,pipeline.Layout());auto constants=Buffer(device,1024,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
-        Check(constants.handle->Map(0,&none,&mapped));memset(mapped,0,1024);memcpy(mapped,&runtime,sizeof(runtime));constants.handle->Unmap(0,nullptr);
-        bindings.Cbv(0,31,constants.handle.Get(),0,1024);
         const Rasterizer::IndexBinding index{&seed,0,24,DXGI_FORMAT_R32_UINT};
         const Rasterizer::StreamOutputBinding target{&output,&counter,0,bytes,0};
         const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
+        const auto record=[&](u32 instances,u32 first_instance){
+        GraphicsRuntime runtime{};runtime.first_vertex=7;runtime.base_instance=first_instance;runtime.capture_base_instance=11;
+        ResourceBindings bindings(device,pipeline.Layout());auto constants=Buffer(device,1024,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        Check(constants.handle->Map(0,&none,&mapped));memset(mapped,0,1024);memcpy(mapped,&runtime,sizeof(runtime));constants.handle->Unmap(0,nullptr);
+        bindings.Cbv(0,31,constants.handle.Get(),0,1024);renderer.RetainUntilFinish([constants](u64){});
         renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,
-            {count,2,expanded?0u:7u,11,0},{},expanded?&index:nullptr,false,nullptr,&target);
+            {count,instances,expanded?0u:7u,first_instance,0},{},expanded?&index:nullptr,false,nullptr,&target);
+        };
+        if(split_capture){record(1,11);record(1,12);}else record(2,11);
         output.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,bytes+16);renderer.Finish();
         std::vector<std::byte> expected(bytes+16,std::byte{0xcd});
@@ -59,8 +67,8 @@ struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
         D3D12_RANGE all{0,bytes+16};Check(result.handle->Map(0,&all,&mapped));const bool equal=!memcmp(mapped,expected.data(),expected.size());
         if(!equal)for(u32 record=0;record<records;++record){
             std::array<u32,4> actual{},wanted{};memcpy(actual.data(),static_cast<std::byte*>(mapped)+record*16,16);memcpy(wanted.data(),expected.data()+record*16,16);
-            if(actual!=wanted){fprintf(stderr,"draw-sysvals expanded=%u record=%u actual=%08x/%08x/%08x/%08x expected=%08x/%08x/%08x/%08x\n",
-                unsigned(expanded),record,actual[0],actual[1],actual[2],actual[3],wanted[0],wanted[1],wanted[2],wanted[3]);break;}
+            if(actual!=wanted){fprintf(stderr,"draw-sysvals split=%u expanded=%u record=%u actual=%08x/%08x/%08x/%08x expected=%08x/%08x/%08x/%08x\n",
+                unsigned(split_capture),unsigned(expanded),record,actual[0],actual[1],actual[2],actual[3],wanted[0],wanted[1],wanted[2],wanted[3]);break;}
         }
         result.handle->Unmap(0,&none);
         if(!equal)throw std::runtime_error(expanded?"Expanded nonindexed draw lost Vulkan VertexIndex/BaseVertex/instance contract":"Direct draw sysval contract mismatch");

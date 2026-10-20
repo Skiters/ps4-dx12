@@ -88,6 +88,7 @@ struct SwVertexRuntimeInfo {
     bool is_indirect{};
     bool tess_emulated_primitive{};
     bool native_point_expansion{};
+    bool native_capture_base_instance{};
     u32 native_point_live_parameters{};
     std::array<NativePointOutput,32> native_point_outputs{};
 
