@@ -41,7 +41,7 @@ int main(int argc,char** argv){try{
     catch(const std::invalid_argument&){rejected_width=true;}
     if(!rejected_width)throw std::runtime_error("Invalid buffered GS primitive width accepted");
     EmulatorSettings.SetPipelineCacheEnabled(false);_putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
-    const auto dxc=std::filesystem::path(argv[2]).wstring();
+    const auto dxc=std::filesystem::absolute(argv[2]).wstring();
     DXIL::SpirvConvertOptions sysval_options;sysval_options.stage=DXIL::SpirvStage::Vertex;
     const auto sysval_vertex=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),Tests::DrawSysvalVertex(),sysval_options);
     if(!sysval_vertex.success)throw std::runtime_error(sysval_vertex.diagnostics);
