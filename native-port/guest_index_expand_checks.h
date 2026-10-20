@@ -26,7 +26,8 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
     const std::array<u32,12> quad{0,1,2,2,1,3,2,3,4,4,3,5};
     const std::array<u32,7> values{0xffffffff,0x80001234,17,0,0x7fc08000,6,9};
     for(auto type:std::array{P::TriangleFan,P::Polygon,P::LineLoop,P::QuadStrip})
-    for(u32 element:std::array{2u,4u})for(u32 available:std::array{0u,4u,7u}){
+    for(u32 element:std::array{0u,2u,4u})for(u32 available:std::array{0u,4u,7u}){
+        if(!element&&available!=7)continue;
         const auto plan=GuestIndexExpansion::Make(type,7);
         const u64 bytes=u64(plan.output_count)*4,offset=element;
         auto seed=Buffer(device,64+bytes+16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -44,9 +45,11 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
         const auto before=source.State(0);
         {
             GuestIndexExpandPass pass(device);
-            bool rejected{};try{pass.Record(renderer,plan,&source,offset,available,element,source);}catch(const std::invalid_argument&){rejected=true;}
-            if(!rejected)throw std::runtime_error("Index expansion accepted source/output alias");
-            pass.Record(renderer,plan,available?&source:nullptr,available?offset:0,available,element,output);
+            if(element){
+                bool rejected{};try{pass.Record(renderer,plan,&source,offset,available,element,source);}catch(const std::invalid_argument&){rejected=true;}
+                if(!rejected)throw std::runtime_error("Index expansion accepted source/output alias");
+                pass.Record(renderer,plan,available?&source:nullptr,available?offset:0,available,element,output);
+            }else pass.RecordGenerated(renderer,plan,UINT32_MAX-3,output);
         } // The queued shader/root/source/output survive pass destruction.
         if(source.State(0)!=before)throw std::runtime_error("Index expansion lost authoritative source state");
         // A later original producer can overwrite the guest index alias.
@@ -58,8 +61,9 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
         const std::span<const u32> ordinals=type==P::LineLoop?std::span<const u32>(loop):
             type==P::QuadStrip?std::span<const u32>(quad):std::span<const u32>(fan);
         std::vector<std::byte> expected(size_t(bytes+16),std::byte{0xcd});
-        for(size_t i=0;i<ordinals.size();++i){const u32 value=ordinals[i]<available?
-            (element==2?values[ordinals[i]]&65535:values[ordinals[i]]):0;memcpy(expected.data()+i*4,&value,4);}
+        for(size_t i=0;i<ordinals.size();++i){const u32 value=!element?(UINT32_MAX-3)+ordinals[i]:
+            ordinals[i]<available?(element==2?values[ordinals[i]]&65535:values[ordinals[i]]):0;
+            memcpy(expected.data()+i*4,&value,4);}
         D3D12_RANGE all{0,SIZE_T(bytes+16)};Check(result.handle->Map(0,&all,&mapped));
         const bool equal=!memcmp(mapped,expected.data(),expected.size());result.handle->Unmap(0,&none);
         if(!equal)throw std::runtime_error("GPU index expansion changed topology/order/bits/zero padding/guards");

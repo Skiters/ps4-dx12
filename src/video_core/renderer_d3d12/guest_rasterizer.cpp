@@ -1375,8 +1375,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
     std::optional<GuestIndexExpansion> gpu_expansion;
-    if(indexed&&expand_primitive&&!r.enable_primitive_restart&&
-       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None){
+    const u32 generated_index_first=draw.first;
+    if(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
+       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None))){
         const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count);
         if(!plan.output_count)return;
         gpu_expansion=plan;
@@ -1396,7 +1397,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             throw std::out_of_range("Guest index range or native view size overflow");
         return std::pair{range.address,UINT(available)};
     };
-    if(resident_indices){
+    if(gpu_expansion&&!indexed){
+        draw.count=gpu_expansion->output_count;draw.first=0;draw.base_vertex=0;
+    }else if(resident_indices){
         const auto type=r.index_buffer_type.index_type;
         if(type!=AmdGpu::IndexType::Index16&&type!=AmdGpu::IndexType::Index32)
             throw std::runtime_error("Invalid guest index element type");
@@ -1519,11 +1522,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             bindings.Prepare();
             if(!index_expand_)index_expand_=std::make_unique<GuestIndexExpandPass>(device_.Get());
             index_storage=AcquireTransientBuffer(u64(gpu_expansion->output_count)*4);
-            const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
-            RetainUntilFinish([source](u64){});
-            const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
-            index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
-                resident_index_bytes/element,element,index_storage);
+            if(indexed){
+                const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
+                RetainUntilFinish([source](u64){});
+                const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
+                index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
+                    resident_index_bytes/element,element,index_storage);
+            }else index_expand_->RecordGenerated(*this,*gpu_expansion,generated_index_first,index_storage);
             index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
             expanded_indices_prepared=true;
         }else if(resident_index_address)

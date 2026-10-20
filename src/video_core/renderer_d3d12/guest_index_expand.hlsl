@@ -2,9 +2,10 @@ ByteAddressBuffer indices : register(t0);
 RWByteAddressBuffer expanded : register(u0);
 cbuffer Parameters : register(b0) {
     uint mode,input_count,output_count,available;
-    uint element,byte_offset,row_pitch;
+    uint element,byte_offset,row_pitch,generated_first;
 };
 uint read_index(uint index) {
+    if(element==0)return generated_first+index;
     if(index>=available)return 0;
     uint address=byte_offset+index*element;
     uint value=indices.Load(address&~3u);

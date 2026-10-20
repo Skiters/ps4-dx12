@@ -22,11 +22,13 @@ class GuestIndexExpandPass {
     ComPtr<ID3D12RootSignature> root_;
     ComPtr<ID3D12PipelineState> pipeline_;
     Resource zero_;
+    void RecordInternal(Rasterizer&,const GuestIndexExpansion&,Resource*,u64,u32,u32,Resource&,bool,u32);
 public:
     explicit GuestIndexExpandPass(ID3D12Device*);
     // Source is the authoritative prepared B wrapper; missing source elements
     // are zero, matching the complete CPU decoder's padded index vector.
     void Record(Rasterizer&,const GuestIndexExpansion&,Resource* source,u64 offset,
         u32 available,u32 element,Resource& output);
+    void RecordGenerated(Rasterizer&,const GuestIndexExpansion&,u32 first,Resource& output);
 };
 }

@@ -19,6 +19,13 @@ GuestIndexExpandPass::GuestIndexExpandPass(ID3D12Device* device){
 }
 void GuestIndexExpandPass::Record(Rasterizer& renderer,const GuestIndexExpansion& plan,
     Resource* source,u64 offset,u32 available,u32 element,Resource& output){
+    RecordInternal(renderer,plan,source,offset,available,element,output,false,0);
+}
+void GuestIndexExpandPass::RecordGenerated(Rasterizer& renderer,const GuestIndexExpansion& plan,u32 first,Resource& output){
+    RecordInternal(renderer,plan,nullptr,0,0,4,output,true,first);
+}
+void GuestIndexExpandPass::RecordInternal(Rasterizer& renderer,const GuestIndexExpansion& plan,
+    Resource* source,u64 offset,u32 available,u32 element,Resource& output,bool generated,u32 first){
     std::lock_guard lock(renderer.ExecutionMutex());
     const AmdGpu::PrimitiveType types[]{AmdGpu::PrimitiveType::TriangleFan,AmdGpu::PrimitiveType::LineLoop,AmdGpu::PrimitiveType::QuadStrip};
     if(plan.mode>2||(element!=2&&element!=4)||available>plan.input_count||!plan.output_count||
@@ -46,7 +53,7 @@ void GuestIndexExpandPass::Record(Rasterizer& renderer,const GuestIndexExpansion
     list->SetComputeRootShaderResourceView(0,input.handle->GetGPUVirtualAddress()+(offset&~u64(3)));
     list->SetComputeRootUnorderedAccessView(1,output.handle->GetGPUVirtualAddress());
     const u32 groups=(plan.output_count+127)/128,rows=(groups+65534)/65535,columns=(groups+rows-1)/rows;
-    const u32 params[]{plan.mode,plan.input_count,plan.output_count,available,element,u32(offset%4),columns*128,0};
+    const u32 params[]{plan.mode,plan.input_count,plan.output_count,available,generated?0:element,u32(offset%4),columns*128,first};
     list->SetComputeRoot32BitConstants(2,8,params,0);list->Dispatch(columns,rows,1);
     output.UavBarrier(list);output.Transition(list,D3D12_RESOURCE_STATE_INDEX_BUFFER);
     if(input.State(0)!=previous)input.Transition(list,previous);
