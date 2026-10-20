@@ -78,6 +78,11 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    const bool capture_instance_gcn=mode=="capture-instance-gcn";
+    if(capture_instance_gcn){
+        if(!compile_shaders)throw std::invalid_argument("capture-instance-gcn is an explicit CPU compiler regression");
+        mode="capture-point-size-gcn-loop-bound";
+    }
     const auto binding=[](D3D12_DESCRIPTOR_RANGE_TYPE type,UINT reg,UINT space,UINT count,UINT offset,
                           D3D_SRV_DIMENSION dimension=D3D_SRV_DIMENSION_UNKNOWN){
         ShaderBinding value{type,reg,space,count,offset};value.dimension=dimension;return value;
@@ -384,6 +389,11 @@ int main(int argc,char** argv){try{
         for(u32 component=0;component<4;++component){
             es.push_back(0xe0302000u|component*4);es.push_back(0x80000000u|((4+component)<<8));}
         es.push_back(0xbf8c007f);
+        if(capture_instance_gcn){
+            // Actual GCN consumes the indirect s8 BaseInstance and v3 instance
+            // ordinal through live ESGS position components (no host shader).
+            es.insert(es.end(),{0x7e080208u,0x7e0a0303u}); // v4=s8; v5=v3
+        }
         es.insert(es.end(),{0x7e100281,0xe0004000u|(50u<<18),0x80010800});
         for(u32 component=0;component<4;++component){
             es.push_back(0xe0704000u|component*4);es.push_back(0x80400000u|((4+component)<<8));}
@@ -446,6 +456,7 @@ int main(int argc,char** argv){try{
         regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::EsGs;
         regs.es_program=regs.vs_program;regs.es_program.address=reinterpret_cast<u64>(export_code.data())>>8;
         regs.es_program.settings.num_user_regs=8;
+        if(capture_instance_gcn){regs.es_program.settings.num_user_regs=9;regs.es_program.settings.vgpr_comp_cnt=3;}
         regs.gs_program.address=reinterpret_cast<u64>(geometry_code.data())>>8;
         regs.gs_program.settings.num_user_regs=gcn_loop?9:8;regs.gs_program.settings.num_vgprs=gcn_center_distances?4:parameters?4:2;
         regs.vs_program.address=reinterpret_cast<u64>(copy_code.data())>>8;
@@ -466,7 +477,13 @@ int main(int argc,char** argv){try{
     profile.native_point_capture_stream_input=stream_inputs;
     // Keep guest program descriptors alive for the frontend's cached stages.
     std::unique_ptr<AmdGpu::Regs> original_tess_regs;
-    GuestShaderFrontend frontend(profile);auto guest=frontend.BuildGraphics(regs);
+    GuestShaderFrontend frontend(profile);auto guest=frontend.BuildGraphics(regs,0,capture_instance_gcn?0xd4:0,capture_instance_gcn);
+    if(capture_instance_gcn){
+        const auto* vertex=guest.stages[u32(Shader::SwStage::Vertex)];
+        if(!vertex||!vertex->runtime.sw.vs.native_capture_base_instance||
+           !vertex->info.loads.Get(Shader::IR::Attribute::BaseInstance)||!vertex->info.loads.Get(Shader::IR::Attribute::InstanceId))
+            throw std::runtime_error("Original GCN did not retain both logical BaseInstance and advancing InstanceIndex");
+    }
     if(point_capture&&gcn_loop){
         auto ordinary_profile=profile;ordinary_profile.native_point_capture=false;ordinary_profile.native_point_capture_stream_input=false;
         GuestShaderFrontend ordinary(ordinary_profile);
