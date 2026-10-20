@@ -1631,7 +1631,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
         replay_prepared=true;
     };
-    const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true) {
+    const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true,
+        const StreamDrawArguments* actual_records=nullptr) {
         prepare_replay(bindings);bindings.Prepare();
         if(!replay_attachments.Beginning())depth.clear_depth=depth.clear_stencil=false;
         static std::set<u64> captured_bound_draws,capture_producers;
@@ -1777,7 +1778,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         ExecuteGraphics(pipeline,bindings,state,
             std::span(attachments.data(),pipeline.TargetFormats().size()),has_depth?&depth:nullptr,
             expanded_points?point_viewports:viewport.viewports,viewport.scissors,r.blend_constants,output_draw,{},
-            !capture&&index_view.resource?&index_view:nullptr,false);
+            !capture&&index_view.resource?&index_view:nullptr,false,actual_records);
         if(probe){
             RecordingList()->EndQuery(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             RecordingList()->ResolveQueryData(probe_heap.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,probe_results.back().handle.Get(),0);
@@ -1870,6 +1871,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
                 primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
                     [&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
+                        primitive_stream_->RecordReplay(*this,lease,part);
+                        const StreamDrawArguments actual_records{&lease.replay_arguments,0};
                         point_capture_->Execute(*this,part.capture,DrawArguments{part.input.limit,1},consumer_state.topology,
                             [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
                                 auto bindings=common.ForkForReplay(consumer_pipeline.Layout());
@@ -1883,8 +1886,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                                 output_draw=replay;auto bindings=common.ForkForReplay(pipeline.Layout());
                                 BindGuestGraphicsRuntime(*bindings,local_runtime);RetainUntilFinish([bindings](u64){});
                                 NativePointCapturePass::BindReplay(*bindings,buffer,part.capture.bytes);
-                                submit_replay(*bindings,part.last);
-                            },arena);
+                                submit_replay(*bindings,part.last,&actual_records);
+                            },arena,&actual_records);
                     });
             },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout);
     }else if(capture){

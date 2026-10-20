@@ -6,6 +6,7 @@
 #include "diagnostics.h"
 #include <algorithm>
 #include <limits>
+#include <cstring>
 namespace NativeDX12 {
 namespace {
 bool Idle(const std::shared_ptr<Resource>& resource){
@@ -18,13 +19,18 @@ bool HasBinding(const ResourceBindings& table,D3D12_DESCRIPTOR_RANGE_TYPE type,
     });
 }
 }
-NativePointCapturePass::NativePointCapturePass(ID3D12Device* device){
-    D3D12_ROOT_PARAMETER parameters[2]{};
+NativePointCapturePass::NativePointCapturePass(ID3D12Device* device)
+    :zero_count_(Buffer(device,4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ)){
+    void* mapped{};D3D12_RANGE no_read{};Check(zero_count_.handle->Map(0,&no_read,&mapped));
+    memset(mapped,0,4);D3D12_RANGE written{0,4};zero_count_.handle->Unmap(0,&written);
+    D3D12_ROOT_PARAMETER parameters[3]{};
     parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV;
     parameters[0].Descriptor={0,Shader::NativePointCapture::DescriptorSet};
     parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    parameters[1].Constants={0,Shader::NativePointCapture::DescriptorSet,2};
-    D3D12_ROOT_SIGNATURE_DESC signature{2,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    parameters[1].Constants={0,Shader::NativePointCapture::DescriptorSet,4};
+    parameters[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;
+    parameters[2].Descriptor={0,Shader::NativePointCapture::DescriptorSet};
+    D3D12_ROOT_SIGNATURE_DESC signature{3,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
     ComPtr<ID3DBlob> blob,errors;
     Check(DX12_API_CALL(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors)));
     Check(DX12_API_CALL(device->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&clear_root_))));
@@ -129,7 +135,8 @@ std::shared_ptr<Resource> NativePointCapturePass::Reserve(Rasterizer& rasterizer
 void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::NativePointCapture::Plan& plan,
     const DrawArguments& original,D3D_PRIMITIVE_TOPOLOGY topology,
     const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
-    const std::function<void(Resource&,const DrawArguments&)>& replay,const std::shared_ptr<Resource>& reusable){
+    const std::function<void(Resource&,const DrawArguments&)>& replay,const std::shared_ptr<Resource>& reusable,
+    const Rasterizer::StreamDrawArguments* actual_records){
     if(!original.count||!original.instances)return;
     const auto checked=Shader::NativePointCapture::Plan::Make(plan.primitive_bound,plan.invocations,plan.emissions,plan.instances);
     if(checked.records!=plan.records||checked.bytes!=plan.bytes||plan.instances!=original.instances||
@@ -145,15 +152,32 @@ void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::Native
     ComPtr<ID3D12Device> owner,expected;
     Check(buffer->handle->GetDevice(IID_PPV_ARGS(&owner)));Check(clear_root_->GetDevice(IID_PPV_ARGS(&expected)));
     if(owner.Get()!=expected.Get())throw std::invalid_argument("Capture allocation belongs to another device");
+    // Transition the authoritative resource, not a lifetime-only value copy.
+    auto& count=actual_records&&actual_records->resource?*actual_records->resource:zero_count_;
+    if(actual_records){
+        if(!actual_records->resource||!count.handle||count.handle.Get()==buffer->handle.Get())
+            throw std::invalid_argument("Invalid capture replay count resource");
+        const auto counter=count.handle->GetDesc();
+        if(counter.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||(counter.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE)||
+           actual_records->offset%4||actual_records->offset>counter.Width||
+           sizeof(D3D12_DRAW_ARGUMENTS)>counter.Width-actual_records->offset||actual_records->offset>UINT32_MAX)
+            throw std::invalid_argument("Invalid capture replay count packet extent");
+        Check(count.handle->GetDevice(IID_PPV_ARGS(&owner)));
+        if(owner.Get()!=expected.Get())throw std::invalid_argument("Capture count belongs to another device");
+    }
     // A BeforeBind callback can Finish during guest ownership resolution.
     // Retain here for clear; descriptor allocation leases cover later passes.
-    rasterizer.RetainUntilFinish([buffer,root=clear_root_,pipeline=clear_pipeline_](u64){});
+    rasterizer.RetainUntilFinish([buffer,count,root=clear_root_,pipeline=clear_pipeline_](u64){});
     try{
         auto* list=rasterizer.RecordingList();buffer->Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        if(actual_records&&!(count.State(0)&D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))
+            count.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         DX12_API_CALL(list->SetPipelineState(clear_pipeline_.Get()));DX12_API_CALL(list->SetComputeRootSignature(clear_root_.Get()));
         DX12_API_CALL(list->SetComputeRootUnorderedAccessView(0,buffer->handle->GetGPUVirtualAddress()));
-        const u32 clear[]{u32(plan.records),u32(Shader::NativePointCapture::RecordBytes)};
-        DX12_API_CALL(list->SetComputeRoot32BitConstants(1,2,clear,0));
+        DX12_API_CALL(list->SetComputeRootShaderResourceView(2,count.handle->GetGPUVirtualAddress()));
+        const u32 clear[]{u32(plan.records),u32(Shader::NativePointCapture::RecordBytes),actual_records?1u:0u,
+            actual_records?u32(actual_records->offset):0u};
+        DX12_API_CALL(list->SetComputeRoot32BitConstants(1,4,clear,0));
         DX12_API_CALL(list->Dispatch(UINT((plan.records+255)/256),1,1));buffer->UavBarrier(list);
         const auto instance_bytes=plan.bytes/plan.instances;
         for(u32 instance=0;instance<original.instances;++instance){

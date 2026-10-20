@@ -40,12 +40,15 @@ public:
 class PrimitiveStreamArguments {
     ComPtr<ID3D12RootSignature> root_;
     ComPtr<ID3D12PipelineState> pipeline_;
+    void RecordCount(Rasterizer&,Resource&,Resource&,u32 divisor,u32 first,u32 limit,u32 multiplier);
 public:
     explicit PrimitiveStreamArguments(ID3D12Device*);
     void Record(Rasterizer&,Resource& filled_size,Resource& arguments,const PrimitiveStreamRange&);
+    void RecordReplay(Rasterizer&,Resource& input_arguments,Resource& replay_arguments,
+        const Shader::NativePointCapture::Plan&,u32 vertices_per_primitive);
 };
 struct PrimitiveStreamLease {
-    Resource data,filled_size,arguments;
+    Resource data,filled_size,arguments,replay_arguments;
     PrimitiveStreamRange range;
 };
 // Captures a producer once, then builds an authoritative GPU draw count.
@@ -65,5 +68,6 @@ public:
     // may perform attachment beginning actions; every slice must be consumed.
     void Replay(Rasterizer&,const std::shared_ptr<PrimitiveStreamLease>&,u32 calls,u32 emissions,u64 capture_byte_budget,
         const std::function<void(PrimitiveStreamLease&,const PrimitiveStreamPartition&)>& consumer);
+    void RecordReplay(Rasterizer&,PrimitiveStreamLease&,const PrimitiveStreamPartition&);
 };
 } // namespace NativeDX12

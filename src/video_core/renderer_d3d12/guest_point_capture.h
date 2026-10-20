@@ -12,6 +12,7 @@ class NativePointCapturePass {
     ComPtr<ID3D12RootSignature> clear_root_;
     ComPtr<ID3D12PipelineState> clear_pipeline_;
     std::vector<std::shared_ptr<Resource>> buffers_;
+    Resource zero_count_;
     std::shared_ptr<Resource> Acquire(Rasterizer&,u64);
 public:
     using DrawArguments=Rasterizer::DrawArguments;
@@ -39,6 +40,7 @@ public:
     void Execute(Rasterizer&,const Shader::NativePointCapture::Plan&,const DrawArguments&,D3D_PRIMITIVE_TOPOLOGY,
         const std::function<void(Resource&,const DrawArguments&,u64,u64)>& producer,
         const std::function<void(Resource&,const DrawArguments&)>& replay,
-        const std::shared_ptr<Resource>& reusable={});
+        const std::shared_ptr<Resource>& reusable={},
+        const Rasterizer::StreamDrawArguments* actual_records=nullptr);
 };
 }

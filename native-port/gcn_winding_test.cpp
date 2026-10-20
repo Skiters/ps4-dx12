@@ -852,6 +852,7 @@ int main(int argc,char** argv){try{
             Rasterizer::DrawArguments output_draw{captured_inputs?12u*capture_instances:sized_points?stream_primitives:6u,captured_inputs?1u:capture_instances};
             GuestReplayAttachments replay_attachment_scope;
             const ShaderPipeline* replay_pipeline=&pipeline;
+            std::optional<Rasterizer::StreamDrawArguments> actual_records;
             u32 color_initializations{},depth_initializations{};
             const auto prepare_attachments=[&](ResourceBindings& bindings){
                 target=&replay_attachment_scope.Select(textures,0,[&]() -> GuestTextureCache::Entry& {
@@ -871,7 +872,7 @@ int main(int argc,char** argv){try{
                 Rasterizer::DepthAttachment dsv{&ds->texture,ds->Dsv()};
                 dsv.clear_depth=dsv.clear_stencil=multipart_replay&&replay_attachment_scope.Beginning();
                 dsv.clear_value=0.5f;dsv.stencil_value=7;
-                rasterizer.ExecuteGraphics(*replay_pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false);
+                rasterizer.ExecuteGraphics(*replay_pipeline,bindings,state,attachment,point_layer?nullptr:&dsv,expanded_points?point_viewports:viewports.viewports,viewports.scissors,blend,output_draw,{},nullptr,false,actual_records?&*actual_records:nullptr);
                 replay_attachment_scope.Submitted();
             };
             if(capture){
@@ -1004,7 +1005,7 @@ int main(int argc,char** argv){try{
                         part(0,first_records*Shader::NativePointCapture::RecordBytes);
                         part(first_records*Shader::NativePointCapture::RecordBytes,(active_plan.records-first_records)*Shader::NativePointCapture::RecordBytes);
                     }else part(0,active_plan.bytes);
-                },capture_arena);
+                },capture_arena,actual_records?&*actual_records:nullptr);
                 };
                 if(partition_replay){
                     // Original source stages, GS and PS share one preparation
@@ -1026,6 +1027,8 @@ int main(int argc,char** argv){try{
                             capture_arena=capture_pass->Reserve(rasterizer,parts.At(0).capture.bytes);
                             serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
                                 [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
+                                    serialized_pass->RecordReplay(rasterizer,*captured_stream,partition);
+                                    actual_records=Rasterizer::StreamDrawArguments{&captured_stream->replay_arguments,0};
                                     if(!partition.first){
                                         // The preceding private capture readback
                                         // retired/reset the ordinary arena.
@@ -1035,6 +1038,7 @@ int main(int argc,char** argv){try{
                                         rasterizer.UploadConstants(unrelated);
                                     }
                                     run_capture(partition.capture,{partition.input.limit,1},partition.input.first,&common,&common);
+                                    actual_records.reset();
                                 });
                         },textures,0,{},true,common_layout);
                 }else run_capture(plan,output_draw,0,nullptr,nullptr);
