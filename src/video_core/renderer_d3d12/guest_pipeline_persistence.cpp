@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=32,PipelineVersion=5;
+constexpr u32 StageVersion=32,PipelineVersion=6;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";
@@ -190,7 +190,7 @@ void GuestPipelineCache::RegisterPipelineData(const GuestShaderStage& stage){
     Storage::DataBase::Instance().Save(Storage::BlobType::PipelineKey,name,std::move(data));
 }
 void GuestPipelineCache::RegisterPipelineData(const GuestGraphicsStages& guest,
-    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil){
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil,bool root_runtime){
     if(warming_||!Storage::DataBase::Instance().IsOpened())return;
     Serialization::Archive ar;Serialization::Writer save(ar);save.Write(PipelineVersion);save.Write(u32{0});
     for(const auto* stage:guest.stages){
@@ -200,6 +200,7 @@ void GuestPipelineCache::RegisterPipelineData(const GuestGraphicsStages& guest,
         Storage::DataBase::Instance().Save(Storage::BlobType::ShaderMeta,meta_name,std::vector<u8>(blob));
     }
     SaveGraphicsState(ar,state);save.Write(depth_bounds);save.Write(&stencil,sizeof(stencil));
+    save.Write(root_runtime);
     auto data=ar.TakeOff();const auto name="g_"+DigestName(std::as_bytes(std::span(data)));
     Storage::DataBase::Instance().Save(Storage::BlobType::PipelineKey,name,std::move(data));
 }
@@ -248,9 +249,9 @@ void GuestPipelineCache::WarmUp(){
                             if(fragment->runtime.hw.fs.ordered_color_targets[i].enabled)
                                 guest.ordered_color_mask|=1u<<i;
                     GraphicsState state(ar);bool bounds{};ShaderPipeline::StencilFaces masks{};
-                    load.Read(bounds);load.Read(&masks,sizeof(masks));
+                    load.Read(bounds);load.Read(&masks,sizeof(masks));bool root_runtime{};load.Read(root_runtime);
                     if(!ar.IsEoS())throw std::runtime_error("Trailing native graphics record");
-                    Graphics(guest,state.state,bounds,masks);
+                    Graphics(guest,state.state,bounds,masks,root_runtime);
                 }else throw std::runtime_error("Invalid native pipeline kind");
                 ++loaded;
             }catch(const std::exception& error){LOG_WARNING(Render_DX12,"Native pipeline preload: {}",error.what());}

@@ -42,7 +42,7 @@ struct Key {
     }
 };
 std::string GraphicsKey(const GuestGraphicsStages& guest,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d,
-    bool depth_bounds,ShaderPipeline::StencilFaces stencil) {
+    bool depth_bounds,ShaderPipeline::StencilFaces stencil,bool root_graphics_runtime) {
     if(d.InputLayout.NumElements&&!d.InputLayout.pInputElementDescs)
         throw std::invalid_argument("Null native vertex input layout");
     Key k;for(auto* stage:guest.stages)k.Add(stage?stage->id:u64(0));
@@ -71,12 +71,14 @@ std::string GraphicsKey(const GuestGraphicsStages& guest,const D3D12_GRAPHICS_PI
     k.Add(d.NodeMask);k.Add(d.Flags);
     k.data.push_back(depth_bounds?'\1':'\0');k.data.push_back(stencil.separate?'\1':'\0');
     k.data.push_back(char(stencil.front_read));k.data.push_back(char(stencil.front_write));
-    k.data.push_back(char(stencil.back_read));k.data.push_back(char(stencil.back_write));return std::move(k.data);
+    k.data.push_back(char(stencil.back_read));k.data.push_back(char(stencil.back_write));
+    if(root_graphics_runtime)k.Text("root-graphics-runtime-v1");
+    return std::move(k.data);
 }
 }
 GuestPipelineCache::GraphicsRecord::GraphicsRecord(const GuestGraphicsStages& g,
-    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d,bool bounds,ShaderPipeline::StencilFaces faces)
-    :guest(g),state(d),stream_output(d.StreamOutput),depth_bounds(bounds),stencil(faces){
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d,bool bounds,ShaderPipeline::StencilFaces faces,bool root_runtime)
+    :guest(g),state(d),stream_output(d.StreamOutput),depth_bounds(bounds),root_graphics_runtime(root_runtime),stencil(faces){
     inputs.reserve(d.InputLayout.NumElements);semantics.reserve(d.InputLayout.NumElements);
     for(UINT i=0;i<d.InputLayout.NumElements;++i){inputs.push_back(d.InputLayout.pInputElementDescs[i]);
         semantics.emplace_back(inputs.back().SemanticName);}
@@ -107,22 +109,23 @@ const ShaderPipeline& GuestPipelineCache::Graphics(AmdGpu::Liverpool& gpu,
     return Graphics(guest,state);
 }
 const ShaderPipeline& GuestPipelineCache::Graphics(const GuestGraphicsStages& guest,
-    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil) {
-    auto key=GraphicsKey(guest,state,depth_bounds,stencil);
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil,bool root_runtime) {
+    auto key=GraphicsKey(guest,state,depth_bounds,stencil,root_runtime);
     if(auto found=graphics_.find(key);found!=graphics_.end())return *found->second->pipeline;
-    auto record=std::make_unique<GraphicsRecord>(guest,state,depth_bounds,stencil);
-    record->pipeline=BuildGraphics(guest,record->state,depth_bounds,stencil);
+    auto record=std::make_unique<GraphicsRecord>(guest,state,depth_bounds,stencil,root_runtime);
+    record->pipeline=BuildGraphics(guest,record->state,depth_bounds,stencil,root_runtime);
 #ifdef SHADPS4_NATIVE_DX12_CORE
-    RegisterPipelineData(guest,state,depth_bounds,stencil);
+    RegisterPipelineData(guest,state,depth_bounds,stencil,root_runtime);
 #endif
     return *graphics_.emplace(std::move(key),std::move(record)).first->second->pipeline;
 }
 std::unique_ptr<ShaderPipeline> GuestPipelineCache::BuildGraphics(const GuestGraphicsStages& guest,
-    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil){
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds,ShaderPipeline::StencilFaces stencil,bool root_runtime){
     const auto& dxil=shaders_.Graphics(guest);
     auto code=[&](Shader::SwStage stage)->std::span<const uint8_t>{return dxil.stages[u32(stage)].bytecode;};
     ShaderPipeline::GraphicsShaders stages{code(Shader::SwStage::Vertex),code(Shader::SwStage::Fragment),
         code(Shader::SwStage::TessellationControl),code(Shader::SwStage::TessellationEval),code(Shader::SwStage::Geometry)};
+    stages.root_graphics_runtime=root_runtime;
     try{return std::make_unique<ShaderPipeline>(device_.Get(),dxc_,stages,state,depth_bounds,stencil);}
     catch(const std::exception& error){
         fprintf(stderr,"Native graphics PSO: %s\n",error.what());
@@ -154,9 +157,9 @@ std::optional<u64> GuestPipelineCache::ReplaceShader(u64 id,std::span<const u32>
         auto guest=record->guest;bool affected=false;
         for(auto*& stage:guest.stages)if(stage==original){stage=&candidate;affected=true;}
         if(!affected)continue;
-        auto replacement=std::make_unique<GraphicsRecord>(record->guest,record->state,record->depth_bounds,record->stencil);
-        replacement->pipeline=BuildGraphics(guest,replacement->state,record->depth_bounds,record->stencil);
-        new_graphics.emplace(GraphicsKey(guest,replacement->state,record->depth_bounds,record->stencil),std::move(replacement));
+        auto replacement=std::make_unique<GraphicsRecord>(record->guest,record->state,record->depth_bounds,record->stencil,record->root_graphics_runtime);
+        replacement->pipeline=BuildGraphics(guest,replacement->state,record->depth_bounds,record->stencil,record->root_graphics_runtime);
+        new_graphics.emplace(GraphicsKey(guest,replacement->state,record->depth_bounds,record->stencil,record->root_graphics_runtime),std::move(replacement));
         retired_keys.push_back(key);
     }
     if(new_compute.empty()&&new_graphics.empty())shaders_.ValidateStage(candidate);

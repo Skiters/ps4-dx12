@@ -96,26 +96,43 @@ int main(int argc,char** argv){try{
         GuestPipelineCache pipelines(device.Get(),std::filesystem::path(argv[2]).wstring(),frontend,shaders);
         const auto* first=&pipelines.Graphics(guest,state.pipeline);
         const auto* second=&pipelines.Graphics(guest,alternate);draw(*first,0.25f);draw(*second,0.25f);
+        const auto* first_root=&pipelines.Graphics(guest,state.pipeline,false,{},true);
+        const auto* second_root=&pipelines.Graphics(guest,alternate,false,{},true);
+        if(first_root==first||second_root==second||pipelines.GraphicsCount()!=4||
+           first_root->Layout().GraphicsRuntimeParameter()==UINT_MAX||first->Layout().GraphicsRuntimeParameter()!=UINT_MAX||
+           &pipelines.Graphics(guest,state.pipeline,false,{},true)!=first_root)
+            throw std::runtime_error("Root runtime and descriptor-table pipeline profiles collided");
+        draw(*first_root,0.25f);draw(*second_root,0.25f);
         const auto old_id=pixel->id;const auto replacement=pipelines.ReplaceShader(old_id,patch,true);
         if(!replacement||*replacement==old_id||frontend.FindStage(old_id)||frontend.FindStage(*replacement)!=pixel||
            pixel->spirv!=canonical||pixel->patch_spirv!=patch||!pixel->is_patched)
             throw std::runtime_error("Replacement did not retain stable stage/canonical words");
         const auto* patched_first=&pipelines.Graphics(guest,state.pipeline);
         const auto* patched_second=&pipelines.Graphics(guest,alternate);
+        const auto* patched_first_root=&pipelines.Graphics(guest,state.pipeline,false,{},true);
+        const auto* patched_second_root=&pipelines.Graphics(guest,alternate,false,{},true);
         if(patched_first==first||patched_second==second)throw std::runtime_error("An affected PSO was not replaced");
         draw(*patched_first,0.75f);draw(*patched_second,0.75f);
+        if(patched_first_root==first_root||patched_second_root==second_root||pipelines.GraphicsCount()!=4||
+           patched_first_root->Layout().GraphicsRuntimeParameter()==UINT_MAX)
+            throw std::runtime_error("Shader replacement lost its root runtime pipeline profile");
+        draw(*patched_first_root,0.75f);draw(*patched_second_root,0.75f);
         auto invalid=patch;
         for(size_t at=5;at<invalid.size();at+=invalid[at]>>16){
             if((invalid[at]&0xffffU)==15){invalid.erase(invalid.begin()+at,invalid.begin()+at+(invalid[at]>>16));break;}
         }
         bool rejected=false;try{pipelines.ReplaceShader(pixel->id,invalid,true);}catch(const std::exception&){rejected=true;}
         if(!rejected||pixel->id!=*replacement||pixel->patch_spirv!=patch||
-           &pipelines.Graphics(guest,state.pipeline)!=patched_first||&pipelines.Graphics(guest,alternate)!=patched_second)
+           &pipelines.Graphics(guest,state.pipeline)!=patched_first||&pipelines.Graphics(guest,alternate)!=patched_second||
+           &pipelines.Graphics(guest,state.pipeline,false,{},true)!=patched_first_root||
+           &pipelines.Graphics(guest,alternate,false,{},true)!=patched_second_root)
             throw std::runtime_error("Failed compiler replacement changed stage or cached PSOs");
         draw(*patched_first,0.75f);draw(*patched_second,0.75f);
         if(!pipelines.ReplaceShader(pixel->id,canonical,false)||pixel->is_patched)
             throw std::runtime_error("Disabling the patch failed");
         draw(pipelines.Graphics(guest,state.pipeline),0.25f);draw(pipelines.Graphics(guest,alternate),0.25f);
+        draw(pipelines.Graphics(guest,state.pipeline,false,{},true),0.25f);
+        draw(pipelines.Graphics(guest,alternate,false,{},true),0.25f);
         saved=Metadata(frontend,*pixel);pipelines.Sync();
     }
     auto& database=Storage::DataBase::Instance();database.Open();
@@ -134,10 +151,17 @@ int main(int argc,char** argv){try{
         GuestShaderFrontend warm_frontend(profile);GuestShaderCache warm_shaders(std::filesystem::path(argv[1]).wstring(),options);
         GuestPipelineCache warm(device.Get(),std::filesystem::path(argv[2]).wstring(),warm_frontend,warm_shaders);
         auto warm_guest=warm_frontend.BuildGraphics(regs);
+        const auto preloaded=warm.GraphicsCount();
+        if(preloaded<4)throw std::runtime_error("Pipeline preload omitted descriptor/root runtime variants");
         auto* warm_pixel=warm_guest.stages[u32(Shader::SwStage::Fragment)];
         if(warm_pixel->spirv!=canonical||warm_shaders.PersistentHits()<1)
             throw std::runtime_error("Actual pipeline preload did not reconstruct cached shaders/PSOs");
         guest=warm_guest;pixel=warm_pixel;draw(warm.Graphics(guest,state.pipeline),0.25f);draw(warm.Graphics(guest,alternate),0.25f);
+        const auto& warm_root=warm.Graphics(guest,state.pipeline,false,{},true);
+        const auto& warm_root_alternate=warm.Graphics(guest,alternate,false,{},true);
+        if(warm.GraphicsCount()!=preloaded||warm_root.Layout().GraphicsRuntimeParameter()==UINT_MAX)
+            throw std::runtime_error("Persisted root runtime profile was rebuilt or restored as a table");
+        draw(warm_root,0.25f);draw(warm_root_alternate,0.25f);
         warm.Sync();
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T size{};Check(messages->GetMessage(i,nullptr,&size));

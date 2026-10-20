@@ -21,9 +21,10 @@ class GuestPipelineCache {
         std::vector<std::string> semantics;
         StreamOutputLayout stream_output;
         bool depth_bounds{};
+        bool root_graphics_runtime{};
         ShaderPipeline::StencilFaces stencil{};
         std::unique_ptr<ShaderPipeline> pipeline;
-        GraphicsRecord(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
+        GraphicsRecord(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces,bool);
     };
     std::map<std::string,std::unique_ptr<GraphicsRecord>> graphics_;
     struct LogicalLayoutRecord {
@@ -31,12 +32,12 @@ class GuestPipelineCache {
         std::shared_ptr<ResourceLayout> layout;
     };
     std::map<std::vector<std::uintptr_t>,LogicalLayoutRecord> logical_layouts_;
-    std::unique_ptr<ShaderPipeline> BuildGraphics(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces);
+    std::unique_ptr<ShaderPipeline> BuildGraphics(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,bool,ShaderPipeline::StencilFaces,bool);
 #ifdef SHADPS4_NATIVE_DX12_CORE
     bool warming_{};
     void RegisterPipelineData(const GuestShaderStage&);
     void RegisterPipelineData(const GuestGraphicsStages&,const D3D12_GRAPHICS_PIPELINE_STATE_DESC&,
-        bool,ShaderPipeline::StencilFaces);
+        bool,ShaderPipeline::StencilFaces,bool);
 #endif
 public:
     std::optional<u64> ReplaceShader(u64,std::span<const u32>,bool);
@@ -56,11 +57,12 @@ public:
     const ShaderPipeline& Compute(const GuestShaderStage&);
     StreamOutputLayout PrimitiveStreamLayout(const GuestGraphicsStages&);
     std::shared_ptr<ResourceLayout> LogicalLayout(std::span<const ShaderPipeline* const> domains);
+    size_t GraphicsCount()const{return graphics_.size();}
     const ShaderPipeline& Graphics(AmdGpu::Liverpool&,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,
         u16 vertex_sgpr_offset=0,u32 instance_sgpr_offset=0);
     const ShaderPipeline& Graphics(const GuestGraphicsStages&,
         const D3D12_GRAPHICS_PIPELINE_STATE_DESC& state,bool depth_bounds=false,
-        ShaderPipeline::StencilFaces stencil={});
+        ShaderPipeline::StencilFaces stencil={},bool root_graphics_runtime=false);
 };
 }
