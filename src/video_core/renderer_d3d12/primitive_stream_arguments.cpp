@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "primitive_stream_arguments.h"
 #include "primitive_stream_arguments_shader.h"
+#include "primitive_stream_partition_shader.h"
 #include "rasterizer.h"
 #include <limits>
 #include <algorithm>
@@ -85,7 +86,7 @@ PrimitiveStreamArguments::PrimitiveStreamArguments(ID3D12Device* device){
     D3D12_ROOT_PARAMETER parameters[3]{};
     parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;parameters[0].Descriptor={0,0};
     parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV;parameters[1].Descriptor={0,0};
-    parameters[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;parameters[2].Constants={0,0,4};
+    parameters[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;parameters[2].Constants={0,0,8};
     const D3D12_ROOT_SIGNATURE_DESC signature{3,parameters,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
     ComPtr<ID3DBlob> blob,errors;
     Check(D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors));
@@ -93,46 +94,51 @@ PrimitiveStreamArguments::PrimitiveStreamArguments(ID3D12Device* device){
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};desc.pRootSignature=root_.Get();
     desc.CS={NativePrimitiveStreamArguments,sizeof(NativePrimitiveStreamArguments)};
     Check(device->CreateComputePipelineState(&desc,IID_PPV_ARGS(&pipeline_)));
+    desc.CS={NativePrimitiveStreamPartition,sizeof(NativePrimitiveStreamPartition)};
+    Check(device->CreateComputePipelineState(&desc,IID_PPV_ARGS(&partition_pipeline_)));
 }
 void PrimitiveStreamArguments::Record(Rasterizer& renderer,Resource& filled,Resource& arguments,const PrimitiveStreamRange& range){
     (void)PrimitiveStreamRange::Make(range.stride,range.capacity_vertices,range.vertices_per_primitive,range.first,range.limit);
     RecordCount(renderer,filled,arguments,range.stride,range.first,range.limit,1);
 }
-void PrimitiveStreamArguments::RecordReplay(Rasterizer& renderer,Resource& input,Resource& output,
-    const Shader::NativePointCapture::Plan& plan,u32 width){
+void PrimitiveStreamArguments::RecordPartition(Rasterizer& renderer,Resource& filled,Resource& output,
+    const PrimitiveStreamPartition& part){
+    const auto& plan=part.capture;const auto& range=part.input;
+    (void)PrimitiveStreamRange::Make(range.stride,range.capacity_vertices,range.vertices_per_primitive,range.first,range.limit);
+    const u32 width=range.vertices_per_primitive;
     const auto checked=Shader::NativePointCapture::Plan::Make(plan.primitive_bound,plan.invocations,plan.emissions,plan.instances);
     if(plan.instances!=1||checked.records!=plan.records||checked.bytes!=plan.bytes||!plan.primitive_bound||
-       (width!=1&&width!=2&&width!=3&&width!=4&&width!=6))throw std::invalid_argument("Invalid captured replay count plan");
+       plan.primitive_bound!=range.limit/width)throw std::invalid_argument("Invalid captured replay count plan");
     const u64 multiplier=u64(plan.invocations)*plan.emissions;
     if(multiplier>UINT32_MAX)throw std::overflow_error("Captured replay count multiplier overflow");
-    RecordCount(renderer,input,output,width,0,plan.primitive_bound,u32(multiplier));
+    RecordCount(renderer,filled,output,range.stride,range.first,range.limit,u32(multiplier),width);
 }
 void PrimitiveStreamArguments::RecordCount(Rasterizer& renderer,Resource& filled,Resource& arguments,
-    u32 divisor,u32 first,u32 limit,u32 multiplier){
+    u32 divisor,u32 first,u32 limit,u32 multiplier,u32 primitive_width){
     std::lock_guard lock(renderer.ExecutionMutex());
-    if(!divisor||!limit||!multiplier||limit>UINT32_MAX/multiplier)
+    if(!divisor||!limit||!multiplier||(primitive_width?limit/primitive_width:limit)>UINT32_MAX/multiplier)
         throw std::invalid_argument("Invalid bounded GPU draw count conversion");
     if(!filled.handle||!arguments.handle||filled.handle.Get()==arguments.handle.Get())
         throw std::invalid_argument("Primitive stream counter/arguments require distinct resources");
     const auto source=filled.handle->GetDesc(),destination=arguments.handle->GetDesc();
     if(source.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||source.Width<4||
        (source.Flags&D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE)||
-       destination.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||destination.Width<sizeof(D3D12_DRAW_ARGUMENTS)||
+       destination.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||destination.Width<sizeof(D3D12_DRAW_ARGUMENTS)*(primitive_width?2:1)||
        !(destination.Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
         throw std::invalid_argument("Primitive stream counter/argument resource extent or usage");
     // Retain both native objects and placed allocations through actual queue
     // retirement; even a short-lived pass owner must not release its PSO early.
     renderer.RetainUntilFinish([source=filled.handle,destination=arguments.handle,
         source_allocation=filled.allocation,destination_allocation=arguments.allocation,
-        root=root_,pipeline=pipeline_](u64){});
+        root=root_,pipeline=primitive_width?partition_pipeline_:pipeline_](u64){});
     auto* list=renderer.RecordingList();
     filled.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     arguments.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    list->SetComputeRootSignature(root_.Get());list->SetPipelineState(pipeline_.Get());
+    list->SetComputeRootSignature(root_.Get());list->SetPipelineState(primitive_width?partition_pipeline_.Get():pipeline_.Get());
     list->SetComputeRootShaderResourceView(0,filled.handle->GetGPUVirtualAddress());
     list->SetComputeRootUnorderedAccessView(1,arguments.handle->GetGPUVirtualAddress());
-    const u32 constants[]{divisor,first,limit,multiplier};
-    list->SetComputeRoot32BitConstants(2,4,constants,0);list->Dispatch(1,1,1);
+    const u32 constants[]{divisor,first,limit,multiplier,primitive_width,0,0,0};
+    list->SetComputeRoot32BitConstants(2,8,constants,0);list->Dispatch(1,1,1);
     arguments.UavBarrier(list);arguments.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
 }
 PrimitiveStreamPass::PrimitiveStreamPass(ID3D12Device* device):generator_(device),
@@ -150,8 +156,7 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         return arena.use_count()==1&&
             (!arena->data.allocation||arena->data.allocation.use_count()==1)&&
             (!arena->filled_size.allocation||arena->filled_size.allocation.use_count()==1)&&
-            (!arena->arguments.allocation||arena->arguments.allocation.use_count()==1)&&
-            (!arena->replay_arguments.allocation||arena->replay_arguments.allocation.use_count()==1);
+            (!arena->arguments.allocation||arena->arguments.allocation.use_count()==1);
     };
     std::shared_ptr<PrimitiveStreamLease>* best{};
     for(auto& arena:arenas_)if(idle(arena)&&arena->data.handle->GetDesc().Width>=bytes&&
@@ -163,8 +168,7 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         arena=std::make_shared<PrimitiveStreamLease>();
         arena->data=renderer.AcquireTransientBuffer(bytes);
         arena->filled_size=renderer.AcquireTransientBuffer(4);
-        arena->arguments=renderer.AcquireTransientBuffer(sizeof(D3D12_DRAW_ARGUMENTS));
-        arena->replay_arguments=renderer.AcquireTransientBuffer(sizeof(D3D12_DRAW_ARGUMENTS));
+        arena->arguments=renderer.AcquireTransientBuffer(2*sizeof(D3D12_DRAW_ARGUMENTS));
         arenas_.push_back(arena);
     }
     arena->range=range;
@@ -182,15 +186,6 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         return arena;
     }catch(...){try{renderer.Finish();}catch(...){}throw;}
 }
-void PrimitiveStreamPass::RecordReplay(Rasterizer& renderer,PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
-    (void)PrimitiveStreamRange::Make(part.input.stride,part.input.capacity_vertices,part.input.vertices_per_primitive,
-        part.input.first,part.input.limit);
-    if(part.input.stride!=lease.range.stride||part.input.capacity_vertices!=lease.range.capacity_vertices||
-       part.input.vertices_per_primitive!=lease.range.vertices_per_primitive||
-       part.capture.primitive_bound!=part.input.limit/part.input.vertices_per_primitive)
-        throw std::invalid_argument("Replay count partition differs from its captured source");
-    generator_.RecordReplay(renderer,lease.arguments,lease.replay_arguments,part.capture,part.input.vertices_per_primitive);
-}
 void PrimitiveStreamPass::Replay(Rasterizer& renderer,const std::shared_ptr<PrimitiveStreamLease>& captured,
     u32 calls,u32 emissions,u64 budget,const std::function<void(PrimitiveStreamLease&,const PrimitiveStreamPartition&)>& consumer){
     auto lease=captured;
@@ -205,7 +200,7 @@ void PrimitiveStreamPass::Replay(Rasterizer& renderer,const std::shared_ptr<Prim
     try{
         for(u32 index=0;index<partitions.Count();++index){
             const auto partition=partitions.At(index);
-            generator_.Record(renderer,lease->filled_size,lease->arguments,partition.input);
+            generator_.RecordPartition(renderer,lease->filled_size,lease->arguments,partition);
             consumer(*lease,partition);
         }
         // A consumer may Finish and consume the initial lease callback. Pin

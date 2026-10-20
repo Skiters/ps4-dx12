@@ -1098,8 +1098,7 @@ int main(int argc,char** argv){try{
                             capture_arena=capture_pass->Reserve(rasterizer,parts.At(0).capture.bytes);
                             serialized_pass->Replay(rasterizer,captured_stream,gs.num_invocations,gs.output_vertices,budget,
                                 [&](PrimitiveStreamLease&,const PrimitiveStreamPartition& partition){
-                                    serialized_pass->RecordReplay(rasterizer,*captured_stream,partition);
-                                    actual_records=Rasterizer::StreamDrawArguments{&captured_stream->replay_arguments,0};
+                                    actual_records=Rasterizer::StreamDrawArguments{&captured_stream->arguments,sizeof(D3D12_DRAW_ARGUMENTS)};
                                     if(!partition.first){
                                         // The preceding private capture readback
                                         // retired/reset the ordinary arena.

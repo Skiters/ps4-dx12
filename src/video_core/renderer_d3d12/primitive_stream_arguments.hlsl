@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 ByteAddressBuffer input_count : register(t0);
 RWByteAddressBuffer draw_arguments : register(u0);
-cbuffer StreamRange : register(b0) { uint vertex_stride; uint first_vertex; uint vertex_limit; uint output_multiplier; };
+cbuffer StreamRange : register(b0) { uint vertex_stride; uint first_vertex; uint vertex_limit; uint output_multiplier; uint primitive_width; };
 // BufferFilledSize is a hardware-produced32-bit byte counter. The owner proves
 // its stream capacity below4GiB and passes complete primitive-aligned ranges.
 // Every nonempty range is replayed, in order; this is bounded partitioning,
@@ -14,4 +14,12 @@ void main() {
     uint vertices=input_count.Load(0)/vertex_stride;
     uint available=vertices>first_vertex?vertices-first_vertex:0;
     draw_arguments.Store4(0,uint4(min(available,vertex_limit)*output_multiplier,1,first_vertex,0));
+}
+[numthreads(1,1,1)]
+void partition() {
+    uint vertices=input_count.Load(0)/vertex_stride;
+    uint available=vertices>first_vertex?vertices-first_vertex:0;
+    uint active=min(available,vertex_limit);
+    draw_arguments.Store4(0,uint4(active,1,first_vertex,0));
+    draw_arguments.Store4(16,uint4((active/primitive_width)*output_multiplier,1,0,0));
 }

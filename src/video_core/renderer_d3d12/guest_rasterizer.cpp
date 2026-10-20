@@ -1886,8 +1886,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
                 primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
                     [&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
-                        primitive_stream_->RecordReplay(*this,lease,part);
-                        const StreamDrawArguments actual_records{&lease.replay_arguments,0};
+                        const StreamDrawArguments actual_records{&lease.arguments,sizeof(D3D12_DRAW_ARGUMENTS)};
                         point_capture_->Execute(*this,part.capture,DrawArguments{part.input.limit,1},consumer_state.topology,
                             [&](Resource& buffer,const DrawArguments& bounds,u64 offset,u64 bytes){
                                 auto bindings=common.ForkForReplay(consumer_pipeline.Layout());

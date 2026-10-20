@@ -410,13 +410,11 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             replay.Replay(renderer,captured,2,256,622592,[&](PrimitiveStreamLease& lease,const PrimitiveStreamPartition& part){
                 if(part.input.first!=partition_index*6||part.input.limit!=6||part.first!=(partition_index==0)||part.last!=(partition_index==2))
                     throw std::runtime_error("Production replay skipped or reordered a primitive partition");
-                replay.RecordReplay(renderer,lease,part);
                 auto* commands=renderer.RecordingList();lease.arguments.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
                 commands->CopyBufferRegion(partition_result.handle.Get(),partition_index*sizeof(D3D12_DRAW_ARGUMENTS),
                     lease.arguments.handle.Get(),0,sizeof(D3D12_DRAW_ARGUMENTS));
-                lease.replay_arguments.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
                 commands->CopyBufferRegion(partition_result.handle.Get(),(3+partition_index)*sizeof(D3D12_DRAW_ARGUMENTS),
-                    lease.replay_arguments.handle.Get(),0,sizeof(D3D12_DRAW_ARGUMENTS));++partition_index;
+                    lease.arguments.handle.Get(),sizeof(D3D12_DRAW_ARGUMENTS),sizeof(D3D12_DRAW_ARGUMENTS));++partition_index;
             });
         }
         renderer.Finish();
@@ -426,6 +424,35 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         D3D12_RANGE partition_all{0,sizeof(partition_expected)};Check(partition_result.handle->Map(0,&partition_all,&mapped));
         const bool partition_equal=!memcmp(mapped,partition_expected,sizeof(partition_expected));partition_result.handle->Unmap(0,&none);
         if(!partition_equal)throw std::runtime_error("Partition replay replaced the GPU count with capacity or lost the empty tail/lifetime");
+    }
+    // Fused packets retain the old independent oracle, including incomplete
+    // primitives and an oversized hardware count; trailing bytes are guards.
+    for(const auto sample:std::array<std::pair<u32,u32>,6>{{{0,0},{6,0},{7,1},{9,3},{12,6},{99,6}}}){
+        auto seed=Buffer(device.Get(),52,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto filled=renderer.AcquireTransientBuffer(4),packets=renderer.AcquireTransientBuffer(48);
+        auto readback=Buffer(device.Get(),48,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));
+        memset(mapped,0xcd,52);const u32 bytes=sample.first*16;memcpy(mapped,&bytes,4);seed.handle->Unmap(0,nullptr);
+        auto* list=renderer.RecordingList();filled.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        packets.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        list->CopyBufferRegion(filled.handle.Get(),0,seed.handle.Get(),0,4);
+        list->CopyBufferRegion(packets.handle.Get(),0,seed.handle.Get(),4,48);
+        const PrimitiveStreamPartition part{PrimitiveStreamRange::Make(16,18,3,6,6),
+            Shader::NativePointCapture::Plan::Make(2,2,256,1),false,false};
+        {
+            PrimitiveStreamArguments generate(device.Get());
+            auto bad=part;bad.capture.primitive_bound=1;
+            bool rejected{};try{generate.RecordPartition(renderer,filled,packets,bad);}catch(const std::invalid_argument&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Fused partition accepted inconsistent capture bounds");
+            generate.RecordPartition(renderer,filled,packets,part);
+        } // The fused PSO and resources must survive their owner.
+        packets.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        list->CopyBufferRegion(readback.handle.Get(),0,packets.handle.Get(),0,48);renderer.Finish();
+        std::array<std::byte,48> expected;expected.fill(std::byte{0xcd});
+        const D3D12_DRAW_ARGUMENTS draws[]{{sample.second,1,6,0},{(sample.second/3)*512,1,0,0}};
+        memcpy(expected.data(),draws,sizeof(draws));D3D12_RANGE all{0,48};Check(readback.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),48);readback.handle->Unmap(0,&none);
+        if(!equal)throw std::runtime_error("Fused partition lost count/first vertex, primitive rounding, lifetime or guards");
     }
     // Clear-only GPU regression: empty/partial indirect replay must leave
     // unused records, payload words and the following record unchanged.

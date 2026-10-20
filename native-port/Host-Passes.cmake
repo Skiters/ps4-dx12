@@ -53,6 +53,16 @@ function(native_host_passes target)
         DEPENDS "${_host_native}/primitive_stream_arguments.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_stream_header}" "${_host_native}/primitive_stream_arguments.cpp")
+    set(_partition_shader "${_host_generated}/primitive_stream_partition.dxil")
+    set(_partition_header "${_host_generated}/primitive_stream_partition_shader.h")
+    add_custom_command(OUTPUT "${_partition_header}" "${_partition_shader}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E partition -HV 2018 -O3 -WX
+            -Fo "${_partition_shader}" "${_host_native}/primitive_stream_arguments.hlsl"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${_partition_shader}" "-DOUTPUT=${_partition_header}"
+            "-DSYMBOL=NativePrimitiveStreamPartition" -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/primitive_stream_arguments.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_partition_header}")
     set(_indirect_shader "${_host_generated}/guest_indirect_pack.dxil")
     set(_indirect_header "${_host_generated}/guest_indirect_pack_shader.h")
     add_custom_command(OUTPUT "${_indirect_header}" "${_indirect_shader}"
