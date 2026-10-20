@@ -40,6 +40,7 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         list->CopyBufferRegion(source.handle.Get(),0,seed.handle.Get(),0,64);
         list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),64,bytes+16);
+        if(available==7)source.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         const auto before=source.State(0);
         {
             GuestIndexExpandPass pass(device);
@@ -48,6 +49,10 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
             pass.Record(renderer,plan,available?&source:nullptr,available?offset:0,available,element,output);
         } // The queued shader/root/source/output survive pass destruction.
         if(source.State(0)!=before)throw std::runtime_error("Index expansion lost authoritative source state");
+        // A later original producer can overwrite the guest index alias.
+        // Subsequent instances must still consume the one expanded snapshot.
+        source.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        list->CopyBufferRegion(source.handle.Get(),0,seed.handle.Get(),64,64);
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,bytes+16);renderer.Finish();
         const std::span<const u32> ordinals=type==P::LineLoop?std::span<const u32>(loop):

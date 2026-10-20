@@ -1375,7 +1375,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
     std::optional<GuestIndexExpansion> gpu_expansion;
-    if(indexed&&expand_primitive&&!r.enable_primitive_restart&&!capture&&
+    if(indexed&&expand_primitive&&!r.enable_primitive_restart&&
        r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None){
         const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count);
         if(!plan.output_count)return;
@@ -1509,6 +1509,26 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         std::shared_ptr<GuestMultisample::StorageLease> lease;
     };
     std::vector<OrderedMultisampleTransfer> ordered_multisample;
+    bool expanded_indices_prepared{};
+    const auto prepare_indices=[&](ResourceBindings& bindings){
+        if(gpu_expansion){
+            // One immutable expansion spans all original producer instances
+            // and final replay. A producer may write the guest index alias;
+            // it must not change the index snapshot for later instances.
+            if(expanded_indices_prepared)return;
+            bindings.Prepare();
+            if(!index_expand_)index_expand_=std::make_unique<GuestIndexExpandPass>(device_.Get());
+            index_storage=AcquireTransientBuffer(u64(gpu_expansion->output_count)*4);
+            const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
+            RetainUntilFinish([source](u64){});
+            const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
+            index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
+                resident_index_bytes/element,element,index_storage);
+            index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
+            expanded_indices_prepared=true;
+        }else if(resident_index_address)
+            index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+    };
     bool replay_prepared{};
     const auto prepare_replay=[&](ResourceBindings& bindings) {
         if(replay_prepared)return;
@@ -1652,22 +1672,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             replay_feedback_snapshots.emplace(native,std::move(copy));
             Diagnostics::Count("image-feedback.gpu-snapshot");
         }
-        if(gpu_expansion){
-            // Complete ownership preparation before borrowing B; the output
-            // allocation may Finish, but must precede the authoritative borrow.
-            bindings.Prepare();
-            if(!index_expand_)index_expand_=std::make_unique<GuestIndexExpandPass>(device_.Get());
-            index_storage=AcquireTransientBuffer(u64(gpu_expansion->output_count)*4);
-            // Preserve the original index source policy: clean small ranges
-            // use physical B0, while GPU-modified ranges use prepared B (or
-            // its UAV-safe snapshot). A shader sharp alias is not the source.
-            const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
-            RetainUntilFinish([source](u64){});
-            const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
-            index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
-                resident_index_bytes/element,element,index_storage);
-            index_view={&index_storage,0,gpu_expansion->output_count*4,DXGI_FORMAT_R32_UINT};
-        }else if(resident_index_address&&!capture)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+        if(!capture)prepare_indices(bindings);
         replay_prepared=true;
     };
     const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true,
@@ -1901,7 +1906,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     [&](PrimitiveStreamLease& lease){
                     auto bindings=common.ForkForReplay(stream_pipeline.Layout());
                     RetainUntilFinish([bindings](u64){});
-                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+                    prepare_indices(*bindings);
                     if(index_view.resource){bindings->Retain(index_view.resource->handle.Get());bindings->RetainAllocation(index_view.resource->allocation);}
                     const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*range.capacity_vertices,0};
                     ExecuteGraphics(stream_pipeline,*bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
@@ -1947,7 +1952,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 [&](ResourceBindings& bindings){
                     NativePointCapturePass::BindProducer(bindings,buffer,offset,bytes);
                     bindings.Prepare();
-                    if(resident_index_address)index_view=ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format);
+                    prepare_indices(bindings);
                     if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
                     ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,viewport.viewports,
                         viewport.scissors,r.blend_constants,instance,{},index_view.resource?&index_view:nullptr,false);
