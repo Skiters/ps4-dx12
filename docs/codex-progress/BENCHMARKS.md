@@ -1,3 +1,5 @@
+Latest:b9f07e3 dispatches capture clear work from the actual GPU prefix (reused indirect packet, ordered UAV/INDIRECT transitions and retained lifetime). Genuine original GCN LS/HS/DS plus GS/PS linkage now CPU-verified; clean Release PASS21.797s. Prepared GPU prefix/guard/reuse/lifetime and exact CS-invocation checks NOT_RUN; game NOT_RUN, app unchanged. Large-source SO capacity, capacity-sized CPU scheduling and indirect-batch bounds remain. See SESSION_HANDOFF.md.
+
 Latest:0252bc0 connects original LsHsEsGs capture;40d9138 derives clear prefix/indirect replay from actual GPU counts. CPU metadata/auxiliary shaders and clean Release PASS; original guest HS/DS compilation NOT_EXERCISED, GPU/game NOT_RUN. Large-source capacity, capacity-sized CPU scheduling and indirect-batch bounds remain. See SESSION_HANDOFF.md.
 
 Latest:b0e875b adds conservative generic tessellation source-capacity planner; CPU boundaries and clean Release PASS, GPU/game NOT_RUN. LsHsEsGs activation/large-source streaming remain pending. Pinned original does not implement dynamic GS ring-load offsets or EsGs QuadList-to-GS; do not require new semantics for parity. See SESSION_HANDOFF.md.
