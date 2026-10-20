@@ -6,6 +6,7 @@
 #include "core/emulator_settings.h"
 #include "stream_output_layout_checks.h"
 #include "guest_indirect_argument_checks.h"
+#include "guest_indirect_pack_checks.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
@@ -21,7 +22,7 @@ int main(int argc,char** argv){try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and primitive stream mode");
     Tests::CheckStreamOutputLayout();
     Tests::CheckGuestIndirectArguments();
-    puts("CHECKED: guest indirect indexed/nonindexed ABI, immutable batch snapshot, stride and address bounds (CPU)");
+    puts("CHECKED: guest indirect indexed/nonindexed ABI, immutable snapshot, stride/address and GPU pack size limits (CPU)");
     GuestGraphicsState patch_state;patch_state.topology=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
     patch_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
     patch_state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF;
@@ -101,6 +102,7 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     auto state=BuildGuestGraphicsState(regs,{});state.rasterizer_discard=true;
     Rasterizer renderer(device.Get());
+    Tests::CheckGuestIndirectPackGpu(device.Get(),renderer);
     for(unsigned variant=0;variant<3;++variant){
         std::array<D3D12_SO_DECLARATION_ENTRY,2> declarations{{{0,"CAPTURE",0,0,4,0},{0,nullptr,0,0,1,0}}};
         UINT stride=variant?8:16;

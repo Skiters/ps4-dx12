@@ -53,5 +53,25 @@ function(native_host_passes target)
         DEPENDS "${_host_native}/primitive_stream_arguments.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_stream_header}" "${_host_native}/primitive_stream_arguments.cpp")
+    set(_indirect_shader "${_host_generated}/guest_indirect_pack.dxil")
+    set(_indirect_header "${_host_generated}/guest_indirect_pack_shader.h")
+    add_custom_command(OUTPUT "${_indirect_header}" "${_indirect_shader}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E main -HV 2018 -O3 -WX
+            -Fo "${_indirect_shader}" "${_host_native}/guest_indirect_pack.hlsl"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${_indirect_shader}" "-DOUTPUT=${_indirect_header}"
+            "-DSYMBOL=NativeGuestIndirectPack" -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_indirect_pack.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_indirect_header}" "${_host_native}/guest_indirect_pack.cpp")
+    set(_indirect_dispatch "${_host_generated}/guest_indirect_dispatch.dxil")
+    set(_indirect_dispatch_header "${_host_generated}/guest_indirect_dispatch_shader.h")
+    add_custom_command(OUTPUT "${_indirect_dispatch_header}" "${_indirect_dispatch}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E build_dispatch -HV 2018 -O3 -WX
+            -Fo "${_indirect_dispatch}" "${_host_native}/guest_indirect_pack.hlsl"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${_indirect_dispatch}" "-DOUTPUT=${_indirect_dispatch_header}"
+            "-DSYMBOL=NativeGuestIndirectDispatch" -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_indirect_pack.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_indirect_dispatch_header}")
     target_include_directories(${target} PRIVATE "${_host_generated}")
 endfunction()

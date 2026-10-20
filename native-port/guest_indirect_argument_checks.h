@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "video_core/renderer_d3d12/guest_indirect_arguments.h"
+#include "video_core/renderer_d3d12/guest_indirect_pack.h"
 #include <limits>
 namespace NativeDX12::Tests {
 inline void CheckGuestIndirectArguments(){
@@ -47,5 +48,18 @@ inline void CheckGuestIndirectArguments(){
     reject([]{(void)NativeIndirectLayout::Make(false,UINT64_MAX-15,16,1);});
     reject([]{(void)NativeIndirectLayout::Make(true,0,24,1,true);});
     reject([]{(void)NativeIndirectLayout::Make(false,4,24,1,true);});
+    const auto pack=GuestIndirectPackPlan::Make(false,32,3);
+    require(pack.source_bytes==80&&pack.command_stride==24&&pack.command_bytes==72&&
+        pack.runtime_stride==1024&&pack.runtime_bytes==3072);
+    const auto indexed_pack=GuestIndirectPackPlan::Make(true,32,3);
+    require(indexed_pack.source_bytes==84&&indexed_pack.command_stride==32&&indexed_pack.command_bytes==96);
+    constexpr u32 maximum=UINT32_MAX/1024;
+    require(GuestIndirectPackPlan::Make(false,16,maximum).runtime_bytes==u64(maximum)*1024);
+    bool overflow{};try{(void)GuestIndirectPackPlan::Make(false,16,maximum+1);}catch(const std::overflow_error&){overflow=true;}
+    require(overflow);overflow=false;
+    try{(void)GuestIndirectPackPlan::Make(false,UINT32_MAX-3,2);}catch(const std::overflow_error&){overflow=true;}
+    require(overflow);
+    bool empty{};try{(void)GuestIndirectPackPlan::Make(false,16,0);}catch(const std::invalid_argument&){empty=true;}
+    require(empty);
 }
 } // namespace NativeDX12::Tests
