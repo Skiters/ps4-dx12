@@ -11,6 +11,9 @@ class ResourceBindings;
 class NativePointCapturePass {
     ComPtr<ID3D12RootSignature> clear_root_;
     ComPtr<ID3D12PipelineState> clear_pipeline_;
+    ComPtr<ID3D12PipelineState> dispatch_pipeline_;
+    ComPtr<ID3D12CommandSignature> dispatch_signature_;
+    Resource clear_arguments_;
     std::vector<std::shared_ptr<Resource>> buffers_;
     Resource zero_count_;
     std::shared_ptr<Resource> Acquire(Rasterizer&,u64);

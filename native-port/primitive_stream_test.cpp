@@ -272,8 +272,9 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     }
     // Clear-only GPU regression: empty/partial indirect replay must leave
     // unused records, payload words and the following record unchanged.
-    for(const u32 active:std::array<u32,3>{0,1,2}){
-        constexpr UINT bytes=UINT(Shader::NativePointCapture::RecordBytes*3);
+    for(const u32 active:std::array<u32,9>{0,1,2,255,256,257,258,259,UINT32_MAX}){
+        constexpr u32 capacity=258;
+        constexpr UINT bytes=UINT(Shader::NativePointCapture::RecordBytes*(capacity+1));
         auto seed=Buffer(device.Get(),bytes+16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         void* data{};D3D12_RANGE no_read{};Check(seed.handle->Map(0,&no_read,&data));
         memset(data,0x6d,bytes+16);const D3D12_DRAW_ARGUMENTS count{active,1,0,0};
@@ -281,6 +282,11 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         D3D12_RANGE written{0,bytes+16};seed.handle->Unmap(0,&written);
         auto counter=renderer.AcquireTransientBuffer(16);
         auto result=Buffer(device.Get(),bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        ComPtr<ID3D12QueryHeap> query;
+        const D3D12_QUERY_HEAP_DESC query_desc{D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS,1,0};
+        Check(device->CreateQueryHeap(&query_desc,IID_PPV_ARGS(&query)));
+        auto statistics=Buffer(device.Get(),sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS),
+            D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         std::shared_ptr<Resource> arena;
         {
             NativePointCapturePass clear(device.Get());arena=clear.Reserve(renderer,bytes);
@@ -288,18 +294,31 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             counter.Transition(commands,D3D12_RESOURCE_STATE_COPY_DEST);
             commands->CopyBufferRegion(arena->handle.Get(),0,seed.handle.Get(),0,bytes);
             commands->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),bytes,16);
+            commands->BeginQuery(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
             const Rasterizer::StreamDrawArguments actual{&counter,0};
-            clear.Execute(renderer,Shader::NativePointCapture::Plan::Make(2,1,1,1),{2,1},D3D_PRIMITIVE_TOPOLOGY_POINTLIST,
+            for(u32 repeat=0;repeat<2;++repeat)
+            clear.Execute(renderer,Shader::NativePointCapture::Plan::Make(capacity,1,1,1),{capacity,1},D3D_PRIMITIVE_TOPOLOGY_POINTLIST,
                 [](Resource&,const Rasterizer::DrawArguments&,u64,u64){},
                 [](Resource&,const Rasterizer::DrawArguments&){},arena,&actual);
         } // Queued clear root/PSO survives owner destruction before submission.
+        renderer.RecordingList()->EndQuery(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0);
+        renderer.RecordingList()->ResolveQueryData(query.Get(),D3D12_QUERY_TYPE_PIPELINE_STATISTICS,0,1,statistics.handle.Get(),0);
         arena->Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         renderer.RecordingList()->CopyBufferRegion(result.handle.Get(),0,arena->handle.Get(),0,bytes);
         renderer.Finish();D3D12_RANGE all{0,bytes};Check(result.handle->Map(0,&all,&data));
         std::array<std::byte,bytes> expected;expected.fill(std::byte{0x6d});
-        for(u32 record=0;record<active;++record)memset(expected.data()+record*Shader::NativePointCapture::RecordBytes,0,4);
+        for(u32 record=0;record<std::min(active,capacity);++record)memset(expected.data()+record*Shader::NativePointCapture::RecordBytes,0,4);
         const bool equal=!memcmp(data,expected.data(),bytes);result.handle->Unmap(0,&no_read);
         if(!equal)throw std::runtime_error("GPU indirect capture clear changed inactive records, payload or guards");
+        D3D12_RANGE stats_all{0,sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS)};
+        Check(statistics.handle->Map(0,&stats_all,&data));
+        const auto invocations=static_cast<const D3D12_QUERY_DATA_PIPELINE_STATISTICS*>(data)->CSInvocations;
+        statistics.handle->Unmap(0,&no_read);
+        // Two one-thread argument builders plus exactly the active clear
+        // groups. A capacity-sized dispatch would fail empty/partial cases.
+        const u64 expected_invocations=2*(1+u64((std::min(active,capacity)+255)/256)*256);
+        if(invocations!=expected_invocations)
+            throw std::runtime_error("Capture clear dispatched capacity instead of the actual GPU prefix");
     }
     for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){SIZE_T bytes{};Check(messages->GetMessage(i,nullptr,&bytes));
         std::vector<std::byte> data(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(data.data());

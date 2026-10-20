@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "guest_point_capture.h"
 #include "guest_point_capture_clear.h"
+#include "guest_point_capture_dispatch.h"
 #include "rasterizer.h"
 #include "resource_bindings.h"
 #include "diagnostics.h"
@@ -37,6 +38,11 @@ NativePointCapturePass::NativePointCapturePass(ID3D12Device* device)
     D3D12_COMPUTE_PIPELINE_STATE_DESC state{};state.pRootSignature=clear_root_.Get();
     state.CS={NativePointCaptureClear,sizeof(NativePointCaptureClear)};
     Check(DX12_API_CALL(device->CreateComputePipelineState(&state,IID_PPV_ARGS(&clear_pipeline_))));
+    state.CS={NativePointCaptureDispatch,sizeof(NativePointCaptureDispatch)};
+    Check(DX12_API_CALL(device->CreateComputePipelineState(&state,IID_PPV_ARGS(&dispatch_pipeline_))));
+    D3D12_INDIRECT_ARGUMENT_DESC argument{};argument.Type=D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+    const D3D12_COMMAND_SIGNATURE_DESC dispatch{sizeof(D3D12_DISPATCH_ARGUMENTS),1,&argument,0};
+    Check(DX12_API_CALL(device->CreateCommandSignature(&dispatch,nullptr,IID_PPV_ARGS(&dispatch_signature_))));
 }
 std::shared_ptr<Resource> NativePointCapturePass::Acquire(Rasterizer& rasterizer,u64 bytes){
     rasterizer.CollectRetirements();
@@ -165,6 +171,9 @@ void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::Native
         Check(count.handle->GetDevice(IID_PPV_ARGS(&owner)));
         if(owner.Get()!=expected.Get())throw std::invalid_argument("Capture count belongs to another device");
     }
+    // Allocation may retire work; obtain it before borrowing RecordingList.
+    if(actual_records&&!clear_arguments_.handle)
+        clear_arguments_=rasterizer.AcquireTransientBuffer(sizeof(D3D12_DISPATCH_ARGUMENTS));
     // A BeforeBind callback can Finish during guest ownership resolution.
     // Retain here for clear; descriptor allocation leases cover later passes.
     rasterizer.RetainUntilFinish([buffer,count,root=clear_root_,pipeline=clear_pipeline_](u64){});
@@ -178,7 +187,24 @@ void NativePointCapturePass::Execute(Rasterizer& rasterizer,const Shader::Native
         const u32 clear[]{u32(plan.records),u32(Shader::NativePointCapture::RecordBytes),actual_records?1u:0u,
             actual_records?u32(actual_records->offset):0u};
         DX12_API_CALL(list->SetComputeRoot32BitConstants(1,4,clear,0));
-        DX12_API_CALL(list->Dispatch(UINT((plan.records+255)/256),1,1));buffer->UavBarrier(list);
+        if(actual_records){
+            // Reuse on the same direct queue: the previous indirect read must
+            // finish before this packet is overwritten. Keep the allocation
+            // and both pipeline objects even if the pass owner is destroyed.
+            rasterizer.RetainUntilFinish([arguments=clear_arguments_,pipeline=dispatch_pipeline_,
+                signature=dispatch_signature_](u64){});
+            clear_arguments_.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            DX12_API_CALL(list->SetPipelineState(dispatch_pipeline_.Get()));
+            DX12_API_CALL(list->SetComputeRootUnorderedAccessView(0,clear_arguments_.handle->GetGPUVirtualAddress()));
+            DX12_API_CALL(list->Dispatch(1,1,1));clear_arguments_.UavBarrier(list);
+            clear_arguments_.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+            DX12_API_CALL(list->SetPipelineState(clear_pipeline_.Get()));
+            DX12_API_CALL(list->SetComputeRootUnorderedAccessView(0,buffer->handle->GetGPUVirtualAddress()));
+            DX12_API_CALL(list->ExecuteIndirect(dispatch_signature_.Get(),1,clear_arguments_.handle.Get(),0,nullptr,0));
+        }else{
+            DX12_API_CALL(list->Dispatch(UINT((plan.records+255)/256),1,1));
+        }
+        buffer->UavBarrier(list);
         const auto instance_bytes=plan.bytes/plan.instances;
         for(u32 instance=0;instance<original.instances;++instance){
             auto draw=original;draw.instances=1;draw.first_instance+=instance;

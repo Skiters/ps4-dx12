@@ -33,6 +33,16 @@ function(native_host_passes target)
         DEPENDS "${_host_native}/guest_point_capture_clear.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_capture_header}" "${_host_native}/guest_point_capture.cpp")
+    set(_capture_args_shader "${_host_generated}/guest_point_capture_dispatch.dxil")
+    set(_capture_args_header "${_host_generated}/guest_point_capture_dispatch.h")
+    add_custom_command(OUTPUT "${_capture_args_header}" "${_capture_args_shader}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E build_dispatch -HV 2018 -O3 -WX
+            -Fo "${_capture_args_shader}" "${_host_native}/guest_point_capture_clear.hlsl"
+        COMMAND ${CMAKE_COMMAND} "-DINPUT=${_capture_args_shader}" "-DOUTPUT=${_capture_args_header}"
+            "-DSYMBOL=NativePointCaptureDispatch" -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_point_capture_clear.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_capture_args_header}")
     set(_stream_shader "${_host_generated}/primitive_stream_arguments.dxil")
     set(_stream_header "${_host_generated}/primitive_stream_arguments_shader.h")
     add_custom_command(OUTPUT "${_stream_header}" "${_stream_shader}"

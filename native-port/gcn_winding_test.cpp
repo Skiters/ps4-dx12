@@ -239,6 +239,7 @@ int main(int argc,char** argv){try{
     struct Allocation{void* value;~Allocation(){VirtualFree(value,0,MEM_RELEASE);}} allocation{memory};
     const auto address=reinterpret_cast<u64>(memory);
     alignas(256) std::array<u32,1024> vertex_code{},pixel_code{},export_code{},geometry_code{},copy_code{};
+    alignas(256) std::array<u32,1024> local_code{},hull_code{},domain_code{};
     const auto initialize=[](auto& program,const std::vector<u32>& words,u64 hash){
         if(words.size()>768)throw std::runtime_error("GCN program overlaps binary metadata");
         std::copy(words.begin(),words.end(),program.begin());program[1]=383;AmdGpu::BinaryInfo binary{};
@@ -463,6 +464,8 @@ int main(int argc,char** argv){try{
     profile.native_viewport_clip_conversion=clip_disabled;
     profile.native_point_capture=point_capture;
     profile.native_point_capture_stream_input=stream_inputs;
+    // Keep guest program descriptors alive for the frontend's cached stages.
+    std::unique_ptr<AmdGpu::Regs> original_tess_regs;
     GuestShaderFrontend frontend(profile);auto guest=frontend.BuildGraphics(regs);
     if(point_capture&&gcn_loop){
         auto ordinary_profile=profile;ordinary_profile.native_point_capture=false;ordinary_profile.native_point_capture_stream_input=false;
@@ -546,6 +549,74 @@ int main(int argc,char** argv){try{
             }
         };
         if(stream_inputs){
+            {
+                // Real GCN LS/HS/DS, rather than the RectList auxiliary HS/DS.
+                // LS exports one position through LDS; passthrough HS writes six
+                // quad factors; DS consumes the output-CP region and exports ES data.
+                std::vector<u32> ls{0xBEEB03FF,15,0x7e080280};
+                std::vector<u32> ds{0xBEEB03FF,15,0xc2028103,0xbf8c007f,0x7e100205};
+                const std::array<u32,4> position{0,0,0x3f000000,0x3f800000};
+                for(u32 c=0;c<4;++c){
+                    ls.insert(ls.end(),{0x7e0a02ff,position[c],0xd8340000u|c*4,0x00000504});
+                    ds.insert(ds.end(),{0xd8d80000u|c*4,((4+c)<<24)|8,
+                        0xe0704000u|c*4,0x80400000u|((4+c)<<8)});
+                }
+                ls.push_back(0xbf810000);ds.push_back(0xbf810000);
+                std::vector<u32> hs{0xBEEB03FF,15,0xc2068100,0xbf8c007f,
+                    0x7e0c020d,0xd8d80000,0x08000006,0x7e0802ff,0x3f800000};
+                for(u32 c=0;c<6;++c)hs.insert(hs.end(),{0xe0704000u|c*4,0x0c420400});
+                hs.push_back(0xbf810000);
+                initialize(local_code,ls,0x57494e44494e4711ULL);
+                initialize(hull_code,hs,0x57494e44494e4712ULL);
+                initialize(domain_code,ds,0x57494e44494e4713ULL);
+                original_tess_regs=std::make_unique<AmdGpu::Regs>(regs);
+                auto& tess=*original_tess_regs;
+                tess.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::LsHsEsGs;
+                tess.primitive_type=AmdGpu::PrimitiveType::PatchPrimitive;
+                tess.ls_hs_config.num_patches=1;
+                tess.ls_hs_config.hs_input_control_points=3;
+                tess.ls_hs_config.hs_output_control_points=3;
+                tess.tess_config.type=AmdGpu::TessellationType::Quad;
+                tess.tess_config.partitioning=AmdGpu::TessellationPartitioning::Integer;
+                tess.tess_config.topology=AmdGpu::TessellationTopology::TriangleCw;
+                tess.ls_program={};tess.hs_program={};tess.es_program={};
+                tess.ls_program.address=reinterpret_cast<u64>(local_code.data())>>8;
+                tess.ls_program.settings.num_vgprs=1;
+                tess.hs_program.address=reinterpret_cast<u64>(hull_code.data())>>8;
+                tess.hs_program.settings.num_user_regs=12;tess.hs_program.settings.num_vgprs=2;
+                tess.hs_program.settings.num_sgprs=1;tess.hs_program.settings.vgpr_comp_cnt=1;
+                tess.es_program.address=reinterpret_cast<u64>(domain_code.data())>>8;
+                tess.es_program.settings.num_user_regs=4;tess.es_program.settings.num_vgprs=2;
+                tess.es_program.settings.num_sgprs=1;tess.es_program.settings.vgpr_comp_cnt=3;
+                const std::array<u32,9> constants{16,16,1,0,0,48,48,0,0};
+                memcpy(reinterpret_cast<void*>(address+56000),constants.data(),sizeof(constants));
+                auto sharp=input;sharp.base_address=address+56000;sharp.stride=4;sharp.num_records=9;
+                memcpy(tess.hs_program.user_data.data(),&sharp,sizeof(sharp));
+                memcpy(tess.es_program.user_data.data(),&sharp,sizeof(sharp));
+                sharp.base_address=address+57000;sharp.num_records=6;
+                memcpy(tess.hs_program.user_data.data()+8,&sharp,sizeof(sharp));
+                const auto captured=frontend.BuildPointCaptureGraphics(tess);
+                if(!captured.stream_tessellated||captured.stream_patch_vertices!=3)
+                    throw std::runtime_error("Original GCN tessellation lost its source patch domain");
+                for(const auto logical:std::array{Shader::SwStage::Vertex,Shader::SwStage::TessellationControl,Shader::SwStage::TessellationEval}){
+                    const auto* stage=captured.stream_producer.stages[u32(logical)];
+                    if(!stage||stage->auxiliary||stage->info.translation_failed||stage->spirv.empty())
+                        throw std::runtime_error("Original GCN tessellation was replaced by an auxiliary stage");
+                }
+                if(captured.producer.stages[u32(Shader::SwStage::TessellationControl)]||
+                   captured.producer.stages[u32(Shader::SwStage::TessellationEval)])
+                    throw std::runtime_error("Original GCN tessellation was repeated by the GS consumer");
+                for(const auto* stages:std::array{&captured.stream_producer,&captured.producer,&captured.replay}){
+                    std::vector<LinkedSpirvStage> inputs;
+                    for(const auto* stage:stages->stages)if(stage)inputs.push_back({stage_kind(stage->info.sw_stage),stage->spirv});
+                    const auto result=ConvertLinkedStages(std::filesystem::path(argv[1]).wstring(),inputs,options);
+                    if(!result.success||result.stages.size()!=inputs.size())
+                        throw std::runtime_error("Original GCN tessellation capture linkage failed: "+result.diagnostics);
+                    for(const auto& stage:result.stages)if(!stage.validated||stage.bytecode.empty())
+                        throw std::runtime_error("Original GCN tessellation produced unvalidated DXIL");
+                }
+                puts("COMPILED: original GCN LS/HS/DS stream, original GS consumer and PS replay; GPU execution NOT_RUN");
+            }
             {
                 auto geometry=guest.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
                 geometry.in_vertex_data_size=132;geometry.in_primitive=AmdGpu::PrimitiveType::AdjTriangleList;
