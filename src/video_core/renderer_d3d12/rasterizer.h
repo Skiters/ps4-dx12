@@ -29,7 +29,7 @@ struct GuestGraphicsState;
 class Rasterizer : public VideoCore::RasterizerInterface {
 protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
-    ComPtr<ID3D12CommandSignature> stream_draw_signature_;
+    std::map<std::pair<bool,u32>,ComPtr<ID3D12CommandSignature>> indirect_draw_signatures_;
     virtual std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const{return {};}
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
@@ -413,9 +413,13 @@ public:
     // physical CPU snapshot; other reads use the already prepared B arena.
     IndexBinding ObtainIndexBuffer(VAddr address,UINT bytes,DXGI_FORMAT format);
     struct DrawArguments {UINT count{},instances=1,first{},first_instance{};INT base_vertex{};};
-    // Host-generated nonindexed draw arguments. The producing pass owns the
+    // GPU draw arguments. The producing pass owns the
     // GPU count/bounds contract; no CPU draw-count snapshot is substituted.
-    struct StreamDrawArguments {Resource* resource{};u64 offset{};};
+    struct StreamDrawArguments {
+        Resource* resource{};u64 offset{};
+        u32 max_count=1,stride=0; // Zero stride selects the DRAW/INDEXED ABI size.
+        Resource* count_resource{};u64 count_offset{};
+    };
     struct StreamOutputBinding {
         Resource* data{};Resource* filled_size{};
         u64 offset{},bytes{},counter_offset{};

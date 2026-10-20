@@ -6,6 +6,7 @@
 #include <cstdio>
 #include "shader_pipeline.h"
 #include "guest_graphics_state.h"
+#include "guest_indirect_arguments.h"
 #include <cmath>
 #include <set>
 #include <algorithm>
@@ -100,7 +101,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
     const StreamOutputBinding* stream_output) {
     std::lock_guard lock(execution_mutex_);
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics submission has compute PSO");
-    if(state.discard||(!stream_draw&&(!draw.count||!draw.instances)))return;
+    if(state.discard||(stream_draw?!stream_draw->max_count:(!draw.count||!draw.instances)))return;
     bindings.Prepare();
     D3D12_STREAM_OUTPUT_BUFFER_VIEW stream_view{};
     if(stream_output){
@@ -120,6 +121,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         if(bindings.References(stream_output->data->handle.Get())||bindings.References(stream_output->filled_size->handle.Get())||
            (indices&&indices->resource&&is_output(indices->resource->handle.Get()))||
            (stream_draw&&stream_draw->resource&&is_output(stream_draw->resource->handle.Get()))||
+           (stream_draw&&stream_draw->count_resource&&is_output(stream_draw->count_resource->handle.Get()))||
            std::any_of(vertices.begin(),vertices.end(),[&](const auto& vertex){return vertex.resource&&is_output(vertex.resource->handle.Get());}))
             throw std::invalid_argument("Internal stream output overlaps draw input or shader resources");
         if(stream_output->data->handle.Get()==stream_output->filled_size->handle.Get()&&
@@ -131,24 +133,45 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         RetainUntilFinish([data=stream_output->data->handle,counter=stream_output->filled_size->handle,
             data_allocation=stream_output->data->allocation,counter_allocation=stream_output->filled_size->allocation](u64){});
     }
+    ComPtr<ID3D12CommandSignature> indirect_signature;
     if(stream_draw){
-        if(indices||!stream_draw->resource||!stream_draw->resource->handle)
+        if(!stream_draw->resource||!stream_draw->resource->handle)
             throw std::invalid_argument("Invalid internal primitive stream draw arguments");
         const auto desc=stream_draw->resource->handle->GetDesc();
-        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||stream_draw->offset%4||
-           stream_draw->offset>desc.Width||sizeof(D3D12_DRAW_ARGUMENTS)>desc.Width-stream_draw->offset)
+        const auto layout=NativeIndirectLayout::Make(indices!=nullptr,stream_draw->offset,stream_draw->stride,stream_draw->max_count);
+        if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||layout.offset>desc.Width||layout.bytes>desc.Width-layout.offset)
             throw std::out_of_range("Internal primitive stream draw arguments exceed their buffer");
         // This private command buffer is distinct from shader data. Do not
         // permit a simultaneous UAV binding to change its indirect arguments.
         if(bindings.References(stream_draw->resource->handle.Get()))
             throw std::invalid_argument("Internal draw arguments overlap shader bindings");
-        if(!stream_draw_signature_){
-            D3D12_INDIRECT_ARGUMENT_DESC argument{};argument.Type=D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-            const D3D12_COMMAND_SIGNATURE_DESC signature{sizeof(D3D12_DRAW_ARGUMENTS),1,&argument,0};
-            Check(device_->CreateCommandSignature(&signature,nullptr,IID_PPV_ARGS(&stream_draw_signature_)));
+        ComPtr<ID3D12Device> owner;
+        Check(stream_draw->resource->handle->GetDevice(IID_PPV_ARGS(&owner)));
+        if(owner.Get()!=device_.Get())throw std::invalid_argument("Indirect arguments belong to another device");
+        if(stream_draw->count_resource){
+            const auto& count=*stream_draw->count_resource;
+            if(!count.handle)throw std::invalid_argument("Missing GPU indirect count buffer");
+            const auto counter=count.handle->GetDesc();
+            if(counter.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||stream_draw->count_offset%4||
+               stream_draw->count_offset>counter.Width||4>counter.Width-stream_draw->count_offset)
+                throw std::out_of_range("GPU indirect count exceeds its buffer");
+            if(bindings.References(count.handle.Get()))throw std::invalid_argument("Indirect count overlaps shader bindings");
+            if(count.handle.Get()==stream_draw->resource->handle.Get()&&stream_draw->count_resource!=stream_draw->resource)
+                throw std::invalid_argument("Shared indirect argument/count buffer requires one authoritative resource state");
+            Check(count.handle->GetDevice(IID_PPV_ARGS(&owner)));
+            if(owner.Get()!=device_.Get())throw std::invalid_argument("Indirect count belongs to another device");
+            RetainUntilFinish([resource=count.handle,allocation=count.allocation](u64){});
         }
+        auto& cached=indirect_draw_signatures_[{indices!=nullptr,layout.stride}];
+        if(!cached){
+            D3D12_INDIRECT_ARGUMENT_DESC argument{};argument.Type=indices?
+                D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED:D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+            const D3D12_COMMAND_SIGNATURE_DESC signature{layout.stride,1,&argument,0};
+            Check(device_->CreateCommandSignature(&signature,nullptr,IID_PPV_ARGS(&cached)));
+        }
+        indirect_signature=cached;
         RetainUntilFinish([resource=stream_draw->resource->handle,
-            allocation=stream_draw->resource->allocation](u64){});
+            allocation=stream_draw->resource->allocation,signature=indirect_signature](u64){});
     }
     if(state.topology==D3D_PRIMITIVE_TOPOLOGY_UNDEFINED||colors.size()!=pipeline.TargetFormats().size()||
        viewports.empty()||viewports.size()>16||scissors.size()!=viewports.size()||vertices.size()>32)
@@ -305,6 +328,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         for(const auto& v:vertices)inputs[v.resource]|=D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
         if(indices)inputs[indices->resource]|=D3D12_RESOURCE_STATE_INDEX_BUFFER;
         if(stream_draw)inputs[stream_draw->resource]|=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+        if(stream_draw&&stream_draw->count_resource)inputs[stream_draw->count_resource]|=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         for(const auto& [resource,input_state]:inputs){
             const auto shader_read=bindings.References(resource->handle.Get())?
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_COMMON;
@@ -385,8 +409,12 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             DX12_API_CALL(extended->OMSetDepthBounds(state.depth_bounds_min,state.depth_bounds_max));
         }
         if(!vertex_views.empty())DX12_API_CALL(list->IASetVertexBuffers(0,UINT(vertex_views.size()),vertex_views.data()));
-        if(stream_draw)DX12_API_CALL(list->ExecuteIndirect(stream_draw_signature_.Get(),1,
-            stream_draw->resource->handle.Get(),stream_draw->offset,nullptr,0));
+        if(stream_draw){
+            if(indices)DX12_API_CALL(list->IASetIndexBuffer(&index_view));
+            DX12_API_CALL(list->ExecuteIndirect(indirect_signature.Get(),stream_draw->max_count,
+                stream_draw->resource->handle.Get(),stream_draw->offset,
+                stream_draw->count_resource?stream_draw->count_resource->handle.Get():nullptr,stream_draw->count_offset));
+        }
         else if(indices){DX12_API_CALL(list->IASetIndexBuffer(&index_view));DX12_API_CALL(list->DrawIndexedInstanced(draw.count,draw.instances,draw.first,draw.base_vertex,draw.first_instance));}
         else DX12_API_CALL(list->DrawInstanced(draw.count,draw.instances,draw.first,draw.first_instance));
         if(render_pass)DX12_API_CALL(render_list->EndRenderPass());

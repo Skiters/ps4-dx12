@@ -58,6 +58,12 @@ struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
 [maxvertexcount(3)] void main(triangle V input[3],inout PointStream<V> output){
     for(uint i=0;i<3;++i)output.Append(input[i]);
 })");
+    const auto batch_vertex=DXIL::CompileDxil(dxc,R"(
+struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
+V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
+    V o;o.position=float4(0,0,0,1);o.payload=uint4(vertex,instance,0x7fc12345u,0x80000000u);return o;
+})",DXIL::Stage::Vertex);
+    if(!batch_vertex.success)throw std::runtime_error(batch_vertex.diagnostics);
     if(!vertex.success||!geometry.success||!reader_vertex.success||!reader_geometry.success)
         throw std::runtime_error(vertex.diagnostics+geometry.diagnostics+reader_vertex.diagnostics+reader_geometry.diagnostics);
     const auto serialized_vertex=DXIL::CompileDxil(dxc,R"(
@@ -186,6 +192,102 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
                 if(!replay_equal)throw std::runtime_error("GPU primitive count/indirect slice/empty draw/order/lifetime/guard mismatch");
             }
         }
+    }
+    {
+        // Native multi-command DRAW/INDEXED and optional GPU count. Capture
+        // VS payload directly so the expected index/base/instance values are
+        // independent of guest translation and GS primitive-ID conventions.
+        D3D12_SO_DECLARATION_ENTRY declaration{0,"CAPTURE",0,0,4,0};UINT stride=16;
+        state.pipeline.StreamOutput={&declaration,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM};
+        // IA values observe API base offsets directly. Bare SV_InstanceID
+        // excludes StartInstanceLocation (HLSL extended-command-info spec).
+        const D3D12_INPUT_ELEMENT_DESC elements[]{
+            {"TEXCOORD",0,DXGI_FORMAT_R32_UINT,0,0,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+            {"TEXCOORD",1,DXGI_FORMAT_R32_UINT,1,0,D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA,1}};
+        state.pipeline.InputLayout={elements,2};
+        ShaderPipeline::GraphicsShaders shaders;shaders.vertex=batch_vertex.bytecode;
+        ShaderPipeline pipeline(device.Get(),dxc,shaders,state.pipeline);
+        ResourceBindings bindings(device.Get(),pipeline.Layout());
+        const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[]{1,1,1,1};
+        const std::array<u32,10> indices{99,9,7,8,11,10,12,17,18,19};
+        auto index=Buffer(device.Get(),sizeof(indices),D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        void* mapped{};D3D12_RANGE none{};Check(index.handle->Map(0,&none,&mapped));
+        memcpy(mapped,indices.data(),sizeof(indices));D3D12_RANGE index_written{0,sizeof(indices)};index.handle->Unmap(0,&index_written);
+        const Rasterizer::IndexBinding index_view{&index,0,sizeof(indices),DXGI_FORMAT_R32_UINT};
+        auto vertex_data=Buffer(device.Get(),128,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto instance_data=Buffer(device.Get(),128,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        for(auto [resource,base]:std::array<std::pair<Resource*,u32>,2>{{{&vertex_data,100},{&instance_data,200}}}){
+            Check(resource->handle->Map(0,&none,&mapped));
+            for(u32 i=0;i<32;++i)static_cast<u32*>(mapped)[i]=base+i;
+            D3D12_RANGE written{0,128};resource->handle->Unmap(0,&written);
+        }
+        const std::array<Rasterizer::VertexBinding,2> vertices{{{&vertex_data,0,128,4},{&instance_data,0,128,4}}};
+        for(const bool indexed:std::array{false,true})for(const u32 spacing:std::array<u32,2>{0,32})
+        for(const u32 active:std::array<u32,6>{0,1,2,3,99,UINT32_MAX}){
+            const u32 command_stride=spacing?spacing:indexed?20:16;
+            constexpr u32 guarded=224;
+            const u32 packet_bytes=4+3*command_stride;
+            auto upload=Buffer(device.Get(),guarded+8+packet_bytes+4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+            Check(upload.handle->Map(0,&none,&mapped));memset(mapped,0xcd,size_t(upload.handle->GetDesc().Width));
+            const u64 zero=0;memcpy(static_cast<std::byte*>(mapped)+guarded,&zero,8);
+            for(u32 command=0;command<3;++command){
+                const std::array<u32,5> words{3,command?1u:2u,indexed?1+command*3:5+command*6,
+                    indexed?std::bit_cast<u32>(command==0?-4:command==1?2:-1):7+command*2,
+                    7+command*2};
+                memcpy(static_cast<std::byte*>(mapped)+guarded+8+4+command*command_stride,words.data(),indexed?20:16);
+            }
+            memcpy(static_cast<std::byte*>(mapped)+guarded+8+packet_bytes,&active,4);
+            upload.handle->Unmap(0,nullptr);
+            auto output=Buffer(device.Get(),guarded,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto filled=Buffer(device.Get(),8,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto result=Buffer(device.Get(),guarded+8,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto* commands=renderer.RecordingList();
+            commands->CopyBufferRegion(output.handle.Get(),0,upload.handle.Get(),0,guarded);
+            commands->CopyBufferRegion(filled.handle.Get(),0,upload.handle.Get(),guarded,8);
+            {
+                auto arguments=Buffer(device.Get(),packet_bytes+4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+                auto count=Buffer(device.Get(),4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+                commands->CopyBufferRegion(arguments.handle.Get(),0,upload.handle.Get(),guarded+8,packet_bytes+4);
+                commands->CopyBufferRegion(count.handle.Get(),0,upload.handle.Get(),guarded+8+packet_bytes,4);
+                const Rasterizer::StreamDrawArguments batch{&arguments,4,3,spacing,
+                    active==UINT32_MAX?nullptr:spacing?&arguments:&count,active==UINT32_MAX?0u:spacing?packet_bytes:0u};
+                const Rasterizer::StreamOutputBinding target{&output,&filled,16,192,0};
+                const auto submit=[&](const Rasterizer::StreamDrawArguments& candidate){
+                    renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
+                        blend,{0,0},vertices,indexed?&index_view:nullptr,false,&candidate,&target);
+                };
+                if(!active){
+                    auto bad=batch;bad.max_count=UINT32_MAX;bool rejected{};
+                    try{submit(bad);}catch(const std::out_of_range&){rejected=true;}
+                    if(!rejected)throw std::runtime_error("Native indirect batch accepted an out-of-bounds maximum count");
+                    bad=batch;bad.count_offset=2;rejected=false;
+                    try{submit(bad);}catch(const std::out_of_range&){rejected=true;}
+                    if(!rejected)throw std::runtime_error("Native indirect batch accepted an unaligned GPU count");
+                    bad=batch;bad.count_resource=&filled;bad.count_offset=0;rejected=false;
+                    try{submit(bad);}catch(const std::invalid_argument&){rejected=true;}
+                    if(!rejected)throw std::runtime_error("Native indirect count overlapped stream-output writes");
+                }
+                submit(batch);
+            } // Native argument/count allocations must survive until Finish.
+            commands=renderer.RecordingList();output.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            filled.Transition(commands,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            commands->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,guarded);
+            commands->CopyBufferRegion(result.handle.Get(),guarded,filled.handle.Get(),0,8);
+            renderer.Finish();
+            std::array<std::byte,guarded+8> expected;expected.fill(std::byte{0xcd});u32 records{};
+            const u32 indexed_ids[3][3]{{5,3,4},{13,12,14},{16,17,18}};
+            for(u32 command=0;command<std::min(active,3u);++command)
+            for(u32 instance=0;instance<(command?1u:2u);++instance)for(u32 corner=0;corner<3;++corner){
+                const std::array<u32,4> payload{100+(indexed?indexed_ids[command][corner]:5+command*6+corner),
+                    200+7+command*2+instance,0x7fc12345u,0x80000000u};
+                memcpy(expected.data()+16+records++*16,payload.data(),16);
+            }
+            const u64 bytes=u64(records)*16;memcpy(expected.data()+guarded,&bytes,8);
+            D3D12_RANGE all{0,expected.size()};Check(result.handle->Map(0,&all,&mapped));
+            const bool equal=!memcmp(mapped,expected.data(),expected.size());result.handle->Unmap(0,&none);
+            if(!equal)throw std::runtime_error("Native indexed/nonindexed batch count/stride/base/instance/order/lifetime/guard mismatch");
+        }
+        state.pipeline.InputLayout={};
     }
     {
         // Actual production serialized writer. Two triangles, two instances,

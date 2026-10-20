@@ -34,5 +34,14 @@ inline void CheckGuestIndirectArguments(){
     reject([]{(void)GuestIndirectLayout::Make(false,UINT64_MAX,4,16,1);});
     reject([]{(void)GuestIndirectLayout::Make(true,UINT64_MAX-19,0,20,1);});
     reject([]{(void)GuestIndirectLayout::Make(false,UINT64_MAX-64,0,16,UINT32_MAX);});
+    const auto native=NativeIndirectLayout::Make(true,4,32,3);
+    require(native.offset==4&&native.bytes==96&&native.stride==32&&native.count==3);
+    require(NativeIndirectLayout::Make(false,0,0,2).bytes==32);
+    require(NativeIndirectLayout::Make(true,0,0,2).bytes==40);
+    require(NativeIndirectLayout::Make(false,0,0,0).bytes==0);
+    reject([]{(void)NativeIndirectLayout::Make(true,0,16,1);});
+    reject([]{(void)NativeIndirectLayout::Make(false,2,16,1);});
+    reject([]{(void)NativeIndirectLayout::Make(false,0,18,1);});
+    reject([]{(void)NativeIndirectLayout::Make(false,UINT64_MAX-15,16,1);});
 }
 } // namespace NativeDX12::Tests
