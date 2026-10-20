@@ -7,6 +7,7 @@
 #include "stream_output_layout_checks.h"
 #include "guest_indirect_argument_checks.h"
 #include "guest_index_expand_checks.h"
+#include "draw_sysval_checks.h"
 #include "guest_indirect_pack_checks.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
@@ -40,6 +41,9 @@ int main(int argc,char** argv){try{
     if(!rejected_width)throw std::runtime_error("Invalid buffered GS primitive width accepted");
     EmulatorSettings.SetPipelineCacheEnabled(false);_putenv_s("SHADPS4_NATIVE_SHADER_CACHE","off");
     const auto dxc=std::filesystem::path(argv[2]).wstring();
+    DXIL::SpirvConvertOptions sysval_options;sysval_options.stage=DXIL::SpirvStage::Vertex;
+    const auto sysval_vertex=DXIL::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),Tests::DrawSysvalVertex(),sysval_options);
+    if(!sysval_vertex.success)throw std::runtime_error(sysval_vertex.diagnostics);
     const auto vertex=DXIL::CompileDxil(dxc,R"(
 struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
 V main(uint id:SV_VertexID,uint instance:SV_InstanceID){
@@ -116,6 +120,10 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     auto state=BuildGuestGraphicsState(regs,{});state.rasterizer_discard=true;
     Rasterizer renderer(device.Get());
+    if(std::string_view(argv[3])=="draw-sysvals"){
+        Tests::CheckDrawSysvalsGpu(device.Get(),renderer,dxc,sysval_vertex.bytecode);
+        renderer.ValidateDebugMessages();puts("PASS: Vulkan direct/expanded draw sysvals");return 0;
+    }
     Tests::CheckGuestIndexExpansionGpu(device.Get(),renderer);
     if(std::string_view(argv[3])=="large-grid"){
         Tests::CheckGuestIndirectLargeGridGpu(device.Get(),renderer);renderer.ValidateDebugMessages();
