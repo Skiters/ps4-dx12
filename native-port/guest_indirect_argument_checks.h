@@ -2,6 +2,7 @@
 #pragma once
 #include "video_core/renderer_d3d12/guest_indirect_arguments.h"
 #include "video_core/renderer_d3d12/guest_indirect_pack.h"
+#include "video_core/renderer_d3d12/guest_index_range.h"
 #include <limits>
 namespace NativeDX12::Tests {
 inline void CheckGuestIndirectArguments(){
@@ -28,6 +29,18 @@ inline void CheckGuestIndirectArguments(){
     // extent: a maximum possible batch can overflow while one actual draw fits.
     require(GuestIndirectLayout::Make(false,UINT64_MAX-64,0,16,1).bytes==16);
     const auto reject=[&](auto action){bool failed{};try{action();}catch(const std::out_of_range&){failed=true;}require(failed);};
+    // Independent Vulkan BindIndexBuffer examples: max_index_size is measured
+    // from the shifted start, including when firstIndex exceeds that size.
+    const auto shifted=GuestIndexRange::Make(0x1000,17,12,64,2,true);
+    require(shifted.address==0x1022&&shifted.bytes==128);
+    const auto beyond=GuestIndexRange::Make(0x2000,91,3,8,4,true);
+    require(beyond.address==0x216c&&beyond.bytes==32);
+    const auto direct_range=GuestIndexRange::Make(0x1000,17,12,8,2,false);
+    require(direct_range.address==0x1022&&direct_range.bytes==16);
+    require(GuestIndexRange::Make(0x1000,0,0,64,4,true).bytes==256);
+    require(GuestIndexRange::Make(0x1000,0,0,64,4,false).bytes==0);
+    reject([]{(void)GuestIndexRange::Make(UINT64_MAX-1,1,1,1,2,true);});
+    require(GuestIndexRange::Make(UINT64_MAX-3,0,1,2,4,true).bytes==8);
     reject([&]{(void)plain.Snapshot(std::span(source).first(47));});
     reject([]{(void)GuestIndirectLayout::Make(false,0,0,12,1);});
     reject([]{(void)GuestIndirectLayout::Make(true,0,0,16,1);});

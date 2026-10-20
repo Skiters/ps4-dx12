@@ -7,6 +7,7 @@
 #include "guest_viewports.h"
 #include "guest_point_capture.h"
 #include "guest_indirect_arguments.h"
+#include "guest_index_range.h"
 #include "guest_indirect_pack.h"
 #include "primitive_stream_arguments.h"
 #include "guest_image_readback.h"
@@ -1375,18 +1376,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool resident_indices=indexed&&!expand_primitive&&!rewrite_restart&&
         r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None;
     const auto index_range=[&](UINT element){
-        const u64 offset=u64(index_offset)*element;const auto base=r.index_base_address.Address<VAddr>();
-        if(base>UINT64_MAX-offset)throw std::out_of_range("Guest index address overflow");
-        u64 available=u64(indirect_draw?r.max_index_size:std::min(draw.count,r.max_index_size))*element;
+        const auto range=GuestIndexRange::Make(r.index_base_address.Address<VAddr>(),index_offset,
+            draw.count,r.max_index_size,element,indirect_draw);
+        u64 available=range.bytes;
 #ifdef SHADPS4_NATIVE_DX12_CORE
-        available=ClampMemoryRange(indirect_draw?base:base+offset,available);
+        available=ClampMemoryRange(range.address,available);
 #endif
-        if(indirect_draw)available=offset>=available?0:available-offset;
         if(!batch)available=std::min(available,u64(draw.count)*element);
         available&=~u64(element-1);
-        if(available>UINT_MAX||base+offset>UINT64_MAX-available-3)
+        if(available>UINT_MAX||range.address>UINT64_MAX-available-3)
             throw std::out_of_range("Guest index range or native view size overflow");
-        return std::pair{base+offset,UINT(available)};
+        return std::pair{range.address,UINT(available)};
     };
     if(resident_indices){
         const auto type=r.index_buffer_type.index_type;
