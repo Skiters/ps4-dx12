@@ -107,6 +107,7 @@ add_test(NAME native_protected_physical_backing_epoch COMMAND native-guest-buffe
 add_test(NAME native_unaligned_buffer_page_witness COMMAND native-guest-buffer-access-test unaligned-proof)
 add_test(NAME native_cpu_buffer_download_window COMMAND native-guest-buffer-access-test cpu-window)
 add_test(NAME native_frame_buffer_readback COMMAND native-guest-buffer-access-test frame-readback)
+add_test(NAME native_guest_indirect_argument_coherence COMMAND native-guest-buffer-access-test indirect-arguments)
 set_tests_properties(native_frame_buffer_readback PROPERTIES TIMEOUT 30)
 add_executable(native-scheduler-lifetime-test scheduler_lifetime_test.cpp)
 add_executable(native-host-copy-queue-test host_copy_queue_test.cpp)

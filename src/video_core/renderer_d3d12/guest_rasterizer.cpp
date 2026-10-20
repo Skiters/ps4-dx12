@@ -6,6 +6,7 @@
 #include "guest_graphics_state.h"
 #include "guest_viewports.h"
 #include "guest_point_capture.h"
+#include "guest_indirect_arguments.h"
 #include "primitive_stream_arguments.h"
 #include "guest_image_readback.h"
 #include "guest_attachment_retirement.h"
@@ -2015,23 +2016,26 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
     u32 max_count,VAddr count_address,u16 vertex_sgpr,u16 instance_sgpr) {
     std::lock_guard lock(execution_mutex_);
     if(!max_count)return;
-    const u32 command_bytes=indexed?20:16;
-    if(stride<command_bytes||stride%4||address>UINT64_MAX-offset)
-        throw std::out_of_range("Invalid native guest indirect draw layout");
-    Finish();u32 count=max_count;
+    // Validate the command ABI before reading the optional GPU count. The
+    // actual count, not max_count, determines the argument memory extent.
+    (void)GuestIndirectLayout::Make(indexed,address,offset,stride,0);
+    u32 count=max_count;
     if(count_address) {
-        ReadMemory(count_address,4);ValidateHostMemory(count_address,4);
+        if(!ReadMemory(count_address,4))throw std::out_of_range("Unmapped native indirect count");
+        ValidateHostMemory(count_address,4);
         u32 actual{};memcpy(&actual,reinterpret_cast<const void*>(count_address),4);count=std::min(count,actual);
     }
     if(!count)return;
-    const u64 bytes=u64(count-1)*stride+command_bytes;const auto start=address+offset;
-    if(start>UINT64_MAX-bytes)throw std::out_of_range("Native indirect draw argument overflow");
-    ReadMemory(start,bytes);ValidateHostMemory(start,bytes);
-    std::vector<std::byte> snapshot(size_t(bytes),std::byte{});memcpy(snapshot.data(),reinterpret_cast<const void*>(start),size_t(bytes));
-    for(u32 i=0;i<count;++i) {
-        u32 raw[5]{};memcpy(raw,snapshot.data()+u64(i)*stride,command_bytes);
-        DrawArguments draw{raw[0],raw[1],indexed?0:raw[2],indexed?raw[4]:raw[3],indexed?s32(raw[3]):0};
-        DrawInternal(indexed,indexed?raw[2]:0,&draw,vertex_sgpr,instance_sgpr);
+    const auto layout=GuestIndirectLayout::Make(indexed,address,offset,stride,count);
+    // ReadMemory resolves relevant image/buffer writes and waits only when
+    // required; clean CPU arguments do not need an unconditional queue drain.
+    if(!ReadMemory(layout.address,layout.bytes))throw std::out_of_range("Unmapped native indirect arguments");
+    ValidateHostMemory(layout.address,layout.bytes);
+    const auto snapshot=layout.Snapshot({reinterpret_cast<const std::byte*>(layout.address),size_t(layout.bytes)});
+    // Snapshot every command before the first draw can write guest memory.
+    for(const auto& command:snapshot) {
+        const DrawArguments draw{command.count,command.instances,command.first_vertex,command.first_instance,command.base_vertex};
+        DrawInternal(indexed,command.first_index,&draw,vertex_sgpr,instance_sgpr);
     }
 }
 bool GuestRasterizer::ComputeImageOperation(const Shader::Info& info,const u32 (&groups)[3]) {

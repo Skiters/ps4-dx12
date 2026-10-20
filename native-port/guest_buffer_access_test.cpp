@@ -3,6 +3,7 @@
 #include "common/scope_exit.h"
 #include "buffer_envelope_fixture.h"
 #include "semantic_buffer_residency_fixture.h"
+#include "video_core/renderer_d3d12/guest_indirect_arguments.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -255,6 +256,48 @@ static void UnalignedPageWitness(ID3D12Device* device,std::byte* guest,std::byte
         renderer.Finish();renderer.ValidateDebugMessages();
     }
     puts("PASS: unaligned readonly B, zero warm full comparisons, real neighbouring CPU stores, page winners and untouched GPU bytes");
+}
+static void IndirectArguments(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
+    constexpr u64 total=1024*1024,page=4096;
+    Require(base%(512*1024)==0,"Indirect fixture needs deterministic CPU download windows");
+    Fixture renderer(device);renderer.MapMemory(base,total);renderer.NotifyHostMapping(base,total,true,true);
+    renderer.SetBufferBackingAccess([&](VAddr a,u64 n){return a>=base&&a-base<=total&&n<=total-(a-base);},
+        [&](VAddr a,std::span<const std::byte> data){memcpy(physical+a-base,data.data(),data.size());return true;});
+    const std::array<u32,9> initial{1,3,2,7,9,8,4,11,13};
+    memcpy(physical,initial.data(),sizeof(initial));
+    const Rasterizer::ShaderBufferRequest unrelated{base+768*1024,page,true,true,true};
+    (void)renderer.PrepareShaderBuffers(std::span(&unrelated,1));
+    renderer.FillPreparedShaderBuffer(unrelated.address,page,0x55555555,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.MarkShaderBufferWrites(std::span(&unrelated,1));
+    bool submitted{};renderer.NotifyOnSubmission([&](u64){submitted=true;});
+    Require(renderer.ReadMemory(base,4),"Clean indirect count read failed");
+    u32 count{};memcpy(&count,guest,4);
+    const auto clean=GuestIndirectLayout::Make(false,base,4,16,count);
+    Require(renderer.ReadMemory(clean.address,clean.bytes),"Clean indirect command read failed");
+    const auto before=clean.Snapshot({guest+4,size_t(clean.bytes)});
+    Require(!submitted&&before.size()==1&&before[0].count==3&&before[0].first_instance==9,
+        "Clean indirect snapshot submitted unrelated GPU work or changed CPU arguments");
+    const Rasterizer::ShaderBufferRequest arguments{base,page,true,true,true};
+    (void)renderer.PrepareShaderBuffers(std::span(&arguments,1));
+    // Actual GPU writes, not a CPU replacement for a GPU-produced count/list.
+    const std::array<u32,9> generated{2,12,5,17,19,23,6,29,31};
+    for(u32 word=0;word<generated.size();++word)
+        renderer.FillPreparedShaderBuffer(base+word*4,4,generated[word],D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    renderer.MarkShaderBufferWrites(std::span(&arguments,1));
+    Require(renderer.ReadMemory(base,4),"GPU indirect count reconciliation failed");
+    memcpy(&count,guest,4);count=std::min(count,3u);
+    const auto layout=GuestIndirectLayout::Make(false,base,4,16,count);
+    Require(renderer.ReadMemory(layout.address,layout.bytes),"GPU indirect argument reconciliation failed");
+    const auto snapshot=layout.Snapshot({guest+4,size_t(layout.bytes)});
+    Require(snapshot.size()==2&&snapshot[0].count==12&&snapshot[0].instances==5&&snapshot[0].first_vertex==17&&
+        snapshot[0].first_instance==19&&snapshot[1].count==23&&snapshot[1].instances==6&&
+        snapshot[1].first_vertex==29&&snapshot[1].first_instance==31,
+        "Indirect snapshot lost GPU count, payload, first vertex or instance");
+    Require(renderer.IsGpuBufferModified(unrelated.address,page),"Indirect read published an unrelated download window");
+    Require(!memcmp(physical,generated.data(),sizeof(generated)),"GPU argument readback did not reach guest backing");
+    Require(before[0].count==3&&before[0].first_instance==9,"Later GPU arguments mutated the earlier snapshot");
+    renderer.Finish();renderer.ValidateDebugMessages();
+    puts("PASS: clean indirect reads avoid queue submission; GPU count/arguments reconcile with immutable snapshots and unrelated ownership");
 }
 static void CpuDownloadWindow(ID3D12Device* device,std::byte* guest,std::byte* physical,VAddr base){
     constexpr u64 window=512*1024,total=2*window,page=4096;
@@ -721,8 +764,9 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
     if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof"||
-        std::string_view(argv[1])=="cpu-window"||std::string_view(argv[1])=="frame-readback")){
-        const bool cpu_window=std::string_view(argv[1])=="cpu-window";const u64 allocation_bytes=cpu_window?1024*1024:65536;
+        std::string_view(argv[1])=="cpu-window"||std::string_view(argv[1])=="frame-readback"||std::string_view(argv[1])=="indirect-arguments")){
+        const bool indirect=std::string_view(argv[1])=="indirect-arguments";
+        const bool cpu_window=std::string_view(argv[1])=="cpu-window"||indirect;const u64 allocation_bytes=cpu_window?1024*1024:65536;
         HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,DWORD(allocation_bytes),nullptr);
         Require(section,"Physical proof section");SCOPE_EXIT {CloseHandle(section);};
         auto* guest=static_cast<std::byte*>(MapViewOfFileEx(section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(allocation_bytes),
@@ -730,7 +774,8 @@ int main(int argc,char** argv){try{
         auto* physical=static_cast<std::byte*>(MapViewOfFile(section,FILE_MAP_ALL_ACCESS,0,0,SIZE_T(allocation_bytes)));
         Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
         memset(physical,0x4d,SIZE_T(allocation_bytes));
-        if(std::string_view(argv[1])=="frame-readback")FrameBufferReadback(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        if(indirect)IndirectArguments(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        else if(std::string_view(argv[1])=="frame-readback")FrameBufferReadback(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else if(cpu_window)CpuDownloadWindow(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else ProtectedDmaBacking(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));return 0;
