@@ -64,7 +64,7 @@ class GuestRasterizer : public GuestBufferAccess {
     void ResolveColorTargets();
     void Dispatch(const u32 (&groups)[3]);
     bool ComputeImageOperation(const Shader::Info&,const u32 (&groups)[3]);
-    struct NativeIndirectBatch {VAddr address,count_address;u32 stride,max_count;};
+    struct NativeIndirectBatch {VAddr address,count_address;u32 stride,max_count;bool with_runtime;};
     void DrawInternal(bool,u32,const DrawArguments*,u16,u16,const NativeIndirectBatch* = nullptr);
 public:
     GuestRasterizer(ID3D12Device*,AmdGpu::Liverpool&,const Shader::Profile&,

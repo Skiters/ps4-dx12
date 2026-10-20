@@ -53,6 +53,13 @@ inline void CheckGuestIndirectArguments(){
         pack.runtime_stride==1024&&pack.runtime_bytes==3072);
     const auto indexed_pack=GuestIndirectPackPlan::Make(true,32,3);
     require(indexed_pack.source_bytes==84&&indexed_pack.command_stride==32&&indexed_pack.command_bytes==96);
+    const auto plain_pack=GuestIndirectPackPlan::Make(false,32,3,false);
+    const auto plain_indexed=GuestIndirectPackPlan::Make(true,32,3,false);
+    require(!plain_pack.with_runtime&&plain_pack.command_stride==16&&plain_pack.command_bytes==48&&
+        !plain_pack.runtime_stride&&!plain_pack.runtime_bytes&&plain_indexed.command_stride==20&&plain_indexed.command_bytes==60);
+    const auto grid_crossing=GuestIndirectPackPlan::Make(false,16,65535*128+1,false);
+    require(grid_crossing.count==8388481&&grid_crossing.command_bytes==134215696);
+    require(GuestIndirectPackPlan::Make(false,16,UINT32_MAX/16,false).command_bytes==4294967280ULL);
     constexpr u32 maximum=UINT32_MAX/1024;
     require(GuestIndirectPackPlan::Make(false,16,maximum).runtime_bytes==u64(maximum)*1024);
     bool overflow{};try{(void)GuestIndirectPackPlan::Make(false,16,maximum+1);}catch(const std::overflow_error&){overflow=true;}

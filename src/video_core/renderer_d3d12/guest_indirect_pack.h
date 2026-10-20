@@ -5,18 +5,18 @@
 #include "guest_indirect_arguments.h"
 namespace NativeDX12 {
 struct GuestIndirectPackPlan {
-    bool indexed;
+    bool indexed,with_runtime;
     u32 count,source_stride,command_stride,runtime_stride;
     u64 source_bytes,command_bytes,runtime_bytes;
-    static GuestIndirectPackPlan Make(bool indexed,u32 stride,u32 count){
+    static GuestIndirectPackPlan Make(bool indexed,u32 stride,u32 count,bool with_runtime=true){
         if(!count)throw std::invalid_argument("Indirect packing needs a nonzero maximum count");
         const auto source=GuestIndirectLayout::Make(indexed,0,0,stride,count);
-        const auto native=NativeIndirectLayout::Make(indexed,0,0,count,true);
-        constexpr u32 runtime_stride=(sizeof(GraphicsRuntime)+255)&~255u;
+        const auto native=NativeIndirectLayout::Make(indexed,0,0,count,with_runtime);
+        const u32 runtime_stride=with_runtime?(sizeof(GraphicsRuntime)+255)&~255u:0;
         const u64 runtime_bytes=u64(runtime_stride)*count;
         if(source.bytes>UINT32_MAX||native.bytes>UINT32_MAX||runtime_bytes>UINT32_MAX)
             throw std::overflow_error("Indirect pack exceeds raw-buffer shader addressing");
-        return {indexed,count,stride,native.stride,runtime_stride,source.bytes,native.bytes,runtime_bytes};
+        return {indexed,with_runtime,count,stride,native.stride,runtime_stride,source.bytes,native.bytes,runtime_bytes};
     }
     bool operator==(const GuestIndirectPackPlan&)const=default;
 };
@@ -29,10 +29,16 @@ class GuestIndirectPackPass {
     ComPtr<ID3D12PipelineState> dispatch_pipeline_;
     ComPtr<ID3D12CommandSignature> dispatch_signature_;
     Resource dispatch_;
+    Resource null_template_;
 public:
     explicit GuestIndirectPackPass(ID3D12Device*);
     void Record(Rasterizer&,const GuestIndirectPackPlan&,Resource& source,u64 source_offset,
         Resource* count,u64 count_offset,const GraphicsRuntime&,
-        Resource& commands,Resource& constants,Resource& output_count);
+        Resource& commands,Resource* constants,Resource& output_count);
+    void Record(Rasterizer& renderer,const GuestIndirectPackPlan& plan,Resource& source,u64 source_offset,
+        Resource* count,u64 count_offset,const GraphicsRuntime& runtime,
+        Resource& commands,Resource& constants,Resource& output_count){
+        Record(renderer,plan,source,source_offset,count,count_offset,runtime,commands,&constants,output_count);
+    }
 };
 } // namespace NativeDX12

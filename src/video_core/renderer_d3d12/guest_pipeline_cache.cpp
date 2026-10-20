@@ -108,7 +108,7 @@ const ShaderPipeline& GuestPipelineCache::Graphics(AmdGpu::Liverpool& gpu,
     auto guest=frontend_.BuildGraphics(gpu,vertex_sgpr_offset,instance_sgpr_offset);
     return Graphics(guest,state);
 }
-bool GuestPipelineCache::SupportsRootGraphicsRuntime(const GuestGraphicsStages& guest){
+GraphicsRuntimeBinding GuestPipelineCache::RuntimeBinding(const GuestGraphicsStages& guest){
     std::array<u64,Shader::MaxStageTypes> key{};
     for(u32 i=0;i<guest.stages.size();++i)if(guest.stages[i])key[i]=guest.stages[i]->id;
     if(const auto found=root_runtime_support_.find(key);found!=root_runtime_support_.end())return found->second;
@@ -116,8 +116,7 @@ bool GuestPipelineCache::SupportsRootGraphicsRuntime(const GuestGraphicsStages& 
     std::array<std::span<const u8>,Shader::MaxStageTypes> codes{};
     for(u32 i=0;i<codes.size();++i)codes[i]=dxil.stages[i].bytecode;
     const auto bindings=ResourceLayout::ReflectBindings(dxc_,codes);
-    const bool supported=std::ranges::any_of(bindings,[](const auto& binding){
-        return binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.space==31&&binding.count==1;});
+    const auto supported=ResourceLayout::ClassifyGraphicsRuntime(bindings);
     root_runtime_support_.emplace(key,supported);return supported;
 }
 const ShaderPipeline& GuestPipelineCache::Graphics(const GuestGraphicsStages& guest,

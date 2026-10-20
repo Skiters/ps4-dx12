@@ -2,10 +2,45 @@
 #pragma once
 #include "video_core/renderer_d3d12/guest_indirect_pack.h"
 namespace NativeDX12::Tests {
+// Explicit hardware mode: crosses the65535-group X boundary without game
+// assets or a multi-gigabyte runtime arena. Only selected records read back.
+inline void CheckGuestIndirectLargeGridGpu(ID3D12Device* device,Rasterizer& renderer){
+    constexpr u32 capacity=65535*128+1;
+    const auto plan=GuestIndirectPackPlan::Make(false,16,capacity,false);
+    auto upload=Buffer(device,plan.source_bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+    void* mapped{};D3D12_RANGE none{};Check(upload.handle->Map(0,&none,&mapped));
+    memset(mapped,0x5a,size_t(plan.source_bytes));const std::array<u32,4> last{1,2,3,4};
+    memcpy(static_cast<std::byte*>(mapped)+plan.source_bytes-16,last.data(),16);upload.handle->Unmap(0,nullptr);
+    auto poison=Buffer(device,32,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+    Check(poison.handle->Map(0,&none,&mapped));memset(mapped,0xcd,32);poison.handle->Unmap(0,nullptr);
+    auto source=Buffer(device,plan.source_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+    auto commands=renderer.AcquireTransientBuffer(plan.command_bytes+16);
+    auto count=renderer.AcquireTransientBuffer(4);
+    auto result=Buffer(device,52,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+    auto* list=renderer.RecordingList();commands.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+    list->CopyBufferRegion(source.handle.Get(),0,upload.handle.Get(),0,plan.source_bytes);
+    list->CopyBufferRegion(commands.handle.Get(),0,poison.handle.Get(),0,16);
+    list->CopyBufferRegion(commands.handle.Get(),plan.command_bytes-16,poison.handle.Get(),0,32);
+    {
+        GuestIndirectPackPass pack(device);GraphicsRuntime unused{};
+        pack.Record(renderer,plan,source,0,nullptr,0,unused,commands,nullptr,count);
+    }
+    list=renderer.RecordingList();commands.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+    count.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+    list->CopyBufferRegion(result.handle.Get(),0,commands.handle.Get(),0,16);
+    list->CopyBufferRegion(result.handle.Get(),16,commands.handle.Get(),plan.command_bytes-16,32);
+    list->CopyBufferRegion(result.handle.Get(),48,count.handle.Get(),0,4);renderer.Finish();
+    std::array<std::byte,52> expected;expected.fill(std::byte{0xcd});memset(expected.data(),0x5a,16);
+    memcpy(expected.data()+16,last.data(),16);memcpy(expected.data()+48,&capacity,4);
+    D3D12_RANGE all{0,52};Check(result.handle->Map(0,&all,&mapped));
+    const bool equal=!memcmp(mapped,expected.data(),expected.size());result.handle->Unmap(0,&none);
+    if(!equal)throw std::runtime_error("GPU indirect pack lost its second dispatch row, first record, count or tail guard");
+}
 inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer){
+    for(const bool with_runtime:std::array{false,true})
     for(const bool indexed:std::array{false,true})for(const bool padded:std::array{false,true})
     for(const u32 active:std::array<u32,5>{0,1,2,99,UINT32_MAX}){
-        const auto plan=GuestIndirectPackPlan::Make(indexed,padded?32:indexed?20:16,3);
+        const auto plan=GuestIndirectPackPlan::Make(indexed,padded?32:indexed?20:16,3,with_runtime);
         const u32 input_bytes=u32(plan.source_bytes)+32,command_bytes=u32(plan.command_bytes)+16;
         const u32 runtime_bytes=u32(plan.runtime_bytes)+16,total=input_bytes+command_bytes+runtime_bytes+20;
         auto upload=Buffer(device,total,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -44,15 +79,16 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
                 const auto reject=[&](auto action){bool failed{};try{action();}catch(const std::invalid_argument&){failed=true;}
                     if(!failed)throw std::runtime_error("GPU indirect pack accepted invalid plan/extent/alias");};
                 auto malformed=plan;malformed.runtime_stride+=256;
-                reject([&]{pack.Record(renderer,malformed,source,16,&source,4,runtime,commands,constants,count);});
-                reject([&]{pack.Record(renderer,plan,source,16,&source,2,runtime,commands,constants,count);});
-                reject([&]{pack.Record(renderer,plan,source,16,&source,4,runtime,constants,constants,count);});
+                reject([&]{pack.Record(renderer,malformed,source,16,&source,4,runtime,commands,with_runtime?&constants:nullptr,count);});
+                reject([&]{pack.Record(renderer,plan,source,16,&source,2,runtime,commands,with_runtime?&constants:nullptr,count);});
+                if(with_runtime)reject([&]{pack.Record(renderer,plan,source,16,&source,4,runtime,constants,constants,count);});
+                else reject([&]{pack.Record(renderer,plan,source,16,&source,4,runtime,commands,nullptr,commands);});
                 auto duplicate=source;
-                reject([&]{pack.Record(renderer,plan,source,16,&duplicate,4,runtime,commands,constants,count);});
-                reject([&]{pack.Record(renderer,plan,source,UINT64_MAX,nullptr,0,runtime,commands,constants,count);});
+                reject([&]{pack.Record(renderer,plan,source,16,&duplicate,4,runtime,commands,with_runtime?&constants:nullptr,count);});
+                reject([&]{pack.Record(renderer,plan,source,UINT64_MAX,nullptr,0,runtime,commands,with_runtime?&constants:nullptr,count);});
             }
             pack.Record(renderer,plan,source,16,count_input,count_input==&source?4:0,
-                runtime,commands,constants,count);
+                runtime,commands,with_runtime?&constants:nullptr,count);
             if(source.State(0)!=input_state)throw std::runtime_error("GPU pack leaked its input SRV state into the guest draw");
             if(input_count.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::runtime_error("GPU pack leaked its count SRV state");
         } // PSO/root and immutable template must outlive the owner.
@@ -60,7 +96,9 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
         for(u32 command=0;command<actual;++command){
             const u64 address=constants.handle->GetGPUVirtualAddress()+u64(command)*1024;
             auto* args=expected.data()+input_bytes+command*plan.command_stride;
-            memcpy(args,&address,8);memcpy(args+8,inputs[command].data(),indexed?20:16);
+            if(with_runtime)memcpy(args,&address,8);
+            memcpy(args+(with_runtime?8:0),inputs[command].data(),indexed?20:16);
+            if(!with_runtime)continue;
             auto* target=expected.data()+input_bytes+command_bytes+command*1024;
             memset(target,0,1024);memcpy(target,&runtime,sizeof(runtime));
             const u32 first=indexed?std::bit_cast<u32>(-7+s32(command)):11+command;

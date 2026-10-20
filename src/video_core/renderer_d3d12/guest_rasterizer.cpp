@@ -1352,7 +1352,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     DXGI_FORMAT resident_index_format=DXGI_FORMAT_UNKNOWN;
     std::vector<ShaderBufferRequest> index_requests;
     if(batch){
-        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count);
+        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count,batch->with_runtime);
         index_requests.push_back({batch->address,plan.source_bytes,false,false,true});
         index_requests.back().publish_dma_residency=false;
         if(batch->count_address){index_requests.push_back({batch->count_address,4,false,false,true});
@@ -1455,7 +1455,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     if(capture){state.topology=D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
         state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;}
-    const auto& pipeline=pipelines_.Graphics(capture?capture->replay:guest,state.pipeline,state.depth_bounds,stencil,batch!=nullptr);
+    const auto& pipeline=pipelines_.Graphics(capture?capture->replay:guest,state.pipeline,state.depth_bounds,stencil,batch&&batch->with_runtime);
     if(trace){fprintf(stderr,"DX12 startup draw %u: native pipeline ready\n",traced_draws);fflush(stderr);}
     Shader::PushData push{};const auto& c=r.viewport_control;const auto& v=r.viewports[0];
     push.xoffset=c.xoffset_enable?v.xoffset:0;push.xscale=c.xscale_enable?v.xscale:1;
@@ -1938,21 +1938,41 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 textures_,r.ta_bc_base.Address());
         });
     }else if(batch){
-        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count);
-        if(!indirect_pack_)indirect_pack_=std::make_unique<GuestIndirectPackPass>(device_.Get());
+        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count,batch->with_runtime);
         ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,
             [&](ResourceBindings& bindings){
                 // Select attachments/index storage and freeze the complete B
                 // envelope before borrowing its authoritative native inputs.
                 prepare_replay(bindings);bindings.Prepare();
+                if(!plan.with_runtime){
+                    // A shader-independent argument/count version can be
+                    // consumed directly, exactly as the original indirect
+                    // buffer read. Project out lifetime-only B references;
+                    // any actual shader alias still takes the private pack.
+                    auto direct=bindings.ForkForReplay(pipeline.Layout());
+                    const auto view=PreparedDmaBuffer(batch->address,plan.source_bytes);
+                    const auto counter_view=batch->count_address?PreparedDmaBuffer(batch->count_address,4):std::nullopt;
+                    const auto native=view?NativeIndirectLayout::Make(indexed,view->offset,batch->stride,batch->max_count):NativeIndirectLayout{};
+                    if(view&&(!batch->count_address||counter_view)&&!direct->References(view->resource.Get())&&
+                       (!counter_view||!direct->References(counter_view->resource.Get()))&&
+                       native.offset<=view->resource->GetDesc().Width&&native.bytes<=view->resource->GetDesc().Width-native.offset){
+                        const auto source=BorrowPreparedShaderBuffer(batch->address,plan.source_bytes);
+                        const auto counter=batch->count_address?std::optional{BorrowPreparedShaderBuffer(batch->count_address,4)}:std::nullopt;
+                        const StreamDrawArguments packet{source.resource,source.offset,batch->max_count,batch->stride,
+                            counter?counter->resource:nullptr,counter?counter->offset:0};
+                        submit_replay(*direct,true,&packet);
+                        RetainUntilFinish([direct](u64){});return;
+                    }
+                }
+                if(!indirect_pack_)indirect_pack_=std::make_unique<GuestIndirectPackPass>(device_.Get());
                 auto commands=AcquireTransientBuffer(plan.command_bytes);
-                auto constants=AcquireTransientBuffer(plan.runtime_bytes);
+                Resource constants;if(plan.with_runtime)constants=AcquireTransientBuffer(plan.runtime_bytes);
                 auto count=AcquireTransientBuffer(4);
                 const auto source=BorrowPreparedShaderBuffer(batch->address,plan.source_bytes);
                 const auto counter=batch->count_address?std::optional{BorrowPreparedShaderBuffer(batch->count_address,4)}:std::nullopt;
                 indirect_pack_->Record(*this,plan,*source.resource,source.offset,
-                    counter?counter->resource:nullptr,counter?counter->offset:0,runtime,commands,constants,count);
-                const StreamDrawArguments packet{&commands,0,batch->max_count,plan.command_stride,&count,0,&constants};
+                    counter?counter->resource:nullptr,counter?counter->offset:0,runtime,commands,plan.with_runtime?&constants:nullptr,count);
+                const StreamDrawArguments packet{&commands,0,batch->max_count,plan.command_stride,&count,0,plan.with_runtime?&constants:nullptr};
                 submit_replay(bindings,true,&packet);
             },textures_,r.ta_bc_base.Address(),index_requests,true);
     }else ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,submit_replay,
@@ -2063,7 +2083,7 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
     if(native){
         // Private raw-buffer addressing is bounded; larger batches retain
         // the complete CPU path rather than clipping commands to fit.
-        try{const auto plan=GuestIndirectPackPlan::Make(indexed,stride,max_count);
+        try{const auto plan=GuestIndirectPackPlan::Make(indexed,stride,max_count,false);
             if(address+offset>UINT64_MAX-plan.source_bytes)native=false;}
         catch(const std::overflow_error&){native=false;}
     }
@@ -2071,9 +2091,15 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
         GuestGraphicsStages stages;
         try{stages=frontend_.BuildGraphics(gpu_,vertex_sgpr,instance_sgpr,true);}
         catch(const Shader::NativePointCapture::Required&){native=false;}
-        if(native&&pipelines_.SupportsRootGraphicsRuntime(stages)){
-            const NativeIndirectBatch batch{address+offset,count_address,stride,max_count};
-            DrawInternal(indexed,0,nullptr,vertex_sgpr,instance_sgpr,&batch);return;
+        if(native){
+            const auto binding=pipelines_.RuntimeBinding(stages);
+            const bool runtime=binding==GraphicsRuntimeBinding::Root;
+            if(binding!=GraphicsRuntimeBinding::Unsupported){
+                try{(void)GuestIndirectPackPlan::Make(indexed,stride,max_count,runtime);}
+                catch(const std::overflow_error&){native=false;}
+                if(native){const NativeIndirectBatch batch{address+offset,count_address,stride,max_count,runtime};
+                    DrawInternal(indexed,0,nullptr,vertex_sgpr,instance_sgpr,&batch);return;}
+            }
         }
     }
     u32 count=max_count;

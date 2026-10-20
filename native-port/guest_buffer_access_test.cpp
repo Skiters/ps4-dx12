@@ -5,6 +5,9 @@
 #include "semantic_buffer_residency_fixture.h"
 #include "video_core/renderer_d3d12/guest_indirect_arguments.h"
 #include "video_core/renderer_d3d12/guest_indirect_pack.h"
+#include "video_core/renderer_d3d12/guest_graphics_state.h"
+#include "video_core/renderer_d3d12/shader_pipeline.h"
+#include "shader_recompiler/backend/dxil/dxil_compiler.h"
 #include <cstdio>
 #include <future>
 using namespace NativeDX12;
@@ -322,6 +325,72 @@ static void IndirectArguments(ID3D12Device* device,std::byte* guest,std::byte* p
         const bool equal=!memcmp(data,expected.data(),expected.size());D3D12_RANGE none{};packed.handle->Unmap(0,&none);
         if(!equal||!renderer.IsGpuBufferModified(base,page)||!renderer.IsGpuBufferModified(unrelated.address,page))
             throw std::runtime_error("Prepared B -> GPU argument/runtime packing lost contents or published guest ownership");
+    }
+    {
+        // Prepared B -> direct native batch for a genuinely runtime-free VS.
+        // IA attributes independently observe first vertex/instance offsets.
+        const auto dxc=(std::filesystem::current_path()/"native-compiler"/"dxcompiler.dll").wstring();
+        const auto vertex=Shader::Backend::DX12::CompileDxil(dxc,R"(
+struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
+V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
+    V o;o.position=float4(0,0,0,1);o.payload=uint4(vertex,instance,0x7fc12345u,0x80000000u);return o;
+})",Shader::Backend::DX12::Stage::Vertex);
+        if(!vertex.success)throw std::runtime_error(vertex.diagnostics);
+        AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::PointList;
+        regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
+        auto state=BuildGuestGraphicsState(regs,{});state.rasterizer_discard=true;
+        const D3D12_INPUT_ELEMENT_DESC elements[]{
+            {"TEXCOORD",0,DXGI_FORMAT_R32_UINT,0,0,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+            {"TEXCOORD",1,DXGI_FORMAT_R32_UINT,1,0,D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA,1}};
+        state.pipeline.InputLayout={elements,2};
+        D3D12_SO_DECLARATION_ENTRY declaration{0,"CAPTURE",0,0,4,0};UINT stride=16;
+        state.pipeline.StreamOutput={&declaration,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM};
+        ShaderPipeline::GraphicsShaders shaders;shaders.vertex=vertex.bytecode;
+        ShaderPipeline pipeline(device,dxc,shaders,state.pipeline);
+        if(ResourceLayout::ClassifyGraphicsRuntime(pipeline.Layout().Bindings())!=GraphicsRuntimeBinding::Absent)
+            throw std::runtime_error("Direct prepared-B fixture accidentally requires runtime constants");
+        auto vertices=Buffer(device,256,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto instances=Buffer(device,256,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        void* mapped{};D3D12_RANGE none{};
+        for(auto [buffer,start]:std::array<std::pair<Resource*,u32>,2>{{{&vertices,100},{&instances,200}}}){
+            Check(buffer->handle->Map(0,&none,&mapped));for(u32 i=0;i<64;++i)static_cast<u32*>(mapped)[i]=start+i;
+            buffer->handle->Unmap(0,nullptr);
+        }
+        constexpr u32 records=12*5+23*6,bytes=16+records*16+16;
+        auto seed=Buffer(device,bytes+8,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        Check(seed.handle->Map(0,&none,&mapped));memset(mapped,0xcd,bytes+8);
+        memset(static_cast<std::byte*>(mapped)+bytes,0,8);seed.handle->Unmap(0,nullptr);
+        auto output=Buffer(device,bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto filled=Buffer(device,8,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto result=Buffer(device,bytes+8,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),0,bytes);
+        list->CopyBufferRegion(filled.handle.Get(),0,seed.handle.Get(),bytes,8);
+        const auto input=renderer.BorrowPreparedShaderBuffer(base+4,48),counter=renderer.BorrowPreparedShaderBuffer(base,4);
+        ResourceBindings parent(device,pipeline.Layout(),nullptr,true);parent.Retain(input.resource->handle.Get());
+        auto bindings=parent.ForkForReplay(pipeline.Layout());
+        if(!parent.References(input.resource->handle.Get())||bindings->References(input.resource->handle.Get()))
+            throw std::runtime_error("Lifetime-only indirect B reference became a shader descriptor alias");
+        const Rasterizer::VertexBinding inputs[]{{&vertices,0,256,4},{&instances,0,256,4}};
+        const Rasterizer::StreamDrawArguments packet{input.resource,input.offset,3,16,counter.resource,counter.offset};
+        const Rasterizer::StreamOutputBinding target{&output,&filled,16,records*16,0};
+        const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[]{1,1,1,1};
+        renderer.ExecuteGraphics(pipeline,*bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
+            blend,{0,0},inputs,nullptr,false,&packet,&target);
+        output.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        filled.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,bytes);
+        renderer.RecordingList()->CopyBufferRegion(result.handle.Get(),bytes,filled.handle.Get(),0,8);renderer.Finish();
+        std::array<std::byte,bytes+8> expected;expected.fill(std::byte{0xcd});u32 record{};
+        for(u32 command=0;command<2;++command)for(u32 instance=0;instance<(command?6u:5u);++instance)
+        for(u32 vertex=0;vertex<(command?23u:12u);++vertex){
+            const std::array<u32,4> payload{100+(command?29u:17u)+vertex,200+(command?31u:19u)+instance,0x7fc12345u,0x80000000u};
+            memcpy(expected.data()+16+record++*16,payload.data(),16);
+        }
+        const u64 written=records*16;memcpy(expected.data()+bytes,&written,8);
+        D3D12_RANGE all{0,expected.size()};Check(result.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),expected.size());result.handle->Unmap(0,&none);
+        if(!equal||!renderer.IsGpuBufferModified(base,page)||!renderer.IsGpuBufferModified(unrelated.address,page))
+            throw std::runtime_error("Prepared B direct indirect batch lost IA offsets, count, order, guards or ownership");
     }
     Require(renderer.ReadMemory(base,4),"GPU indirect count reconciliation failed");
     memcpy(&count,guest,4);count=std::min(count,3u);

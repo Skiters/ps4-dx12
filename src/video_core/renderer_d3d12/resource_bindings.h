@@ -33,6 +33,7 @@ struct ShaderBinding {
     bool amd_clock{};
     D3D_SRV_DIMENSION dimension=D3D_SRV_DIMENSION_UNKNOWN;
 };
+enum class GraphicsRuntimeBinding {Absent,Root,Unsupported};
 // Reflect actual DXIL resource registers, including Mesa's runtime/push CBVs.
 // No guessed register layout and no Vulkan descriptor objects.
 class ResourceLayout {
@@ -56,6 +57,11 @@ public:
     const std::vector<ShaderBinding>& Bindings()const{return bindings_;}
     static std::vector<ShaderBinding> ReflectBindings(const std::wstring& dxc,
         std::span<const std::span<const uint8_t>> shaders);
+    static GraphicsRuntimeBinding ClassifyGraphicsRuntime(std::span<const ShaderBinding> bindings){
+        for(const auto& binding:bindings)if(binding.type==D3D12_DESCRIPTOR_RANGE_TYPE_CBV&&binding.reg==0&&binding.space==31)
+            return binding.count==1?GraphicsRuntimeBinding::Root:GraphicsRuntimeBinding::Unsupported;
+        return GraphicsRuntimeBinding::Absent;
+    }
     struct DescriptorProjection {bool sampler;UINT source,target,count;};
     // Match reflected register identities, independent of table/root offsets.
     static std::vector<DescriptorProjection> ProjectBindings(std::span<const ShaderBinding> source,

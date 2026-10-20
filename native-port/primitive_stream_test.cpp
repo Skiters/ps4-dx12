@@ -68,10 +68,16 @@ V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
     if(!batch_vertex.success)throw std::runtime_error(batch_vertex.diagnostics);
     const std::array<std::span<const u8>,1> runtime_code{batch_vertex.bytecode},plain_code{vertex.bytecode};
     const auto reflected=ResourceLayout::ReflectBindings(dxc,runtime_code);
-    if(reflected.size()!=1||reflected[0].type!=D3D12_DESCRIPTOR_RANGE_TYPE_CBV||
+    if(ResourceLayout::ClassifyGraphicsRuntime(reflected)!=GraphicsRuntimeBinding::Root||
+       reflected.size()!=1||reflected[0].type!=D3D12_DESCRIPTOR_RANGE_TYPE_CBV||
        reflected[0].reg||reflected[0].space!=31||reflected[0].count!=1||
        !ResourceLayout::ReflectBindings(dxc,plain_code).empty())
         throw std::runtime_error("CPU indirect admission reflection lost the runtime CBV or invented a binding");
+    const auto absent=ResourceLayout::ReflectBindings(dxc,plain_code);
+    const ShaderBinding array_runtime{D3D12_DESCRIPTOR_RANGE_TYPE_CBV,0,31,2};
+    if(ResourceLayout::ClassifyGraphicsRuntime(absent)!=GraphicsRuntimeBinding::Absent||
+       ResourceLayout::ClassifyGraphicsRuntime(std::span(&array_runtime,1))!=GraphicsRuntimeBinding::Unsupported)
+        throw std::runtime_error("Runtime-free shader admission confused an unsupported CBV array with an absent runtime");
     if(!vertex.success||!geometry.success||!reader_vertex.success||!reader_geometry.success)
         throw std::runtime_error(vertex.diagnostics+geometry.diagnostics+reader_vertex.diagnostics+reader_geometry.diagnostics);
     const auto serialized_vertex=DXIL::CompileDxil(dxc,R"(
@@ -108,6 +114,10 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
     auto state=BuildGuestGraphicsState(regs,{});state.rasterizer_discard=true;
     Rasterizer renderer(device.Get());
+    if(std::string_view(argv[3])=="large-grid"){
+        Tests::CheckGuestIndirectLargeGridGpu(device.Get(),renderer);renderer.ValidateDebugMessages();
+        puts("PASS: GPU indirect pack second dispatch row and exact guards; no runtime arena");return 0;
+    }
     Tests::CheckGuestIndirectPackGpu(device.Get(),renderer);
     for(unsigned variant=0;variant<3;++variant){
         std::array<D3D12_SO_DECLARATION_ENTRY,2> declarations{{{0,"CAPTURE",0,0,4,0},{0,nullptr,0,0,1,0}}};
