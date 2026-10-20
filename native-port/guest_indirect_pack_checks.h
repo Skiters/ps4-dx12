@@ -36,6 +36,10 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
         runtime.viewport_depths[15][3]=std::bit_cast<float>(0x80000000u);
         {
             GuestIndirectPackPass pack(device);
+            const auto input_state=source.State(0);
+            auto input_count=Buffer(device,4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            renderer.RecordingList()->CopyBufferRegion(input_count.handle.Get(),0,upload.handle.Get(),4,4);
+            Resource* count_input=active==UINT32_MAX?nullptr:padded?&input_count:&source;
             if(!active){
                 const auto reject=[&](auto action){bool failed{};try{action();}catch(const std::invalid_argument&){failed=true;}
                     if(!failed)throw std::runtime_error("GPU indirect pack accepted invalid plan/extent/alias");};
@@ -47,8 +51,10 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
                 reject([&]{pack.Record(renderer,plan,source,16,&duplicate,4,runtime,commands,constants,count);});
                 reject([&]{pack.Record(renderer,plan,source,UINT64_MAX,nullptr,0,runtime,commands,constants,count);});
             }
-            pack.Record(renderer,plan,source,16,active==UINT32_MAX?nullptr:&source,active==UINT32_MAX?0:4,
+            pack.Record(renderer,plan,source,16,count_input,count_input==&source?4:0,
                 runtime,commands,constants,count);
+            if(source.State(0)!=input_state)throw std::runtime_error("GPU pack leaked its input SRV state into the guest draw");
+            if(input_count.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::runtime_error("GPU pack leaked its count SRV state");
         } // PSO/root and immutable template must outlive the owner.
         const u32 actual=std::min(active,3u);memcpy(expected.data()+total-20,&actual,4);
         for(u32 command=0;command<actual;++command){

@@ -65,6 +65,7 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
     auto dispatch=renderer.AcquireTransientBuffer(sizeof(D3D12_DISPATCH_ARGUMENTS));
     renderer.RetainUntilFinish([source,count_value=count?*count:seed,commands,constants,output_count,seed,
         dispatch,root=root_,pipeline=pipeline_,builder=dispatch_pipeline_,signature=dispatch_signature_](u64){});
+    const auto source_state=source.State(0),count_state=count?count->State(0):D3D12_RESOURCE_STATE_COMMON;
     auto* list=renderer.RecordingList();
     if(!(source.State(0)&D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))source.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     if(count&&!(count->State(0)&D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE))count->Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -87,6 +88,10 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
     list->SetComputeRootUnorderedAccessView(6,commands.handle->GetGPUVirtualAddress());
     list->ExecuteIndirect(dispatch_signature_.Get(),1,dispatch.handle.Get(),0,nullptr,0);
     for(auto* output:outputs)output->UavBarrier(list);
+    // These can also be prepared guest shader buffers. The packing prepass
+    // must return their authoritative state to the subsequent guest draw.
+    if(source.State(0)!=source_state)source.Transition(list,source_state);
+    if(count&&count!=&source&&count->State(0)!=count_state)count->Transition(list,count_state);
     commands.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
     output_count.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
     constants.Transition(list,D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
