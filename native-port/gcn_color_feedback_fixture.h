@@ -141,9 +141,10 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         // First draw made I=1 and wrote only the real zero DWORD to B. A second
         // exact-base writer invalidates I before refresh, but an interior writer
         // must retain I. The left half is not redrawn, so these outcomes differ.
-        if(buffer_writer==2)writer.base_address+=4;
+        if(buffer_writer>=2)writer.base_address+=4;
         memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
-        regs.generic_scissor.top_left_x=4;draw(seed,false);
+        regs.generic_scissor.top_left_x=4;
+        if(buffer_writer==3)draw(left,true);else draw(seed,false);
         regs.generic_scissor.top_left_x=0;
         writer.base_address=base+57344;
         memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
@@ -157,15 +158,24 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         raw.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
         rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,raw.resource->handle.Get(),raw.offset,raw_bytes);
         raw.resource->Transition(rasterizer.RecordingList(),prior);rasterizer.Finish();
-        auto expected_b=physical;memset(expected_b.data()+16384,0,buffer_writer==2?8:4);
+        auto expected_b=physical;memset(expected_b.data()+16384,0,buffer_writer>=2?8:4);
         void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
         const bool preserved=memcmp(bytes,expected_b.data()+16384,raw_bytes)==0;
         D3D12_RANGE none{};rb.handle->Unmap(0,&none);
         if(!preserved)throw std::runtime_error("Color attachment overwrote the shader buffer domain");
         rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
-        auto expected=physical;const float value=buffer_writer==2?.5f:0.f;
+        auto expected=physical;const float value=buffer_writer>=2?.5f:0.f;
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
             memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
+        if(buffer_writer==3){
+            physical.assign(backing,backing+65536);
+            cb.base_address=u32((base+53248)>>8);draw(right,true);
+            const auto right_probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto rl=LayoutGuestTexture(right_probe);
+            rasterizer.ReadMemory(right_probe.address,rl.guest_bytes);rasterizer.Finish();
+            const float right_value=.25f;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+53248+GuestPixelOffset(right_probe,rl,0,0,x,y),&right_value,4);
+        }
         rasterizer.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),65536))
             throw std::runtime_error("Color writer selected stale I/B or published unrelated bytes");
