@@ -403,6 +403,9 @@ public:
     // Resolve full parent/recreated depth storage BEFORE caller source/prewrite
     // captures. Requested selectors stay on the binding view.
     GuestTextureDesc ResolveDepthViewStorage(const GuestTextureDesc&)const;
+    // Keep a current color parent's complete allocation when CB registers name
+    // only its mip-zero/layer view. Resolve before capturing the B envelope.
+    GuestTextureDesc ResolveColorViewStorage(const GuestTextureDesc&)const;
     // Also admits existing packed conversion and pinned-compatible uncompressed
     // color image interpretations. These are sources, never direct view reuse.
     Entry* FindIndependentUploadSource(const GuestTextureDesc&,const GuestTextureLayout&)const;

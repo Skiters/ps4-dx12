@@ -2486,6 +2486,26 @@ GuestTextureCache::Entry& GuestTextureCache::RecreateCachedDepthAtBind(Entry& im
     PublishBufferResidency(result);
     return result;
 }
+GuestTextureDesc GuestTextureCache::ResolveColorViewStorage(const GuestTextureDesc& requested)const{
+    if(!requested.render_target||requested.depth_target||requested.writable||requested.stencil_address)
+        return requested;
+    const auto layout=LayoutGuestTexture(requested);
+    auto* parent=FindValidIndependentImage(requested,layout);
+    if(!parent||!CompatibleGuestColorSubview(parent->desc,parent->layout,requested,layout))
+        return requested;
+    auto storage=parent->desc;
+    storage.render_target=true;
+    storage.data_format=requested.data_format;storage.number_format=requested.number_format;
+    storage.native_raw32=requested.native_raw32;storage.native_packed10_raw=requested.native_packed10_raw;
+    storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;
+    storage.view_layers=requested.view_layers;storage.min_lod=requested.min_lod;storage.swizzle=requested.swizzle;
+    // A native view alone does not prove a guest address mapping. Keep every
+    // parent mip offset/slice and the complete memory envelope unchanged.
+    const auto physical=LayoutGuestTexture(storage);
+    if(!MatchesGuestMipLayout(parent->layout,physical)||
+       !MatchesGuestUploadStorage(*parent,storage,physical))return requested;
+    return storage;
+}
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
     const auto layout=LayoutGuestTexture(requested);
     if(!IsDirectDepthWordClass(requested,layout))return requested;
@@ -3283,9 +3303,9 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
             r.Format=DXGI_FORMAT_R32_UINT;
             r.Flags|=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
-        const bool sample_backing_capable=!d.depth_target&&d.levels==1&&
+        const bool color_attachment_capable=!d.depth_target&&
             !d.one_dimensional&&!d.volume_depth&&layout.block_extent==1;
-        if(d.render_target||(d.samples>1&&!d.depth_target)||sample_backing_capable) {
+        if(d.render_target||(d.samples>1&&!d.depth_target)||color_attachment_capable) {
             D3D12_FEATURE_DATA_FORMAT_SUPPORT support{layout.format};
             Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
             if(!(support.Support1&D3D12_FORMAT_SUPPORT1_RENDER_TARGET)&&(d.render_target||d.samples>1))

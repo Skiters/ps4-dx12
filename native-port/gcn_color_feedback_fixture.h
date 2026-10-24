@@ -12,7 +12,8 @@ template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
-    bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false){
+    bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
+    bool retained_mips=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -55,6 +56,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     // the original FLOAT attachment bits, not numerically convert the texel.
     image.data_format=shared_ms?14:4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
+    if(retained_mips)image.last_level=1;
     const auto sampled=DescribeGuestTexture(image);
     const auto sampled_layout=LayoutGuestTexture(sampled);
     if(independent_class){
@@ -63,7 +65,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto same=sampled;same.pitch=target.pitch;
         if(GuestTextureCache::SeparateColorSampledImages(target,layout,same,LayoutGuestTexture(same)))
             throw std::runtime_error("Compatible feedback was misclassified as independent pool reuse");
-    }else if(!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
+    }else if(!retained_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
         throw std::runtime_error("Feedback fixture target/sample physical mapping differs");
     AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
     input.data_format=4;input.num_format=4;
@@ -74,6 +76,13 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
     if(independent_class){const float source=.75f;
         memcpy(memory+16384+GuestPixelOffset(sampled,sampled_layout,0,0,0,0),&source,4);}
+    if(retained_mips){
+        if(!raw_domain||sampled.levels!=2||sampled_layout.mips.size()!=2)
+            throw std::runtime_error("Retained mip fixture requires two mips and independent B");
+        const float value=.75f;
+        for(UINT y=0;y<4;++y)for(UINT x=0;x<4;++x)
+            memcpy(memory+16384+GuestPixelOffset(sampled,sampled_layout,1,0,x,y),&value,4);
+    }
     std::vector<std::byte> physical(backing,backing+65536);
     // A large original index sharp selects resident B rather than the clean
     // <=16KiB private CPU stream. Establish it before any image writes.
@@ -94,6 +103,12 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         if(memcmp(backing,physical.data(),65536))
             throw std::runtime_error("Feedback draw published physical CPU bytes before explicit readback");
     };
+    if(retained_mips){
+        // First cache the entire readonly mip chain while drawing elsewhere.
+        // CB then names only mip zero of this already-current allocation.
+        cb.base_address=u32((base+61440)>>8);draw(left,true);
+        cb.base_address=u32((base+16384)>>8);
+    }
     draw(seed,false);
     if(independent_class){
         // I_color now contains1, physical B still contains.75. The distinct
@@ -314,6 +329,10 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             physical.assign(backing,backing+65536);
         };
         probe(left,.125f);probe(right,.0625f);
+        if(retained_mips){
+            image.base_level=1;
+            probe(left,.375f); // Mip1 survives every mip0 render/feedback write.
+        }
         return;
     }
     rasterizer.Finish();rasterizer.ReadMemory(base,65536);

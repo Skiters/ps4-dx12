@@ -787,7 +787,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     // with the same codec as physical materialization, before changing planes.
     const auto clear=DecodeGuestColorClear(b);
     if(!page_watch_||!d.render_target||d.depth_target||d.stencil_address||d.writable||
-       d.one_dimensional||d.volume_depth||d.levels!=1||d.first_mip||
+       d.one_dimensional||d.volume_depth||d.first_mip||
        !clear||d.UsesRaw32()||
        d.data_format!=clear->data_format||d.number_format!=clear->number_format||
        l.bytes_per_pixel!=clear->pixel_bytes||l.expanded_bytes_per_pixel||l.block_extent!=1||
@@ -804,7 +804,8 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
         // A pinned CB retired by the later depth bind still receives its load
         // clear, but must never become the logical owner again.
         if(bound_target->layout.guest_bytes!=l.guest_bytes||
-           !CompatibleGuestAttachmentStorage(bound_target->desc,d)||
+           (!CompatibleGuestAttachmentStorage(bound_target->desc,d)&&
+            !CompatibleGuestColorSubview(bound_target->desc,bound_target->layout,d,l))||
            (retired?(!bound_target->logical_dirty||bound_target->gpu_owned):
                !textures_.HasCurrentNativeContents(*bound_target)))return false;
     }else for(auto& entry:textures_.Entries())if(entry->gpu_owned&&ImageOverlap(d.address,l.guest_bytes,*entry)){
@@ -812,13 +813,14 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
         // writer. Let the existing reconciliation path determine ownership.
         if(image||(entry->buffer_alias_version&&!textures_.HasCurrentNativeContents(*entry))||
            entry->layout.guest_bytes!=l.guest_bytes||
-           !CompatibleGuestAttachmentStorage(entry->desc,d))return false;
+           (!CompatibleGuestAttachmentStorage(entry->desc,d)&&
+            !CompatibleGuestColorSubview(entry->desc,entry->layout,d,l)))return false;
         image=entry.get();
     }
     if(!image||!image->texture.handle)return false;
     const auto native=image->texture.handle->GetDesc();
     if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.Width!=d.width||native.Height!=d.height||
-       native.MipLevels!=1||native.DepthOrArraySize!=d.layers||
+       native.MipLevels!=d.levels||native.DepthOrArraySize!=d.layers||
        native.SampleDesc.Count!=(retired?image->RequestedBackingSamples():d.samples)||
        !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))return false;
     std::shared_ptr<GuestRawColorClear::Program> raw_program;
@@ -1127,6 +1129,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     MergeGuestColorAttachmentLayers(std::span(descriptions.data(),target_count));
     for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN){
+        descriptions[i]=textures_.ResolveColorViewStorage(descriptions[i]);
         descriptions[i]=textures_.ResolveDepthViewStorage(descriptions[i]);
         layouts[i]=LayoutGuestTexture(descriptions[i]);
         ValidateGpuBacking(descriptions[i].address,layouts[i].guest_bytes,true);
