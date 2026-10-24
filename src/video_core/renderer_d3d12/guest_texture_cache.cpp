@@ -820,8 +820,12 @@ GuestTextureDesc DescribeGuestTexture(const AmdGpu::Image& image){
     LayoutGuestTexture(d);return d;
 }
 GuestTextureDesc DescribeGuestColorBuffer(const AmdGpu::ColorBuffer& buffer,AmdGpu::CbDbExtent extent) {
-    if(!buffer||buffer.info.compression||buffer.info.dcc_enable)
-        throw std::runtime_error("Native guest color buffer needs valid uncompressed tiling: address="+
+    // Pinned ImageInfo stores expanded color samples; compression registers
+    // FMASK metadata, not a different color payload/tiling. Shader FMASK reads
+    // already use the original identity lowering. Retain the sample count and
+    // metadata lifecycle instead of rejecting the attachment at description.
+    if(!buffer||buffer.info.dcc_enable)
+        throw std::runtime_error("Native guest color buffer needs valid non-DCC tiling: address="+
             std::to_string(buffer.Address())+" samples="+std::to_string(buffer.NumSamples())+
             " compression="+std::to_string(buffer.info.compression)+" dcc="+std::to_string(buffer.info.dcc_enable)+
             " alt="+std::to_string(buffer.info.alt_tile_mode)+" linear="+std::to_string(buffer.info.linear_general)+
@@ -867,8 +871,8 @@ GuestColorClearPlan PlanGuestColorClear(const AmdGpu::ColorBuffer& b,const Guest
     const GuestTextureLayout& l,std::span<const std::byte> cmask) {
     GuestColorClearPlan plan;
     if(!b.info.fast_clear||!b.cmask_base_address)return plan;
-    if(b.info.compression||b.info.dcc_enable||l.block_extent!=1)
-        throw std::runtime_error("Native CMASK requires uncompressed color");
+    if(b.info.dcc_enable||l.block_extent!=1)
+        throw std::runtime_error("Native CMASK requires non-DCC color");
     if(cmask.size()<GuestCmaskBytes(b)||d.first_layer>=b.NumSlices()||
        !d.view_layers||d.view_layers>b.NumSlices()-d.first_layer)
         throw std::out_of_range("Native CMASK storage/view too short");

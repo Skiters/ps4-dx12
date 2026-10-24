@@ -598,8 +598,9 @@ int main(){try {
     std::fill(metadata.begin(),metadata.begin()+2048,std::byte{0});
     Require(!GuestColorClearPending(b,desc,layout,metadata));
     std::fill(metadata.begin()+2048,metadata.begin()+4096,std::byte{0xff});
+    for(uint32_t compressed=0;compressed<2;++compressed)
     for(uint32_t log2_samples=1;log2_samples<=4;++log2_samples){
-        auto msaa=b;msaa.attrib.num_fragments_log2=log2_samples;
+        auto msaa=b;msaa.attrib.num_fragments_log2=log2_samples;msaa.info.compression=compressed;
         const auto msaa_desc=DescribeGuestColorBuffer(msaa,extent);
         const auto msaa_layout=LayoutGuestTexture(msaa_desc);
         std::vector<std::byte> samples(msaa_layout.guest_bytes,std::byte{0xee});

@@ -13,7 +13,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
-    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0){
+    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -48,6 +48,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
     if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
+    if(compressed_color){cb.info.compression=1;cb.fmask_base_address=u32((base+57344)>>8);}
     const auto target=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
