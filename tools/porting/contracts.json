@@ -18200,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Converted/reallocated feedback and target rebind after image growth need a retained native storage plan; incompatible mappings still use ResolveMemory/DiscardImages. Compatible typed/rebased GPU snapshots and equal-base independent overlap classes are connected. Do not invent per-fragment communication beyond pinned Vulkan semantics.",
+      "missing_semantics": "Converted/reallocated feedback beyond proven same-layer mip growth, changed-layer or shifted target rebind remain. Compatible typed/rebased snapshots, retained color mip allocations and same-layer mip growth are connected through799b610, behavior NOT_RUN. Preserve pinned synchronization and independent B/I.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18525,12 +18525,31 @@
         "evidence": "C:\\Users\\skei\\Documents\\Codex\\handoff\\native-sample-fallback-20261018\\VERIFICATION_FINAL.json",
         "gcn_exe_sha256": "f8a539891f7c4c5223283d78a10407d81453cd994330aa6bcc0d5b3361c36e7a",
         "scope": "112 queued read-only MSAA cases plus162 regressions, raw transport8, native14 and reload. No readonly-MSAA writer-alias ownership, generic unsupported-count fallback, graphics-stage or rebuilt-core/game acceptance."
+      },
+      "color_bc_progress_20261025": {
+        "implementation_state": "connected",
+        "behavior_state": "not_run",
+        "commits": [
+          "9c7d979",
+          "b6b59c5",
+          "799b610",
+          "bed2cb9",
+          "0dabfe7"
+        ],
+        "contract": "Preserve color mip allocation/growth B/I envelopes and original per-stage formatted buffer -> texture ordering, including full BC/terminal word views and active converted I. Changed-stride/shifted/general converted domains remain gaps.",
+        "prepared_checks": [
+          "color-retained-mips-owned",
+          "color-grown-mips-owned",
+          "ordered-bc-word formatted-first full/prefix",
+          "ordered-stages converted packed10 formatted-middle"
+        ],
+        "evidence": "F:/PS4Dev/handoff/native-port-comparison-20261019/ordered-current-image-0dabfe7.json"
       }
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw",
-      "missing_semantics": "Equal-base supported direct-word/channel-to-MS-depth recreation, independent BlockDim classes, retired-CB CMASK after copy and delayed sample backing conversion connected through9ef7343; behavior NOT_RUN. Remaining: compression/shared shader feedback/shifted mappings, ordered alternate sample storage, opaque D/S DMA independent ownership. Same-plane depth write feedback excluded by pinned Vulkan.",
+      "missing_semantics": "Equal-base supported direct-word/channel-to-MS-depth recreation, independent BlockDim classes, retired-CB CMASK after copy, delayed sample backing and validated readonly depth feedback CB prefetch connected through96d28fc; behavior NOT_RUN. Remaining compression/competing shader feedback/shifted mappings, ordered alternate sample storage, opaque D/S DMA ownership.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: depth/color alias and simultaneous buffer/HTILE guards",
       "groups": [
         2,
@@ -18662,5 +18681,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "Production80e12b0; clean Release compile/link PASS21.449s; all behavior execution deferred until seven-area implementation completion. Mixed blending connected; six other areas retain explicit gaps. See SESSION_HANDOFF.md first section."
+  "seven_area_continuation": "Production0dabfe7 after96d28fc/9c7d979/b6b59c5/799b610/bed2cb9: shared sampled-depth prefetch, retained and grown color mip attachments, BC/word formatted domains and active converted-image read ordering CONNECTED. Clean tracked Release compile/link PASS17.178s; ALL behavior NOT_RUN by user instruction (test only after seven implementations). Six broad areas still have concrete code gaps; mixed blending connected, unaccepted. SESSION_HANDOFF.md first section is authoritative. Reused trees, no app replacement/runtime archive/game or fixture execution. Continue development, do not stop at checkpoint."
 }

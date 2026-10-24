@@ -1,6 +1,6 @@
 ## Current implementation continuation — 2026-10-25
 
-Production80e12b0: GPU restart/decode/indirect counts and original capture integration; sparse polygon output liveness connected. Clean tracked Release compile/link PASS21.449s; ALL behavior NOT_RUN. Earlier shared attachment/polygon/blending work retained. Six broad areas still have concrete code gaps. SESSION_HANDOFF.md first section is authoritative. No app replacement/runtime archive/GPU or game execution. Continue development.
+Production0dabfe7 after96d28fc/9c7d979/b6b59c5/799b610/bed2cb9: shared sampled-depth prefetch, retained and grown color mip attachments, BC/word formatted domains and active converted-image read ordering CONNECTED. Clean tracked Release compile/link PASS17.178s; ALL behavior NOT_RUN by user instruction (test only after seven implementations). Six broad areas still have concrete code gaps; mixed blending connected, unaccepted. SESSION_HANDOFF.md first section is authoritative. Reused trees, no app replacement/runtime archive/game or fixture execution. Continue development, do not stop at checkpoint.
 
 ## Current continuation — 2026-10-25
 
