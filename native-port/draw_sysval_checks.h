@@ -30,7 +30,9 @@ inline std::vector<u32> DrawSysvalVertex(bool split_capture=false){
 inline void CheckDrawSysvalsGpu(ID3D12Device* device,Rasterizer& renderer,const std::wstring& dxc,std::span<const u8> vertex,bool split_capture=false){
     namespace D=Shader::Backend::DX12;
     const auto gs=D::CompileGeometryDxil(dxc,R"(
-struct V {float4 position:SV_Position;uint4 value:TEXCOORD0;};
+// Mesa assigns the user varying before Position. DXIL stage linkage requires
+// the matching register order, not just matching semantic names.
+struct V {uint4 value:TEXCOORD0;float4 position:SV_Position;};
 struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
 [maxvertexcount(1)] void main(point V input[1],inout PointStream<O> stream){O o;o.position=input[0].position;o.value=input[0].value;stream.Append(o);}
 )");if(!gs.success)throw std::runtime_error(gs.diagnostics);
@@ -41,21 +43,30 @@ struct O {float4 position:SV_Position;uint4 value:CAPTURE0;};
     for(bool expanded:std::array{false,true}){
         const u32 count=expanded?6:3,records=count*2,bytes=records*16;
         auto seed=Buffer(device,32+bytes+16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
-        auto output=renderer.AcquireTransientBuffer(bytes+16),counter=renderer.AcquireTransientBuffer(4);
+        auto output=renderer.AcquireTransientBuffer(bytes+16),counter=renderer.AcquireTransientBuffer(8);
         auto result=Buffer(device,bytes+16,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));memset(mapped,0xcd,32+bytes+16);
-        const u32 indices[]{0,1,1,2,2,0};memcpy(mapped,indices,sizeof(indices));const u32 zero=0;memcpy(static_cast<std::byte*>(mapped)+24,&zero,4);seed.handle->Unmap(0,nullptr);
+        const u32 indices[]{0,1,1,2,2,0};memcpy(mapped,indices,sizeof(indices));const u64 zero=0;memcpy(static_cast<std::byte*>(mapped)+24,&zero,8);seed.handle->Unmap(0,nullptr);
         auto* list=renderer.RecordingList();output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
-        list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),32,bytes+16);list->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),24,4);
+        list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),32,bytes+16);list->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),24,8);
         const Rasterizer::IndexBinding index{&seed,0,24,DXGI_FORMAT_R32_UINT};
         const Rasterizer::StreamOutputBinding target{&output,&counter,0,bytes,0};
         const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
         const auto record=[&](u32 instances,u32 first_instance){
         GraphicsRuntime runtime{};runtime.first_vertex=7;runtime.base_instance=first_instance;runtime.capture_base_instance=11;
-        ResourceBindings bindings(device,pipeline.Layout());auto constants=Buffer(device,1024,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto bindings=std::make_shared<ResourceBindings>(device,pipeline.Layout());auto constants=Buffer(device,1024,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         Check(constants.handle->Map(0,&none,&mapped));memset(mapped,0,1024);memcpy(mapped,&runtime,sizeof(runtime));constants.handle->Unmap(0,nullptr);
-        bindings.Cbv(0,31,constants.handle.Get(),0,1024);renderer.RetainUntilFinish([constants](u64){});
-        renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,
+        bindings->Cbv(0,31,constants.handle.Get(),0,1024);renderer.RetainUntilFinish([constants,bindings](u64){});
+        if(!expanded&&first_instance==11){
+            auto short_counter=Buffer(device,4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COMMON);
+            auto invalid_target=target;invalid_target.filled_size=&short_counter;
+            bool rejected{};
+            try{renderer.ExecuteGraphics(pipeline,*bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,
+                {count,instances,7,first_instance,0},{},nullptr,false,nullptr,&invalid_target);}
+            catch(const std::out_of_range&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Stream output accepted a truncated counter backing interval");
+        }
+        renderer.ExecuteGraphics(pipeline,*bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),blend,
             {count,instances,expanded?0u:7u,first_instance,0},{},expanded?&index:nullptr,false,nullptr,&target);
         };
         if(split_capture){record(1,11);record(1,12);}else record(2,11);

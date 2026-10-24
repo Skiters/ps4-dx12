@@ -115,7 +115,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
            stream_output->offset%4||stream_output->counter_offset%4||!stream_output->bytes||
            stream_output->bytes%state.pipeline.StreamOutput.pBufferStrides[0]||
            stream_output->bytes>UINT32_MAX||stream_output->offset>data.Width||stream_output->bytes>data.Width-stream_output->offset||
-           stream_output->counter_offset>counter.Width||4>counter.Width-stream_output->counter_offset)
+           stream_output->counter_offset>counter.Width||8>counter.Width-stream_output->counter_offset)
             throw std::out_of_range("Internal stream-output targets exceed their buffers");
         const auto is_output=[&](ID3D12Resource* resource){return resource==stream_output->data->handle.Get()||resource==stream_output->filled_size->handle.Get();};
         if(bindings.References(stream_output->data->handle.Get())||bindings.References(stream_output->filled_size->handle.Get())||
@@ -127,7 +127,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             throw std::invalid_argument("Internal stream output overlaps draw input or shader resources");
         if(stream_output->data->handle.Get()==stream_output->filled_size->handle.Get()&&
            stream_output->counter_offset<stream_output->offset+stream_output->bytes&&
-           stream_output->offset<stream_output->counter_offset+4)
+           stream_output->offset<stream_output->counter_offset+8)
             throw std::invalid_argument("Internal stream data overlaps its filled-size counter");
         stream_view={stream_output->data->handle->GetGPUVirtualAddress()+stream_output->offset,stream_output->bytes,
             stream_output->filled_size->handle->GetGPUVirtualAddress()+stream_output->counter_offset};
@@ -438,7 +438,13 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         else if(indices){DX12_API_CALL(list->IASetIndexBuffer(&index_view));DX12_API_CALL(list->DrawIndexedInstanced(draw.count,draw.instances,draw.first,draw.base_vertex,draw.first_instance));}
         else DX12_API_CALL(list->DrawInstanced(draw.count,draw.instances,draw.first,draw.first_instance));
         if(render_pass)DX12_API_CALL(render_list->EndRenderPass());
-        if(stream_output){const D3D12_STREAM_OUTPUT_BUFFER_VIEW empty{};DX12_API_CALL(list->SOSetTargets(0,1,&empty));}
+        if(stream_output){
+            const D3D12_STREAM_OUTPUT_BUFFER_VIEW empty{};DX12_API_CALL(list->SOSetTargets(0,1,&empty));
+            // Unbinding alone does not publish the filled-size write before a
+            // later SOSetTargets reloads it. Order the counter on the GPU so
+            // split producer draws append instead of overwriting prior data.
+            stream_output->filled_size->Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
         // Keep unrelated UAVs concurrent.  Microsoft recommends the minimum
         // necessary UAV barriers; guest page ownership handles later CPU use.
         for(const auto base:dirty_mappings_) {

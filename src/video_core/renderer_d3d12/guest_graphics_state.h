@@ -180,5 +180,5 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs&,
     UINT patch_control_points=0,bool native_alpha_factor=false);
 bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type);
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
-    bool restart=false,u32 restart_index=~0u);
+    bool restart=false,u32 restart_index=~0u,u32 patch_points=0);
 }

@@ -10,7 +10,9 @@ bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type) {
     return type==P::TriangleFan||type==P::Polygon||type==P::LineLoop||type==P::QuadStrip;
 }
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
-    bool restart,u32 restart_index) {
+    bool restart,u32 restart_index,u32 patch_points) {
+    if(type==AmdGpu::PrimitiveType::PatchPrimitive&&(!patch_points||patch_points>32))
+        throw std::out_of_range("Native guest restart patch control point count");
     std::vector<u32> result;
     const auto emit=[&](std::span<const u32> part) {
         using P=AmdGpu::PrimitiveType;
@@ -47,6 +49,11 @@ std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const
             result.insert(result.end(),part.begin(),part.begin()+part.size()/4*4);break;
         case P::AdjTriangleList:
             result.insert(result.end(),part.begin(),part.begin()+part.size()/6*6);break;
+        case P::PatchPrimitive:
+            // Vulkan patch-list restart discards the incomplete patch before
+            // each marker. D3D12 patch lists have no strip-cut support: compact
+            // complete patches without joining control points across markers.
+            result.insert(result.end(),part.begin(),part.begin()+part.size()/patch_points*patch_points);break;
         default:
             result.insert(result.end(),part.begin(),part.end());break;
         }

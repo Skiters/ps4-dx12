@@ -21,11 +21,13 @@
 
 using namespace NativeDX12;
 namespace DXIL=Shader::Backend::DX12;
-int main(int argc,char** argv){try{
+int main(int argc,char** argv){ComPtr<ID3D12InfoQueue> messages;try{
     if(argc!=4)throw std::invalid_argument("Expected converter, DXC and primitive stream mode");
     Tests::CheckStreamOutputLayout();
     Tests::CheckGuestIndirectArguments();
     Tests::CheckGuestIndexExpansionPlan();
+    Tests::CheckGuestPatchRestart();
+    puts("CHECKED: patch restart widths 1/3/4/32, both fixed markers, partial/empty patches and invalid widths (CPU)");
     puts("CHECKED: guest indirect indexed/nonindexed ABI, immutable snapshot, stride/address and GPU pack size limits (CPU)");
     GuestGraphicsState patch_state;patch_state.topology=D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
     patch_state.pipeline.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
@@ -125,7 +127,7 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         if(SUCCEEDED(D3D12CreateDevice(adapter.Get(),D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device))))break;
     }
     if(!device)throw std::runtime_error("No hardware D3D12 device");
-    ComPtr<ID3D12InfoQueue> messages;Check(device.As(&messages));
+    Check(device.As(&messages));
     AmdGpu::Regs regs{};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
     regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
     regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
@@ -139,11 +141,17 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         renderer.ValidateDebugMessages();puts("PASS: Vulkan direct/expanded draw sysvals");return 0;
     }
     Tests::CheckGuestIndexExpansionGpu(device.Get(),renderer);
+    if(std::string_view(argv[3])=="index-expansion"){
+        renderer.ValidateDebugMessages();puts("PASS: 28 GPU index expansion cases, source state/lifetime and guards");return 0;
+    }
     if(std::string_view(argv[3])=="large-grid"){
         Tests::CheckGuestIndirectLargeGridGpu(device.Get(),renderer);renderer.ValidateDebugMessages();
         puts("PASS: GPU indirect pack second dispatch row and exact guards; no runtime arena");return 0;
     }
     Tests::CheckGuestIndirectPackGpu(device.Get(),renderer);
+    if(std::string_view(argv[3])=="indirect-pack"){
+        renderer.ValidateDebugMessages();puts("PASS: 40 GPU indirect pack cases, lifetime, states and guards");return 0;
+    }
     for(unsigned variant=0;variant<3;++variant){
         std::array<D3D12_SO_DECLARATION_ENTRY,2> declarations{{{0,"CAPTURE",0,0,4,0},{0,nullptr,0,0,1,0}}};
         UINT stride=variant?8:16;
@@ -553,4 +561,14 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         if(message->Severity<=D3D12_MESSAGE_SEVERITY_ERROR)throw std::runtime_error(message->pDescription);
     }
     puts("PASS: internal primitive stream full/sliced/gap records, GPU count/indirect slices/empty replay, lifetime and exact guards");return 0;
-}catch(const std::exception& error){fprintf(stderr,"FAIL: %s\n",error.what());return 1;}}
+}catch(const std::exception& error){
+    fprintf(stderr,"FAIL: %s\n",error.what());
+    if(messages)for(UINT64 i=0;i<messages->GetNumStoredMessages();++i){
+        SIZE_T bytes{};
+        if(FAILED(messages->GetMessage(i,nullptr,&bytes)))continue;
+        std::vector<std::byte> storage(bytes);auto* message=reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+        if(SUCCEEDED(messages->GetMessage(i,message,&bytes))&&message->Severity<=D3D12_MESSAGE_SEVERITY_WARNING)
+            fprintf(stderr,"D3D12[%u]: %s\n",unsigned(message->ID),message->pDescription);
+    }
+    return 1;
+}}

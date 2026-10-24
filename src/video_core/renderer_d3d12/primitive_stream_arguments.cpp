@@ -142,9 +142,9 @@ void PrimitiveStreamArguments::RecordCount(Rasterizer& renderer,Resource& filled
     arguments.UavBarrier(list);arguments.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
 }
 PrimitiveStreamPass::PrimitiveStreamPass(ID3D12Device* device):generator_(device),
-    zero_(Buffer(device,4,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ)){
+    zero_(Buffer(device,8,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ)){
     void* mapped{};D3D12_RANGE none{};Check(zero_.handle->Map(0,&none,&mapped));
-    const u32 zero=0;memcpy(mapped,&zero,4);D3D12_RANGE written{0,4};zero_.handle->Unmap(0,&written);
+    const u64 zero=0;memcpy(mapped,&zero,8);D3D12_RANGE written{0,8};zero_.handle->Unmap(0,&written);
 }
 std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& renderer,u32 stride,u32 capacity,
     u32 primitive,const std::function<void(PrimitiveStreamLease&)>& producer){
@@ -167,7 +167,9 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
         std::erase_if(arenas_,idle);
         arena=std::make_shared<PrimitiveStreamLease>();
         arena->data=renderer.AcquireTransientBuffer(bytes);
-        arena->filled_size=renderer.AcquireTransientBuffer(4);
+        // Current D3D12 validation requires an eight-byte backing interval for
+        // BufferFilledSizeLocation. The bounded count shader reads its low DWORD.
+        arena->filled_size=renderer.AcquireTransientBuffer(8);
         arena->arguments=renderer.AcquireTransientBuffer(48);
         arenas_.push_back(arena);
     }
@@ -178,7 +180,7 @@ std::shared_ptr<PrimitiveStreamLease> PrimitiveStreamPass::Capture(Rasterizer& r
     renderer.RetainUntilFinish([arena,zero=zero_.handle](u64){});
     try{
         auto* list=renderer.RecordingList();arena->filled_size.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
-        list->CopyBufferRegion(arena->filled_size.handle.Get(),0,zero_.handle.Get(),0,4);
+        list->CopyBufferRegion(arena->filled_size.handle.Get(),0,zero_.handle.Get(),0,8);
         producer(*arena);
         arena->data.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         generator_.Record(renderer,arena->filled_size,arena->arguments,range);

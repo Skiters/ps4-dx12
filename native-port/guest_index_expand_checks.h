@@ -4,6 +4,35 @@
 #include <array>
 #include <cstring>
 namespace NativeDX12::Tests {
+inline void CheckGuestPatchRestart(){
+    using P=AmdGpu::PrimitiveType;
+    // The expected patches are independent of the compactor: neither the two
+    // leading vertices nor a segment's trailing vertices may form another patch.
+    for(u32 marker:std::array{0xffffu,0xffffffffu}){
+        const std::array source{marker,10u,11u,marker,20u,21u,22u,23u,24u,marker,marker,30u,31u,32u,marker};
+        if(ExpandGuestPrimitive(P::PatchPrimitive,source,true,marker,3)!=std::vector<u32>{20,21,22,30,31,32})
+            throw std::runtime_error("Patch restart joined partial control points across a marker");
+        if(ExpandGuestPrimitive(P::PatchPrimitive,source,true,marker,4)!=std::vector<u32>{20,21,22,23})
+            throw std::runtime_error("Patch restart ignored the original HS input control point count");
+        if(ExpandGuestPrimitive(P::PatchPrimitive,source,true,marker,1)!=std::vector<u32>{10,11,20,21,22,23,24,30,31,32})
+            throw std::runtime_error("Single-control-point restart lost a complete patch");
+        const std::array partial{10u,11u,marker,20u,21u};
+        if(!ExpandGuestPrimitive(P::PatchPrimitive,partial,true,marker,3).empty())
+            throw std::runtime_error("Incomplete patches were combined into work");
+    }
+    std::vector<u32> source{77,78,UINT32_MAX};
+    for(u32 i=0;i<34;++i)source.push_back(100+i);
+    source.push_back(UINT32_MAX);
+    for(u32 i=0;i<31;++i)source.push_back(200+i);
+    std::vector<u32> expected;for(u32 i=0;i<32;++i)expected.push_back(100+i);
+    if(ExpandGuestPrimitive(P::PatchPrimitive,source,true,UINT32_MAX,32)!=expected)
+        throw std::runtime_error("Maximum-width patch restart changed complete patch contents");
+    for(u32 width:std::array{0u,33u}){
+        bool rejected{};try{(void)ExpandGuestPrimitive(P::PatchPrimitive,source,true,UINT32_MAX,width);}
+        catch(const std::out_of_range&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Patch restart accepted an invalid control point count");
+    }
+}
 inline void CheckGuestIndexExpansionPlan(){
     using P=AmdGpu::PrimitiveType;
     const auto require=[](bool value){if(!value)throw std::runtime_error("GPU index expansion plan regression");};

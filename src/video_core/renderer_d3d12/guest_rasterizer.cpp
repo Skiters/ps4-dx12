@@ -1436,7 +1436,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             for(u32 i=0;i<draw.count;++i){u32 value{};if(narrow){u16 v;memcpy(&v,source.data()+i*2,2);value=v;}else memcpy(&value,source.data()+i*4,4);logical.push_back(value);}
         }else for(u32 i=0;i<draw.count;++i)logical.push_back(draw.first+i);
         if(expand_primitive||rewrite_restart)
-            logical=ExpandGuestPrimitive(r.primitive_type,logical,indexed&&r.enable_primitive_restart,r.primitive_restart_index);
+            logical=ExpandGuestPrimitive(r.primitive_type,logical,indexed&&r.enable_primitive_restart,
+                r.primitive_restart_index,r.ls_hs_config.hs_input_control_points);
         if(logical.empty())return;
         const bool output_narrow=!expand_primitive&&indexed&&narrow;
         if(logical.size()>UINT_MAX/(output_narrow?2u:4u))

@@ -72,8 +72,15 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
         {
             GuestIndirectPackPass pack(device);
             const auto input_state=source.State(0);
-            auto input_count=Buffer(device,4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
-            renderer.RecordingList()->CopyBufferRegion(input_count.handle.Get(),0,upload.handle.Get(),4,4);
+            Resource input_count;
+            // Only enqueue the separate count upload when Record will retain
+            // that resource. An unused copy otherwise outlives this scope and
+            // dereferences a destroyed resource when the command list executes.
+            if(padded&&active!=UINT32_MAX){
+                input_count=Buffer(device,4,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+                Check(input_count.handle->SetName(L"indirect fixture count retained by pack"));
+                renderer.RecordingList()->CopyBufferRegion(input_count.handle.Get(),0,upload.handle.Get(),4,4);
+            }
             Resource* count_input=active==UINT32_MAX?nullptr:padded?&input_count:&source;
             if(!active){
                 const auto reject=[&](auto action){bool failed{};try{action();}catch(const std::invalid_argument&){failed=true;}
@@ -90,7 +97,7 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
             pack.Record(renderer,plan,source,16,count_input,count_input==&source?4:0,
                 runtime,commands,with_runtime?&constants:nullptr,count);
             if(source.State(0)!=input_state)throw std::runtime_error("GPU pack leaked its input SRV state into the guest draw");
-            if(input_count.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::runtime_error("GPU pack leaked its count SRV state");
+            if(input_count.handle&&input_count.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST)throw std::runtime_error("GPU pack leaked its count SRV state");
         } // PSO/root and immutable template must outlive the owner.
         const u32 actual=std::min(active,3u);memcpy(expected.data()+total-20,&actual,4);
         for(u32 command=0;command<actual;++command){
