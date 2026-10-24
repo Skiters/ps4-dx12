@@ -70,7 +70,7 @@ function(native_host_passes target)
             -Fo "${_index_shader}" "${_host_native}/guest_index_expand.hlsl"
         COMMAND ${CMAKE_COMMAND} "-DINPUT=${_index_shader}" "-DOUTPUT=${_index_header}"
             "-DSYMBOL=NativeGuestIndexExpand" -P "${_host_root}/native-port/Embed-Binary.cmake"
-        DEPENDS "${_host_native}/guest_index_expand.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_index_expand.hlsl" "${_host_native}/guest_index_read.hlsli" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_index_header}" "${_host_native}/guest_index_expand.cpp")
     set(_restart_shader "${_host_generated}/guest_index_restart.dxil")
@@ -80,7 +80,7 @@ function(native_host_passes target)
             -Fo "${_restart_shader}" "${_host_native}/guest_index_restart.hlsl"
         COMMAND ${CMAKE_COMMAND} "-DINPUT=${_restart_shader}" "-DOUTPUT=${_restart_header}"
             "-DSYMBOL=NativeGuestIndexRestart" -P "${_host_root}/native-port/Embed-Binary.cmake"
-        DEPENDS "${_host_native}/guest_index_restart.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_index_restart.hlsl" "${_host_native}/guest_index_read.hlsli" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_restart_header}")
     set(_indirect_shader "${_host_generated}/guest_indirect_pack.dxil")

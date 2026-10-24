@@ -1416,18 +1416,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
+    const bool gpu_swap=indexed&&!r.enable_primitive_restart&&!batch&&
+        r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None;
     std::optional<GuestIndexExpansion> gpu_expansion;
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
-    if(gpu_restart||(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
-       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None)))){
+    if(gpu_restart||gpu_swap||(expand_primitive&&(!indexed||!r.enable_primitive_restart))){
         const auto plan=gpu_restart?GuestIndexExpansion::MakeRestart(r.primitive_type,draw.count,
             r.ls_hs_config.hs_input_control_points,strip_last_provoking):
-            GuestIndexExpansion::Make(r.primitive_type,draw.count,strip_last_provoking);
+            expand_primitive?GuestIndexExpansion::Make(r.primitive_type,draw.count,strip_last_provoking):
+            GuestIndexExpansion::Copy(draw.count);
         if(!plan.output_count)return;
         gpu_expansion=plan;
     }
     const bool resident_indices=indexed&&(!expand_primitive||gpu_expansion.has_value())&&(!rewrite_restart||gpu_restart)&&
-        (gpu_restart||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None);
+        (gpu_expansion.has_value()||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None);
     const auto index_range=[&](UINT element){
         const auto range=GuestIndexRange::Make(r.index_base_address.Address<VAddr>(),index_offset,
             draw.count,r.max_index_size,element,indirect_draw);
@@ -1584,7 +1586,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     index_expand_->RecordRestart(*this,*gpu_expansion,source.resource,source.offset,
                         resident_index_bytes/element,element,r.primitive_restart_index,draw,index_storage,restart_arguments,u32(r.index_buffer_type.swap_mode));
                 }else index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
-                    resident_index_bytes/element,element,index_storage);
+                    resident_index_bytes/element,element,index_storage,u32(r.index_buffer_type.swap_mode));
             }else{
                 // The translated VS adds original firstVertex to native
                 // VertexID and exposes it independently as BaseVertex. Keep

@@ -65,19 +65,26 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
     const std::array<u32,15> strip_first{0,1,2,1,3,2,2,3,4,3,5,4,4,5,6};
     const std::array<u32,15> strip_last{0,1,2,2,1,3,2,3,4,4,3,5,4,5,6};
     const std::array<u32,7> values{0xffffffff,0x80001234,17,0,0x7fc08000,6,9};
-    const std::array types{P::TriangleFan,P::Polygon,P::LineLoop,P::QuadStrip,P::TriangleStrip,P::TriangleStrip};
+    const std::array types{P::TriangleFan,P::Polygon,P::LineLoop,P::QuadStrip,P::TriangleStrip,P::TriangleStrip,P::PointList};
+    const std::array<u32,7> copied{0,1,2,3,4,5,6};
     for(u32 variant=0;variant<types.size();++variant)
-    for(u32 element:std::array{0u,2u,4u})for(u32 available:std::array{0u,4u,7u}){
-        if(!element&&available!=7)continue;
+    for(u32 element:std::array{0u,2u,4u})for(u32 available:std::array{0u,4u,7u})for(u32 swap=0;swap<4;++swap){
+        if(!element&&(available!=7||swap))continue;
         const auto type=types[variant];
-        const auto plan=GuestIndexExpansion::Make(type,7,variant==5);
+        const auto plan=type==P::PointList?GuestIndexExpansion::Copy(7):GuestIndexExpansion::Make(type,7,variant==5);
         const u64 bytes=u64(plan.output_count)*4,offset=element;
         auto seed=Buffer(device,64+bytes+16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         auto source=renderer.AcquireTransientBuffer(64),output=renderer.AcquireTransientBuffer(bytes+16);
         auto result=Buffer(device,bytes+16,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         void* mapped{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&mapped));
         memset(mapped,0xcd,size_t(64+bytes+16));
-        for(u32 i=0;i<7;++i)memcpy(static_cast<std::byte*>(mapped)+offset+i*element,&values[i],element);
+        std::array<std::byte,28> encoded{};
+        for(u32 i=0;i<7;++i)memcpy(encoded.data()+i*element,&values[i],element);
+        constexpr UINT lanes[4][4]{{0,1,2,3},{1,0,3,2},{3,2,1,0},{2,3,0,1}};
+        for(u32 byte=0;byte<7*element;++byte){
+            const u32 start=byte&~3u,selected=start+4<=7*element?start+lanes[swap][byte%4]:swap==1?(byte^1):byte;
+            static_cast<std::byte*>(mapped)[offset+byte]=encoded[selected];
+        }
         seed.handle->Unmap(0,nullptr);
         auto* list=renderer.RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -90,7 +97,7 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
             if(element){
                 bool rejected{};try{pass.Record(renderer,plan,&source,offset,available,element,source);}catch(const std::invalid_argument&){rejected=true;}
                 if(!rejected)throw std::runtime_error("Index expansion accepted source/output alias");
-                pass.Record(renderer,plan,available?&source:nullptr,available?offset:0,available,element,output);
+                pass.Record(renderer,plan,available?&source:nullptr,available?offset:0,available,element,output,swap);
             }else pass.RecordGenerated(renderer,plan,UINT32_MAX-3,output);
         } // The queued shader/root/source/output survive pass destruction.
         if(source.State(0)!=before)throw std::runtime_error("Index expansion lost authoritative source state");
@@ -100,7 +107,7 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
         list->CopyBufferRegion(source.handle.Get(),0,seed.handle.Get(),64,64);
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,bytes+16);renderer.Finish();
-        const std::span<const u32> ordinals=type==P::LineLoop?std::span<const u32>(loop):
+        const std::span<const u32> ordinals=type==P::PointList?std::span<const u32>(copied):type==P::LineLoop?std::span<const u32>(loop):
             type==P::QuadStrip?std::span<const u32>(quad):type==P::TriangleStrip?
             (variant==5?std::span<const u32>(strip_last):std::span<const u32>(strip_first)):std::span<const u32>(fan);
         std::vector<std::byte> expected(size_t(bytes+16),std::byte{0xcd});

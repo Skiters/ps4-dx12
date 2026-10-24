@@ -8,7 +8,7 @@ GuestIndexExpandPass::GuestIndexExpandPass(ID3D12Device* device){
     D3D12_ROOT_PARAMETER params[3]{};
     params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;params[0].Descriptor={0,0};
     params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV;params[1].Descriptor={0,0};
-    params[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;params[2].Constants={0,0,8};
+    params[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;params[2].Constants={0,0,9};
     const D3D12_ROOT_SIGNATURE_DESC desc{3,params,0,nullptr,D3D12_ROOT_SIGNATURE_FLAG_NONE};
     ComPtr<ID3DBlob> blob,errors;Check(D3D12SerializeRootSignature(&desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors));
     Check(device->CreateRootSignature(0,blob->GetBufferPointer(),blob->GetBufferSize(),IID_PPV_ARGS(&root_)));
@@ -19,19 +19,21 @@ GuestIndexExpandPass::GuestIndexExpandPass(ID3D12Device* device){
     void* data{};D3D12_RANGE none{};Check(zero_.handle->Map(0,&none,&data));memset(data,0,4);zero_.handle->Unmap(0,nullptr);
 }
 void GuestIndexExpandPass::Record(Rasterizer& renderer,const GuestIndexExpansion& plan,
-    Resource* source,u64 offset,u32 available,u32 element,Resource& output){
-    RecordInternal(renderer,plan,source,offset,available,element,output,false,0);
+    Resource* source,u64 offset,u32 available,u32 element,Resource& output,u32 swap_mode){
+    RecordInternal(renderer,plan,source,offset,available,element,output,false,0,swap_mode);
 }
 void GuestIndexExpandPass::RecordGenerated(Rasterizer& renderer,const GuestIndexExpansion& plan,u32 first,Resource& output){
-    RecordInternal(renderer,plan,nullptr,0,0,4,output,true,first);
+    RecordInternal(renderer,plan,nullptr,0,0,4,output,true,first,0);
 }
 void GuestIndexExpandPass::RecordInternal(Rasterizer& renderer,const GuestIndexExpansion& plan,
-    Resource* source,u64 offset,u32 available,u32 element,Resource& output,bool generated,u32 first){
+    Resource* source,u64 offset,u32 available,u32 element,Resource& output,bool generated,u32 first,u32 swap_mode){
     std::lock_guard lock(renderer.ExecutionMutex());
     const AmdGpu::PrimitiveType types[]{AmdGpu::PrimitiveType::TriangleFan,AmdGpu::PrimitiveType::LineLoop,
         AmdGpu::PrimitiveType::QuadStrip,AmdGpu::PrimitiveType::TriangleStrip,AmdGpu::PrimitiveType::TriangleStrip};
-    if(plan.mode>4||plan.group_width||(element!=2&&element!=4)||available>plan.input_count||!plan.output_count||
-       GuestIndexExpansion::Make(types[plan.mode],plan.input_count).output_count!=plan.output_count||
+    const bool valid_plan=plan.mode<=4?
+        GuestIndexExpansion::Make(types[plan.mode],plan.input_count).output_count==plan.output_count:
+        plan.mode==7&&plan.input_count<=UINT32_MAX/4&&plan.output_count==plan.input_count;
+    if(!valid_plan||swap_mode>3||plan.group_width||(element!=2&&element!=4)||available>plan.input_count||!plan.output_count||
        (!source&&(available||offset))||offset%element)
         throw std::invalid_argument("Invalid GPU index expansion plan/source");
     auto& input=source?*source:zero_;
@@ -55,8 +57,8 @@ void GuestIndexExpandPass::RecordInternal(Rasterizer& renderer,const GuestIndexE
     list->SetComputeRootShaderResourceView(0,input.handle->GetGPUVirtualAddress()+(offset&~u64(3)));
     list->SetComputeRootUnorderedAccessView(1,output.handle->GetGPUVirtualAddress());
     const u32 groups=(plan.output_count+127)/128,rows=(groups+65534)/65535,columns=(groups+rows-1)/rows;
-    const u32 params[]{plan.mode,plan.input_count,plan.output_count,available,generated?0:element,u32(offset%4),columns*128,first};
-    list->SetComputeRoot32BitConstants(2,8,params,0);list->Dispatch(columns,rows,1);
+    const u32 params[]{plan.mode,plan.input_count,plan.output_count,available,generated?0:element,u32(offset%4),columns*128,first,swap_mode};
+    list->SetComputeRoot32BitConstants(2,9,params,0);list->Dispatch(columns,rows,1);
     output.UavBarrier(list);output.Transition(list,D3D12_RESOURCE_STATE_INDEX_BUFFER);
     if(input.State(0)!=previous)input.Transition(list,previous);
 }

@@ -19,6 +19,10 @@ struct GuestIndexExpansion {
         if(output>UINT32_MAX/4)throw std::overflow_error("Expanded GPU index view exceeds native addressing");
         return {mode,count,u32(output)};
     }
+    static GuestIndexExpansion Copy(u32 count){
+        if(count>UINT32_MAX/4)throw std::overflow_error("GPU index copy exceeds native view addressing");
+        return {7,count,count,0};
+    }
     static bool SupportsRestart(AmdGpu::PrimitiveType type){
         using P=AmdGpu::PrimitiveType;
         switch(type){
@@ -54,13 +58,13 @@ class GuestIndexExpandPass {
     Resource zero_;
     ComPtr<ID3D12RootSignature> restart_root_;
     ComPtr<ID3D12PipelineState> restart_pipeline_;
-    void RecordInternal(Rasterizer&,const GuestIndexExpansion&,Resource*,u64,u32,u32,Resource&,bool,u32);
+    void RecordInternal(Rasterizer&,const GuestIndexExpansion&,Resource*,u64,u32,u32,Resource&,bool,u32,u32);
 public:
     explicit GuestIndexExpandPass(ID3D12Device*);
     // Source is the authoritative prepared B wrapper; missing source elements
     // are zero, matching the complete CPU decoder's padded index vector.
     void Record(Rasterizer&,const GuestIndexExpansion&,Resource* source,u64 offset,
-        u32 available,u32 element,Resource& output);
+        u32 available,u32 element,Resource& output,u32 swap_mode=0);
     void RecordGenerated(Rasterizer&,const GuestIndexExpansion&,u32 first,Resource& output);
     // Retain the GPU-computed count while selecting one original producer
     // instance. Never copy the count back to CPU for capture scheduling.
