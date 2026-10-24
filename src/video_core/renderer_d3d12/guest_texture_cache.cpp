@@ -167,7 +167,8 @@ DXGI_FORMAT OrderedColorWordStorage(const GuestTextureDesc& d){
 }
 bool IsOrderedColorClass(const GuestTextureDesc& d) {
     return d.render_target&&!d.writable&&!d.depth_target&&!d.stencil_address&&
-        !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
+        !d.one_dimensional&&!d.volume_depth&&d.first_mip<d.levels&&
+        (d.samples==1||(!d.first_mip&&d.levels==1))&&
         std::has_single_bit(d.samples)&&d.samples<=8&&
         (IsOrderedScalarClass(d)||IsOrderedIntegerClass(d)||IsOrderedPacked16Class(d)||(d.data_format==9&&(d.number_format==0||d.number_format==1))||
          (d.data_format==3&&(d.number_format==0||d.number_format==1||d.number_format==9))||
@@ -1303,7 +1304,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
          ((attachment.data_format==5||attachment.data_format==12)&&
           (attachment.number_format==0||attachment.number_format==1||attachment.number_format==7))||
          IsOrderedFloatWordClass(attachment)||(attachment.data_format==6&&attachment.number_format==7))||
-       attachment.first_mip||attachment.levels!=1||!attachment.view_layers||
+       attachment.first_mip>=attachment.levels||!attachment.view_layers||
        attachment.first_layer>=attachment.layers||
        attachment.view_layers>attachment.layers-attachment.first_layer)
         throw std::invalid_argument("Invalid native ordered color view");
@@ -1313,7 +1314,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
     D3D12_UNORDERED_ACCESS_VIEW_DESC view{};view.Format=OrderedColorWordFormat(attachment);
     if(cache)cache->ValidateWritableFormat(view.Format);
     view.ViewDimension=D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-    view.Texture2DArray={0,attachment.first_layer,attachment.view_layers,0};
+    view.Texture2DArray={attachment.first_mip,attachment.first_layer,attachment.view_layers,0};
     return view;
 }
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::StorageUav(const GuestTextureDesc& writable_view,uint32_t sample)const{
@@ -2491,6 +2492,7 @@ GuestTextureDesc GuestTextureCache::ResolveColorViewStorage(const GuestTextureDe
         return requested;
     const auto layout=LayoutGuestTexture(requested);
     auto* parent=FindValidIndependentImage(requested,layout);
+    if(!parent)if(auto rebased=RebaseColorSubresource(requested,layout,true))return rebased->view;
     if(!parent||!CompatibleGuestColorSubview(parent->desc,parent->layout,requested,layout))
         return requested;
     auto storage=parent->desc;
@@ -2758,12 +2760,12 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
 }
 std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColorSubresource(
     const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
-    if(desc.writable||desc.render_target||desc.depth_target||desc.stencil_address||
+    if(desc.writable||desc.depth_target||desc.stencil_address||
        desc.one_dimensional||desc.volume_depth||desc.samples!=1||desc.levels!=1||
        desc.first_mip||!desc.layers||desc.first_layer>=desc.layers||!desc.view_layers||
        desc.view_layers>desc.layers-desc.first_layer||layout.mips.size()!=1||
        layout.block_extent!=1||layout.expanded_bytes_per_pixel||desc.pow2_padding||
-       desc.storage_height||desc.storage_slice_bytes)return std::nullopt;
+       (!desc.render_target&&(desc.storage_height||desc.storage_slice_bytes)))return std::nullopt;
     if(FindValidIndependentImage(desc,layout))return std::nullopt;
     const auto& local=layout.mips[0];
     if(local.offset||!local.slice_bytes)return std::nullopt;
@@ -2785,14 +2787,15 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
             const auto layer=relative/part.slice_bytes;
             if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer||
                !MatchesGuestSliceAddressing(parent.desc,parent.layout,mip,desc,layout,UINT(layer)))continue;
-            auto view=parent.desc;view.render_target=false;
+            auto view=parent.desc;view.render_target=desc.render_target;
             view.data_format=desc.data_format;view.number_format=desc.number_format;
             view.native_raw32=desc.native_raw32;view.native_packed10_raw=desc.native_packed10_raw;
             view.sampled_depth=desc.sampled_depth;view.swizzle=desc.swizzle;
-            view.first_mip=mip;view.levels=mip+1;view.min_lod=mip*256;
+            view.first_mip=mip;view.levels=desc.render_target?parent.desc.levels:mip+1;view.min_lod=mip*256;
             view.first_layer=UINT(layer)+desc.first_layer;view.view_layers=desc.view_layers;
             if(!CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
-               !CanBindNativeWordFormat(parent,view))continue;
+               !CanBindNativeWordFormat(parent,view)||
+               (desc.render_target&&!(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)))continue;
             if(parent.HasUnprotectedCpuPages())
                 throw std::runtime_error("Color subresource lookup requires boundary validation");
             if(result&&result->parent!=&parent){

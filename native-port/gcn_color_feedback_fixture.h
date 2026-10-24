@@ -13,7 +13,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
-    bool retained_mips=false,bool grown_mips=false){
+    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -97,7 +97,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.ps_program.address=reinterpret_cast<u64>(program.data())>>8;
         regs.ps_program.settings.num_user_regs=feedback?8:0;regs.ps_program.settings.num_vgprs=1;
         if(feedback)memcpy(regs.ps_program.user_data.data(),&image,sizeof(image));
-        if(shared_clear&&cb.cmask_base_address)
+        if((shared_clear||shifted_mip)&&cb.cmask_base_address)
             std::fill_n(physical.begin()+49152,size_t(GuestCmaskBytes(cb)),std::byte{0xff});
         rasterizer.Draw(false);
         if(memcmp(backing,physical.data(),65536))
@@ -332,6 +332,31 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         if(retained_mips||grown_mips){
             image.base_level=1;
             probe(left,.375f); // Mip1 survives every mip0 render/feedback write.
+        }
+        if(shifted_mip){
+            const auto saved_cb=cb;
+            const auto mip_address=sampled.address+sampled_layout.mips[1].offset;
+            if(mip_address&255)throw std::runtime_error("Shifted CB mip is not register aligned");
+            cb.base_address=u32(mip_address>>8);cb.pitch.tile_max=cb.slice.tile_max=0;
+            cb.info.fast_clear=1;cb.cmask_base_address=u32((base+49152)>>8);cb.cmask_slice.tile_max=0;
+            cb.clear_word0=0x3e800000;cb.clear_word1=0;
+            const auto metadata_bytes=GuestCmaskBytes(cb);
+            rasterizer.InvalidateMemory(base+49152,metadata_bytes);
+            memset(memory+49152,0,size_t(metadata_bytes));
+            std::fill_n(physical.begin()+49152,size_t(metadata_bytes),std::byte{0});
+            gpu.last_cb_extent[0]={4,4};
+            regs.viewports[0].xscale=2;regs.viewports[0].yscale=-2;
+            regs.viewports[0].xoffset=regs.viewports[0].yoffset=2;
+            regs.generic_scissor.top_left_x=2;
+            draw(seed,false); // Clear left to .25; render right to 1 in parent mip1.
+            cb=saved_cb;gpu.last_cb_extent[0]={8,8};
+            regs.viewports[0].xscale=4;regs.viewports[0].yscale=-4;
+            regs.viewports[0].xoffset=regs.viewports[0].yoffset=4;
+            regs.generic_scissor.top_left_x=0;
+            expected=physical;
+            alignas(256) std::array<u32,128> middle{};sample(middle,2,0x4645454447430051ULL);
+            probe(left,.125f);probe(middle,.5f);
+            image.base_level=0;probe(left,.125f); // Original mip0 remains .25.
         }
         return;
     }

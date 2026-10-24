@@ -787,15 +787,15 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     // with the same codec as physical materialization, before changing planes.
     const auto clear=DecodeGuestColorClear(b);
     if(!page_watch_||!d.render_target||d.depth_target||d.stencil_address||d.writable||
-       d.one_dimensional||d.volume_depth||d.first_mip||
+       d.one_dimensional||d.volume_depth||d.first_mip>=d.levels||
        !clear||d.UsesRaw32()||
        d.data_format!=clear->data_format||d.number_format!=clear->number_format||
        l.bytes_per_pixel!=clear->pixel_bytes||l.expanded_bytes_per_pixel||l.block_extent!=1||
        b.info.cmask_addr_type||b.info.compression||b.info.dcc_enable||
        !has_backing_(d.address,l.guest_bytes))return false;
     const auto meta_bytes=GuestCmaskBytes(b),slice_bytes=meta_bytes/b.NumSlices();
-    if(metadata.size()!=meta_bytes||d.first_layer>=b.NumSlices()||!d.view_layers||
-       d.view_layers>b.NumSlices()-d.first_layer||
+    if(metadata.size()!=meta_bytes||b.BaseSlice()>=b.NumSlices()||!d.view_layers||
+       d.view_layers>b.NumSlices()-b.BaseSlice()||d.first_layer<b.BaseSlice()||
        Overlap(d.address,l.guest_bytes,b.CmaskAddress(),meta_bytes))return false;
     if(!plan.Pending())return false;
     GuestTextureCache::Entry* image=bound_target;
@@ -832,11 +832,13 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     // Use exactly the CPU materializer's validated tile plan. Rectangles are
     // clipped at logical edges; expanded tiles are not included in mixed layers.
     std::map<UINT,std::vector<D3D12_RECT>> regions;
+    const auto width=std::max(d.width>>d.first_mip,1u),height=std::max(d.height>>d.first_mip,1u);
+    const auto layer_offset=d.first_layer-b.BaseSlice();
     for(const auto layer:plan.uniform_layers)
-        regions[layer].push_back({0,0,LONG(d.width),LONG(d.height)});
+        regions[layer+layer_offset].push_back({0,0,LONG(width),LONG(height)});
     for(const auto& tile:plan.tiles)
-        regions[tile.layer].push_back({LONG(tile.x),LONG(tile.y),
-            LONG(std::min(tile.x+8,d.width)),LONG(std::min(tile.y+8,d.height))});
+        regions[tile.layer+layer_offset].push_back({LONG(tile.x),LONG(tile.y),
+            LONG(std::min(tile.x+8,width)),LONG(std::min(tile.y+8,height))});
     ComPtr<ID3D12DescriptorHeap> heap;D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
     heap_desc.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV;heap_desc.NumDescriptors=UINT(regions.size());
     Check(DX12_API_CALL(device_->CreateDescriptorHeap(&heap_desc,IID_PPV_ARGS(&heap))));
@@ -844,7 +846,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     auto handle=heap->GetCPUDescriptorHandleForHeapStart();
     for(const auto& region:regions){
         auto view=d;view.first_layer=region.first;view.view_layers=1;
-        auto rtv=image->Rtv(view);if(raw_program)rtv.Format=raw_program->format;
+        auto rtv=image->Rtv(view,d.first_mip);if(raw_program)rtv.Format=raw_program->format;
         DX12_API_CALL(device_->CreateRenderTargetView(image->texture.handle.Get(),&rtv,handle));handle.ptr+=step;
     }
     // RTV clear writes all samples of each selected layer. Unsupported raw
@@ -864,7 +866,7 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     handle=heap->GetCPUDescriptorHandleForHeapStart();
     for(const auto& region:regions){
         const auto& rectangles=region.second;
-        if(raw_program)GuestRawColorClear::Record(list,*raw_program,handle,d.width,d.height,rectangles,*clear);
+        if(raw_program)GuestRawColorClear::Record(list,*raw_program,handle,width,height,rectangles,*clear);
         else DX12_API_CALL(list->ClearRenderTargetView(handle,clear->rtv.data(),UINT(rectangles.size()),rectangles.data()));
         handle.ptr+=step;
     }
@@ -890,9 +892,17 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     if(!ReadMemory(b.CmaskAddress(),meta_bytes))
         throw std::runtime_error("Native CMASK backing is not mapped");
     ValidateHostMemory(b.CmaskAddress(),meta_bytes,true);
+    // CMASK belongs to the original CB descriptor, even when its RTV selects
+    // an interior mip/layer of a larger native image. Keep metadata addressing
+    // local; only the destination view translates those layer indices.
+    const auto clear_width=std::max(d.width>>d.first_mip,1u),clear_height=std::max(d.height>>d.first_mip,1u);
+    if(clear_width>UINT16_MAX||clear_height>UINT16_MAX)
+        throw std::out_of_range("Native CMASK view exceeds guest extent fields");
+    const auto clear_desc=DescribeGuestColorBuffer(b,{u16(clear_width),u16(clear_height)});
+    const auto clear_layout=LayoutGuestTexture(clear_desc);
     GuestColorClearPlan plan;
     try {
-        plan=PlanGuestColorClear(b,d,l,
+        plan=PlanGuestColorClear(b,clear_desc,clear_layout,
             {reinterpret_cast<const std::byte*>(b.CmaskAddress()),size_t(meta_bytes)});
     } catch(...) {
         // Opt-in, bounded reproduction data; keep the original failure intact.
@@ -917,7 +927,8 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     if(!plan.Pending())return;
     if(MaterializeOwnedColorClear(b,d,l,plan,
         {reinterpret_cast<std::byte*>(b.CmaskAddress()),size_t(meta_bytes)},bound_target,retired))return;
-    if(native_only)throw std::runtime_error("Recreated native color target has no exact pending CMASK clear path");
+    if(native_only||d.address!=b.Address()||d.first_mip)
+        throw std::runtime_error("Recreated native color target has no exact pending CMASK clear path");
     if(!ReadMemory(d.address,l.guest_bytes))
         throw std::runtime_error("Native color backing is not mapped");
     ValidateHostMemory(d.address,l.guest_bytes,true);
@@ -1116,6 +1127,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     std::array<GuestTextureDesc,9> descriptions{};
     std::array<GuestTextureLayout,9> layouts{};
+    std::vector<std::shared_ptr<void>> color_storage_pins;
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
     std::array<bool,8> color_storage_feedback{};
@@ -1140,6 +1152,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         descriptions[i]=textures_.ResolveDepthViewStorage(descriptions[i]);
         layouts[i]=LayoutGuestTexture(descriptions[i]);
+        if(auto* parent=textures_.FindValidIndependentImage(descriptions[i],layouts[i]))
+            color_storage_pins.push_back(textures_.PinBinding(*parent));
         ValidateGpuBacking(descriptions[i].address,layouts[i].guest_bytes,true);
         for(UINT j=0;j<i;++j)if(formats[j]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(descriptions[i].address,layouts[i].guest_bytes,descriptions[j].address,layouts[j].guest_bytes)){
@@ -1777,7 +1791,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     const auto count=descriptions[i].view_layers;
                     for(UINT layer=first;layer<first+count;++layer)
                         entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 layer*entry.desc.levels);
+                                                 descriptions[i].first_mip+layer*entry.desc.levels);
                     const auto view=entry.OrderedColorUav(descriptions[i]);
                     bindings.Uav(Shader::NativeOrderedColor::Register(i),
                                  Shader::NativeOrderedColor::DescriptorSet,
@@ -1799,7 +1813,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                                      plane.handle.Get(),entry.StorageUav(descriptions[i],sample));
                     }
                 }
-            }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
+            }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i],descriptions[i].first_mip)};
         }
         bindings.Prepare();
         std::set<ID3D12Resource*> feedback_copies;
