@@ -31,6 +31,14 @@ inline u32 NativePointMiscLocation(const Shader::Info& vertex,bool emulated_clip
     }
     throw Shader::NativePointCapture::Required("Native point interface needs a free generic varying slot");
 }
+inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip){
+    try{return NativePointMiscLocation(vertex,emulated_clip);}
+    catch(const Shader::NativePointCapture::Required&){
+        // Ordinary point capture consumes an original point-output GS. It
+        // cannot be substituted for this polygon producer when slots run out.
+        throw std::runtime_error("Polygon point payload needs a buffered varying transport");
+    }
+}
 std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool emulated_clip=false,u32 live_parameters=~0u,
     std::span<const Shader::NativePointOutput> transport={});
 struct GuestPolygonPointConfig {

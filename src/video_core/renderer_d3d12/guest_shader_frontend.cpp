@@ -46,6 +46,8 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     std::span<const Shader::NativeImageWrite> signed_packed_views,
     std::span<const Shader::NativeImageWrite> raw32_views) {
     auto runtime = VideoCore::BuildGuestRuntimeInfo(regs, compute, hardware, logical, context);
+    if(hardware==Shader::HwStage::Vertex)
+        runtime.hw.vs.native_polygon_point_transport=GuestPolygonPointGeometryState(regs);
     if(logical==Shader::SwStage::Fragment){
         ConfigureOrderedColorTargets(runtime, regs,profile_.native_alpha_blend_factor);
         runtime.hw.fs.native_point_input_compaction=(regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&

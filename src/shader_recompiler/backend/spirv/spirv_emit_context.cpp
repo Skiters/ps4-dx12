@@ -698,19 +698,24 @@ void EmitContext::DefineVertexBlock() {
     }
     const bool native_vs_points=sw_stage==SwStage::Vertex&&runtime_info.sw.vs.native_point_expansion&&
         info.stores.GetAny(IR::Attribute::PointSize);
-    if(native_vs_points)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePointMiscLocation(info,
+    const bool polygon_misc=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
+        (info.stores.GetAny(IR::Attribute::PointSize)||info.stores.GetAny(IR::Attribute::RenderTargetIndex)||
+         info.stores.GetAny(IR::Attribute::ViewportIndex));
+    if(polygon_misc)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePolygonPointMiscLocation(info,
+        sw_stage==SwStage::Vertex&&profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance)));
+    else if(native_vs_points)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePointMiscLocation(info,
         profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
         runtime_info.sw.vs.native_point_live_parameters,runtime_info.sw.vs.native_point_outputs));
-    if (info.stores.GetAny(IR::Attribute::PointSize)&&!native_vs_points) {
+    if (info.stores.GetAny(IR::Attribute::PointSize)&&!native_vs_points&&!polygon_misc) {
         output_point_size = sw_stage==SwStage::Geometry&&runtime_info.hw.gs.native_point_expansion?
             DefineVariable(F32[1],std::nullopt,spv::StorageClass::Private):
             DefineVariable(F32[1], spv::BuiltIn::PointSize, spv::StorageClass::Output);
     }
-    if (info.stores.GetAny(IR::Attribute::RenderTargetIndex)&&!native_vs_points) {
+    if (info.stores.GetAny(IR::Attribute::RenderTargetIndex)&&!native_vs_points&&!polygon_misc) {
         output_layer = capture?DefineVariable(U32[1],std::nullopt,spv::StorageClass::Private):
             DefineVariable(U32[1], spv::BuiltIn::Layer, spv::StorageClass::Output);
     }
-    if (info.stores.GetAny(IR::Attribute::ViewportIndex)&&!native_vs_points) {
+    if (info.stores.GetAny(IR::Attribute::ViewportIndex)&&!native_vs_points&&!polygon_misc) {
         output_viewport_index = capture?DefineVariable(U32[1],std::nullopt,spv::StorageClass::Private):
             DefineVariable(U32[1], spv::BuiltIn::ViewportIndex, spv::StorageClass::Output);
     }

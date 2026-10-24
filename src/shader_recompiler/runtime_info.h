@@ -113,6 +113,7 @@ struct HwVertexRuntimeInfo {
     bool emulate_depth_negative_one_to_one{};
     bool clip_disable{};
     u32 user_clip_plane_mask{};
+    bool native_polygon_point_transport{};
 
     bool operator==(const HwVertexRuntimeInfo& other) const noexcept = default;
 };

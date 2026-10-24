@@ -95,7 +95,8 @@ int main(int argc,char** argv){try{
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned"||
         mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned";
-    const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||mode=="polygon-points-owned";
+    const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||
+        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
     const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
@@ -209,7 +210,8 @@ int main(int argc,char** argv){try{
             mode=="color-feedback-buffer-owned"||mode=="color-feedback-uint-buffer-owned",
             mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned",mode=="color-depth-shared-owned");
     }else if(snorm_color){
-        if(mode=="polygon-points-owned")RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
+        if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned")
+            RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned");
         else RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,
                 mode=="snorm-dual-source-owned");
     }else if(mixed_samples){
@@ -1508,6 +1510,14 @@ int main(int argc,char** argv){try{
     }
     if(packed16_format){
         puts("PASS: 24 actual GCN packed16 mixed-constant draws, original guest words/swizzles, missing alpha, masks, MSAA1/2/4/8, layers and padding");
+        return 0;
+    }
+    if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"){
+        puts("PASS: actual GCN polygon points, clipped corners, original winding, exact additive counts, routing and backing guards");
+        return 0;
+    }
+    if(mode=="snorm-dual-source-owned"){
+        puts("PASS: original GCN secondary exports, ordered SRC1 factors, inverses, per-sample quantization and masked backing guards");
         return 0;
     }
     puts(normalized_edges?"PASS: 48 actual GCN normalized blend boundary draws, source/factor clamp and selection, MSAA1/2/4/8, masked channels, layers and physical padding":color_feedback?"PASS: actual GCN GPU feedback current pixels, disjoint rectangles and physical CPU preservation":half_edges?"PASS: 136 actual GCN RG16 FLOAT RNE boundary draws, zeros/subnormals/ties/normal/overflow/infinity and masked NaN bits, MSAA1/2/4/8 and padding":half_mixed_constants?"PASS: 56 actual GCN RG16 FLOAT sample1/2/4/8 mixed constant blends, per-fragment half rounding, NaN/zero masked bits, signed HDR, overlap and padding":float_mixed_constants?"PASS: 48 actual GCN R32 FLOAT sample1/2/4/8 mixed constant-color/alpha fallback draws, exact floats, masks, missing alpha, signed HDR, overlapping fragments, layers and padding":snorm_color?"PASS: actual GCN packed10 SNORM unblended/logic fixture and GPU validation":independent_unorm_logic?"PASS: 136 actual GCN RGBA8 UNORM sample1/4 draws, all logic ops, three independent MRT masks, disjoint layers and full padding":mixed_constant_blend?"PASS: eight actual GCN RGBA8 sample1/4 mixed constant-color/alpha fallback draws, disjoint layers and full padding":mixed_samples?"PASS: actual GCN mixed color/depth draw fixture and GPU validation":shared_exponent?"PASS: actual PM4 shared exponent alias fixture and GPU validation":writable_word?"PASS: actual PM4 writable packed10/word alias fixture and GPU validation":readonly_numeric?"PASS: actual PM4 readonly numeric alias fixture and GPU validation":cached_depth_packed_storage?

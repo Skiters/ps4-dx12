@@ -296,8 +296,9 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
 }
 
 void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 element) {
-    if(ctx.sw_stage==SwStage::Vertex&&ctx.runtime_info.sw.vs.native_point_expansion&&
-       ctx.info.stores.GetAny(IR::Attribute::PointSize)&&
+    if(((ctx.sw_stage==SwStage::Vertex&&ctx.runtime_info.sw.vs.native_point_expansion&&
+         ctx.info.stores.GetAny(IR::Attribute::PointSize))||
+        (ctx.hw_stage==HwStage::Vertex&&ctx.runtime_info.hw.vs.native_polygon_point_transport))&&
        (attr==IR::Attribute::PointSize||attr==IR::Attribute::RenderTargetIndex||attr==IR::Attribute::ViewportIndex)){
         const u32 component=attr==IR::Attribute::PointSize?0u:attr==IR::Attribute::RenderTargetIndex?1u:2u;
         ctx.OpStore(ctx.OpAccessChain(ctx.output_u32,ctx.native_point_misc,ctx.ConstU32(component)),

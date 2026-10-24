@@ -454,9 +454,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     using Sirit::Id;
     using A=Shader::IR::Attribute;
     using Q=Shader::Qualifier;
-    for(const auto attribute:{A::PointSize,A::ViewportIndex,A::RenderTargetIndex})
-        if(vertex.stores.GetAny(attribute))
-            throw std::runtime_error("Polygon point fill needs routed size/layer/viewport transport");
+    const bool sized=vertex.stores.GetAny(A::PointSize),routed_viewport=vertex.stores.GetAny(A::ViewportIndex),
+        routed_layer=vertex.stores.GetAny(A::RenderTargetIndex);
     PointReplayEmitter ctx;ctx.AddCapability(spv::Capability::Geometry);
     const auto u32_type=ctx.TypeUInt(32),f32=ctx.TypeFloat(32),b1=ctx.TypeBool();
     const auto vec4=ctx.TypeVector(f32,4),void_type=ctx.TypeVoid();
@@ -466,9 +465,17 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto output_position=ctx.Variable(vec4,spv::StorageClass::Output,{},spv::BuiltIn::Position);
     const auto primitive=ctx.Variable(u32_type,spv::StorageClass::Input,{},spv::BuiltIn::PrimitiveId);
     const auto output_primitive=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::PrimitiveId);
+    Id input_misc{},output_viewport{},output_layer{};
+    const auto uint4=ctx.TypeVector(u32_type,4);
+    if(sized||routed_viewport||routed_layer)
+        input_misc=ctx.Variable(ctx.TypeArray(uint4,three),spv::StorageClass::Input,
+            NativePolygonPointMiscLocation(vertex,config.emulated_clip));
+    if(routed_viewport){ctx.AddCapability(spv::Capability::MultiViewport);
+        output_viewport=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);}
+    if(routed_layer)output_layer=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
     struct Varying {Id type,input,output;u32 width;Q qualifier;};
     std::vector<Varying> varyings;
-    u32 output_components=5;
+    u32 output_components=5+u32(routed_viewport)+u32(routed_layer);
     for(u32 parameter=0;parameter<Shader::IR::NumParams;++parameter){
         if(!vertex.stores.GetAny(A::Param0+parameter))continue;
         std::optional<Q> qualifier;
@@ -505,7 +512,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     if(cull_mask){ctx.AddCapability(spv::Capability::CullDistance);
         culls=ctx.Variable(ctx.TypeArray(distances,three),spv::StorageClass::Input,{},spv::BuiltIn::CullDistance);}
     const u32 planes=6+std::popcount(clip_mask),capacity=3+planes;
-    const u32 fields=1+u32(varyings.size())+u32(clip_mask!=0)*2;
+    const u32 size_field=1+u32(varyings.size()),clip_field=size_field+u32(sized);
+    const u32 fields=clip_field+u32(clip_mask!=0)*2;
     if(capacity*4*output_components>1024)
         throw std::runtime_error("Polygon point payload exceeds native geometry output capacity; needs capture");
     const auto runtime=Shader::Backend::SPIRV::DefinePointRuntime(ctx);ctx.interfaces.push_back(runtime);
@@ -552,6 +560,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
         ctx.OpStore(cursor,ctx.OpIAdd(u32_type,index,one));ctx.OpBranch(header);ctx.AddLabel(done);
     };
     ctx.OpStore(count,three);
+    const auto misc=Sirit::ValidId(input_misc)?input(uint4,input_misc,ci(config.last_provoking?2:0)):Id{};
+    const auto viewport=routed_viewport?ctx.OpCompositeExtract(u32_type,misc,2u):zero;
     for(u32 index=0;index<3;++index){
         ctx.OpStore(pointer(data[0],ci(index),0),input(vec4,position,ci(index)));
         for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
@@ -562,10 +572,13 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                 channels[channel]=varying.width==1?value:component(value,channel);
             ctx.OpStore(pointer(data[0],ci(index),field+1),ctx.OpCompositeConstruct(vec4,channels));
         }
+        if(sized){const auto value=input(uint4,input_misc,ci(index));
+            const auto size=ctx.OpBitcast(f32,ctx.OpCompositeExtract(u32_type,value,0u));
+            ctx.OpStore(pointer(data[0],ci(index),size_field),ctx.OpCompositeConstruct(vec4,size,fzero,fzero,fzero));}
         if(clip_mask)for(u32 word=0;word<2;++word){std::array<Id,4> channels{};
             for(u32 channel=0;channel<4;++channel)channels[channel]=config.emulated_clip&&word?fzero:
                 distance_input(clips,index,word*4+channel);
-            ctx.OpStore(pointer(data[0],ci(index),1+u32(varyings.size())+word),ctx.OpCompositeConstruct(vec4,channels));}
+            ctx.OpStore(pointer(data[0],ci(index),clip_field+word),ctx.OpCompositeConstruct(vec4,channels));}
     }
     auto visible=ctx.ConstantTrue(b1);
     for(u32 channel=0;channel<8;++channel)if(cull_mask&(1u<<channel)){
@@ -584,7 +597,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
             const auto from=data[side],to=data[side^1];
             const auto n=ctx.OpLoad(u32_type,count);ctx.OpStore(next_count,zero);
             const auto distance=[&](Id index,Id p){
-                if(plane>=6)return component(load(from,index,1+u32(varyings.size())+(plane-6)/4),(plane-6)%4);
+                if(plane>=6)return component(load(from,index,clip_field+(plane-6)/4),(plane-6)%4);
                 const auto w=component(p,3),axis=component(p,plane/2);
                 if(plane==4)return axis;
                 return plane%2?ctx.OpFSub(f32,w,axis):ctx.OpFAdd(f32,w,axis);
@@ -616,7 +629,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                             weight=ctx.OpFDiv(f32,ctx.OpFMul(f32,t,component(b,3)),component(p,3));
                         const auto x=load(from,previous,field),y=load(from,current,field);
                         auto value=field<=varyings.size()&&varyings[field-1].qualifier==Q::Flat?x:lerp(x,y,weight);
-                        if(plane>=6&&field==1+varyings.size()+(plane-6)/4)
+                        if(plane>=6&&field==clip_field+(plane-6)/4)
                             value=ctx.OpCompositeInsert(vec4,fzero,value,(plane-6)%4);
                         ctx.OpStore(pointer(to,out,field),value);
                     }
@@ -639,7 +652,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                 ctx.OpStore(area_sum,ctx.OpFAdd(f32,ctx.OpLoad(f32,area_sum),projected));
             });
             const auto flips=ctx.OpLoad(u32_type,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Uniform,u32_type),runtime,ci(9)));
-            const auto flip=ctx.OpINotEqual(b1,ctx.OpBitwiseAnd(u32_type,flips,one),zero);
+            const auto selected_flips=ctx.OpShiftRightLogical(u32_type,flips,ctx.OpUMin(u32_type,viewport,ci(15)));
+            const auto flip=ctx.OpINotEqual(b1,ctx.OpBitwiseAnd(u32_type,selected_flips,one),zero);
             const auto area=ctx.OpLoad(f32,area_sum);
             const auto native_area=ctx.OpSelect(f32,flip,ctx.OpFNegate(f32,area),area);
             const auto front=config.front_ccw?ctx.OpFOrdGreaterThan(b1,native_area,fzero):ctx.OpFOrdLessThan(b1,native_area,fzero);
@@ -654,8 +668,11 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                     outputs.push_back({varying.type,varying.output,varying.width==1?channels[0]:ctx.OpCompositeConstruct(varying.type,channels)});
                 }
                 outputs.push_back({u32_type,output_primitive,ctx.OpLoad(u32_type,primitive)});
-                if(config.emulated_clip)outputs.push_back({vec4,output_clips,load(clipped,index,1+u32(varyings.size()))});
-                Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,load(clipped,index,0),fone,zero,true,
+                if(config.emulated_clip)outputs.push_back({vec4,output_clips,load(clipped,index,clip_field)});
+                if(routed_viewport)outputs.push_back({u32_type,output_viewport,viewport});
+                if(routed_layer)outputs.push_back({u32_type,output_layer,ctx.OpCompositeExtract(u32_type,misc,1u)});
+                const auto size=sized?component(load(clipped,index,size_field),0):fone;
+                Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,load(clipped,index,0),size,viewport,true,
                     output_position,outputs,{},ctx.OpLogicalNot(b1,front));
             });});
         });
