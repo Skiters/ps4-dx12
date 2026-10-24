@@ -791,6 +791,11 @@ int main(int argc,char** argv){try{
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
     if(argc==2&&strcmp(argv[1],"--large-image-transfer")==0){RunLargeImageTransferFixture(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--depth-color-geometry")==0){
+        RunDirtyCachedDepthFixture(device.Get(),true,false,0,false,0,0,false,true);
+        RunDirtyCachedDepthFixture(device.Get(),false,true,0,false,0,0,false,true);
+        RunDirtyCachedDepthFixture(device.Get(),false,false,0,true,0,0,false,true);return 0;
+    }
     if(argc==2&&strcmp(argv[1],"--readonly-depth-conversion")==0){RunReadonlyDepthConversion(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());return 0;}

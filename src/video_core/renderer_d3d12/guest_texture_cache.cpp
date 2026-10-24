@@ -1952,6 +1952,21 @@ bool CanMapIndependentDepthImage(const GuestTextureDesc& source,const GuestTextu
     if(source.address==target.address&&MatchesReferenceOverlapClass(source,source_layout,target,target_layout)&&
        GuestMultisample::CanReinterpretColorAsMsDepth(source,source_layout,target,target_layout))return true;
     if(MatchesReferenceDepthImage(source,source_layout,target,target_layout))return true;
+    // ResolveOverlap admits equal-address depth recreation by BlockDim
+    // (pitch/height) and texel bits, not by guest tiling or logical width.
+    // CopyImage/CopyImageWithBuffer copy the SOURCE extent at (0,0); do not
+    // invent clipped copies for a smaller destination. Each native source
+    // plane is retiled into the destination's own physical addressing below.
+    if(source.address==target.address&&source.samples==1&&target.samples==1&&
+       (source.depth_target||target.depth_target)&&
+       !source.volume_depth&&!target.volume_depth&&!source.one_dimensional&&!target.one_dimensional&&
+       source.width&&source.width<=target.width&&source.levels&&target.levels&&source.layers&&target.layers&&
+       MatchesReferenceOverlapClass(source,source_layout,target,target_layout)&&
+       (!source.depth_target||IsGuestDepthPlaneStorage(source,source_layout))&&
+       (!target.depth_target||IsGuestDepthPlaneStorage(target,target_layout))&&
+       IsDirectDepthWordClass(source,source_layout)&&IsDirectDepthWordClass(target,target_layout)&&
+       MatchesGuestMipLayout(LayoutGuestTexture(source),source_layout)&&
+       MatchesGuestMipLayout(LayoutGuestTexture(target),target_layout))return true;
     // Original CopyImage/CopyImageWithBuffer copy the mip/layer intersection
     // after lexicographic resource recreation. More mips can mean fewer layers.
     // Byte prefixes are NOT physical mip prefixes when layer counts differ:
@@ -3663,7 +3678,12 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
         slice.buffer=multisampled?GuestTiler::Scratch(device_.Get(),slice.bytes):
             Buffer(device_.Get(),(slice.bytes+3)&~u64(3),D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
         const auto source_format=GuestTiler::DescribeNativeFormat(source_interpreted,source_physical);
-        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,interpreted,physical,
+        // The pinned copy uses source width/height, leaving the target-only
+        // region initialized from its B seed. Keep TARGET pitch, mip offsets,
+        // tiling and layer strides while bounding work by the source extent.
+        auto copied=interpreted;
+        if(mapped_desc){copied.width=source_interpreted.width;copied.height=source_interpreted.height;}
+        slice.dispatch=image.tiler->Prepare(slice.buffer,output,mask,copied,physical,
             slice.mip,slice.layer,slice.footprint,slice.native_bytes,true,false,&source_format);
         if(multisampled)slice.samples=image.multisample->Prepare(image.texture,slice.buffer,
             image.desc,image.layout,slice.layer,plane,false);

@@ -7,7 +7,7 @@
 #include <cstring>
 namespace NativeDX12 {
 inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=false,bool color_target=false,int late_change=0,bool writable_target=false,
-    UINT color_format=0,UINT color_number=0,bool sampled_color_source=false){
+    UINT color_format=0,UINT color_number=0,bool sampled_color_source=false,bool remap_geometry=false){
     const auto require=[](bool ok,const char* why){if(!ok)throw std::runtime_error(why);};
     unsigned executed{};
     for(const UINT format:{2u,4u})for(const UINT tile:{0u,8u})for(const bool modified:{false,true})for(const bool growth:{false,true}){
@@ -26,6 +26,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
             target.depth_target=false;target.render_target=!writable_target;target.writable=writable_target;target.number_format=7;
             if(color_format){target.data_format=color_format;target.number_format=color_number;}
         }
+        if(remap_geometry){target.width=15;target.tile_mode=tile==8?0:8;}
         const bool uint_color=color_format&&color_number==4;
         const bool packed16=color_format>=16&&color_format<=19;
         const bool raw_packed=packed16&&writable_target;
@@ -130,6 +131,14 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
         const auto storage=cache.ResolveDepthViewStorage(requested);
         require(storage==target&&cache.FindCachedDepthRecreationSource(storage,layout)==&image,
             "Dirty native source lost normalized recreation extent");
+        if(remap_geometry){
+            auto clipped=target;clipped.width=source.width-1;
+            require(!cache.FindCachedDepthRecreationSource(clipped,LayoutGuestTexture(clipped)),
+                "Depth recreation invented a clipped source copy");
+            auto different_bucket=target;different_bucket.pitch+=16;
+            require(!cache.FindCachedDepthRecreationSource(different_bucket,LayoutGuestTexture(different_bucket)),
+                "Depth recreation ignored the pinned BlockDim overlap predicate");
+        }
         require(!cache.FindCachedDepthRecreationSource(source,old_layout),"Same-resource dirty refresh incorrectly selected old native copy");
         if(growth&&!color_source){auto rebased=source;rebased.stencil_address=base+dc+sc;
             require(!cache.FindCachedDepthRecreationSource(rebased,old_layout),
@@ -188,7 +197,7 @@ inline void RunDirtyCachedDepthFixture(ID3D12Device* device,bool color_source=fa
                 !cache.GetMetaInfo(htile),"Actual RT binding lost native copy/original flags or metadata retirement");
             auto expected=current_d;
             for(UINT m=0;m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)
-            for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){
+            for(UINT y=0;y<std::max(source.height>>m,1u);++y)for(UINT x=0;x<std::max(source.width>>m,1u);++x){
                 const u32 value=bits(1,m,l,x,y);memcpy(expected.data()+GuestPixelOffset(target,layout,m,l,x,y),&value,layout.bytes_per_pixel);}
             auto source_native=std::make_shared<GuestImageReadback>(device,image,renderer.RecordingList());
             auto before_native=std::make_shared<GuestImageReadback>(device,converted,renderer.RecordingList());
@@ -314,7 +323,8 @@ output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
             std::vector<u32> pixels;
             for(UINT m=0;m<target.levels;++m)for(UINT l=0;l<target.layers;++l)for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){
                 const bool drawn=!m&&!l&&x>=1&&x<4&&y>=2&&y<5,cleared=!m&&!l&&x>=8&&y<8;
-                pixels.push_back(drawn||cleared?written_color_word(cleared):bits(m<source.levels&&l<source.layers?1:5,m,l,x,y));}
+                pixels.push_back(drawn||cleared?written_color_word(cleared):bits(m<source.levels&&l<source.layers&&
+                    x<std::max(source.width>>m,1u)&&y<std::max(source.height>>m,1u)?1:5,m,l,x,y));}
             const u64 bytes=pixels.size()*4;auto output=GuestTiler::Scratch(device,bytes),typed=Buffer(device,bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
             renderer.RetainUntilFinish([output,typed,root,pipeline](u64){(void)output;(void)typed;(void)root;(void)pipeline;});
             converted.texture.Transition(list,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);u32 base_word{};
@@ -334,7 +344,7 @@ output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
             auto actual_source=old_d,actual_source_s=old_stencil;source_native->Resolve(renderer.CompletedFence(),actual_source,actual_source_s);
             auto actual_before=current_d;before_native->Resolve(renderer.CompletedFence(),actual_before);
             auto before_expected=current_d;
-            for(UINT m=0;m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){const u32 value=bits(1,m,l,x,y);memcpy(before_expected.data()+GuestPixelOffset(target,layout,m,l,x,y),&value,layout.bytes_per_pixel);}
+            for(UINT m=0;m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)for(UINT y=0;y<std::max(source.height>>m,1u);++y)for(UINT x=0;x<std::max(source.width>>m,1u);++x){const u32 value=bits(1,m,l,x,y);memcpy(before_expected.data()+GuestPixelOffset(target,layout,m,l,x,y),&value,layout.bytes_per_pixel);}
             auto actual=current_d;after_native->Resolve(renderer.CompletedFence(),actual);
             const auto diagnose=[](const char* name,const auto& a,const auto& b){
                 for(size_t i=0;i<a.size();++i)if(a[i]!=b[i]){printf("MISMATCH %s byte=%zu actual=%02x expected=%02x\n",name,i,
@@ -429,7 +439,7 @@ output.Store(4*(base+(p.z*height+p.y)*width+p.x),word);})";
         require(rejected&&reads==before_private_read,"Initialized private snapshot was admitted as cached native I");
         auto expected=late_change==2?data(target,layout,false,7,std::byte{0xa9}):current_d;
         for(UINT m=0;late_change!=2&&m<std::min(source.levels,target.levels);++m)for(UINT l=0;l<std::min(source.layers,target.layers);++l)
-        for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){
+        for(UINT y=0;y<std::max(source.height>>m,1u);++y)for(UINT x=0;x<std::max(source.width>>m,1u);++x){
             const u32 value=native_word(m,l,x,y);memcpy(expected.data()+GuestPixelOffset(target,layout,m,l,x,y),&value,layout.bytes_per_pixel);}
         auto source_readback=std::make_shared<GuestImageReadback>(device,image,renderer.RecordingList());
         auto target_readback=std::make_shared<GuestImageReadback>(device,bound,renderer.RecordingList());
@@ -456,7 +466,8 @@ output.Store(at+4,s);})";
         std::vector<u32> pixels;
         for(UINT m=0;m<target.levels;++m)for(UINT l=0;l<target.layers;++l)
         for(UINT y=0;y<std::max(target.height>>m,1u);++y)for(UINT x=0;x<std::max(target.width>>m,1u);++x){
-            pixels.push_back(late_change==2?bits(7,m,l,x,y):(m<source.levels&&l<source.layers?native_word(m,l,x,y):bits(5,m,l,x,y)));pixels.push_back(sbits(9,m,l,x,y));}
+            pixels.push_back(late_change==2?bits(7,m,l,x,y):(m<source.levels&&l<source.layers&&
+                x<std::max(source.width>>m,1u)&&y<std::max(source.height>>m,1u)?native_word(m,l,x,y):bits(5,m,l,x,y)));pixels.push_back(sbits(9,m,l,x,y));}
         const u64 pixel_bytes=pixels.size()*4;auto output=GuestTiler::Scratch(device,pixel_bytes),pixel_readback=Buffer(device,pixel_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         renderer.RetainUntilFinish([output,pixel_readback,root,pipeline](u64){(void)output;(void)pixel_readback;(void)root;(void)pipeline;});
         bound.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);u32 base_word{};
