@@ -506,24 +506,36 @@ void ResourceBindings::Srv(UINT reg,UINT space,ID3D12Resource* resource,const D3
         shader_planes_[resource]|=planes;
     }
 }
-UINT ResourceBindings::SnapshotColorSrvs(ID3D12GraphicsCommandList* list,Resource& source,Resource& copy){
+UINT ResourceBindings::SnapshotColorSrvs(ID3D12GraphicsCommandList* list,Resource& source,Resource& copy,
+    ColorSnapshotAccess mode){
     if(!list||sealed_||recycled_||preparing_||!source.handle||!copy.handle||source.handle.Get()==copy.handle.Get())
         throw std::invalid_argument("Invalid native color snapshot");
     const auto from=source.handle->GetDesc(),to=copy.handle->GetDesc();
     if(from.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||to.Dimension!=from.Dimension||
-       !(from.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||
+       !(from.Flags&(mode==ColorSnapshotAccess::OrderedAttachment?
+           D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET|D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS:
+           D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))||
        (from.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)||
        from.Width!=to.Width||from.Height!=to.Height||from.DepthOrArraySize!=to.DepthOrArraySize||
        from.MipLevels!=to.MipLevels||from.Format!=to.Format||
        from.SampleDesc.Count!=to.SampleDesc.Count||from.SampleDesc.Quality!=to.SampleDesc.Quality)
         throw std::invalid_argument("Color snapshot native layouts differ");
-    if(HasShaderUav(source.handle.Get()))throw std::invalid_argument("Color snapshot includes storage-image access");
+    if(mode==ColorSnapshotAccess::ReadOnly&&HasShaderUav(source.handle.Get()))
+        throw std::invalid_argument("Color snapshot includes storage-image access");
     struct Slice {UINT index;D3D12_RESOURCE_STATES before,access;};
     std::vector<Slice> slices;
     for(UINT layer=0;layer<from.DepthOrArraySize;++layer)for(UINT mip=0;mip<from.MipLevels;++mip){
         if(ShaderAccess(source.handle.Get(),mip,layer,1)!=D3D12_RESOURCE_STATE_COMMON)
             throw std::invalid_argument("Color snapshot includes a non-color plane");
-        const auto access=ShaderAccess(source.handle.Get(),mip,layer,0);
+        // Only SRV reachability belongs to the immutable snapshot. Internal
+        // ordered color writes stay on the original, in UAV state; combining
+        // their access with the snapshot's SRV state would be invalid D3D12.
+        auto access=D3D12_RESOURCE_STATE_COMMON;
+        const auto found=shader_texture_ranges_.find(source.handle.Get());
+        if(found!=shader_texture_ranges_.end())for(const auto& range:found->second)
+            if(!(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)&&(range.planes&1)&&
+               mip>=range.mip&&mip-range.mip<range.mips&&layer>=range.layer&&layer-range.layer<range.layers)
+                access=D3D12_RESOURCE_STATES(access|range.access);
         if(access==D3D12_RESOURCE_STATE_COMMON)continue;
         const UINT index=mip+layer*from.MipLevels;
         slices.push_back({index,source.State(index),access});

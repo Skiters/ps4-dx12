@@ -170,7 +170,11 @@ public:
     UINT RemapTextureSrvs(ID3D12Resource*,const Resource&);
     // The caller retains source/copy allocations through the submission fence.
     // Copy every subresource reachable by the active SRVs, then redirect them.
-    UINT SnapshotColorSrvs(ID3D12GraphicsCommandList*,Resource& source,Resource& copy);
+    // OrderedAttachment permits the renderer's internal color-output UAV to
+    // remain on the source. Guest storage-image feedback is not admitted here.
+    enum class ColorSnapshotAccess { ReadOnly, OrderedAttachment };
+    UINT SnapshotColorSrvs(ID3D12GraphicsCommandList*,Resource& source,Resource& copy,
+        ColorSnapshotAccess access=ColorSnapshotAccess::ReadOnly);
     bool HasTextureSrvs(ID3D12Resource* resource)const {
         const auto found=shader_texture_ranges_.find(resource);if(found==shader_texture_ranges_.end())return false;
         for(const auto& range:found->second)if(!(range.access&D3D12_RESOURCE_STATE_UNORDERED_ACCESS))return true;

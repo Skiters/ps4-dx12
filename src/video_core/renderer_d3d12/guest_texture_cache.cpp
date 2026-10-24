@@ -1700,13 +1700,21 @@ bool GuestTextureCache::EvictPressureVictim(uint64_t completed,Entry* preserve){
     if(chosen->BindingPinned())throw std::runtime_error("Pressure victim acquired another binding during retirement");
     entries_.erase(victim);RebuildIndex();return true;
 }
-Resource GuestTextureCache::AllocateColorFeedbackCopy(Entry& entry,uint64_t completed){
+Resource GuestTextureCache::AllocateColorFeedbackCopy(Entry& entry,uint64_t completed,Resource* sampled_backing){
     if(entry.cache!=this||!entry.texture.handle||entry.desc.depth_target)
         throw std::invalid_argument("Invalid native color feedback source");
-    auto pin=PinBinding(entry);const auto desc=entry.texture.handle->GetDesc();
-    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||!(desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
+    auto pin=PinBinding(entry);
+    auto& source=sampled_backing?*sampled_backing:entry.texture;
+    const bool sample_plane=sampled_backing&&std::ranges::any_of(entry.storage_samples,
+        [&](const auto& plane){return &plane==sampled_backing;});
+    if((sampled_backing!=nullptr&&sampled_backing!=&entry.texture&&!sample_plane)||!source.handle)
+        throw std::invalid_argument("Feedback backing does not belong to its image");
+    const auto desc=source.handle->GetDesc();
+    if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||
+       (desc.Flags&D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)||
+       !(desc.Flags&(sample_plane?D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS:D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)))
         throw std::invalid_argument("Feedback source is not a color attachment");
-    const auto formats=entry.texture.castable_formats?std::span<const DXGI_FORMAT>(*entry.texture.castable_formats):std::span<const DXGI_FORMAT>{};
+    const auto formats=source.castable_formats?std::span<const DXGI_FORMAT>(*source.castable_formats):std::span<const DXGI_FORMAT>{};
     const auto bytes=texture_allocator_.AllocationInfo(desc,formats).SizeInBytes;
     if(!bytes||bytes==UINT64_MAX)throw std::runtime_error("Invalid color feedback allocation");
     ReserveMemory(bytes,completed,&entry);

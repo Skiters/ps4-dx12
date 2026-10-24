@@ -1111,6 +1111,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<GuestTextureLayout,9> layouts{};
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
+    std::array<bool,8> color_storage_feedback{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
     for(UINT i=0;i<8;++i)if(r.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable&&
@@ -1136,9 +1137,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const auto d=DescribeGuestTexture(image.GetSharp(*stage.info));const auto l=LayoutGuestTexture(d);
                 const auto ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
                 const bool disjoint=!(ordered_mask&(1u<<i))&&DisjointGuestColorSampledViews(descriptions[i],layouts[i],d,l);
+                if(image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
+                    color_storage_feedback[i]=true;
                 if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_feedback[i]=true;
-                    gpu_color_feedback[i]=gpu_color_feedback[i]&&!(ordered_mask&(1u<<i))&&
+                    gpu_color_feedback[i]=gpu_color_feedback[i]&&
                         CompatibleGuestColorSampledMapping(descriptions[i],layouts[i],d,l);
                 }
             }
@@ -1664,24 +1667,36 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         bindings.Prepare();
         std::set<ID3D12Resource*> feedback_copies;
         for(UINT i=0;i<target_count;++i)if(color_feedback[i]&&gpu_color_feedback[i]&&targets[i]){
-            auto& image=*targets[i];auto& source=image.texture;auto* native=source.handle.Get();
-            if(!bindings.HasTextureSrvs(native)||!feedback_copies.insert(native).second)continue;
-            if(bindings.HasShaderUav(native))throw std::runtime_error("Color feedback with storage-image access needs separate alias handling");
-            if(const auto saved=replay_feedback_snapshots.find(native);saved!=replay_feedback_snapshots.end()){
-                if(!bindings.RemapTextureSrvs(native,saved->second))
-                    throw std::logic_error("Color feedback lost its continuation shader views");
-                continue;
-            }
-            if(!replay_attachments.Beginning())
-                throw std::logic_error("Color feedback introduced after logical draw began");
-            auto copy=textures_.AllocateColorFeedbackCopy(image,CompletedFence());
-            // Retain before recording: both source allocation and copy must
-            // survive failure/unwinding and the eventual submission fence.
-            RetainUntilFinish([source,copy](u64){(void)source;(void)copy;});
-            if(!bindings.SnapshotColorSrvs(RecordingList(),source,copy))
-                throw std::logic_error("Color feedback lost its prepared shader views");
-            replay_feedback_snapshots.emplace(native,std::move(copy));
-            Diagnostics::Count("image-feedback.gpu-snapshot");
+            auto& image=*targets[i];
+            const bool ordered_attachment=(state.ordered_color_mask&(1u<<i))!=0;
+            const auto snapshot=[&](Resource& source){
+                auto* native=source.handle.Get();
+                if(!bindings.HasTextureSrvs(native)||!feedback_copies.insert(native).second)return;
+                if(color_storage_feedback[i]||(!ordered_attachment&&bindings.HasShaderUav(native)))
+                    throw std::runtime_error("Color feedback with storage-image access needs separate alias handling");
+                if(const auto saved=replay_feedback_snapshots.find(native);saved!=replay_feedback_snapshots.end()){
+                    if(!bindings.RemapTextureSrvs(native,saved->second))
+                        throw std::logic_error("Color feedback lost its continuation shader views");
+                    return;
+                }
+                if(!replay_attachments.Beginning())
+                    throw std::logic_error("Color feedback introduced after logical draw began");
+                auto copy=textures_.AllocateColorFeedbackCopy(image,CompletedFence(),&source);
+                // Retain before recording: both source allocation and copy must
+                // survive failure/unwinding and the eventual submission fence.
+                RetainUntilFinish([source,copy](u64){(void)source;(void)copy;});
+                if(!bindings.SnapshotColorSrvs(RecordingList(),source,copy,ordered_attachment?
+                    ResourceBindings::ColorSnapshotAccess::OrderedAttachment:ResourceBindings::ColorSnapshotAccess::ReadOnly))
+                    throw std::logic_error("Color feedback lost its prepared shader views");
+                replay_feedback_snapshots.emplace(native,std::move(copy));
+                Diagnostics::Count("image-feedback.gpu-snapshot");
+            };
+            snapshot(image.texture);
+            // A multisampled ordered target is backed by per-sample UAV
+            // planes. Snapshot the actual SRVs, not an unrelated resolved
+            // texture, and retain one immutable version across replay slices.
+            if(ordered_attachment&&descriptions[i].samples>1)
+                for(auto& plane:image.storage_samples)if(plane.handle)snapshot(plane);
         }
         if(!capture)prepare_indices(bindings);
         replay_prepared=true;

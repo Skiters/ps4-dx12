@@ -519,7 +519,7 @@ public:
         submit_copy_=std::move(submit);}
     void SetHostTextureCopy(decltype(host_texture_copy_) copy){host_texture_copy_=std::move(copy);}
     void SetHostBufferCopy(decltype(host_buffer_copy_) copy){host_buffer_copy_=std::move(copy);}
-    Resource AllocateColorFeedbackCopy(Entry&,uint64_t completed);
+    Resource AllocateColorFeedbackCopy(Entry&,uint64_t completed,Resource* sampled_backing=nullptr);
     void SetImmutableWatch(std::function<void(Entry&)> watch,std::function<void(Entry&)> release){
         watch_immutable_=std::move(watch);release_immutable_=std::move(release);}
     const auto& Entries(){return entries_;}
