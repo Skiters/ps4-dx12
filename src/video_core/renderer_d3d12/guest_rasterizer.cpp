@@ -1381,7 +1381,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     bool write_depth_stencil=false;
     u32 depth_write_planes{};
-    Resource index_storage;IndexBinding index_view{};
+    Resource index_storage,restart_arguments;IndexBinding index_view{};
     VAddr resident_index_address{};UINT resident_index_bytes{};
     DXGI_FORMAT resident_index_format=DXGI_FORMAT_UNKNOWN;
     std::vector<ShaderBufferRequest> index_requests;
@@ -1408,15 +1408,20 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
+    const bool gpu_restart=indexed&&r.enable_primitive_restart&&!capture&&!batch&&
+        r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None&&
+        (expand_primitive||rewrite_restart)&&GuestIndexExpansion::SupportsRestart(r.primitive_type);
     std::optional<GuestIndexExpansion> gpu_expansion;
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
-    if(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
-       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None))){
-        const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count,strip_last_provoking);
+    if(gpu_restart||(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
+       r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None)))){
+        const auto plan=gpu_restart?GuestIndexExpansion::MakeRestart(r.primitive_type,draw.count,
+            r.ls_hs_config.hs_input_control_points,strip_last_provoking):
+            GuestIndexExpansion::Make(r.primitive_type,draw.count,strip_last_provoking);
         if(!plan.output_count)return;
         gpu_expansion=plan;
     }
-    const bool resident_indices=indexed&&(!expand_primitive||gpu_expansion.has_value())&&!rewrite_restart&&
+    const bool resident_indices=indexed&&(!expand_primitive||gpu_expansion.has_value())&&(!rewrite_restart||gpu_restart)&&
         r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None;
     const auto index_range=[&](UINT element){
         const auto range=GuestIndexRange::Make(r.index_base_address.Address<VAddr>(),index_offset,
@@ -1530,6 +1535,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     diagnostic.Stage("resource-upload-and-draw");
     DrawArguments output_draw=draw;
+    if(gpu_expansion&&!capture){output_draw.count=gpu_expansion->output_count;output_draw.first=0;}
     // A bounded producer graph after the NEXT snapshot trigger. Copy actual
     // shader-bound resources before this draw and its outputs afterwards into
     // the same command stream; do not infer inputs from compatible RTs.
@@ -1564,7 +1570,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const auto source=resident_index_bytes?ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
                 RetainUntilFinish([source](u64){});
                 const u32 element=resident_index_format==DXGI_FORMAT_R16_UINT?2:4;
-                index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
+                if(gpu_restart){
+                    restart_arguments=AcquireTransientBuffer(sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+                    index_expand_->RecordRestart(*this,*gpu_expansion,source.resource,source.offset,
+                        resident_index_bytes/element,element,r.primitive_restart_index,draw,index_storage,restart_arguments);
+                }else index_expand_->Record(*this,*gpu_expansion,source.resource,source.offset,
                     resident_index_bytes/element,element,index_storage);
             }else{
                 // The translated VS adds original firstVertex to native
@@ -1779,6 +1789,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const auto submit_replay=[&](ResourceBindings& bindings,bool final_submission=true,
         const StreamDrawArguments* actual_records=nullptr) {
         prepare_replay(bindings);bindings.Prepare();
+        const StreamDrawArguments restarted{&restart_arguments,0};
+        if(gpu_restart){
+            if(actual_records||!restart_arguments.handle)
+                throw std::logic_error("Restart expansion has conflicting or missing indirect arguments");
+            actual_records=&restarted;
+        }
         if(!replay_attachments.Beginning())depth.clear_depth=depth.clear_stencil=false;
         static std::set<u64> captured_bound_draws,capture_producers;
         static bool capture_root_added{};

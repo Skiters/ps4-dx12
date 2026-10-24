@@ -141,8 +141,56 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         renderer.ValidateDebugMessages();puts("PASS: Vulkan direct/expanded draw sysvals");return 0;
     }
     Tests::CheckGuestIndexExpansionGpu(device.Get(),renderer);
+    Tests::CheckGuestIndexRestartGpu(device.Get(),renderer);
     if(std::string_view(argv[3])=="index-expansion"){
-        renderer.ValidateDebugMessages();puts("PASS: 28 GPU index expansion cases, source state/lifetime and guards");return 0;
+        for(bool empty:{false,true}){
+            const std::array<u32,12> input{99,0,1,2,3,99,4,99,5,6,7,99};
+            constexpr std::array<u32,9> expected_indices{0,1,2,0,2,3,5,6,7};
+            const auto plan=GuestIndexExpansion::MakeRestart(AmdGpu::PrimitiveType::TriangleFan,UINT(input.size()));
+            auto source=Buffer(device.Get(),sizeof(input),D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+            void* bytes{};D3D12_RANGE none{};Check(source.handle->Map(0,&none,&bytes));
+            memcpy(bytes,input.data(),sizeof(input));source.handle->Unmap(0,nullptr);
+            auto indices=renderer.AcquireTransientBuffer(u64(plan.output_count)*4),arguments=renderer.AcquireTransientBuffer(20);
+            {
+                GuestIndexExpandPass pass(device.Get());
+                // Missing elements read zero; marker0 therefore yields an
+                // exactly empty draw, never an array of degenerate triangles.
+                pass.RecordRestart(renderer,plan,empty?nullptr:&source,0,empty?0:UINT(input.size()),4,empty?0:99,
+                    {plan.input_count,2},indices,arguments);
+            }
+            D3D12_SO_DECLARATION_ENTRY declaration{0,"CAPTURE",0,0,4,0};const UINT stride=16;
+            StreamOutputLayout layout({&declaration,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM});
+            auto stream_state=state;stream_state.pipeline.StreamOutput=layout.Desc();
+            ShaderPipeline::GraphicsShaders shaders;shaders.vertex=vertex.bytecode;shaders.geometry=geometry.bytecode;
+            ShaderPipeline pipeline(device.Get(),dxc,shaders,stream_state.pipeline);ResourceBindings bindings(device.Get(),pipeline.Layout());
+            auto output=Buffer(device.Get(),320,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto counter=Buffer(device.Get(),8,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+            auto seed=Buffer(device.Get(),328,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+            auto readback=Buffer(device.Get(),328,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            Check(seed.handle->Map(0,&none,&bytes));memset(bytes,0xcd,320);memset(static_cast<std::byte*>(bytes)+320,0,8);seed.handle->Unmap(0,nullptr);
+            renderer.RetainUntilFinish([source,indices,arguments,output,counter,seed,readback](u64){});
+            auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),0,320);
+            list->CopyBufferRegion(counter.handle.Get(),0,seed.handle.Get(),320,8);
+            const Rasterizer::StreamOutputBinding target{&output,&counter,16,288,0};
+            const Rasterizer::IndexBinding index{&indices,0,plan.output_count*4,DXGI_FORMAT_R32_UINT};
+            const Rasterizer::StreamDrawArguments command{&arguments,0};
+            const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
+            renderer.ExecuteGraphics(pipeline,bindings,stream_state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
+                blend,{plan.output_count,2},{},&index,true,&command,&target);
+            list=renderer.RecordingList();output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);counter.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,320);
+            list->CopyBufferRegion(readback.handle.Get(),320,counter.handle.Get(),0,8);renderer.Finish();
+            std::array<std::byte,328> expected;expected.fill(std::byte{0xcd});
+            if(!empty)for(UINT instance=0;instance<2;++instance)for(UINT v=0;v<expected_indices.size();++v){
+                const u32 payload[]{expected_indices[v],instance,0x7fc12345u^(v/3),0x80000000u};
+                memcpy(expected.data()+16+(instance*expected_indices.size()+v)*16,payload,16);
+            }
+            const u64 filled=empty?0:288;memcpy(expected.data()+320,&filled,8);
+            D3D12_RANGE all{0,328};Check(readback.handle->Map(0,&all,&bytes));
+            const bool equal=memcmp(bytes,expected.data(),expected.size())==0;readback.handle->Unmap(0,&none);
+            if(!equal)throw std::runtime_error("Restart ExecuteIndirect changed GS records/order/instances or executed empty-segment primitives");
+        }
+        renderer.ValidateDebugMessages();puts("PASS: fixed/segmented GPU index expansion, indirect GS consumers, lifetime, states and guards");return 0;
     }
     if(std::string_view(argv[3])=="large-grid"){
         Tests::CheckGuestIndirectLargeGridGpu(device.Get(),renderer);renderer.ValidateDebugMessages();

@@ -112,4 +112,74 @@ inline void CheckGuestIndexExpansionGpu(ID3D12Device* device,Rasterizer& rendere
         if(!equal)throw std::runtime_error("GPU index expansion changed topology/order/bits/zero padding/guards");
     }
 }
+inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer){
+    using P=AmdGpu::PrimitiveType;
+    const std::array types{P::TriangleFan,P::LineLoop,P::QuadStrip,P::TriangleStrip,P::TriangleStrip,
+        P::LineStrip,P::PointList,P::TriangleList,P::LineList,P::QuadList,P::AdjTriangleList,P::PatchPrimitive};
+    // Literal primitive sequences, independent of both the CPU decoder and
+    // GPU segmented scans. Repeated groups cross128-thread boundaries.
+    const std::array<std::vector<u32>,12> short_sequences{{
+        {10,11,12,10,12,13,30,31,32},
+        {10,11,11,12,12,13,13,10,30,31,31,32,32,30},
+        {10,11,12,12,11,13},
+        {10,11,12,11,13,12,30,31,32},
+        {10,11,12,12,11,13,30,31,32},
+        {10,11,11,12,12,13,30,31,31,32},
+        {10,11,12,13,20,30,31,32},
+        {10,11,12,30,31,32},{10,11,12,13,30,31},{10,11,12,13},{},{10,11,12,30,31,32}}};
+    const std::array<std::vector<u32>,12> group{{
+        {10,11,12,10,12,13},{10,11,11,12,12,13,13,10},
+        {10,11,12,12,11,13},{10,11,12,11,13,12},{10,11,12,12,11,13},
+        {10,11,11,12,12,13},{10,11,12,13},{10,11,12},{10,11,12,13},{10,11,12,13},{},{10,11,12}}};
+    for(u32 variant=0;variant<types.size();++variant)for(u32 element:{2u,4u})
+    for(u32 marker:std::array{0u,99u,element==2?65535u:UINT32_MAX})for(u32 shape=0;shape<3;++shape){
+        std::vector<u32> input{marker,10,11,12,13,marker,20,marker,30,31,32,marker};
+        std::vector<u32> expected_indices=short_sequences[variant];
+        if(shape==1){input.clear();expected_indices.clear();
+            for(UINT n=0;n<65;++n){input.insert(input.end(),{marker,10,11,12,13});
+                expected_indices.insert(expected_indices.end(),group[variant].begin(),group[variant].end());}}
+        const auto plan=GuestIndexExpansion::MakeRestart(types[variant],UINT(input.size()),3,variant==4);
+        const u32 available=shape==2?0:UINT(input.size());
+        if(shape==2)expected_indices.assign(marker?plan.output_count:0,0);
+        const u64 offset=element,source_bytes=(offset+input.size()*element+3)&~u64(3);
+        const u64 output_bytes=u64(plan.output_count)*4+16,total=source_bytes+output_bytes+36;
+        auto seed=Buffer(device,total,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto source=renderer.AcquireTransientBuffer(source_bytes),output=renderer.AcquireTransientBuffer(output_bytes);
+        auto arguments=renderer.AcquireTransientBuffer(36);
+        auto result=Buffer(device,output_bytes+36,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* bytes{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&bytes));memset(bytes,0xcd,size_t(total));
+        for(size_t i=0;i<input.size();++i)memcpy(static_cast<std::byte*>(bytes)+offset+i*element,&input[i],element);
+        seed.handle->Unmap(0,nullptr);
+        renderer.RetainUntilFinish([seed,source,output,arguments,result](u64){});
+        auto* list=renderer.RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+        list->CopyBufferRegion(source.handle.Get(),0,seed.handle.Get(),0,source_bytes);
+        list->CopyBufferRegion(output.handle.Get(),0,seed.handle.Get(),source_bytes,output_bytes);
+        list->CopyBufferRegion(arguments.handle.Get(),0,seed.handle.Get(),source_bytes+output_bytes,36);
+        source.Transition(list,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);const auto previous=source.State(0);
+        {
+            GuestIndexExpandPass pass(device);const Rasterizer::DrawArguments draw{plan.input_count,3,0,11,-7};
+            bool rejected{};try{pass.RecordRestart(renderer,plan,&source,offset,available,element,marker,draw,source,arguments);}
+            catch(const std::invalid_argument&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Segmented expansion accepted aliased source/output");
+            rejected=false;try{pass.RecordRestart(renderer,plan,&source,offset,available,element,marker,draw,output,output);}
+            catch(const std::invalid_argument&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Segmented expansion accepted aliased output/arguments");
+            pass.RecordRestart(renderer,plan,available?&source:nullptr,available?offset:0,available,element,marker,draw,output,arguments);
+        }
+        if(source.State(0)!=previous)throw std::runtime_error("Segmented expansion changed source state");
+        if(arguments.State(0)!=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT||output.State(0)!=D3D12_RESOURCE_STATE_INDEX_BUFFER)
+            throw std::runtime_error("Segmented expansion failed to publish native consumer states");
+        output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,output_bytes);
+        list->CopyBufferRegion(result.handle.Get(),output_bytes,arguments.handle.Get(),0,36);
+        renderer.Finish();std::vector<std::byte> expected(size_t(output_bytes+36),std::byte{0xcd});
+        if(!expected_indices.empty())memcpy(expected.data(),expected_indices.data(),expected_indices.size()*4);
+        const u32 args[]{UINT(expected_indices.size()),3,0,u32(-7),11};memcpy(expected.data()+output_bytes,args,sizeof(args));
+        D3D12_RANGE range{0,SIZE_T(output_bytes+36)};Check(result.handle->Map(0,&range,&bytes));
+        const bool equal=memcmp(bytes,expected.data(),expected.size())==0;result.handle->Unmap(0,&none);
+        if(!equal)throw std::runtime_error("Segmented expansion changed restart boundaries, order, provoking, count, arguments or guards");
+    }
+}
+
 }
