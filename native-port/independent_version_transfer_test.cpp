@@ -9,6 +9,7 @@
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "msaa_depth_initialization_fixture.h"
 #include "independent_depth_fixture.h"
+#include "independent_color_growth_fixture.h"
 #include "requested_sample_backing_fixture.h"
 #include "sample_backing_pressure_fixture.h"
 #include "robust_sample_copy_fixture.h"
@@ -879,6 +880,7 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--depth-subviews")==0){RunDepthSubviewFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-crossed-resources")==0){RunIndependentDepthGrowthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--depth-growth")==0){RunIndependentDepthGrowthFixture(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--color-layer-growth")==0){RunIndependentColorLayerGrowth(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth")==0){RunColorToMsDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-srgb")==0){RunColorToMsDepthFixture(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-raw")==0){

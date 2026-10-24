@@ -1286,7 +1286,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // publish its future native class or metadata during physical prewarm.
         auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
         if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
-        deferred_color_clear[i]=color_depth_alias[i]||separate_color_depth[i]||(source&&source->desc.depth_target);
+        deferred_color_clear[i]=color_depth_alias[i]||separate_color_depth[i]||
+            (source&&(source->desc.depth_target||source->desc.levels<descriptions[i].levels||
+                source->desc.layers<descriptions[i].layers));
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
     const bool recreate_color_depth=std::ranges::any_of(color_depth_alias,[](bool value){return value;});
