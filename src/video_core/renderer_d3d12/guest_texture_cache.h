@@ -406,6 +406,8 @@ public:
     // Keep a current color parent's complete allocation when CB registers name
     // only its mip-zero/layer view. Resolve before capturing the B envelope.
     GuestTextureDesc ResolveColorViewStorage(const GuestTextureDesc&)const;
+    static GuestTextureDesc GrowColorAttachmentStorage(const GuestTextureDesc&,
+        const GuestTextureDesc& sampled);
     // Also admits existing packed conversion and pinned-compatible uncompressed
     // color image interpretations. These are sources, never direct view reuse.
     Entry* FindIndependentUploadSource(const GuestTextureDesc&,const GuestTextureLayout&)const;

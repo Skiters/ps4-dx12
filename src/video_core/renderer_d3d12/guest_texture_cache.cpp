@@ -2506,6 +2506,25 @@ GuestTextureDesc GuestTextureCache::ResolveColorViewStorage(const GuestTextureDe
        !MatchesGuestUploadStorage(*parent,storage,physical))return requested;
     return storage;
 }
+GuestTextureDesc GuestTextureCache::GrowColorAttachmentStorage(const GuestTextureDesc& target,
+    const GuestTextureDesc& sampled){
+    if(!target.render_target||sampled.render_target||target.levels>=sampled.levels||
+       target.layers!=sampled.layers||target.samples!=1||sampled.samples!=1||
+       target.writable||sampled.writable)return target;
+    const auto small=LayoutGuestTexture(target),large=LayoutGuestTexture(sampled);
+    if(!CompatibleGuestColorSubview(sampled,large,target,small))return target;
+    // Identical layers keep the old mip-major prefix at the same guest byte
+    // offsets. Newly exposed mip bytes are initialized from independent B.
+    for(UINT mip=0;mip<target.levels;++mip)
+        if(small.mips[mip].offset!=large.mips[mip].offset)return target;
+    auto storage=sampled;storage.render_target=true;
+    storage.data_format=target.data_format;storage.number_format=target.number_format;
+    storage.native_raw32=target.native_raw32;storage.native_packed10_raw=target.native_packed10_raw;
+    storage.first_mip=target.first_mip;storage.first_layer=target.first_layer;
+    storage.view_layers=target.view_layers;storage.min_lod=target.min_lod;storage.swizzle=target.swizzle;
+    if(!MatchesGuestMipLayout(large,LayoutGuestTexture(storage)))return target;
+    return storage;
+}
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
     const auto layout=LayoutGuestTexture(requested);
     if(!IsDirectDepthWordClass(requested,layout))return requested;
@@ -2571,8 +2590,12 @@ GuestTextureCache::Entry* GuestTextureCache::FindIndependentUploadSource(const G
         // A valid smaller mip chain is still the preceding I source. The
         // caller must expand it privately before final buffer selection; a
         // failed lookup here would instead seed BindTextures from unrelated B.
+        auto color_view=desc;color_view.render_target=false;
+        auto color_source=entry->desc;color_source.render_target=true;
+        const bool color_growth=GrowColorAttachmentStorage(color_source,color_view).levels==desc.levels&&
+            entry->desc.levels<desc.levels;
         const bool mip_growth=entry->desc.levels<desc.levels&&
-            CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout);
+            (CompatibleGuestShaderMipPrefixes(entry->desc,entry->layout,desc,layout)||color_growth);
         const bool depth_transfer=CanMapIndependentDepthImage(entry->desc,entry->layout,desc,layout);
         const bool depth_view=CompatibleGuestDepthSubview(entry->desc,entry->layout,desc,layout);
         if(!block&&!mip_growth&&!depth_transfer&&!depth_view&&(!MatchesGuestMipLayout(entry->layout,layout)||

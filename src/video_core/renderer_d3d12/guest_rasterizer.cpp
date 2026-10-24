@@ -1130,6 +1130,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     MergeGuestColorAttachmentLayers(std::span(descriptions.data(),target_count));
     for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN){
         descriptions[i]=textures_.ResolveColorViewStorage(descriptions[i]);
+        // Original PrepareRenderState prefetches CB; BindTextures can then
+        // expand that image and BeginRendering rebinds the grown allocation.
+        // Establish the same full storage envelope before prewrite captures.
+        for(const auto& stage:stages)for(const auto& image:stage.info->images)if(!image.is_written){
+            const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
+            descriptions[i]=GuestTextureCache::GrowColorAttachmentStorage(
+                descriptions[i],DescribeGuestTexture(sharp));
+        }
         descriptions[i]=textures_.ResolveDepthViewStorage(descriptions[i]);
         layouts[i]=LayoutGuestTexture(descriptions[i]);
         ValidateGpuBacking(descriptions[i].address,layouts[i].guest_bytes,true);
