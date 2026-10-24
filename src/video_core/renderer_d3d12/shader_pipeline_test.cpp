@@ -288,10 +288,21 @@ float4 main():SV_Target0 {return image.SampleLevel(filter,float2(0.5,0.5),0)*tin
     regs.polygon_control.enable_polygon_mode=1;
     regs.polygon_control.polygon_mode_front=AmdGpu::PolygonMode::Point;
     regs.polygon_control.polygon_mode_back=AmdGpu::PolygonMode::Fill;
+    const auto previous_primitive=regs.primitive_type;
+    regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::Vs;
+    regs.polygon_control.cull_front=1;regs.polygon_control.cull_back=0;
+    regs.clipper_control={};
+    for(auto primitive:{AmdGpu::PrimitiveType::TriangleList,AmdGpu::PrimitiveType::TriangleFan,AmdGpu::PrimitiveType::Polygon}){
+        regs.primitive_type=primitive;
+        const auto clipped_points=BuildGuestGraphicsState(regs,formats);
+        if(!clipped_points.polygon_points||clipped_points.pipeline.RasterizerState.CullMode!=D3D12_CULL_MODE_NONE||
+            clipped_points.pipeline.RasterizerState.FillMode!=D3D12_FILL_MODE_SOLID)
+            throw std::runtime_error("Polygon point state lost its clipping/culling geometry pass");
+    }
+    regs.primitive_type=AmdGpu::PrimitiveType::TriangleStrip;
     bool point_rejected=false;
     try{BuildGuestGraphicsState(regs,formats);}catch(const std::runtime_error&){point_rejected=true;}
-    if(!point_rejected)throw std::runtime_error("Guest point polygons silently approximated before native rasterization integration");
-    const auto previous_primitive=regs.primitive_type;
+    if(!point_rejected)throw std::runtime_error("Polygon point strip needs an explicit provoking-vertex mapping");
     regs.primitive_type=AmdGpu::PrimitiveType::PointList;
     regs.stage_enable.raw=AmdGpu::ShaderStageEnable::VgtStages::Vs;
     const auto unit_points=BuildGuestGraphicsState(regs,formats);

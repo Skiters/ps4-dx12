@@ -1472,7 +1472,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     diagnostic.Stage("pipeline-creation");
     const auto* geometry_stage=guest.stages[u32(Shader::SwStage::Geometry)];
-    const bool expanded_points=capture.has_value()||(geometry_stage&&!geometry_stage->auxiliary&&geometry_stage->runtime.hw.gs.native_point_expansion&&
+    const bool expanded_points=state.polygon_points||capture.has_value()||(geometry_stage&&!geometry_stage->auxiliary&&geometry_stage->runtime.hw.gs.native_point_expansion&&
        geometry_stage->info.stores.GetAny(Shader::IR::Attribute::PointSize))||
        (guest.stages[u32(Shader::SwStage::Vertex)]&&
        guest.stages[u32(Shader::SwStage::Vertex)]->runtime.sw.vs.native_point_expansion&&

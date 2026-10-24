@@ -31,7 +31,7 @@ inline Sirit::Id DefinePointRuntime(Sirit::Module& ctx){
 inline void EmitPointStrip(Sirit::Module& ctx,Sirit::Id runtime,Sirit::Id position,
     Sirit::Id size,Sirit::Id viewport,bool clip_depth,
     Sirit::Id output_position,std::span<const PointOutput> outputs,
-    std::span<const PointDistance> distances){
+    std::span<const PointDistance> distances,Sirit::Id reverse_winding={}){
     using Sirit::Id;
     const auto f32=ctx.TypeFloat(32),u32_type=ctx.TypeUInt(32),bool_type=ctx.TypeBool(),vec4=ctx.TypeVector(f32,4);
     const auto zero=ctx.Constant(u32_type,0u),one=ctx.Constant(u32_type,1u),fzero=ctx.Constant(f32,0.f);
@@ -79,7 +79,10 @@ inline void EmitPointStrip(Sirit::Module& ctx,Sirit::Id runtime,Sirit::Id positi
     for(const auto corner:{std::array<float,2>{-1,-1},std::array<float,2>{1,-1},
                            std::array<float,2>{-1,1},std::array<float,2>{1,1}}){
         const auto cx=ctx.OpFAdd(f32,x,ctx.OpFMul(f32,dx,ctx.Constant(f32,corner[0])));
-        const auto cy=ctx.OpFAdd(f32,y,ctx.OpFMul(f32,dy,ctx.Constant(f32,corner[1])));
+        auto corner_y=ctx.Constant(f32,corner[1]);
+        if(Sirit::ValidId(reverse_winding))corner_y=ctx.OpSelect(f32,reverse_winding,
+            ctx.OpFNegate(f32,corner_y),corner_y);
+        const auto cy=ctx.OpFAdd(f32,y,ctx.OpFMul(f32,dy,corner_y));
         const auto native_y=ctx.OpSelect(f32,flip_y,ctx.OpFNegate(f32,cy),cy);
         // Keep window coordinates multiplied by w: this preserves reciprocal-w
         // interpolation and avoids dividing/remultiplying the point center.

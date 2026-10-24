@@ -33,6 +33,13 @@ inline u32 NativePointMiscLocation(const Shader::Info& vertex,bool emulated_clip
 }
 std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool emulated_clip=false,u32 live_parameters=~0u,
     std::span<const Shader::NativePointOutput> transport={});
+struct GuestPolygonPointConfig {
+    bool cull_front{},cull_back{},front_ccw{},last_provoking{},emulated_clip{};
+};
+// Clip the completed triangle, then expand its surviving polygon vertices.
+// No guest shader is evaluated again for the generated clipping vertices.
+std::vector<u32> EmitGuestPolygonPoints(const Shader::Info&,const Shader::Info*,
+    const Shader::HwFragmentRuntimeInfo&,const GuestPolygonPointConfig&);
 // Replay host records, never guest shader code. Only the flat record ID crosses
 // the hardware varying interface; original PS attributes are fetched from SRV.
 std::vector<u32> EmitNativePointReplayVertex();

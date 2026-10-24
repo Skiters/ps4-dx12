@@ -449,6 +449,219 @@ struct PointReplayEmitter : Sirit::Module {
     }
 };
 }
+std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader::Info* fragment,
+    const Shader::HwFragmentRuntimeInfo& fs,const GuestPolygonPointConfig& config){
+    using Sirit::Id;
+    using A=Shader::IR::Attribute;
+    using Q=Shader::Qualifier;
+    for(const auto attribute:{A::PointSize,A::ViewportIndex,A::RenderTargetIndex})
+        if(vertex.stores.GetAny(attribute))
+            throw std::runtime_error("Polygon point fill needs routed size/layer/viewport transport");
+    PointReplayEmitter ctx;ctx.AddCapability(spv::Capability::Geometry);
+    const auto u32_type=ctx.TypeUInt(32),f32=ctx.TypeFloat(32),b1=ctx.TypeBool();
+    const auto vec4=ctx.TypeVector(f32,4),void_type=ctx.TypeVoid();
+    const auto zero=ctx.Constant(u32_type,0u),one=ctx.Constant(u32_type,1u),three=ctx.Constant(u32_type,3u);
+    const auto fzero=ctx.Constant(f32,0.f),fone=ctx.Constant(f32,1.f);
+    const auto position=ctx.Variable(ctx.TypeArray(vec4,three),spv::StorageClass::Input,{},spv::BuiltIn::Position);
+    const auto output_position=ctx.Variable(vec4,spv::StorageClass::Output,{},spv::BuiltIn::Position);
+    const auto primitive=ctx.Variable(u32_type,spv::StorageClass::Input,{},spv::BuiltIn::PrimitiveId);
+    const auto output_primitive=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::PrimitiveId);
+    struct Varying {Id type,input,output;u32 width;Q qualifier;};
+    std::vector<Varying> varyings;
+    u32 output_components=5;
+    for(u32 parameter=0;parameter<Shader::IR::NumParams;++parameter){
+        if(!vertex.stores.GetAny(A::Param0+parameter))continue;
+        std::optional<Q> qualifier;
+        if(fragment)for(u32 input=0;input<fs.num_inputs-u32(fs.clip_distance_emulation);++input){
+            if(!fragment->loads.GetAny(A::Param0+input)||fs.inputs[input].param_index!=parameter||
+                (fs.inputs[input].is_default&&!fs.inputs[input].is_flat))continue;
+            const auto q=fs.inputs[input].is_flat?Q::Flat:fragment->fs_interpolation[input].primary;
+            if(q==Q::PerVertex)throw std::runtime_error("Polygon point fill needs per-vertex barycentric transport");
+            const auto interpolation=q==Q::Flat?Q::Flat:q==Q::NoPerspective?Q::NoPerspective:Q::Smooth;
+            if(qualifier&&*qualifier!=interpolation)
+                throw std::runtime_error("Polygon point fill needs duplicated interpolation transport");
+            qualifier=interpolation;
+        }
+        if(!qualifier)continue;
+        const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
+        const auto type=width==1?f32:ctx.TypeVector(f32,width);
+        const u32 location=parameter+u32(config.emulated_clip);
+        if(location>=32)throw std::runtime_error("Polygon point interface exceeds native varying locations");
+        varyings.push_back({type,ctx.Variable(ctx.TypeArray(type,three),spv::StorageClass::Input,location),
+            ctx.Variable(type,spv::StorageClass::Output,location),width,*qualifier});
+        output_components+=width;
+    }
+    const u32 clip_mask=vertex.stores.flags[Shader::Info::AttributeFlags::Index(A::ClipDistance)];
+    const u32 cull_mask=vertex.stores.flags[Shader::Info::AttributeFlags::Index(A::CullDistance)];
+    Id clips{},culls{},output_clips{};
+    const auto distances=ctx.TypeArray(f32,ctx.Constant(u32_type,8u));
+    if(config.emulated_clip){
+        static_assert(Shader::MaxEmulatedClipDistances==4);
+        if(clip_mask&~15u)throw std::runtime_error("Polygon point emulated clip payload exceeds four distances");
+        clips=ctx.Variable(ctx.TypeArray(vec4,three),spv::StorageClass::Input,0);
+        output_clips=ctx.Variable(vec4,spv::StorageClass::Output,0);output_components+=4;
+    }else if(clip_mask){ctx.AddCapability(spv::Capability::ClipDistance);
+        clips=ctx.Variable(ctx.TypeArray(distances,three),spv::StorageClass::Input,{},spv::BuiltIn::ClipDistance);}
+    if(cull_mask){ctx.AddCapability(spv::Capability::CullDistance);
+        culls=ctx.Variable(ctx.TypeArray(distances,three),spv::StorageClass::Input,{},spv::BuiltIn::CullDistance);}
+    const u32 planes=6+std::popcount(clip_mask),capacity=3+planes;
+    const u32 fields=1+u32(varyings.size())+u32(clip_mask!=0)*2;
+    if(capacity*4*output_components>1024)
+        throw std::runtime_error("Polygon point payload exceeds native geometry output capacity; needs capture");
+    const auto runtime=Shader::Backend::SPIRV::DefinePointRuntime(ctx);ctx.interfaces.push_back(runtime);
+    const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
+    ctx.AddExecutionMode(main,spv::ExecutionMode::Triangles);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputTriangleStrip);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,capacity*4);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,1u);
+    ctx.AddEntryPoint(spv::ExecutionModel::Geometry,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
+    const auto fn_u32=ctx.TypePointer(spv::StorageClass::Function,u32_type);
+    const auto fn_float=ctx.TypePointer(spv::StorageClass::Function,f32);
+    const auto fn_vec=ctx.TypePointer(spv::StorageClass::Function,vec4);
+    const auto array=ctx.TypeArray(vec4,ctx.Constant(u32_type,capacity*fields));
+    const auto fn_array=ctx.TypePointer(spv::StorageClass::Function,array);
+    std::array<Id,2> data{ctx.AddLocalVariable(fn_array,spv::StorageClass::Function),ctx.AddLocalVariable(fn_array,spv::StorageClass::Function)};
+    const auto count=ctx.AddLocalVariable(fn_u32,spv::StorageClass::Function);
+    const auto next_count=ctx.AddLocalVariable(fn_u32,spv::StorageClass::Function);
+    const auto cursor=ctx.AddLocalVariable(fn_u32,spv::StorageClass::Function);
+    const auto area_sum=ctx.AddLocalVariable(fn_float,spv::StorageClass::Function);
+    const auto ci=[&](u32 value){return ctx.Constant(u32_type,value);};
+    const auto pointer=[&](Id buffer,Id vertex_index,u32 field){return ctx.OpAccessChain(fn_vec,buffer,
+        ctx.OpIAdd(u32_type,ctx.OpIMul(u32_type,vertex_index,ci(fields)),ci(field)));};
+    const auto load=[&](Id buffer,Id index,u32 field){return ctx.OpLoad(vec4,pointer(buffer,index,field));};
+    const auto component=[&](Id value,u32 channel){return ctx.OpCompositeExtract(f32,value,channel);};
+    const auto input=[&](Id type,Id variable,Id index){return ctx.OpLoad(type,
+        ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,type),variable,index));};
+    const auto distance_input=[&](Id variable,u32 index,u32 channel){return ctx.OpLoad(f32,
+        ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Input,f32),variable,ci(index),ci(channel)));};
+    const auto selection=[&](Id condition,const auto& body){
+        const auto active=ctx.OpLabel(),done=ctx.OpLabel();
+        ctx.OpSelectionMerge(done,spv::SelectionControlMask::MaskNone);
+        ctx.OpBranchConditional(condition,active,done);ctx.AddLabel(active);
+        body();ctx.OpBranch(done);ctx.AddLabel(done);
+    };
+    const auto loop=[&](Id bound,const auto& body){
+        ctx.OpStore(cursor,zero);
+        const auto header=ctx.OpLabel(),active=ctx.OpLabel(),step=ctx.OpLabel(),done=ctx.OpLabel();
+        ctx.OpBranch(header);ctx.AddLabel(header);
+        const auto index=ctx.OpLoad(u32_type,cursor);
+        const auto condition=ctx.OpULessThan(b1,index,bound);
+        ctx.OpLoopMerge(done,step,spv::LoopControlMask::MaskNone);
+        ctx.OpBranchConditional(condition,active,done);ctx.AddLabel(active);body(index);
+        ctx.OpBranch(step);ctx.AddLabel(step);
+        ctx.OpStore(cursor,ctx.OpIAdd(u32_type,index,one));ctx.OpBranch(header);ctx.AddLabel(done);
+    };
+    ctx.OpStore(count,three);
+    for(u32 index=0;index<3;++index){
+        ctx.OpStore(pointer(data[0],ci(index),0),input(vec4,position,ci(index)));
+        for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
+            const auto value=input(varying.type,varying.input,
+                varying.qualifier==Q::Flat?ci(config.last_provoking?2:0):ci(index));
+            std::array<Id,4> channels{fzero,fzero,fzero,fzero};
+            for(u32 channel=0;channel<varying.width;++channel)
+                channels[channel]=varying.width==1?value:component(value,channel);
+            ctx.OpStore(pointer(data[0],ci(index),field+1),ctx.OpCompositeConstruct(vec4,channels));
+        }
+        if(clip_mask)for(u32 word=0;word<2;++word){std::array<Id,4> channels{};
+            for(u32 channel=0;channel<4;++channel)channels[channel]=config.emulated_clip&&word?fzero:
+                distance_input(clips,index,word*4+channel);
+            ctx.OpStore(pointer(data[0],ci(index),1+u32(varyings.size())+word),ctx.OpCompositeConstruct(vec4,channels));}
+    }
+    auto visible=ctx.ConstantTrue(b1);
+    for(u32 channel=0;channel<8;++channel)if(cull_mask&(1u<<channel)){
+        auto outside=ctx.ConstantTrue(b1);
+        for(u32 index=0;index<3;++index)outside=ctx.OpLogicalAnd(b1,outside,
+            ctx.OpFOrdLessThan(b1,distance_input(culls,index,channel),fzero));
+        visible=ctx.OpLogicalAnd(b1,visible,ctx.OpLogicalNot(b1,outside));
+    }
+    selection(visible,[&]{
+        // Sutherland-Hodgman in homogeneous clip space. A convex triangle
+        // gains at most one vertex per plane; no CPU readback or shader replay.
+        std::vector<u32> clipping_planes{0,1,2,3,4,5};
+        for(u32 channel=0;channel<8;++channel)if(clip_mask&(1u<<channel))clipping_planes.push_back(6+channel);
+        u32 side{};
+        for(const auto plane:clipping_planes){
+            const auto from=data[side],to=data[side^1];
+            const auto n=ctx.OpLoad(u32_type,count);ctx.OpStore(next_count,zero);
+            const auto distance=[&](Id index,Id p){
+                if(plane>=6)return component(load(from,index,1+u32(varyings.size())+(plane-6)/4),(plane-6)%4);
+                const auto w=component(p,3),axis=component(p,plane/2);
+                if(plane==4)return axis;
+                return plane%2?ctx.OpFSub(f32,w,axis):ctx.OpFAdd(f32,w,axis);
+            };
+            loop(n,[&](Id current){
+                const auto previous=ctx.OpSelect(u32_type,ctx.OpIEqual(b1,current,zero),
+                    ctx.OpISub(u32_type,n,one),ctx.OpISub(u32_type,current,one));
+                const auto a=load(from,previous,0),b=load(from,current,0);
+                const auto da=distance(previous,a),db=distance(current,b);
+                const auto inside_a=ctx.OpFOrdGreaterThanEqual(b1,da,fzero),inside_b=ctx.OpFOrdGreaterThanEqual(b1,db,fzero);
+                // A vertex exactly on the plane is emitted by the inside
+                // branch. Do not emit that endpoint a second time: duplicate
+                // vertices would blend/stencil twice in polygon point mode.
+                const auto crosses=ctx.OpLogicalAnd(b1,ctx.OpLogicalNotEqual(b1,inside_a,inside_b),
+                    ctx.OpLogicalAnd(b1,ctx.OpFOrdNotEqual(b1,da,fzero),ctx.OpFOrdNotEqual(b1,db,fzero)));
+                selection(crosses,[&]{
+                    const auto t=ctx.OpFDiv(f32,da,ctx.OpFSub(f32,da,db));
+                    const auto lerp=[&](Id x,Id y,Id weight){return ctx.OpFAdd(vec4,x,
+                        ctx.OpVectorTimesScalar(vec4,ctx.OpFSub(vec4,y,x),weight));};
+                    auto p=lerp(a,b,t);
+                    // Snap the intersected plane exactly; roundoff must not
+                    // reject its point center during the later point expansion.
+                    if(plane<6){const auto w=component(p,3);const auto coordinate=plane==4?fzero:
+                        plane%2?w:ctx.OpFNegate(f32,w);p=ctx.OpCompositeInsert(vec4,coordinate,p,plane/2);}
+                    const auto out=ctx.OpLoad(u32_type,next_count);ctx.OpStore(pointer(to,out,0),p);
+                    for(u32 field=1;field<fields;++field){
+                        auto weight=t;
+                        if(field<=varyings.size()&&varyings[field-1].qualifier==Q::NoPerspective)
+                            weight=ctx.OpFDiv(f32,ctx.OpFMul(f32,t,component(b,3)),component(p,3));
+                        const auto x=load(from,previous,field),y=load(from,current,field);
+                        auto value=field<=varyings.size()&&varyings[field-1].qualifier==Q::Flat?x:lerp(x,y,weight);
+                        if(plane>=6&&field==1+varyings.size()+(plane-6)/4)
+                            value=ctx.OpCompositeInsert(vec4,fzero,value,(plane-6)%4);
+                        ctx.OpStore(pointer(to,out,field),value);
+                    }
+                    ctx.OpStore(next_count,ctx.OpIAdd(u32_type,out,one));
+                });
+                selection(inside_b,[&]{const auto out=ctx.OpLoad(u32_type,next_count);
+                    for(u32 field=0;field<fields;++field)ctx.OpStore(pointer(to,out,field),load(from,current,field));
+                    ctx.OpStore(next_count,ctx.OpIAdd(u32_type,out,one));});
+            });
+            ctx.OpStore(count,ctx.OpLoad(u32_type,next_count));side^=1;
+        }
+        const auto n=ctx.OpLoad(u32_type,count),clipped=data[side];
+        selection(ctx.OpUGreaterThanEqual(b1,n,three),[&]{
+            ctx.OpStore(area_sum,fzero);
+            loop(n,[&](Id index){const auto next=ctx.OpIAdd(u32_type,index,one);
+                const auto a=load(clipped,index,0),b=load(clipped,ctx.OpSelect(u32_type,ctx.OpIEqual(b1,next,n),zero,next),0);
+                const auto cross=ctx.OpFSub(f32,ctx.OpFMul(f32,component(a,0),component(b,1)),
+                    ctx.OpFMul(f32,component(b,0),component(a,1)));
+                const auto projected=ctx.OpFDiv(f32,cross,ctx.OpFMul(f32,component(a,3),component(b,3)));
+                ctx.OpStore(area_sum,ctx.OpFAdd(f32,ctx.OpLoad(f32,area_sum),projected));
+            });
+            const auto flips=ctx.OpLoad(u32_type,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Uniform,u32_type),runtime,ci(9)));
+            const auto flip=ctx.OpINotEqual(b1,ctx.OpBitwiseAnd(u32_type,flips,one),zero);
+            const auto area=ctx.OpLoad(f32,area_sum);
+            const auto native_area=ctx.OpSelect(f32,flip,ctx.OpFNegate(f32,area),area);
+            const auto front=config.front_ccw?ctx.OpFOrdGreaterThan(b1,native_area,fzero):ctx.OpFOrdLessThan(b1,native_area,fzero);
+            auto keep=ctx.ConstantTrue(b1);
+            if(config.cull_front)keep=ctx.OpLogicalAnd(b1,keep,ctx.OpLogicalNot(b1,front));
+            if(config.cull_back)keep=ctx.OpLogicalAnd(b1,keep,front);
+            selection(keep,[&]{loop(n,[&](Id index){
+                std::vector<Shader::Backend::SPIRV::PointOutput> outputs;
+                for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
+                    const auto value=load(clipped,index,field+1);std::vector<Id> channels;
+                    for(u32 channel=0;channel<varying.width;++channel)channels.push_back(component(value,channel));
+                    outputs.push_back({varying.type,varying.output,varying.width==1?channels[0]:ctx.OpCompositeConstruct(varying.type,channels)});
+                }
+                outputs.push_back({u32_type,output_primitive,ctx.OpLoad(u32_type,primitive)});
+                if(config.emulated_clip)outputs.push_back({vec4,output_clips,load(clipped,index,1+u32(varyings.size()))});
+                Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,load(clipped,index,0),fone,zero,true,
+                    output_position,outputs,{},ctx.OpLogicalNot(b1,front));
+            });});
+        });
+    });
+    ctx.OpReturn();ctx.OpFunctionEnd();return ctx.Assemble();
+}
 std::vector<u32> EmitNativePointReplayVertex(){
     PointReplayEmitter ctx;
     const auto u32_type=ctx.TypeUInt(32),f32=ctx.TypeFloat(32),vec4=ctx.TypeVector(f32,4),void_type=ctx.TypeVoid();

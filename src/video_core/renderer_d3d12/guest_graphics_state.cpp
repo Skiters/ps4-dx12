@@ -411,8 +411,14 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     result.rasterizer_discard|=cullable&&poly.cull_front&&poly.cull_back;
     if(!cullable)r.CullMode=D3D12_CULL_MODE_NONE;
     if(!rasterizes_polygons)r.FillMode=D3D12_FILL_MODE_SOLID;
-    if(poly.PolyMode()==AmdGpu::PolygonMode::Point&&rasterizes_polygons&&!result.rasterizer_discard&&!result.discard)
-        throw std::runtime_error("Guest point polygon fill requires native clipping and point rasterization");
+    if(poly.PolyMode()==AmdGpu::PolygonMode::Point&&rasterizes_polygons&&!result.rasterizer_discard&&!result.discard){
+        if(!GuestPolygonPointGeometryState(regs))
+            throw std::runtime_error("Guest point polygon stage/topology/bias needs extended clipping and point lowering");
+        result.polygon_points=true;
+        // The auxiliary GS culls the original polygon. Hardware must retain
+        // both quad orientations for FrontFacing and two-sided stencil.
+        r.CullMode=D3D12_CULL_MODE_NONE;
+    }
     if(result.rasterizer_discard)p.StreamOutput.RasterizedStream=D3D12_SO_NO_RASTERIZED_STREAM;
     if(regs.enable_primitive_restart) {
         if(result.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||result.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP){

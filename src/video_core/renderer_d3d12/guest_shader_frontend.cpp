@@ -325,6 +325,25 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
         add_auxiliary(AuxShaderType::PassthroughTES,SwStage::TessellationEval);
     }
     const auto* vertex=result.stages[u32(SwStage::Vertex)];
+    if(vertex&&GuestPolygonPointGeometryState(regs)){
+        const auto* producer=result.stages[u32(SwStage::TessellationEval)]?
+            result.stages[u32(SwStage::TessellationEval)]:vertex;
+        const auto* fragment=result.stages[u32(SwStage::Fragment)];
+        const auto& poly=regs.polygon_control;
+        auto words=EmitGuestPolygonPoints(producer->info,fragment?&fragment->info:nullptr,
+            fragment?fragment->runtime.hw.fs:Shader::HwFragmentRuntimeInfo{},
+            {bool(poly.cull_front),bool(poly.cull_back),poly.front_face==AmdGpu::FrontFace::CounterClockwise,
+             poly.provoking_vtx_last==AmdGpu::ProvokingVtxLast::Last,
+             producer==vertex&&profile_.needs_clip_distance_emulation&&
+                 producer->info.stores.GetAny(Shader::IR::Attribute::ClipDistance)});
+        auto found=auxiliary_.find(words);
+        if(found==auxiliary_.end()){
+            auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;
+            stage->info.sw_stage=SwStage::Geometry;stage->info.hw_stage=HwStage::Geometry;stage->spirv=words;
+            found=auxiliary_.emplace(std::move(words),std::move(stage)).first;
+        }
+        result.stages[u32(SwStage::Geometry)]=found->second.get();
+    }
     if(vertex&&vertex->runtime.sw.vs.native_point_expansion&&vertex->info.stores.GetAny(Shader::IR::Attribute::PointSize)){
         const bool emulated_clip=profile_.needs_clip_distance_emulation&&vertex->info.stores.GetAny(Shader::IR::Attribute::ClipDistance);
         auto words=EmitGuestPointGeometry(vertex->info,!regs.clipper_control.clip_disable&&regs.clipper_control.ZclipEnable(),emulated_clip,

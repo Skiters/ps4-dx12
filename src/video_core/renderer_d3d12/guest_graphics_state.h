@@ -148,6 +148,7 @@ struct GuestGraphicsState {
     bool blend_constant_alpha_rgb{};
     u32 ordered_color_mask{};
     bool rasterizer_discard{};
+    bool polygon_points{};
     bool discard{};
     bool WritesDepth(bool clear_depth=false)const {
         if(discard)return false;
@@ -173,6 +174,18 @@ struct GuestGraphicsState {
         return WritesDepth(clear_depth)||WritesStencil(clear_stencil);
     }
 };
+inline bool GuestPolygonPointGeometryState(const AmdGpu::Regs& regs){
+    using Stages=AmdGpu::ShaderStageEnable::VgtStages;
+    using P=AmdGpu::PrimitiveType;
+    const bool vertex_triangles=regs.stage_enable.raw==Stages::Vs&&
+        (regs.primitive_type==P::TriangleList||regs.primitive_type==P::TriangleFan||regs.primitive_type==P::Polygon);
+    const bool tessellated_triangles=regs.stage_enable.raw==Stages::LsHs&&
+        regs.primitive_type==P::PatchPrimitive&&regs.tess_config.type!=AmdGpu::TessellationType::Isoline;
+    return regs.polygon_control.PolyMode()==AmdGpu::PolygonMode::Point&&
+        (vertex_triangles||tessellated_triangles)&&
+        !regs.polygon_control.NeedsBias()&&!regs.clipper_control.clip_disable&&
+        regs.clipper_control.ZclipEnable();
+}
 // Attachment formats come from the actual native texture/depth cache. Preserve
 // PS4 RT slot numbers (including holes); no signature-derived placeholder formats.
 GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs&,
