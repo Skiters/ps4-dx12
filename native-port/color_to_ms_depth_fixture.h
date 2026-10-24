@@ -8,11 +8,12 @@
 #include <cmath>
 
 namespace NativeDX12 {
-inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false,UINT pool_geometry=0,bool retain_extent=false){
+inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool wide=false,UINT pool_geometry=0,bool retain_extent=false,
+    UINT raw_format=0,UINT raw_number=0){
     const auto require=[](bool ok,const char* message){if(!ok)throw std::runtime_error(message);};
     unsigned cases{};
     const auto counts=wide?std::array<UINT,2>{8,16}:std::array<UINT,2>{2,4};
-    for(UINT color_kind=srgb?2:0;color_kind<(srgb?3u:wide?1u:2u);++color_kind)for(UINT format:{2u,4u})
+    for(UINT color_kind=raw_format?3:srgb?2:0;color_kind<(raw_format?4u:srgb?3u:wide?1u:2u);++color_kind)for(UINT format:{2u,4u})
     for(bool stencil:{false,true})for(UINT samples:counts){
         if((pool_geometry||retain_extent)&&(color_kind!=0||format!=4||samples!=4))continue;
         if(wide){D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS quality{stencil?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
@@ -22,6 +23,9 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         GuestTextureDesc source;source.width=13;source.height=11;source.pitch=16;
         source.layers=source.view_layers=2;source.levels=pool_geometry?2:1;source.tile_mode=8;source.writable=true;
         source.data_format=color_kind==0?14:color_kind==1?11:10;source.number_format=color_kind==2?9:7;
+        if(raw_format){source.data_format=raw_format;source.number_format=raw_number;
+            source.native_raw32=true;source.native_packed10_raw=raw_format==9;}
+        const bool gamma=color_kind==2||(raw_format==10&&raw_number==9);
         // The upstream helper creates its own mip/layer-zero view. Guest
         // binding selectors/swizzles must not leak into this copy operation.
         source.first_mip=pool_geometry?1:0;source.first_layer=1;source.view_layers=1;source.swizzle={7,6,5,4};
@@ -49,8 +53,28 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         const auto component=[&](UINT x,UINT y,UINT c,UINT layer,UINT mip){return wide?
             float(c+1+layer*5+mip*7)/16.f:float(1+(x*3+y*7+c*53+layer*31+mip*17)%251)/256.f;};
         const auto byte=[](UINT x,UINT y,UINT c,UINT layer,UINT mip){return 1+(x*3+y*7+c*53+layer*31+mip*17)%251;};
+        const auto raw_word=[&](UINT x,UINT y,UINT layer,UINT mip){
+            if(raw_format==4)return std::bit_cast<u32>(component(x,y,0,layer,mip));
+            if(raw_format==34)return byte(x,y,0,layer,mip)|(byte(x,y,1,layer,mip)<<9)|
+                (byte(x,y,2,layer,mip)<<18)|(15u<<27);
+            const UINT width=raw_format==9?10:8;u32 word{};
+            for(UINT c=0;c<4;++c){
+                const UINT bits=c==3&&raw_format==9?2:width;
+                const UINT mask=(1u<<(bits-(raw_number==1?1:0)))-1;
+                word|=(byte(x,y,c,layer,mip)&mask)<<(c*width);
+            }
+            return word;
+        };
         const auto sampled=[&](UINT x,UINT y,UINT c){
             if(wide&&c>=4)return 0.f; // Explicit native choice for undefined upstream channels.
+            if(raw_format){
+                if(raw_format==4)return c==0?component(x,y,0,0,0):c==3?1.f:0.f;
+                if(raw_format==34)return c==3?1.f:float(byte(x,y,c,0,0))/512.f;
+                const UINT width=raw_format==9?10:8,bits=raw_format==9&&c==3?2:width;
+                const UINT divisor=(1u<<(bits-(raw_number==1?1:0)))-1;
+                const float value=float((raw_word(x,y,0,0)>>(c*width))&((1u<<bits)-1))/float(divisor);
+                return gamma&&c<3?(value<=0.04045f?value/12.92f:std::pow((value+0.055f)/1.055f,2.4f)):value;
+            }
             if(color_kind==1&&c>1)return c==3?1.f:0.f;
             if(color_kind!=2)return component(x,y,c,0,0);
             const float s=float(byte(x,y,c,0,0))/255.f;
@@ -60,6 +84,7 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         for(UINT m=0;m<source.levels;++m)for(UINT l=0;l<source.layers;++l)
         for(UINT y=0;y<std::max(source.height>>m,1u);++y)for(UINT x=0;x<std::max(source.width>>m,1u);++x){
             auto* at=color.data()+GuestPixelOffset(source,sl,m,l,x,y);
+            if(raw_format){const u32 word=raw_word(x,y,l,m);memcpy(at,&word,4);continue;}
             for(UINT c=0;c<(color_kind==1?2u:4u);++c){
                 if(color_kind==2)at[c]=std::byte(byte(x,y,c,l,m));
                 else{const float value=component(x,y,c,l,m);memcpy(at+4*c,&value,4);}
@@ -120,7 +145,7 @@ inline void RunColorToMsDepthFixture(ID3D12Device* device,bool srgb=false,bool w
         try{cache.CaptureIndependentImageVersion(image,bad,dl,renderer.RecordingList(),renderer.CompletedFence(),capture);}
         catch(const std::invalid_argument&){rejected=true;}
         require(rejected&&!captures&&image.gpu_owned,"Invalid sample geometry accepted or source mutated");
-        auto integer=source;integer.number_format=4;
+        auto integer=source;integer.number_format=4;if(raw_format==34)integer.data_format=4;
         require(!GuestMultisample::CanReinterpretColorAsMsDepth(integer,LayoutGuestTexture(integer),target,dl),
             "Integer color source accepted by float-sampler depth contract");
         bad=target;bad.address+=4;rejected=false;
@@ -231,7 +256,7 @@ O.Store(at+4,0);
             const auto* xy=sample_xy(s);
             const UINT sx=((16*x+xy[0])*source.width)/(16*target.width),sy=((16*y+xy[1])*source.height)/(16*target.height);
             const float ideal=l?seed(l,s,x,y):sampled(sx,sy,s);
-            if(l||color_kind!=2||s==3)return std::pair{ideal,ideal};
+            if(l||!gamma||s==3)return std::pair{ideal,ideal};
             // D3D functional spec 3.2.3.7 measures sRGB precision on the
             // encoded side: half an 8-bit step, before integer rounding.
             // Map that interval through the independent ideal decoder.
@@ -264,7 +289,7 @@ O.Store(at+4,0);
         // observed native output. In particular 0.5 may become 0x7fff OR 0x8000.
         // Keep exact byte checks for padding, S and the nonconverted inputs.
         // https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#FLOATtoUNORM
-        if(format==2&&color_kind!=2)
+        if(format==2&&!gamma&&!raw_format)
         for(UINT l=0;l<target.layers;++l)for(UINT s=0;s<samples;++s)for(UINT y=0;y<target.height;++y)for(UINT x=0;x<target.width;++x){
             const auto at=GuestPixelOffset(target,dl,0,l,x,y,s);u16 actual{};memcpy(&actual,actual_d.data()+at,2);
             const auto* xy=sample_xy(s);const UINT sx=((16*x+xy[0])*source.width)/(16*target.width),sy=((16*y+xy[1])*source.height)/(16*target.height);
@@ -273,7 +298,7 @@ O.Store(at+4,0);
             memcpy(actual_d.data()+at,expected.data()+at,2); // Compare untouched padding below, after the value assertion.
         }
         // sRGB has defined conversion accuracy rather than an exact bit oracle.
-        if(color_kind!=2){
+        if(!gamma&&!raw_format){
             if(actual_d!=expected){const auto i=size_t(std::mismatch(actual_d.begin(),actual_d.end(),expected.begin()).first-actual_d.begin());
                 fprintf(stderr,"Guest mismatch byte=%zu actual=%u expected=%u\n",i,unsigned(actual_d[i]),unsigned(expected[i]));
                 for(UINT l=0;l<target.layers;++l)for(UINT s=0;s<samples;++s)for(UINT y=0;y<target.height;++y)for(UINT x=0;x<target.width;++x){
@@ -307,7 +332,7 @@ O.Store(at+4,0);
         cache.Collect(renderer.CompletedFence());require(converted.color_depth_leases.empty(),"Completed color draw lease was not released");
         renderer.ValidateDebugMessages();++cases;
     }
-    require((pool_geometry||retain_extent)?cases==2:wide?cases>0:cases==(srgb?8u:16u),"Color-channel cases missing");
+    require((pool_geometry||retain_extent)?cases==2:wide?cases>0:cases==((srgb||raw_format)?8u:16u),"Color-channel cases missing");
     printf("PASS: %u typed color-to-MS-depth cases; channels/defaults/sRGB, sample UVs, mip/layer-zero selection, unchanged S/B/padding, deferred receipts, CPU guards and real fence leases\n",cases);
 }
 } // namespace NativeDX12

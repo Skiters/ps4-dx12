@@ -22,6 +22,16 @@ ComPtr<ID3DBlob> Compile(std::string_view source,const char* target,const D3D_SH
 DXGI_FORMAT LinearFormat(DXGI_FORMAT format){
     return format==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB?DXGI_FORMAT_R8G8B8A8_UNORM:format;
 }
+bool RawFloatColor(const GuestTextureDesc& d,const GuestTextureLayout& layout){
+    if(!d.UsesRaw32()||layout.format!=DXGI_FORMAT_R32_UINT||layout.bytes_per_pixel!=4||
+       layout.expanded_bytes_per_pixel)return false;
+    switch(d.data_format){
+    case 4:case 34:return d.number_format==7;
+    case 9:return d.number_format==0||d.number_format==1;
+    case 10:return d.number_format==0||d.number_format==1||d.number_format==9;
+    default:return false;
+    }
+}
 void ValidateRawRgba8Transfer(const GuestTextureDesc& d,const GuestTextureLayout& layout,DXGI_FORMAT backing){
     if((d.data_format==10||d.data_format==34)&&d.UsesRaw32()&&
        (layout.format!=DXGI_FORMAT_R32_UINT||layout.bytes_per_pixel!=4||layout.HostBytesPerPixel()!=4||
@@ -470,9 +480,11 @@ bool GuestMultisample::CanReinterpretColorAsMsDepth(const GuestTextureDesc& sour
     // retaining the defined channel transfers, S and the full draw operation.
     return !source.depth_target&&!source.stencil_address&&source.samples==1&&
         !source.volume_depth&&!source.one_dimensional&&source.levels&&source.layers&&
-        !source.UsesRaw32()&&!source.UsesRawPacked10()&&source_layout.block_extent==1&&
-        !source_layout.expanded_bytes_per_pixel&&source_layout.format!=DXGI_FORMAT_UNKNOWN&&
-        std::string_view(ValueType(source_layout.format))=="float4"&&
+        source_layout.block_extent==1&&source_layout.format!=DXGI_FORMAT_UNKNOWN&&
+        (RawFloatColor(source,source_layout)||
+         (!source.UsesRaw32()&&!source.UsesRawPacked10()&&
+          (!source_layout.expanded_bytes_per_pixel||HasExactPackedExpansion(source,source_layout))&&
+          std::string_view(ValueType(source_layout.format))=="float4"))&&
         target.depth_target&&!target.writable&&!target.render_target&&
         !target.volume_depth&&!target.one_dimensional&&target.levels==1&&target.layers&&
         target.samples>1&&target.samples<=16&&std::has_single_bit(target.samples)&&
@@ -497,13 +509,18 @@ std::shared_ptr<GuestMultisample::ColorDepthLease> GuestMultisample::PrepareColo
         target_layout.bytes_per_pixel==2?DXGI_FORMAT_D16_UNORM:DXGI_FORMAT_D32_FLOAT;
     // Writable sRGB I uses a linear UAV layout, but the pinned blit samples
     // ImageInfo::pixel_format, not that storage view. Restore its typed SRV.
-    const auto color_format=source_desc.data_format==10&&source_desc.number_format==9?
+    const bool raw=RawFloatColor(source_desc,source_layout);
+    const auto color_format=raw?DXGI_FORMAT_R32_UINT:source_desc.data_format==10&&source_desc.number_format==9?
         DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:source_layout.format;
+    if(raw&&src.Format!=DXGI_FORMAT_R32_TYPELESS&&src.Format!=DXGI_FORMAT_R32_UINT&&
+       !source.AllowsCast(DXGI_FORMAT_R32_UINT))
+        throw std::invalid_argument("Color-channel depth transfer raw source lacks UINT view permission");
     D3D12_FEATURE_DATA_FORMAT_SUPPORT support{color_format};
     Check(DX12_API_CALL(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT,&support,sizeof(support))));
     if(!(support.Support1&D3D12_FORMAT_SUPPORT1_SHADER_LOAD))
         throw std::runtime_error("Color-channel depth transfer source lacks typed sample loads");
-    auto& program=color_depth_programs_[{depth_format,target_desc.samples,dst.SampleDesc.Quality}];
+    const UINT codec=raw?source_desc.data_format*16+source_desc.number_format:0;
+    auto& program=color_depth_programs_[{depth_format,target_desc.samples,dst.SampleDesc.Quality,codec}];
     if(!program){
         auto compiled=std::make_shared<Program>();
         D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,0,0,0};
@@ -516,7 +533,10 @@ std::shared_ptr<GuestMultisample::ColorDepthLease> GuestMultisample::PrepareColo
         const auto vs=Compile("struct O{float4 p:SV_Position;float2 uv:TEXCOORD0;};"
             "O main(uint id:SV_VertexID){O o;o.uv=float2(id==2?2:0,id==1?2:0);"
             "o.p=float4(o.uv.x*2-1,1-o.uv.y*2,0,1);return o;}","vs_5_1");
-        const auto ps=Compile(GuestColorToMsDepthSource,"ps_5_1");
+        const auto format=std::to_string(source_desc.data_format),number=std::to_string(source_desc.number_format);
+        const D3D_SHADER_MACRO macros[]{{"RAW_COLOR",raw?"1":"0"},
+            {"DATA_FORMAT",format.c_str()},{"NUMBER_FORMAT",number.c_str()},{nullptr,nullptr}};
+        const auto ps=Compile(GuestColorToMsDepthSource,"ps_5_1",macros);
         D3D12_GRAPHICS_PIPELINE_STATE_DESC state{};state.pRootSignature=compiled->root.Get();
         state.VS={vs->GetBufferPointer(),vs->GetBufferSize()};state.PS={ps->GetBufferPointer(),ps->GetBufferSize()};
         state.RasterizerState.FillMode=D3D12_FILL_MODE_SOLID;state.RasterizerState.CullMode=D3D12_CULL_MODE_NONE;

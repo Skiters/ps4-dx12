@@ -881,6 +881,14 @@ int main(int argc,char** argv){try{
     if(argc==2&&strcmp(argv[1],"--depth-growth")==0){RunIndependentDepthGrowthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth")==0){RunColorToMsDepthFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-srgb")==0){RunColorToMsDepthFixture(device.Get(),true);return 0;}
+    if(argc==2&&strcmp(argv[1],"--color-ms-depth-raw")==0){
+        for(const auto format:{4u,9u,10u,34u})for(const auto number:{0u,1u,7u,9u}){
+            if((format==4||format==34)?number!=7:format==9?(number!=0&&number!=1):
+                (number!=0&&number!=1&&number!=9))continue;
+            RunColorToMsDepthFixture(device.Get(),false,false,0,false,format,number);
+        }
+        return 0;
+    }
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-wide")==0){RunColorToMsDepthFixture(device.Get(),false,true);return 0;}
     if(argc==2&&strcmp(argv[1],"--color-ms-depth-overlap-class")==0){
         RunColorToMsDepthFixture(device.Get(),false,false,1);RunColorToMsDepthFixture(device.Get(),false,false,2);return 0;}
