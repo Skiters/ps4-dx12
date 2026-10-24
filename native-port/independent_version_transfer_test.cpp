@@ -834,7 +834,7 @@ int main(int argc,char** argv){try{
     }
     if(argc==2&&strcmp(argv[1],"--readonly-depth-conversion")==0){RunReadonlyDepthConversion(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
-    if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());RunConvertedColorSubresource(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--converted-clear-pressure")==0){RunConvertedClearPressure(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
     if(argc==2&&strcmp(argv[1],"--sample-backing-pressure")==0){for(UINT samples:{1u,8u})RunSampleBackingPressure(device.Get(),samples);return 0;}

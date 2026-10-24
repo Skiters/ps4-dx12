@@ -2768,7 +2768,7 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
        desc.one_dimensional||desc.volume_depth||desc.samples!=1||desc.levels!=1||
        desc.first_mip||!desc.layers||desc.first_layer>=desc.layers||!desc.view_layers||
        desc.view_layers>desc.layers-desc.first_layer||layout.mips.size()!=1||
-       layout.block_extent!=1||layout.expanded_bytes_per_pixel||desc.pow2_padding||
+       layout.block_extent!=1||(layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(desc,layout))||desc.pow2_padding||
        (!desc.render_target&&(desc.storage_height||desc.storage_slice_bytes)))return std::nullopt;
     if(FindValidIndependentImage(desc,layout))return std::nullopt;
     const auto& local=layout.mips[0];
@@ -2778,7 +2778,8 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
         if(!parent.gpu_owned||parent.logical_dirty||parent.desc.writable||
            parent.desc.depth_target||parent.desc.stencil_address||parent.desc.samples!=1||
            parent.desc.volume_depth||parent.desc.one_dimensional||
-           parent.layout.block_extent!=1||parent.layout.expanded_bytes_per_pixel||
+           parent.layout.block_extent!=1||
+           (parent.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(parent.desc,parent.layout))||
            parent.layout.bytes_per_pixel!=layout.bytes_per_pixel||
            desc.address<=parent.desc.address||(!array&&parent.desc.layers!=1))continue;
         const auto delta=desc.address-parent.desc.address;
@@ -2797,9 +2798,20 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
             view.sampled_depth=desc.sampled_depth;view.swizzle=desc.swizzle;
             view.first_mip=mip;view.levels=desc.render_target?parent.desc.levels:mip+1;view.min_lod=mip*256;
             view.first_layer=UINT(layer)+desc.first_layer;view.view_layers=desc.view_layers;
-            if(!CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
-               !CanBindNativeWordFormat(parent,view)||
-               (desc.render_target&&!(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)))continue;
+            const bool direct=CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))&&
+                CanBindNativeWordFormat(parent,view)&&
+                (!desc.render_target||(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET));
+            if(!direct){
+                // A native cast is not available for every physically identical
+                // guest view (R32/RGBA8 and expanded signed packed10). Convert
+                // the complete parent, keeping the selected mip/slice. A local
+                // standalone upload would incorrectly initialize it from B.
+                view.levels=parent.desc.levels;
+                const auto converted_layout=LayoutGuestTexture(view);
+                if(!CompatibleGuestPackedStorage(parent.desc,view)||
+                   !CanUploadGpuSnapshot(parent.desc,parent.layout)||
+                   !CanUploadGpuSnapshot(view,converted_layout))continue;
+            }
             if(parent.HasUnprotectedCpuPages())
                 throw std::runtime_error("Color subresource lookup requires boundary validation");
             if(result&&result->parent!=&parent){

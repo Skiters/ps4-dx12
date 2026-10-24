@@ -431,7 +431,8 @@ public:
     std::optional<GuestTextureDesc> RebaseBlockSubresource(const GuestTextureDesc&,
         const GuestTextureLayout&,bool array)const;
     struct ColorSubresource {Entry* parent;GuestTextureDesc view;};
-    // Resolve a direct color mip/slice without publishing I into guest memory.
+    // Resolve a color mip/slice without publishing I into guest memory. A
+    // converted view retains the complete parent envelope for UploadVersion.
     // Callers retain parent with PinBinding before any subsequent allocation.
     std::optional<ColorSubresource> RebaseColorSubresource(const GuestTextureDesc&,
         const GuestTextureLayout&,bool array)const;

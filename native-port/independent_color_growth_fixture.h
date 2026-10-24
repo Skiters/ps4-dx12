@@ -5,6 +5,53 @@
 #include <cstring>
 
 namespace NativeDX12 {
+inline void RunConvertedColorSubresource(ID3D12Device* device){
+    const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
+    for(const UINT tile:{0u,8u}){
+        Rasterizer renderer(device);GuestTextureCache cache(device);
+        GuestTextureDesc source;source.address=0x40000;source.width=source.height=source.pitch=16;
+        source.levels=3;source.layers=source.view_layers=2;source.tile_mode=tile;
+        source.data_format=4;source.number_format=4;source.render_target=true;
+        const auto layout=LayoutGuestTexture(source);
+        std::vector<std::byte> original(layout.guest_bytes,std::byte{0x39});
+        for(UINT mip=0;mip<source.levels;++mip)for(UINT layer=0;layer<source.layers;++layer)
+        for(UINT y=0;y<(source.height>>mip);++y)for(UINT x=0;x<(source.width>>mip);++x){
+            const u32 value=0xc1000000u|(mip<<20)|(layer<<16)|(y<<8)|x;
+            memcpy(original.data()+GuestPixelOffset(source,layout,mip,layer,x,y),&value,4);
+        }
+        auto& parent=cache.Upload(source,original,renderer.RecordingList(),renderer.CompletedFence());
+        parent.buffer_alias_version=parent.buffer_alias_watch=true;parent.SetGpuOwned(true);
+        parent.NoteLogicalImageWrite();auto pin=cache.PinBinding(parent);
+        cache.SetOwnershipResolver([](auto&){throw std::runtime_error("Converted mip published its image");});
+        auto local=source;local.address+=layout.mips[1].offset+layout.mips[1].slice_bytes;
+        local.width=local.height=8;local.pitch=layout.mips[1].pitch;
+        local.levels=local.layers=local.view_layers=1;local.render_target=false;
+        local.data_format=10;local.number_format=4;
+        const auto physical=LayoutGuestTexture(local);
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+            require(source.address+GuestPixelOffset(source,layout,1,1,x,y)==
+                local.address+GuestPixelOffset(local,physical,0,0,x,y),"Converted mip physical oracle");
+        const auto alias=cache.RebaseColorSubresource(local,physical,true);
+        require(alias&&alias->parent==&parent&&alias->view.address==source.address&&
+            alias->view.first_mip==1&&alias->view.first_layer==1&&alias->view.view_layers==1&&
+            alias->view.levels==3&&alias->view.layers==2,"Converted mip lost complete parent envelope");
+        auto invalid=local;invalid.pitch*=2;
+        require(!cache.RebaseColorSubresource(invalid,LayoutGuestTexture(invalid),true),
+            "Converted mip accepted a different pitch");
+        std::vector<std::byte> unrelated(layout.guest_bytes,std::byte{0xa5});
+        auto& converted=cache.Upload(alias->view,unrelated,renderer.RecordingList(),renderer.CompletedFence());
+        const auto srv=converted.Srv(alias->view);
+        require(srv.Format==DXGI_FORMAT_R8G8B8A8_UINT&&
+            srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
+            srv.Texture2DArray.MostDetailedMip==1&&srv.Texture2DArray.FirstArraySlice==1,
+            "Converted mip SRV lost format or selected subresource");
+        GuestImageReadback readback(device,converted,renderer.RecordingList());
+        const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
+        auto actual=original;readback.Resolve(renderer.CompletedFence(),actual);
+        require(actual==original,"Converted shifted mip lost current I, another mip/layer or padding");
+        renderer.ValidateDebugMessages();
+    }
+}
 inline void RunIndependentColorLayerGrowth(ID3D12Device* device){
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
     for(const UINT tile:{0u,8u})for(const UINT layers:{1u,2u}){
