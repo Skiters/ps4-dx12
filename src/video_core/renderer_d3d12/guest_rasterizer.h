@@ -61,8 +61,10 @@ class GuestRasterizer : public GuestBufferAccess {
     void ReleaseImageWatches(VAddr,u64) override;
     void DiscardImages(VAddr,u64);
     bool MaterializeOwnedColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,
-        const GuestTextureLayout&,const GuestColorClearPlan&,std::span<std::byte> metadata);
-    void MaterializeColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,const GuestTextureLayout&,bool native_only=false);
+        const GuestTextureLayout&,const GuestColorClearPlan&,std::span<std::byte> metadata,
+        GuestTextureCache::Entry* bound_target=nullptr,bool retired=false);
+    void MaterializeColorClear(const AmdGpu::ColorBuffer&,const GuestTextureDesc&,const GuestTextureLayout&,
+        bool native_only=false,GuestTextureCache::Entry* bound_target=nullptr,bool retired=false);
     void ResolveColorTargets();
     void Dispatch(const u32 (&groups)[3]);
     bool ComputeImageOperation(const Shader::Info&,const u32 (&groups)[3]);

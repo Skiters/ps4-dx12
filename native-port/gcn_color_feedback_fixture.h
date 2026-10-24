@@ -12,7 +12,7 @@ template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
-    bool independent_class=false,bool independent_depth=false){
+    bool independent_class=false,bool independent_depth=false,bool shared_clear=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -84,6 +84,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.ps_program.address=reinterpret_cast<u64>(program.data())>>8;
         regs.ps_program.settings.num_user_regs=feedback?8:0;regs.ps_program.settings.num_vgprs=1;
         if(feedback)memcpy(regs.ps_program.user_data.data(),&image,sizeof(image));
+        if(shared_clear&&cb.cmask_base_address)
+            std::fill_n(physical.begin()+49152,size_t(GuestCmaskBytes(cb)),std::byte{0xff});
         rasterizer.Draw(false);
         if(memcmp(backing,physical.data(),65536))
             throw std::runtime_error("Feedback draw published physical CPU bytes before explicit readback");
@@ -142,12 +144,22 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto shifted=depth;shifted.address+=256;
         if(GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,shifted,LayoutGuestTexture(shifted)))
             throw std::runtime_error("Shifted attachment recreation was admitted without a physical plan");
+        if(shared_clear){
+            cb.info.fast_clear=1;cb.cmask_base_address=u32((base+49152)>>8);
+            cb.clear_word0=0x3f400000; // .75: must clear retired CB AFTER the copy into D.
+            const auto bytes=GuestCmaskBytes(cb);
+            if(bytes>61440-49152)throw std::runtime_error("Shared CMASK fixture metadata overlaps probe target");
+            rasterizer.InvalidateMemory(base+49152,bytes);memset(memory+49152,0,size_t(bytes));
+            physical.assign(backing,backing+65536);
+            regs.generic_scissor.bottom_right_x=4;
+        }
         draw(seed,false); // CB writes1, D writes vertex Z=.5 into the new owner.
         rasterizer.InvalidateMemory(base,96);
         for(UINT i=0;i<3;++i){const float z=.25f;memcpy(memory+i*32+8,&z,4);}
         physical.assign(backing,backing+65536);
         draw(seed,false); // Repeat D->CB->D recreation, now with Z=.25.
         regs.depth_control={};cb.base_address=u32((base+61440)>>8);
+        if(shared_clear){cb.info.fast_clear=0;cb.cmask_base_address=0;regs.generic_scissor.bottom_right_x=8;}
         const auto probe_desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
         const auto probe_layout=LayoutGuestTexture(probe_desc);
         if(independent_depth){
@@ -185,6 +197,16 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&expected_depth,4);
         if(memcmp(backing,expected.data(),65536))
             throw std::runtime_error("Shared attachments lost depth owner, published retired color or changed B/padding");
+        if(shared_clear){
+            physical.assign(backing,backing+65536);
+            draw(right,true);rasterizer.Finish();rasterizer.ReadMemory(base+61440,probe_layout.guest_bytes);
+            // Untouched D came from old C=1, not the subsequent retired clear=.75.
+            const float untouched=.5f;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&untouched,4);
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Retired color clear was reordered before depth recreation or published into B");
+        }
         return;
     }
     // Read outside the written rectangle. Successive draws consume the last

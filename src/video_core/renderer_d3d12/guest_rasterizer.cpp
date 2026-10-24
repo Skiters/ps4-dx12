@@ -781,7 +781,7 @@ void GuestRasterizer::CaptureDisplayCandidates(VAddr address,uint64_t id,Resourc
 }
 bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     const GuestTextureDesc& d,const GuestTextureLayout& l,const GuestColorClearPlan& plan,
-    std::span<std::byte> metadata) {
+    std::span<std::byte> metadata,GuestTextureCache::Entry* bound_target,bool retired) {
     // Update an initialized native color owner, retaining a separate B version
     // when this target came from native depth recreation. Decode the CB map
     // with the same codec as physical materialization, before changing planes.
@@ -798,8 +798,16 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
        d.view_layers>b.NumSlices()-d.first_layer||
        Overlap(d.address,l.guest_bytes,b.CmaskAddress(),meta_bytes))return false;
     if(!plan.Pending())return false;
-    GuestTextureCache::Entry* image{};
-    for(auto& entry:textures_.Entries())if(entry->gpu_owned&&ImageOverlap(d.address,l.guest_bytes,*entry)){
+    GuestTextureCache::Entry* image=bound_target;
+    if(bound_target){
+        // Upload has already reconciled this draw's exact native target.
+        // A pinned CB retired by the later depth bind still receives its load
+        // clear, but must never become the logical owner again.
+        if(bound_target->layout.guest_bytes!=l.guest_bytes||
+           !CompatibleGuestAttachmentStorage(bound_target->desc,d)||
+           (retired?(!bound_target->logical_dirty||bound_target->gpu_owned):
+               !textures_.HasCurrentNativeContents(*bound_target)))return false;
+    }else for(auto& entry:textures_.Entries())if(entry->gpu_owned&&ImageOverlap(d.address,l.guest_bytes,*entry)){
         // A competing alias is not evidence that this image is the last
         // writer. Let the existing reconciliation path determine ownership.
         if(image||(entry->buffer_alias_version&&!textures_.HasCurrentNativeContents(*entry))||
@@ -857,10 +865,10 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
         else DX12_API_CALL(list->ClearRenderTargetView(handle,clear->rtv.data(),UINT(rectangles.size()),rectangles.data()));
         handle.ptr+=step;
     }
-    image->NoteLogicalImageWrite(); // The actual clear is a GPU write, including a GpuModified0 copy.
+    if(!retired)image->NoteLogicalImageWrite();
     image->diagnostic_writer=image->diagnostic_vs=image->diagnostic_ps=0;
-    // Color pages stay guarded and GPU-owned. ResolveImage later merges these
-    // logical texels into existing backing, preserving padding/untouched layers.
+    // Current color pages stay guarded and GPU-owned. A retired attachment
+    // keeps only its pinned native writes; it never publishes logical texels.
     // Publish expanded metadata only after the color writes are in queue order.
     for(const auto layer:plan.uniform_layers)
         std::fill_n(metadata.begin()+size_t(slice_bytes*layer),size_t(slice_bytes),std::byte{0xff});
@@ -869,7 +877,8 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     return true;
 }
 void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
-    const GuestTextureDesc& d,const GuestTextureLayout& l,bool native_only) {
+    const GuestTextureDesc& d,const GuestTextureLayout& l,bool native_only,
+    GuestTextureCache::Entry* bound_target,bool retired) {
     if(!b.info.fast_clear||!b.cmask_base_address)return;
     const auto meta_bytes=GuestCmaskBytes(b);
     // Fast-clear enable is persistent state, not evidence of a new clear.
@@ -904,7 +913,7 @@ void GuestRasterizer::MaterializeColorClear(const AmdGpu::ColorBuffer& b,
     }
     if(!plan.Pending())return;
     if(MaterializeOwnedColorClear(b,d,l,plan,
-        {reinterpret_cast<std::byte*>(b.CmaskAddress()),size_t(meta_bytes)}))return;
+        {reinterpret_cast<std::byte*>(b.CmaskAddress()),size_t(meta_bytes)},bound_target,retired))return;
     if(native_only)throw std::runtime_error("Recreated native color target has no exact pending CMASK clear path");
     if(!ReadMemory(d.address,l.guest_bytes))
         throw std::runtime_error("Native color backing is not mapped");
@@ -1187,7 +1196,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 descriptions[i],layouts[i],descriptions[8],layouts[8]);
             if((!separate_color_depth[i]&&
                 !GuestTextureCache::CanRecreateColorDepthAttachments(descriptions[i],layouts[i],descriptions[8],layouts[8]))||
-               r.color_buffers[i].info.fast_clear||r.color_buffers[i].info.compression||
+               r.color_buffers[i].info.compression||
                (descriptions[8].stencil_address&&Overlap(descriptions[8].stencil_address,stencil_layout.guest_bytes,
                    descriptions[i].address,layouts[i].guest_bytes)))
                 throw std::runtime_error("Guest depth/color alias requires an exact attachment recreation plan");
@@ -1251,7 +1260,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // publish its future native class or metadata during physical prewarm.
         auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
         if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
-        deferred_color_clear[i]=source&&source->desc.depth_target;
+        deferred_color_clear[i]=color_depth_alias[i]||separate_color_depth[i]||(source&&source->desc.depth_target);
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
     const bool recreate_color_depth=std::ranges::any_of(color_depth_alias,[](bool value){return value;});
@@ -1574,13 +1583,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 RecordingList(),CompletedFence());});
             bindings.RetainAllocation(replay_attachments.BindingPin(i));bindings.RetainAllocation(entry.texture.allocation);
             const auto& buffer=r.color_buffers[i];
-            if(replay_attachments.Beginning()&&deferred_color_clear[i]){
+            if(replay_attachments.Beginning()&&deferred_color_clear[i]&&!color_depth_alias[i]){
                 if(!OwnIndependentImage(entry))throw std::runtime_error("Recreated color target cannot retain native clear ownership");
-                MaterializeColorClear(buffer,descriptions[i],layouts[i],true);
+                MaterializeColorClear(buffer,descriptions[i],layouts[i],true,&entry);
             }
-            // CMASK bytes are materialized before upload. Keep their owner in
-            // the same image cache while preserving the physical clear path.
-            if(replay_attachments.Beginning()){
+            // Current CB metadata follows its native owner. A CB replaced by
+            // depth is registered later, matching original BeginRendering.
+            if(replay_attachments.Beginning()&&!color_depth_alias[i]){
                 textures_.RegisterMeta(entry,GuestTextureCache::MetaType::CMask,
                     buffer.info.fast_clear?buffer.CmaskAddress():0,0);
                 textures_.RegisterMeta(entry,GuestTextureCache::MetaType::FMask,
@@ -1700,6 +1709,18 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i==8||!retired_color_targets[i])&&
             (i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
+        }
+        // Pinned PrepareRenderState performs CB->D recreation before
+        // BeginRendering registers and clears CB. Clearing before the copy
+        // would incorrectly inject CB's future clear value into current D.
+        if(replay_attachments.Beginning())for(UINT i=0;i<target_count;++i)if(retired_color_targets[i]){
+            auto& entry=*targets[i];const auto& buffer=r.color_buffers[i];
+            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::CMask,
+                buffer.info.fast_clear?buffer.CmaskAddress():0,0);
+            textures_.RegisterMeta(entry,GuestTextureCache::MetaType::FMask,
+                buffer.info.compression?buffer.FmaskAddress():0);
+            MaterializeColorClear(buffer,descriptions[i],layouts[i],true,&entry,true);
+            textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
         }
         bindings.Prepare();
         std::set<ID3D12Resource*> feedback_copies;
