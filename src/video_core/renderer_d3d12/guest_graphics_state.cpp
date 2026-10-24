@@ -205,11 +205,11 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             const auto samples = regs.color_buffers[i].NumSamples();
             if (!std::has_single_bit(samples) || samples > Shader::NativeOrderedColor::MaxSamples)
                 throw std::runtime_error("Native ordered color sample count exceeds storage planes");
-            if (regs.color_control.rop3 == AmdGpu::ColorControl::LogicOp::Copy &&
+            if (i != 0 && regs.color_control.rop3 == AmdGpu::ColorControl::LogicOp::Copy &&
                 (dual(blend.color_src_factor) || dual(blend.color_dst_factor) ||
                 (blend.separate_alpha_blend &&
                  (dual(blend.alpha_src_factor) || dual(blend.alpha_dst_factor)))))
-                throw std::runtime_error("Native packed10 SNORM ordered blending does not support dual-source input");
+                throw std::runtime_error("Dual-source blending is only defined for the primary color attachment");
             result.ordered_color_mask |= 1u << i;
             p.RTVFormats[i] = DXGI_FORMAT_UNKNOWN;
             rt.RenderTargetWriteMask = 0;

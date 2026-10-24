@@ -831,7 +831,9 @@ void EmitContext::DefineOutputs() {
                 continue;
             }
             const u32 num_components = info.stores.NumComponents(mrt);
-            if (runtime_info.hw.fs.ordered_color_targets[i].enabled) {
+            const bool ordered_secondary = i == 1 && runtime_info.hw.fs.dual_source_blending &&
+                runtime_info.hw.fs.ordered_color_targets[0].enabled;
+            if (runtime_info.hw.fs.ordered_color_targets[i].enabled || ordered_secondary) {
                 const Id id = DefineVar(F32[4], spv::StorageClass::Private,
                     ConstF32(0.f, 0.f, 0.f, 0.f));
                 Name(id, fmt::format("ordered_frag_color{}", i));

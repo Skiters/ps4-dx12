@@ -4,7 +4,8 @@
 namespace NativeDX12 {
 template<class Program,class Initialize>
 void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
-    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base){
+    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,
+    bool dual_source=false){
     struct Payload{std::array<float,4> value;std::array<s32,4> code;};
     // Independent authored codes; not computed using the production quantizer.
     const Payload payloads[]{
@@ -17,6 +18,12 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
             0x7e0402ff,std::bit_cast<u32>(v[2]),0x7e0602ff,std::bit_cast<u32>(v[3]),0xf800000f,0x03020100,0xbf810000},
             0x534e4f524d525430ull+i);
     }
+    alignas(256) std::array<u32,128> dual_pixel{};
+    initialize(dual_pixel,{0xBEEB03FF,15,
+        0x7e0002ff,0x3f000000,0x7e0202ff,0xbf000000,0x7e0402ff,0x3f800000,0x7e0602ff,0xbf800000,
+        0xf800000f,0x03020100,
+        0x7e0002ff,0x3e800000,0x7e0202ff,0x3f000000,0x7e0402ff,0x3f400000,0x7e0602ff,0x3e800000,
+        0xf800081f,0x03020100,0xbf810000},0x534e4f524d445541ull);
     const auto pack=[](const std::array<s32,4>& c){return(u32(c[0])&1023)|((u32(c[1])&1023)<<10)|
         ((u32(c[2])&1023)<<20)|((u32(c[3])&3)<<30);};
     unsigned cases{};
@@ -97,6 +104,31 @@ void RunSnormAttachmentFixture(GuestRasterizer& r,AmdGpu::Liverpool& gpu,
                 throw std::runtime_error("SNORM ordered blend lost per-sample contents, quantization, mask or padding");
             }
             ++cases;
+            if(dual_source){
+                using F=AmdGpu::BlendControl::BlendFactor;
+                const F factors[]{F::Src1Color,F::InvSrc1Color,F::Src1Alpha,F::InvSrc1Alpha};
+                // S0={.5,-.5,1,-1}, S1={.25,.5,.75,.25}; dst factor=0.
+                // Authored nearest-even SNORM codes, independent of the emitter.
+                const std::array<s32,4> codes[]{{64,-128,383,0},{192,-128,128,-1},
+                    {64,-64,128,0},{192,-192,383,-1}};
+                regs.ps_program.address=reinterpret_cast<u64>(dual_pixel.data())>>8;
+                for(u32 factor=0;factor<std::size(factors);++factor){
+                    blend.color_src_factor=blend.alpha_src_factor=factors[factor];
+                    blend.color_dst_factor=blend.alpha_dst_factor=F::Zero;
+                    const u32 dual_result=pack(codes[factor]);
+                    for(u32 sample=0;sample<desc.samples;++sample)
+                        for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
+                            const auto offset=4096+GuestPixelOffset(desc,layout,0,1,x,y,sample);
+                            u32 old;memcpy(&old,expected.data()+offset,4);
+                            const u32 result=(old&~bitmask)|(dual_result&bitmask);
+                            memcpy(expected.data()+offset,&result,4);
+                        }
+                    r.Draw(false);r.ReadMemory(desc.address,layout.guest_bytes);r.Finish();r.ValidateDebugMessages();
+                    if(memcmp(backing,expected.data(),expected.size()))
+                        throw std::runtime_error("Ordered SRC1 blend changed exports, mask, sample or padding bytes");
+                    ++cases;
+                }
+            }
             regs.blend_control[0].enable=0;
         }
         ++cases;

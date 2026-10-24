@@ -131,8 +131,20 @@ Id OrderedBlendFactor(EmitContext& ctx, AmdGpu::BlendControl::BlendFactor factor
     case F::Src1Color:
     case F::InvSrc1Color:
     case F::Src1Alpha:
-    case F::InvSrc1Alpha:
-        throw std::runtime_error("Ordered color reached unsupported dual-source blend factor");
+    case F::InvSrc1Alpha: {
+        if (!ctx.runtime_info.hw.fs.dual_source_blending ||
+            !ctx.runtime_info.hw.fs.ordered_color_targets[0].enabled)
+            throw std::logic_error("Ordered dual-source factor has no primary attachment");
+        // MRT1 is the original shader's second source, not another attachment.
+        // Keep its unquantized exports until the final ordered store. As in
+        // the pinned Vulkan emitter, an absent secondary export is undefined.
+        const Id second = Sirit::ValidId(ctx.frag_outputs[1].id) ?
+            ctx.OpLoad(ctx.F32[4], ctx.frag_outputs[1].id) : ctx.OpUndef(ctx.F32[4]);
+        const bool alpha = factor == F::Src1Alpha || factor == F::InvSrc1Alpha;
+        const Id value = channel(second, alpha ? 3 : component);
+        return factor == F::InvSrc1Color || factor == F::InvSrc1Alpha ?
+            ctx.OpFSub(ctx.F32[1], one, value) : value;
+    }
     }
     throw std::runtime_error("Ordered color reached invalid blend factor");
 }
