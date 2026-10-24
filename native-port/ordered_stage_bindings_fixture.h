@@ -247,7 +247,7 @@ inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false,bool f
     rasterizer.ValidateDebugMessages();
 }
 
-inline void RunOrderedConvertedPackedStages(ID3D12Device* device){
+inline void RunOrderedConvertedPackedStages(ID3D12Device* device,bool formatted_middle=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
@@ -306,10 +306,15 @@ inline void RunOrderedConvertedPackedStages(ID3D12Device* device){
         {},true,nullptr,true,true);
     require(textures.Own(seed),"Converted ordered-stage seed could not retain I");
     std::vector<Rasterizer::ShaderBufferRequest> requests{{base,sampled_layout.guest_bytes,true,true,true}};
-    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,sampled_layout.guest_bytes}};
+    std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,sampled_layout.guest_bytes}};
     const std::vector<OrderedGuestImage> images{{sampled,sampled_layout,false,false},
         {writable,writable_layout,true,false}};
-    const std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
+    std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
+    if(formatted_middle){
+        requests.insert(requests.begin(),{base,sampled_layout.guest_bytes,false,true,true});
+        buffers.insert(buffers.begin(),{true,true,false,0,4,sampled_layout.guest_bytes});
+        stages={{0,0,0,1},{0,1,1,1},{1,2,1,1},{2,2,1,2}};
+    }
     auto prepared=PrepareOrderedGuestStages(device,rasterizer,textures,stages,requests,buffers,images,true,
         [](VAddr,u64)->VAddr{throw std::runtime_error("Converted ordered-stage fixture requested a CPU stream");});
     require(prepared.images[0]&&prepared.images[1]&&prepared.images[0]!=prepared.images[1],
@@ -322,7 +327,8 @@ inline void RunOrderedConvertedPackedStages(ID3D12Device* device){
     std::vector<std::byte> observed_early(initial.size()),observed_late(current.size());
     early.Resolve(rasterizer.CompletedFence(),observed_early);late.Resolve(rasterizer.CompletedFence(),observed_late);
     require(observed_early==initial,"Early converted sampled view did not preserve original I and padding");
-    require(observed_late==current,"Late converted writable view did not use current B and padding");
+    require(observed_late==(formatted_middle?initial:current),
+        "Late converted writable view did not use stage-ordered formatted B and padding");
     rasterizer.ValidateDebugMessages();
 }
 
@@ -455,6 +461,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device,bool color_views=
     if(color_views){puts("PASS: ordered typed color views retain original I/B stage ordering and complete contents");return 0;}
     RunOrderedWritableOwnershipAcquisition(device);
     RunOrderedConvertedPackedStages(device);
+    RunOrderedConvertedPackedStages(device,true);
     RunOrderedBcWordStages(device);
     RunOrderedBcWordStages(device,true);
     RunOrderedBcWordStages(device,false,true);

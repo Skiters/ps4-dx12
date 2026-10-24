@@ -82,6 +82,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             GuestTextureCache::Entry* bound{};uint64_t bound_generation{};};
         std::vector<ConvertedView> converted_views;
         bool has_converted_views{};
+        GuestTextureCache::Entry* active{};
         std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> cached_plan;};
     std::map<VAddr,Domain> domains;
     const auto add_domain=[&](const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool cached=false){
@@ -300,7 +301,14 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                     }
                     if(!metadata)for(auto& [address,domain]:domains)if((address>>8)==(original.address>>8)){
                         const bool old_prefix=!domain.bound&&!domain.generation&&domain.initial_tiled.handle;
-                        auto* image=old_prefix?nullptr:textures.FindValidIndependentImage(domain.desc,domain.layout);
+                        GuestTextureCache::Entry* image{};
+                        if(!old_prefix){
+                            if(domain.active)image=textures.FindValidIndependentImage(
+                                domain.active->desc,domain.active->layout);
+                            // A private converted view does not retire or
+                            // replace its canonical parent's logical I.
+                            if(!image)image=textures.FindValidIndependentImage(domain.desc,domain.layout);
+                        }
                         // Current readonly I can be retained without an
                         // original image write. It is not SafeToDownload.
                         if(!old_prefix&&(!image||!image->logical_gpu_modified))continue;
@@ -382,6 +390,11 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                     bound_generation=domain.generation;arm();
                 }
                 result.images[i]=entry;
+                // FindImageFromRange observes the current original image
+                // class after the preceding BindTextures. A converted word
+                // allocation may now be current while the canonical BC image
+                // remains pinned only for an earlier shader descriptor.
+                domain.active=entry;
                 textures.PublishBufferResidency(*entry);
                 if(image.written){
                     // The writable image must acquire/demote its actual page
