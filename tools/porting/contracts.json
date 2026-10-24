@@ -18200,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Exact packed feedback, converted shifted views, shifted CB mip/CMASK rebind and retained mip/layer growth connected through bca4aeb; behavior NOT_RUN. Broader converted/competing multiview feedback outside proven physical mapping remains; retain source allocation, state and independent B/I ordering.",
+      "missing_semantics": "Exact packed single/MSAA feedback, converted shifted views, shifted CB mip/CMASK and retained mip/layer growth connected through c14c27f; behavior NOT_RUN. Broader converted/competing multiview feedback outside proved physical mappings remains; preserve allocation/state and independent B/I ordering.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18545,12 +18545,12 @@
         ],
         "evidence": "F:/PS4Dev/handoff/native-port-comparison-20261019/ordered-current-image-0dabfe7.json"
       },
-      "latest_connected_color_domains": "b486aee: cached RT owners admitted into exact packed ordered domains; a5a01cb/63b7634/14a9d4d/bca4aeb connect shifted color and changed-layer mappings with retained states and full parent conversion. New fixtures compile/link only; runtime NOT_RUN. Earlier verified hashes do not validate latest binary."
+      "latest_connected_color_domains": "Through3e6af19: exact packed MSAA feedback, HTILE-cleared independent I beside buffer B, expanded compression flag semantics; previous color mip/layer and ordered-domain changes retained. Compile/link only, runtime NOT_RUN. Ordinary D16/D32/S ownership is already connected; T#16 remains open."
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw",
-      "missing_semantics": "Equal-base supported direct-word/channel-to-MS-depth recreation, independent BlockDim classes, retired-CB CMASK after copy, delayed sample backing and validated readonly depth feedback CB prefetch connected through96d28fc; behavior NOT_RUN. Remaining compression/competing shader feedback/shifted mappings, ordered alternate sample storage, opaque D/S DMA ownership.",
+      "missing_semantics": "Equal-base direct-word/channel-to-MS-depth recreation, independent BlockDim classes, retired-CB CMASK after copy, delayed sample backing, readonly depth feedback prefetch, expanded compression/DCC flag semantics and uniform TC clear connected. 3e6af19 connects HTILE clear beside independent buffer writes; behavior NOT_RUN. Remaining competing image feedback/shifted mappings, ordinary simultaneous buffer+attachment writes and native T#16 boundary. Ordinary D16/D32/S ownership for1/2/4/8 is already connected; do not redo it.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: depth/color alias and simultaneous buffer/HTILE guards",
       "groups": [
         2,
@@ -18576,7 +18576,7 @@
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "Clipped VS/TES polygon points, strip/fan provoking, duplicate interpolation, original bias with viewport clamp, sparse export liveness/misc routing and output partition connected throughbd3aaea. Remaining: original GS triangles, auxiliary rectangle/quad output, fully unclamped depth/bias, per-vertex interpolation, genuinely exhausted live varying transport. Latest behavior NOT_RUN.",
+      "missing_semantics": "VS/TES and auxiliary rectangle/quad polygon points, provoking/interpolation, clamped original bias and sparse export/partition transport connected through e1d244e (StageVersion42); behavior NOT_RUN. Remaining original GS triangles, fully unclamped depth/bias, PerVertex and exhausted live varying transport.",
       "evidence": "src/video_core/renderer_d3d12/guest_graphics_state.cpp: Guest point polygon fill requires native clipping and point rasterization",
       "groups": [
         34,
@@ -18597,7 +18597,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart compaction and byte decoding, exact indirect counts/per-instance capture packets and expanded producer bounds connected through80e12b0; all latest behavior NOT_RUN. Remaining: GPU-native multidraw expansion and large-source/active-part scheduling. Do not repeat completed EsGs/tessellation bridge. Known stream fixture correction remains unexecuted.",
+      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart/byte decoding, per-instance GPU capture packets, expanded producer bounds and element-local swapped native indirect batches connected through3e51362; latest behavior NOT_RUN. Remaining GPU-native batch primitive expansion/restart/pair-relative16-bit swaps and large-source/active-part scheduling. Do not redo completed EsGs/tessellation bridge.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,

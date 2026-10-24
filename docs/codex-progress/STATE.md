@@ -1,3 +1,7 @@
+## Sample feedback / HTILE continuation — 2026-10-25
+
+Production3e6af19 after f526d4c/e1d244e/3e51362/7f322df/c14c27f: expanded FMASK/DCC flag semantics and uniform TC clear, auxiliary quad/rectangle polygon points, element-local swapped indirect batches, converted MSAA feedback and independent HTILE clear beside buffer writes CONNECTED. Clean tracked Release compile/link PASS21.010s (command-20261025-042543-32324.log). ALL new runtime/GPU/game checks NOT_RUN; tests only after seven implementations. Exact identity: F:/PS4Dev/handoff/native-port-comparison-20261019/htile-buffer-clear-3e6af19.json. SESSION_HANDOFF first section is authoritative for remaining code and prepared checks. Six broad areas retain gaps; mixed blending is connected/unaccepted. No app replacement or FPS claim. Continue production work without stopping at checkpoint.
+
 ## Converted color storage continuation — 2026-10-25
 
 Production b486aee after a5a01cb,63b7634,14a9d4d,bca4aeb. Shifted CB mip/CMASK addressing, color mip/layer growth, pinned packed feedback, converted shifted views and ordered cached-CB domains are connected. Clean tracked Release compile/link PASS16.828s (command-20261025-040000-23468.log). All executable fixtures/GPU/game tests remain NOT_RUN until the seven implementations are complete. Compilation is not behavior/FPS acceptance. Six broad areas still have concrete gaps; mixed blending is connected but runtime unaccepted. Continue development, not completion. SESSION_HANDOFF first section is authoritative.
