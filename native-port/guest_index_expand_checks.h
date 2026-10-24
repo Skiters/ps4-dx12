@@ -146,7 +146,10 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
         auto seed=Buffer(device,total,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         auto source=renderer.AcquireTransientBuffer(source_bytes),output=renderer.AcquireTransientBuffer(output_bytes);
         auto arguments=renderer.AcquireTransientBuffer(36);
-        auto result=Buffer(device,output_bytes+36,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const bool capture_packet=variant==0&&element==4&&marker==99&&shape==1&&swap==0;
+        const u64 result_bytes=output_bytes+36+(capture_packet?20:0);
+        auto result=Buffer(device,result_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        Resource instance_arguments;
         void* bytes{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&bytes));memset(bytes,0xcd,size_t(total));
         std::vector<std::byte> encoded(input.size()*element);
         for(size_t i=0;i<input.size();++i)memcpy(encoded.data()+i*element,&input[i],element);
@@ -174,6 +177,14 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
             catch(const std::invalid_argument&){rejected=true;}
             if(!rejected)throw std::runtime_error("Segmented expansion accepted aliased output/arguments");
             pass.RecordRestart(renderer,plan,available?&source:nullptr,available?offset:0,available,element,marker,draw,output,arguments,swap);
+            if(capture_packet){
+                bool rejected{};try{(void)pass.InstanceArguments(renderer,arguments,{plan.input_count,2});}
+                catch(const std::invalid_argument&){rejected=true;}
+                if(!rejected)throw std::runtime_error("Capture packet accepted multiple original instances");
+                instance_arguments=pass.InstanceArguments(renderer,arguments,{plan.input_count,1,0,37,-19});
+                if(instance_arguments.State(0)!=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT)
+                    throw std::runtime_error("Capture packet did not publish its consumer state");
+            }
         }
         if(source.State(0)!=previous)throw std::runtime_error("Segmented expansion changed source state");
         if(arguments.State(0)!=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT||output.State(0)!=D3D12_RESOURCE_STATE_INDEX_BUFFER)
@@ -181,10 +192,14 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
         output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
         list->CopyBufferRegion(result.handle.Get(),0,output.handle.Get(),0,output_bytes);
         list->CopyBufferRegion(result.handle.Get(),output_bytes,arguments.handle.Get(),0,36);
-        renderer.Finish();std::vector<std::byte> expected(size_t(output_bytes+36),std::byte{0xcd});
+        if(capture_packet){instance_arguments.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            list->CopyBufferRegion(result.handle.Get(),output_bytes+36,instance_arguments.handle.Get(),0,20);}
+        renderer.Finish();std::vector<std::byte> expected(size_t(result_bytes),std::byte{0xcd});
         if(!expected_indices.empty())memcpy(expected.data(),expected_indices.data(),expected_indices.size()*4);
         const u32 args[]{UINT(expected_indices.size()),3,0,u32(-7),11};memcpy(expected.data()+output_bytes,args,sizeof(args));
-        D3D12_RANGE range{0,SIZE_T(output_bytes+36)};Check(result.handle->Map(0,&range,&bytes));
+        if(capture_packet){const u32 one[]{UINT(expected_indices.size()),1,0,u32(-19),37};
+            memcpy(expected.data()+output_bytes+36,one,sizeof(one));}
+        D3D12_RANGE range{0,SIZE_T(result_bytes)};Check(result.handle->Map(0,&range,&bytes));
         const bool equal=memcmp(bytes,expected.data(),expected.size())==0;result.handle->Unmap(0,&none);
         if(!equal)throw std::runtime_error("Segmented expansion changed restart boundaries, order, provoking, count, arguments or guards");
     }

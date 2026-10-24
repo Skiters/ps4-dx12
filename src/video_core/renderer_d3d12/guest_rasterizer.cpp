@@ -1408,8 +1408,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
         state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     }
-    const bool gpu_restart=indexed&&r.enable_primitive_restart&&!capture&&!batch&&
-        (expand_primitive||rewrite_restart)&&GuestIndexExpansion::SupportsRestart(r.primitive_type);
+    const bool gpu_restart=indexed&&r.enable_primitive_restart&&!batch&&
+        (expand_primitive||rewrite_restart||r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None)&&
+        GuestIndexExpansion::SupportsRestart(r.primitive_type);
+    if(gpu_restart&&strip){
+        state.topology=state.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP?
+            D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST:D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+        state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+    }
     std::optional<GuestIndexExpansion> gpu_expansion;
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
     if(gpu_restart||(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
@@ -1490,6 +1496,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         draw.count=UINT(logical.size());draw.first=0;
         if(!indexed)draw.base_vertex=0;
     }
+    // Source indexing was bounded using the ORIGINAL guest count above.
+    // Native producer capacity/draw counts must instead cover expanded indices,
+    // including capture paths. Restart packets supply their smaller GPU count.
+    if(gpu_expansion){draw.count=gpu_expansion->output_count;draw.first=0;}
     diagnostic.Stage("pipeline-creation");
     const auto* geometry_stage=guest.stages[u32(Shader::SwStage::Geometry)];
     const bool expanded_points=state.polygon_points||capture.has_value()||(geometry_stage&&!geometry_stage->auxiliary&&geometry_stage->runtime.hw.gs.native_point_expansion&&
@@ -1789,7 +1799,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const StreamDrawArguments* actual_records=nullptr) {
         prepare_replay(bindings);bindings.Prepare();
         const StreamDrawArguments restarted{&restart_arguments,0};
-        if(gpu_restart){
+        if(gpu_restart&&!capture){
             if(actual_records||!restart_arguments.handle)
                 throw std::logic_error("Restart expansion has conflicting or missing indirect arguments");
             actual_records=&restarted;
@@ -2026,8 +2036,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     prepare_indices(*bindings);
                     if(index_view.resource){bindings->Retain(index_view.resource->handle.Get());bindings->RetainAllocation(index_view.resource->allocation);}
                     const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*range.capacity_vertices,0};
+                    const StreamDrawArguments restarted{&restart_arguments,0};
                     ExecuteGraphics(stream_pipeline,*bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
-                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,nullptr,&target);
+                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,gpu_restart?&restarted:nullptr,&target);
                 });
                 auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
                 primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
@@ -2072,8 +2083,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     bindings.Prepare();
                     prepare_indices(bindings);
                     if(index_view.resource){bindings.Retain(index_view.resource->handle.Get());bindings.RetainAllocation(index_view.resource->allocation);}
+                    Resource instance_arguments;
+                    if(gpu_restart)instance_arguments=index_expand_->InstanceArguments(*this,restart_arguments,instance);
+                    const StreamDrawArguments restarted{&instance_arguments,0};
                     ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,viewport.viewports,
-                        viewport.scissors,r.blend_constants,instance,{},index_view.resource?&index_view:nullptr,false);
+                        viewport.scissors,r.blend_constants,instance,{},index_view.resource?&index_view:nullptr,false,
+                        gpu_restart?&restarted:nullptr);
                 },textures_,r.ta_bc_base.Address(),index_requests);
         },[&](Resource& buffer,const DrawArguments& replay){
             output_draw=replay;auto replay_runtime=runtime;
