@@ -340,7 +340,11 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
              producer==vertex&&profile_.needs_clip_distance_emulation&&
                  producer->info.stores.GetAny(Shader::IR::Attribute::ClipDistance),
              regs.clipper_control.ZclipEnable(),
-             u32(regs.primitive_type==AmdGpu::PrimitiveType::TriangleFan||regs.primitive_type==AmdGpu::PrimitiveType::Polygon)});
+             u32(regs.primitive_type==AmdGpu::PrimitiveType::TriangleFan||regs.primitive_type==AmdGpu::PrimitiveType::Polygon),
+             poly.NeedsBias(),regs.depth_buffer.z_info.format!=AmdGpu::DepthBuffer::ZFormat::Z16,
+             poly.enable_polygon_offset_front?regs.poly_offset.front_offset:regs.poly_offset.back_offset,
+             (poly.enable_polygon_offset_front?regs.poly_offset.front_scale:regs.poly_offset.back_scale)/16.f,
+             regs.poly_offset.depth_bias});
         auto found=auxiliary_.find(words);
         if(found==auxiliary_.end()){
             auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;

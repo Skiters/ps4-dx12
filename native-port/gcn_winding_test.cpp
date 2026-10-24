@@ -134,7 +134,17 @@ int main(int argc,char** argv){try{
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Qualified polygon transport failed signed DXIL: "+compiled.diagnostics);
         }
-        std::puts("PASS polygon geometry capacity declarations and signed DXIL; GPU behavior NOT_RUN");return 0;
+        for(bool floating:{false,true})for(bool clip:{false,true}){
+            Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            GuestPolygonPointConfig config;config.depth_bias_enabled=true;config.float_depth=floating;
+            config.clip_depth=clip;config.depth_bias=1.5f;config.slope_depth_bias=-.5f;config.depth_bias_clamp=-.125f;
+            const auto words=EmitGuestPolygonPoints(vertex,&fragment,fs,config);
+            Shader::Backend::DX12::SpirvConvertOptions options{};options.stage=Shader::Backend::DX12::SpirvStage::Geometry;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Polygon depth bias failed signed DXIL: "+compiled.diagnostics);
+        }
+        std::puts("PASS polygon geometry capacity, interpolation and bias signed DXIL; GPU behavior NOT_RUN");return 0;
     }
     const bool capture_instance_gcn=mode=="capture-instance-gcn";
     if(capture_instance_gcn){

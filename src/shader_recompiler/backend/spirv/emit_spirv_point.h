@@ -31,7 +31,8 @@ inline Sirit::Id DefinePointRuntime(Sirit::Module& ctx){
 inline void EmitPointStrip(Sirit::Module& ctx,Sirit::Id runtime,Sirit::Id position,
     Sirit::Id size,Sirit::Id viewport,bool clip_depth,
     Sirit::Id output_position,std::span<const PointOutput> outputs,
-    std::span<const PointDistance> distances,Sirit::Id reverse_winding={}){
+    std::span<const PointDistance> distances,Sirit::Id reverse_winding={},
+    Sirit::Id depth_bias={},bool clamp_depth=false){
     using Sirit::Id;
     const auto f32=ctx.TypeFloat(32),u32_type=ctx.TypeUInt(32),bool_type=ctx.TypeBool(),vec4=ctx.TypeVector(f32,4);
     const auto zero=ctx.Constant(u32_type,0u),one=ctx.Constant(u32_type,1u),fzero=ctx.Constant(f32,0.f);
@@ -73,8 +74,13 @@ inline void EmitPointStrip(Sirit::Module& ctx,Sirit::Id runtime,Sirit::Id positi
     const auto dx=ctx.OpFDiv(f32,scaled,width),raw_dy=ctx.OpFDiv(f32,scaled,height);
     const auto dy=ctx.OpSelect(f32,same_orientation,raw_dy,ctx.OpFNegate(f32,raw_dy));
     const auto native_z=ctx.OpSelect(f32,flip_z,ctx.OpFSub(f32,w,z),z);
-    const auto window_z=ctx.OpFAdd(f32,ctx.OpFMul(f32,min_depth,w),
+    auto window_z=ctx.OpFAdd(f32,ctx.OpFMul(f32,min_depth,w),
         ctx.OpFMul(f32,ctx.OpFSub(f32,max_depth,min_depth),native_z));
+    // Bias belongs to the original polygon, before point-quad interpolation.
+    // Clipping has already consumed the unbiased position; never clip on bias.
+    if(Sirit::ValidId(depth_bias))window_z=ctx.OpFAdd(f32,window_z,ctx.OpFMul(f32,depth_bias,w));
+    if(clamp_depth)window_z=ctx.OpFClamp(f32,window_z,
+        ctx.OpFMul(f32,min_depth,w),ctx.OpFMul(f32,max_depth,w));
     const auto half=ctx.Constant(f32,0.5f),window_to_clip=ctx.Constant(f32,2.f/16384.f);
     for(const auto corner:{std::array<float,2>{-1,-1},std::array<float,2>{1,-1},
                            std::array<float,2>{-1,1},std::array<float,2>{1,1}}){

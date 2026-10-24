@@ -10,6 +10,7 @@
 #include "video_core/renderer_d3d12/guest_point_transport.h"
 #include <limits>
 #include <bit>
+#include <cmath>
 
 namespace Shader::Backend::SPIRV {
 
@@ -453,6 +454,9 @@ struct PointReplayEmitter : Sirit::Module {
 std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader::Info* fragment,
     const Shader::HwFragmentRuntimeInfo& fs,const GuestPolygonPointConfig& config){
     if(config.first_provoking>=3)throw std::out_of_range("Invalid polygon point provoking vertex");
+    if(config.depth_bias_enabled&&(!std::isfinite(config.depth_bias)||
+       !std::isfinite(config.slope_depth_bias)||!std::isfinite(config.depth_bias_clamp)))
+        throw std::runtime_error("Non-finite polygon point depth bias");
     using Sirit::Id;
     using A=Shader::IR::Attribute;
     using Q=Shader::Qualifier;
@@ -579,6 +583,9 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto next_count=ctx.AddLocalVariable(fn_u32,spv::StorageClass::Function);
     const auto cursor=ctx.AddLocalVariable(fn_u32,spv::StorageClass::Function);
     const auto area_sum=ctx.AddLocalVariable(fn_float,spv::StorageClass::Function);
+    const auto slope_x=ctx.AddLocalVariable(fn_float,spv::StorageClass::Function);
+    const auto slope_y=ctx.AddLocalVariable(fn_float,spv::StorageClass::Function);
+    const auto max_depth=ctx.AddLocalVariable(fn_float,spv::StorageClass::Function);
     const auto ci=[&](u32 value){return ctx.Constant(u32_type,value);};
     const auto pointer=[&](Id buffer,Id vertex_index,u32 field){return ctx.OpAccessChain(fn_vec,buffer,
         ctx.OpIAdd(u32_type,ctx.OpIMul(u32_type,vertex_index,ci(fields)),ci(field)));};
@@ -609,6 +616,15 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto provoking=ci(config.last_provoking?2:config.first_provoking);
     const auto misc=Sirit::ValidId(input_misc)?input(uint4,input_misc,provoking):Id{};
     const auto viewport=routed_viewport?ctx.OpCompositeExtract(u32_type,misc,2u):zero;
+    const auto viewport_value=[&](u32 member,u32 channel){return ctx.OpLoad(f32,
+        ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Uniform,f32),runtime,
+            ci(member),ctx.OpUMin(u32_type,viewport,ci(15)),ci(channel)));};
+    const auto depth_min=viewport_value(11,0),depth_max=viewport_value(11,1);
+    const auto depth_scale=ctx.OpFSub(f32,depth_max,depth_min);
+    const auto viewport_flips=ctx.OpLoad(u32_type,ctx.OpAccessChain(
+        ctx.TypePointer(spv::StorageClass::Uniform,u32_type),runtime,ci(9)));
+    const auto flip_depth=ctx.OpINotEqual(b1,ctx.OpBitwiseAnd(u32_type,
+        ctx.OpShiftRightLogical(u32_type,viewport_flips,ctx.OpIAdd(u32_type,ctx.OpUMin(u32_type,viewport,ci(15)),ci(16))),one),zero);
     for(u32 index=0;index<3;++index){
         ctx.OpStore(pointer(data[0],ci(index),0),input(vec4,position,ci(index)));
         for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
@@ -692,17 +708,57 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
         const auto n=ctx.OpLoad(u32_type,count),clipped=data[side];
         selection(ctx.OpUGreaterThanEqual(b1,n,three),[&]{
             ctx.OpStore(area_sum,fzero);
+            if(config.depth_bias_enabled){ctx.OpStore(slope_x,fzero);ctx.OpStore(slope_y,fzero);ctx.OpStore(max_depth,fzero);}
             loop(n,[&](Id index){const auto next=ctx.OpIAdd(u32_type,index,one);
                 const auto a=load(clipped,index,0),b=load(clipped,ctx.OpSelect(u32_type,ctx.OpIEqual(b1,next,n),zero,next),0);
                 const auto cross=ctx.OpFSub(f32,ctx.OpFMul(f32,component(a,0),component(b,1)),
                     ctx.OpFMul(f32,component(b,0),component(a,1)));
                 const auto projected=ctx.OpFDiv(f32,cross,ctx.OpFMul(f32,component(a,3),component(b,3)));
                 ctx.OpStore(area_sum,ctx.OpFAdd(f32,ctx.OpLoad(f32,area_sum),projected));
+                if(config.depth_bias_enabled){
+                    const auto ax=ctx.OpFDiv(f32,component(a,0),component(a,3));
+                    const auto ay=ctx.OpFDiv(f32,component(a,1),component(a,3));
+                    const auto az=ctx.OpFDiv(f32,component(a,2),component(a,3));
+                    const auto bx=ctx.OpFDiv(f32,component(b,0),component(b,3));
+                    const auto by=ctx.OpFDiv(f32,component(b,1),component(b,3));
+                    const auto bz=ctx.OpFDiv(f32,component(b,2),component(b,3));
+                    // Sum the polygon's projected cross products. Unlike a
+                    // first-three-corners plane, this also handles collinear
+                    // corners introduced by homogeneous clipping.
+                    ctx.OpStore(slope_x,ctx.OpFAdd(f32,ctx.OpLoad(f32,slope_x),
+                        ctx.OpFSub(f32,ctx.OpFMul(f32,ay,bz),ctx.OpFMul(f32,az,by))));
+                    ctx.OpStore(slope_y,ctx.OpFAdd(f32,ctx.OpLoad(f32,slope_y),
+                        ctx.OpFSub(f32,ctx.OpFMul(f32,az,bx),ctx.OpFMul(f32,ax,bz))));
+                    const auto window_z=ctx.OpFAdd(f32,depth_min,ctx.OpFMul(f32,depth_scale,
+                        ctx.OpSelect(f32,flip_depth,ctx.OpFSub(f32,fone,az),az)));
+                    ctx.OpStore(max_depth,ctx.OpFMax(f32,ctx.OpLoad(f32,max_depth),ctx.OpFAbs(f32,window_z)));
+                }
             });
             const auto flips=ctx.OpLoad(u32_type,ctx.OpAccessChain(ctx.TypePointer(spv::StorageClass::Uniform,u32_type),runtime,ci(9)));
             const auto selected_flips=ctx.OpShiftRightLogical(u32_type,flips,ctx.OpUMin(u32_type,viewport,ci(15)));
             const auto flip=ctx.OpINotEqual(b1,ctx.OpBitwiseAnd(u32_type,selected_flips,one),zero);
             const auto area=ctx.OpLoad(f32,area_sum);
+            Id polygon_bias{};
+            if(config.depth_bias_enabled){
+                const auto scale=ctx.OpFMul(f32,depth_scale,ctx.Constant(f32,2.f));
+                const auto projected_slope=[&](Id sum,u32 axis){return ctx.OpFAbs(f32,ctx.OpFDiv(f32,
+                    ctx.OpFMul(f32,ctx.OpLoad(f32,sum),scale),ctx.OpFMul(f32,area,viewport_value(10,axis))));};
+                const auto slope=ctx.OpSelect(f32,ctx.OpFOrdEqual(b1,area,fzero),fzero,
+                    ctx.OpFMax(f32,projected_slope(slope_x,0),projected_slope(slope_y,1)));
+                Id unit=ctx.Constant(f32,1.f/65535.f);
+                if(config.float_depth){
+                    const auto exponent=ctx.OpBitwiseAnd(u32_type,
+                        ctx.OpShiftRightLogical(u32_type,ctx.OpBitcast(u32_type,ctx.OpLoad(f32,max_depth)),ci(23)),ci(255));
+                    const auto s32_type=ctx.TypeSInt(32);
+                    const auto power=ctx.OpISub(s32_type,ctx.OpBitcast(s32_type,ctx.OpUMax(u32_type,exponent,one)),
+                        ctx.Constant(s32_type,150));
+                    unit=ctx.OpLdexp(f32,fone,power);
+                }
+                polygon_bias=ctx.OpFAdd(f32,ctx.OpFMul(f32,unit,ctx.Constant(f32,config.depth_bias)),
+                    ctx.OpFMul(f32,slope,ctx.Constant(f32,config.slope_depth_bias)));
+                if(config.depth_bias_clamp>0)polygon_bias=ctx.OpFMin(f32,polygon_bias,ctx.Constant(f32,config.depth_bias_clamp));
+                else if(config.depth_bias_clamp<0)polygon_bias=ctx.OpFMax(f32,polygon_bias,ctx.Constant(f32,config.depth_bias_clamp));
+            }
             const auto native_area=ctx.OpSelect(f32,flip,ctx.OpFNegate(f32,area),area);
             const auto front=config.front_ccw?ctx.OpFOrdGreaterThan(b1,native_area,fzero):ctx.OpFOrdLessThan(b1,native_area,fzero);
             auto keep=ctx.ConstantTrue(b1);
@@ -731,15 +787,10 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                 if(routed_viewport)outputs.push_back({u32_type,output_viewport,viewport});
                 if(routed_layer)outputs.push_back({u32_type,output_layer,ctx.OpCompositeExtract(u32_type,misc,1u)});
                 const auto size=sized?component(load(clipped,index,size_field),0):fone;
-                auto p=load(clipped,index,0);
-                // The original depth clamp uses the selected viewport's range.
-                // Clamp the point's clip-space Z before mapping that viewport;
-                // hardware clamping the enlarged replay viewport to[0,1]
-                // would give a different result for e.g.[.25,.75].
-                if(!config.clip_depth)p=ctx.OpCompositeInsert(vec4,
-                    ctx.OpFClamp(f32,component(p,2),fzero,component(p,3)),p,2u);
+                const auto p=load(clipped,index,0);
                 Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,p,size,viewport,config.clip_depth,
-                    output_position,outputs,{},ctx.OpLogicalNot(b1,front));
+                    output_position,outputs,{},ctx.OpLogicalNot(b1,front),polygon_bias,
+                    config.depth_bias_enabled||!config.clip_depth);
               },first);
             });
         });

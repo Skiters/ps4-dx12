@@ -188,7 +188,7 @@ inline bool GuestPolygonPointGeometryState(const AmdGpu::Regs& regs){
         regs.primitive_type==P::PatchPrimitive&&regs.tess_config.type!=AmdGpu::TessellationType::Isoline;
     return regs.polygon_control.PolyMode()==AmdGpu::PolygonMode::Point&&
         (vertex_triangles||tessellated_triangles)&&
-        !regs.polygon_control.NeedsBias()&&
+        (!regs.polygon_control.NeedsBias()||!regs.depth_render_override.disable_viewport_clamp)&&
         (regs.clipper_control.ZclipEnable()||!regs.depth_render_override.disable_viewport_clamp);
 }
 // Attachment formats come from the actual native texture/depth cache. Preserve

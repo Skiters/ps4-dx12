@@ -45,6 +45,8 @@ struct GuestPolygonPointConfig {
     bool cull_front{},cull_back{},front_ccw{},last_provoking{},emulated_clip{};
     bool clip_depth{true};
     u32 first_provoking{};
+    bool depth_bias_enabled{},float_depth{true};
+    float depth_bias{},slope_depth_bias{},depth_bias_clamp{};
 };
 // Clip the completed triangle, then expand its surviving polygon vertices.
 // No guest shader is evaluated again for the generated clipping vertices.

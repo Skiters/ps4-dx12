@@ -5,7 +5,7 @@ namespace NativeDX12 {
 template<class Program,class Initialize>
 void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool routed=false,
-    bool depth_clamped=false){
+    bool depth_clamped=false,bool depth_biased=false){
     alignas(256) std::array<u32,128> pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0xf800080f,0x00000000,0xbf810000},
         0x504f4c59504f494eull);
@@ -22,12 +22,14 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         {{{-2.f,-.5f},{0.f,-.5f},{0.f,.5f}},{{0,4},{0,6},{4,6},{4,2}}},
         {{{-1.f,-.5f},{0.f,-.5f},{0.f,.5f}},{{0,6},{4,6},{4,2}}},
         {{{-2.f,-.5f},{-1.f,-.5f},{0.f,.5f}},{{0,4},{0,6},{4,2}}}};
-    for(const auto& test:cases)for(bool reverse:{false,true})for(u32 cull=0;cull<3;++cull){
+    for(const auto& test:cases)for(bool reverse:{false,true})for(u32 cull=0;cull<3;++cull)
+    for(u32 bias_case=0;bias_case<(depth_biased?4u:1u);++bias_case){
         rasterizer.ReadMemory(base,65536);rasterizer.Finish();rasterizer.UnmapMemory(base,65536);
         rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
         memset(memory,0xa7,65536);
         for(u32 i=0;i<3;++i){const auto j=reverse&&i?3-i:i;
-            const float position[]{test.xy[j][0],test.xy[j][1],depth_clamped?(reverse?1.5f:-.5f):.5f,1.f};
+            const float z=depth_biased?.5f+.125f*test.xy[j][0]:depth_clamped?(reverse?1.5f:-.5f):.5f;
+            const float position[]{test.xy[j][0],test.xy[j][1],z,1.f};
             memcpy(memory+i*32,position,sizeof(position));
             const float size=3.f;const u32 layer=1,viewport=1;
             memcpy(memory+i*32+16,&size,4);memcpy(memory+i*32+20,&layer,4);memcpy(memory+i*32+24,&viewport,4);}
@@ -46,6 +48,12 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         regs.polygon_control.polygon_mode_front=regs.polygon_control.polygon_mode_back=AmdGpu::PolygonMode::Point;
         regs.polygon_control.cull_front=cull==1;regs.polygon_control.cull_back=cull==2;
         regs.polygon_control.front_face=AmdGpu::FrontFace::CounterClockwise;
+        if(depth_biased){
+            regs.polygon_control.enable_polygon_offset_front=regs.polygon_control.enable_polygon_offset_back=1;
+            regs.poly_offset.front_offset=regs.poly_offset.back_offset=bias_case==0?131072.f:0.f;
+            regs.poly_offset.front_scale=regs.poly_offset.back_scale=bias_case==0?0.f:bias_case==3?-16.f:16.f;
+            regs.poly_offset.depth_bias=bias_case==2?1.f/64.f:bias_case==3?-1.f/64.f:0.f;
+        }
         regs.clipper_control.clip_space=AmdGpu::ClipSpace::ZeroToW;
         auto& vp=regs.viewport_control;vp.xscale_enable=vp.yscale_enable=vp.xoffset_enable=vp.yoffset_enable=vp.zscale_enable=1;
         regs.viewports[0].xscale=4;regs.viewports[0].yscale=-4;regs.viewports[0].xoffset=regs.viewports[0].yoffset=4.5f;
@@ -68,7 +76,7 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         for(u32 layer=0;layer<desc.layers;++layer)for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const float seed=0;
             memcpy(memory+4096+GuestPixelOffset(desc,layout,0,layer,x,y),&seed,4);}
         GuestTextureDesc depth_desc{};GuestTextureLayout depth_layout{};
-        if(depth_clamped){
+        if(depth_clamped||depth_biased){
             auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=u32((base+8192)>>8);
             db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
             db.depth_size.pitch_tile_max=1;db.depth_size.height_tile_max=0;db.depth_slice.tile_max=1;
@@ -77,6 +85,10 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
             regs.depth_control.depth_func=AmdGpu::CompareFunc::Always;
             depth_desc=DescribeGuestDepthBuffer(db,regs.depth_view,gpu.last_db_extent);
             depth_layout=LayoutGuestTexture(depth_desc);
+            if(depth_biased){const auto state=BuildGuestGraphicsState(regs,std::span(&layout.format,1),DXGI_FORMAT_D32_FLOAT);
+                if(!state.polygon_points||state.dynamic_depth_bias||state.pipeline.RasterizerState.DepthBias||
+                   state.pipeline.RasterizerState.SlopeScaledDepthBias)
+                    throw std::runtime_error("Polygon bias was applied twice through the point quad rasterizer");}
             for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const float seed=1.f;
                 memcpy(memory+8192+GuestPixelOffset(depth_desc,depth_layout,0,0,x,y),&seed,4);}
         }
@@ -94,11 +106,15 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
                     const auto offset=4096+GuestPixelOffset(desc,layout,0,routed?1:0,u32(x),u32(y));
                     float value;memcpy(&value,expected.data()+offset,4);value+=.25f;
                     memcpy(expected.data()+offset,&value,4);
-                    if(depth_clamped){const float z=reverse?.75f:.25f;
+                    if(depth_clamped||depth_biased){
+                        const float bias=bias_case==0?1.f/128.f:bias_case==1?1.f/32.f:bias_case==2?1.f/64.f:-1.f/64.f;
+                        // Original plane is z=.5+x_ndc/8; viewport x=4*x_ndc+4.5.
+                        // Slope is exactly1/32, maximum float exponent is -1.
+                        const float z=depth_biased?.5f+(float(point[0])-4.f)/32.f+bias:reverse?.75f:.25f;
                         memcpy(expected.data()+8192+GuestPixelOffset(depth_desc,depth_layout,0,0,u32(x),u32(y)),&z,4);}
                 }}
         rasterizer.Draw(false);rasterizer.ReadMemory(desc.address,layout.guest_bytes);
-        if(depth_clamped)rasterizer.ReadMemory(depth_desc.address,depth_layout.guest_bytes);
+        if(depth_clamped||depth_biased)rasterizer.ReadMemory(depth_desc.address,depth_layout.guest_bytes);
         rasterizer.Finish();
         rasterizer.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),expected.size()))

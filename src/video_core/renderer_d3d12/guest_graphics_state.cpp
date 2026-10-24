@@ -352,7 +352,7 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
             result.stencil_write_mask_front!=result.stencil_write_mask_back||front_reference.value!=back_reference.value;
     }
     auto& r=p.RasterizerState;const auto& poly=regs.polygon_control;
-    if(poly.NeedsBias()) {
+    if(poly.NeedsBias()&&!GuestPolygonPointGeometryState(regs)) {
         const bool front=poly.enable_polygon_offset_front;
         result.depth_bias=front?regs.poly_offset.front_offset:regs.poly_offset.back_offset;
         result.depth_bias_clamp=regs.poly_offset.depth_bias;
