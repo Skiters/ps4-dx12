@@ -143,7 +143,11 @@ int main(int argc,char** argv){try{
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
     const bool pending_depth_clear=mode=="depth-buffer-htile-clear-owned";
-    const bool readonly_depth=pending_depth_clear||planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
+    const bool competing_depth_write=mode=="depth-buffer-write-owned";
+    const bool competing_stencil_write=mode=="depth-buffer-stencil-write-owned";
+    const bool explicit_buffer_clear=mode=="depth-buffer-explicit-clear-owned";
+    const bool independent_depth_case=pending_depth_clear||competing_depth_write||competing_stencil_write||explicit_buffer_clear;
+    const bool readonly_depth=independent_depth_case||planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
     if(!color_feedback&&!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
@@ -856,7 +860,8 @@ int main(int argc,char** argv){try{
             0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4154544453425001ULL);
         for(bool z16:{false,true})for(uint32_t samples:{0u,2u})for(bool stencil:{false,true})
         for(bool stencil_writer:{false,true})for(bool full_buffer:{false,true})for(bool htile:{false,true}){
-            if(pending_depth_clear&&(z16||samples||stencil||stencil_writer||full_buffer||!htile))continue;
+            if(independent_depth_case&&(z16||samples||stencil!=competing_stencil_write||
+                stencil_writer!=competing_stencil_write||full_buffer||htile!=pending_depth_clear))continue;
             if(planned_depth&&(z16||samples||!stencil||stencil_writer))continue;
             if(stencil_writer&&!stencil)continue;
             if(mixed_planes&&!stencil)continue;
@@ -925,12 +930,14 @@ int main(int argc,char** argv){try{
                 rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
                 regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;
             }
-            for(unsigned warm=0;warm<((planned_depth||pending_depth_clear)?1u:3u);++warm){
+            for(unsigned warm=0;warm<((planned_depth||independent_depth_case)?1u:3u);++warm){
                 rasterizer.ReadMemory(base,65536);rasterizer.InvalidateMemory(base,65536);memset(memory,0xee,65536);
                 regs.depth_view.z_read_only=regs.depth_view.stencil_read_only=warm!=1;
-                regs.depth_control.depth_write_enable=mixed_planes&&stencil_writer;
+                regs.depth_control.depth_write_enable=competing_depth_write||explicit_buffer_clear||(mixed_planes&&stencil_writer);
+                regs.depth_render_control.depth_clear_enable=explicit_buffer_clear;
+                if(explicit_buffer_clear)regs.depth_control.depth_func=AmdGpu::CompareFunc::Never;
                 regs.stencil_control.stencil_zpass_front=regs.stencil_control.stencil_zpass_back=
-                    mixed_planes&&!stencil_writer?AmdGpu::StencilFunc::AddClamp:AmdGpu::StencilFunc::Keep;
+                    competing_stencil_write||(mixed_planes&&!stencil_writer)?AmdGpu::StencilFunc::AddClamp:AmdGpu::StencilFunc::Keep;
                 const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
                 for(unsigned i=0;i<3;++i){const float position[]{xy[i][0],xy[i][1],0.5f,1.f};memcpy(memory+i*32,position,sizeof(position));}
                 if(planned_depth){
@@ -952,7 +959,7 @@ int main(int argc,char** argv){try{
                     regs.depth_control=saved_control;regs.depth_render_control=saved_render;
                     regs.depth_clear=saved_clear;
                 }
-                const float initial_depth=(planned_depth||pending_depth_clear)?0.25f:warm==1?0.25f:warm==2?0.875f:0.75f;
+                const float initial_depth=(planned_depth||pending_depth_clear||explicit_buffer_clear)?0.25f:warm==1?0.25f:warm==2?0.875f:0.75f;
                 const u16 packed_depth=u16(initial_depth*65535.f+0.5f);const u8 initial_stencil=u8(37+warm);
                 regs.stencil_ref_front.stencil_test_val=regs.stencil_ref_back.stencil_test_val=initial_stencil;
                 for(u32 sample=0;sample<depth.samples;++sample)for(u32 y=0;y<depth.height;++y)for(u32 x=0;x<depth.width;++x){
@@ -1037,7 +1044,7 @@ int main(int argc,char** argv){try{
                     regs.vs_program=saved_vertex;regs.ps_program=saved_pixel;target=saved_target;
                     regs.depth_control.depth_func=saved_depth_func;
                 }
-                if(pending_depth_clear){
+                if(independent_depth_case){
                     // B retains .25 (plus the actual zero DWORD writer), while
                     // I was cleared to .75. A second draw into a fresh CB must
                     // still pass z=.5 < I after metadata was consumed. Reading
@@ -1047,6 +1054,16 @@ int main(int argc,char** argv){try{
                         0x7e0402ff,0x3f800000,0x7e0602ff,0x3f800000,
                         0xf800000f,0x03020100,0xbf810000},0x4854494c45424931ULL);
                     regs.ps_program.address=reinterpret_cast<u64>(blue.data())>>8;
+                    // The ordinary attachment case wrote .5 into I while B
+                    // retains .75/zero. Equal(.5) must pass every probe pixel.
+                    regs.depth_control.depth_write_enable=0;
+                    if(competing_depth_write)regs.depth_control.depth_func=AmdGpu::CompareFunc::Equal;
+                    if(explicit_buffer_clear){regs.depth_render_control.depth_clear_enable=0;
+                        regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;}
+                    if(competing_stencil_write){
+                        regs.stencil_control.stencil_zpass_front=regs.stencil_control.stencil_zpass_back=AmdGpu::StencilFunc::Keep;
+                        regs.stencil_ref_front.stencil_test_val=regs.stencil_ref_back.stencil_test_val=initial_stencil+1;
+                    }
                     target.base_address=base+49152;bind_writer();
                     cb.base_address=u32((base+61440)>>8);
                     const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
@@ -1056,10 +1073,13 @@ int main(int argc,char** argv){try{
                         memcpy(expected.data()+61440+GuestPixelOffset(probe,probe_layout,0,0,x,y),&blue_pixel,4);
                     rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
                     if(memcmp(memory,expected.data(),65536))
-                        throw std::runtime_error("HTILE clear did not retain I independently from buffer B or consumed metadata twice");
+                        throw std::runtime_error("Depth attachment write/clear did not retain I independently from buffer B");
                     continue;
                 }
-                if(planned_depth)continue;
+                // Owned buffer+attachment writers now have a positive two-
+                // domain case above. Keep rejection checks for IMAGE_WRITE
+                // and callers without a physical ownership provider.
+                if(planned_depth||(owned&&!image_writer))continue;
                 const auto reject=[&]{const std::vector<std::byte> before(memory,memory+65536);bool rejected=false;
                     try{rasterizer.Draw(false);}catch(const std::runtime_error&){rejected=true;}
                     rasterizer.Finish();rasterizer.ReadMemory(base,65536);
