@@ -2197,6 +2197,15 @@ bool GuestTextureCache::SeparateColorSampledImages(const GuestTextureDesc& color
         color.address==sampled.address&&color_layout.block_extent&&sampled_layout.block_extent&&
         !MatchesReferenceOverlapClass(color,color_layout,sampled,sampled_layout);
 }
+bool GuestTextureCache::SeparateColorDepthAttachments(const GuestTextureDesc& color,
+    const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
+    // ResolveOverlap checks pool-reuse geometry before ResolveDepthOverlap,
+    // including when both images were selected as attachments in this draw.
+    return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
+        depth.depth_target&&!depth.render_target&&!depth.writable&&!depth.stencil_address&&
+        color.address==depth.address&&color_layout.block_extent&&depth_layout.block_extent&&
+        !MatchesReferenceOverlapClass(color,color_layout,depth,depth_layout);
+}
 bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
     if((al.block_extent==4)==(bl.block_extent==4))return false;

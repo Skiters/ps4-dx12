@@ -1107,7 +1107,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
     std::array<bool,8> color_storage_feedback{};
-    std::array<bool,8> color_depth_alias{},retired_color_targets{};
+    std::array<bool,8> color_depth_alias{},separate_color_depth{},retired_color_targets{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
     for(UINT i=0;i<8;++i)if(r.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable&&
@@ -1183,12 +1183,15 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             // ResolveDepthOverlap replaces the logical color owner with D,
             // while the already selected CB remains alive for this draw.
             // Native allocations are distinct; their guest authority is not.
-            if(!GuestTextureCache::CanRecreateColorDepthAttachments(descriptions[i],layouts[i],descriptions[8],layouts[8])||
+            separate_color_depth[i]=GuestTextureCache::SeparateColorDepthAttachments(
+                descriptions[i],layouts[i],descriptions[8],layouts[8]);
+            if((!separate_color_depth[i]&&
+                !GuestTextureCache::CanRecreateColorDepthAttachments(descriptions[i],layouts[i],descriptions[8],layouts[8]))||
                r.color_buffers[i].info.fast_clear||r.color_buffers[i].info.compression||
                (descriptions[8].stencil_address&&Overlap(descriptions[8].stencil_address,stencil_layout.guest_bytes,
                    descriptions[i].address,layouts[i].guest_bytes)))
                 throw std::runtime_error("Guest depth/color alias requires an exact attachment recreation plan");
-            color_depth_alias[i]=true;
+            color_depth_alias[i]=!separate_color_depth[i];
         }
         for(const auto& stage:stages) {
             for(const auto& image:stage.info->images) {
@@ -1583,7 +1586,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
             }
             if(!retired_color_targets[i]){
-                if(color_depth_alias[i]){
+                if(color_depth_alias[i]||separate_color_depth[i]){
                     if(!textures_.OwnIndependentShaderImage(entry))
                         throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
                 }else OwnImage(entry);
@@ -1655,6 +1658,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const ShaderBufferRequest resident{stencil_desc.address,stencil_layout.guest_bytes,false,true,true};
                 DmaMemory().ObserveResidentSharps(std::span(&resident,1));
             }
+            if(std::ranges::any_of(separate_color_depth,[](bool value){return value;})&&
+               !OwnIndependentImage(entry))
+                throw std::runtime_error("Independent depth attachment cannot retain separate buffer/image ownership");
             textures_.PublishBufferResidency(entry);
             bindings.RetainAllocation(replay_attachments.BindingPin(8));bindings.RetainAllocation(entry.texture.allocation);
             const auto meta=r.depth_buffer.z_info.tile_surface_enable?

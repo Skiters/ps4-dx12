@@ -12,7 +12,7 @@ template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
-    bool independent_class=false){
+    bool independent_class=false,bool independent_depth=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -120,16 +120,24 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             throw std::runtime_error("Distinct color images lost B/I separation, cached contents or padding");
         return;
     }
-    if(shared_depth){
+    if(shared_depth||independent_depth){
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
-        db.depth_size.pitch_tile_max=1;db.depth_size.height_tile_max=0;db.depth_slice.tile_max=1;
+        db.depth_size.pitch_tile_max=independent_depth?3:1;
+        db.depth_size.height_tile_max=0;db.depth_slice.tile_max=independent_depth?3:1;
         gpu.last_db_extent={8,8};
         regs.depth_control.depth_enable=regs.depth_control.depth_write_enable=1;
         regs.depth_control.depth_func=AmdGpu::CompareFunc::Always;
         const auto depth=DescribeGuestDepthBuffer(db,regs.depth_view,gpu.last_db_extent);
         const auto dl=LayoutGuestTexture(depth);
-        if(!GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
+        if(independent_depth){
+            if(!raw_domain||!GuestTextureCache::SeparateColorDepthAttachments(target,layout,depth,dl)||
+               GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
+                throw std::runtime_error("Independent depth fixture lost its distinct overlap class");
+            auto same=depth;same.pitch=target.pitch;
+            if(GuestTextureCache::SeparateColorDepthAttachments(target,layout,same,LayoutGuestTexture(same)))
+                throw std::runtime_error("Equal color/depth geometry was misclassified as pool reuse");
+        }else if(!GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
             throw std::runtime_error("Shared attachment fixture lost its original overlap class");
         auto shifted=depth;shifted.address+=256;
         if(GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,shifted,LayoutGuestTexture(shifted)))
@@ -142,6 +150,34 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.depth_control={};cb.base_address=u32((base+61440)>>8);
         const auto probe_desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
         const auto probe_layout=LayoutGuestTexture(probe_desc);
+        if(independent_depth){
+            // D must not retire C. Sample both independently through actual
+            // GCN, while the resident raw buffer remains the initial bytes.
+            auto expected=physical;
+            for(const auto [pitch,value]:std::array<std::pair<u32,float>,2>{{{15,.5f},{31,.125f}}}){
+                image.pitch=pitch;draw(left,true);rasterizer.Finish();
+                rasterizer.ReadMemory(probe_desc.address,probe_layout.guest_bytes);
+                for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                    memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&value,4);
+                if(memcmp(backing,expected.data(),65536))
+                    throw std::runtime_error("Independent CB/DB lost an image, changed B or padding");
+                physical.assign(backing,backing+65536);
+            }
+            const auto current_b=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+            if(!current_b.resource||current_b.bytes!=raw_bytes)throw std::runtime_error("Independent CB/DB lost resident B");
+            auto readback=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            rasterizer.RetainUntilFinish([readback,lease=current_b.allocation](u64){});
+            const auto prior=current_b.resource->State(0);
+            current_b.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            rasterizer.RecordingList()->CopyBufferRegion(readback.handle.Get(),0,current_b.resource->handle.Get(),current_b.offset,raw_bytes);
+            current_b.resource->Transition(rasterizer.RecordingList(),prior);
+            rasterizer.Finish();void* bytes{};D3D12_RANGE range{0,raw_bytes};
+            Check(readback.handle->Map(0,&range,&bytes));
+            const bool preserved=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+            D3D12_RANGE none{};readback.handle->Unmap(0,&none);
+            if(!preserved)throw std::runtime_error("Independent CB/DB published I into resident B");
+            return;
+        }
         draw(left,true); // Real original GCN reads CURRENT D and multiplies .5.
         rasterizer.Finish();rasterizer.ReadMemory(base+61440,probe_layout.guest_bytes);
         auto expected=physical;const float expected_depth=.125f;
