@@ -65,6 +65,10 @@ GuestRasterizer::GuestRasterizer(ID3D12Device* device,AmdGpu::Liverpool& gpu,
     :GuestBufferAccess(device),device_(device),gpu_(gpu),frontend_(profile),shaders_(converter,NativeOptions(profile)),
      pipelines_(device,std::move(dxc),frontend_,shaders_),textures_(device,std::move(converter)) {
     native_alpha_factor_=profile.native_alpha_blend_factor;
+    D3D12_FEATURE_DATA_D3D12_OPTIONS19 output_options{};
+    mismatching_output_dimensions_=SUCCEEDED(device->CheckFeatureSupport(
+        D3D12_FEATURE_D3D12_OPTIONS19,&output_options,sizeof(output_options)))&&
+        output_options.MismatchingOutputDimensionsSupported;
     EnableHostSpanCache(true);
     textures_.SetRecordingListProvider([this]{return RecordingList();});
     textures_.SetCopySubmission([this](const auto& record){SubmitCopyCommands(record);});
@@ -1160,7 +1164,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             Overlap(descriptions[i].address,layouts[i].guest_bytes,descriptions[j].address,layouts[j].guest_bytes)){
             const auto& a=descriptions[i];const auto& b=descriptions[j];
             const bool disjoint=a.first_layer>=b.first_layer+b.view_layers||
-                b.first_layer>=a.first_layer+a.view_layers;
+                b.first_layer>=a.first_layer+a.view_layers||
+                (mismatching_output_dimensions_&&a.first_mip!=b.first_mip);
             if(!disjoint||!CompatibleGuestAttachmentStorage(a,b))
                 throw std::runtime_error("Overlapping guest color attachment views require compatible disjoint subresources");
         }
@@ -1830,6 +1835,16 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             MaterializeColorClear(buffer,descriptions[i],layouts[i],true,&entry,true);
             textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
         }
+        // Vulkan's render area is the intersection of all active attachments,
+        // including storage-backed color targets. Keep viewport transforms;
+        // trimming their extents would distort the guest geometry instead.
+        UINT render_width=16384,render_height=16384;
+        for(UINT i=0;i<targets.size();++i)if(targets[i]){
+            const auto& view=descriptions[i];
+            render_width=std::min(render_width,std::max(1u,view.width>>view.first_mip));
+            render_height=std::min(render_height,std::max(1u,view.height>>view.first_mip));
+        }
+        IntersectGuestRenderArea(viewport.scissors,render_width,render_height);
         // Bind descriptors only after sample backing replacement and load
         // clears. Ordered storage snapshots must include those clears.
         for(UINT i=0;i<target_count;++i)if(targets[i]){

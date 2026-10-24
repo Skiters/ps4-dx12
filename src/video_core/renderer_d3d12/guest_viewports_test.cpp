@@ -37,5 +37,14 @@ int main(){try {
     r.clipper_control.clip_disable=0;
     v.yscale=std::numeric_limits<float>::quiet_NaN();bool rejected=false;
     try{BuildGuestViewports(r);}catch(const std::invalid_argument&){rejected=true;}Require(rejected);
+    std::array<D3D12_RECT,4> areas{{{-3,-2,1280,800},{100,200,900,700},{900,700,1200,800},{0,0,0,0}}};
+    IntersectGuestRenderArea(areas,640,480);
+    Require(areas[0].left==0&&areas[0].top==0&&areas[0].right==640&&areas[0].bottom==480);
+    Require(areas[1].left==100&&areas[1].top==200&&areas[1].right==640&&areas[1].bottom==480);
+    Require(areas[2].left==640&&areas[2].right==640&&areas[2].top==480&&areas[2].bottom==480);
+    Require(areas[3].right==0&&areas[3].bottom==0);
+    IntersectGuestRenderArea(areas,0,0);
+    for(const auto& area:areas)Require(!area.left&&!area.top&&!area.right&&!area.bottom);
+    rejected=false;try{IntersectGuestRenderArea(areas,16385,1);}catch(const std::out_of_range&){rejected=true;}Require(rejected);
     puts("PASS: native 1280x800 viewport orientation, reversed depth, intersected scissor and nonfinite rejection");return 0;
 }catch(const std::exception& e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}}

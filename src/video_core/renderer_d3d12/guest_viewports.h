@@ -11,5 +11,6 @@ struct GuestViewports {
     std::array<std::array<float,4>,16> clip_transforms{};
 };
 GuestViewports BuildGuestViewports(const AmdGpu::Regs&);
+void IntersectGuestRenderArea(std::span<D3D12_RECT> scissors,UINT width,UINT height);
 std::vector<D3D12_VIEWPORT> BuildGuestPointViewports(std::span<const D3D12_VIEWPORT>);
 }

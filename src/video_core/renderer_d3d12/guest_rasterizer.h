@@ -26,6 +26,7 @@ class GuestRasterizer : public GuestBufferAccess {
     std::unique_ptr<GuestIndirectPackPass> indirect_pack_;
     std::unique_ptr<GuestIndexExpandPass> index_expand_;
     bool native_alpha_factor_{};
+    bool mismatching_output_dimensions_{};
     bool image_watch_pending_{},validating_image_watches_{};
     std::function<bool(VAddr,std::span<std::byte>)> read_backing_;
     std::function<bool(VAddr,std::span<const std::byte>)> write_backing_;

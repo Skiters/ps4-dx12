@@ -3,6 +3,16 @@
 #include <algorithm>
 #include <cmath>
 namespace NativeDX12 {
+void IntersectGuestRenderArea(std::span<D3D12_RECT> scissors,UINT width,UINT height){
+    if(width>16384||height>16384)throw std::out_of_range("Native render area exceeds attachment limits");
+    for(auto& scissor:scissors){
+        scissor.left=std::clamp(scissor.left,0L,LONG(width));
+        scissor.top=std::clamp(scissor.top,0L,LONG(height));
+        scissor.right=std::clamp(scissor.right,scissor.left,LONG(width));
+        scissor.bottom=std::clamp(scissor.bottom,scissor.top,LONG(height));
+    }
+}
+
 std::vector<D3D12_VIEWPORT> BuildGuestPointViewports(std::span<const D3D12_VIEWPORT> original) {
     if(original.empty()||original.size()>AmdGpu::NUM_VIEWPORTS)
         throw std::invalid_argument("Invalid expanded point viewport count");
