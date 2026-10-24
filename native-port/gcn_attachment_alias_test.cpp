@@ -142,7 +142,8 @@ int main(int argc,char** argv){try{
     const bool mixed_planes=mode=="mixed-depth-buffer"||mode=="mixed-depth-buffer-owned"||
         mode=="mixed-depth-image"||mode=="mixed-depth-image-owned";
     const bool planned_depth=mode=="planned-depth-recreation-owned";
-    const bool readonly_depth=planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
+    const bool pending_depth_clear=mode=="depth-buffer-htile-clear-owned";
+    const bool readonly_depth=pending_depth_clear||planned_depth||mixed_planes||image_writer||mode=="readonly-depth-buffer"||mode=="readonly-depth-buffer-owned";
     if(!color_feedback&&!snorm_color&&!mixed_samples&&!shared_exponent&&!writable_word&&!readonly_numeric&&!cached_depth_storage&&!signed_color&&!independent_unorm_logic&&!mixed_constant_blend&&!readonly_depth&&!separate_versions&&!formatted_cmask&&!ordered_formatted&&!ordered_bc_writable&&!linear_attachment&&mode!="base")throw std::invalid_argument("Invalid attachment mode");
     Common::ElfInfo::Instance().InitializeApp("DX12FIXTURE", "Headless renderer fixture", "1.0",
         Common::ElfInfo::FW_900, Common::ElfInfo::FW_900, {});
@@ -855,6 +856,7 @@ int main(int argc,char** argv){try{
             0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4154544453425001ULL);
         for(bool z16:{false,true})for(uint32_t samples:{0u,2u})for(bool stencil:{false,true})
         for(bool stencil_writer:{false,true})for(bool full_buffer:{false,true})for(bool htile:{false,true}){
+            if(pending_depth_clear&&(z16||samples||stencil||stencil_writer||full_buffer||!htile))continue;
             if(planned_depth&&(z16||samples||!stencil||stencil_writer))continue;
             if(stencil_writer&&!stencil)continue;
             if(mixed_planes&&!stencil)continue;
@@ -914,7 +916,8 @@ int main(int argc,char** argv){try{
                 else memcpy(regs.vs_program.user_data.data()+4,&target,sizeof(target));
             };
             bind_writer();
-            if(htile){
+            regs.depth_clear=0.75f;
+            if(htile&&!pending_depth_clear){
                 // Consume any real first-use HTILE clear with a disjoint writer.
                 // A later snapshot must preserve the consumed mask after edits.
                 memset(memory,0,65536);regs.depth_clear=0.75f;
@@ -922,7 +925,7 @@ int main(int argc,char** argv){try{
                 rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
                 regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;
             }
-            for(unsigned warm=0;warm<(planned_depth?1u:3u);++warm){
+            for(unsigned warm=0;warm<((planned_depth||pending_depth_clear)?1u:3u);++warm){
                 rasterizer.ReadMemory(base,65536);rasterizer.InvalidateMemory(base,65536);memset(memory,0xee,65536);
                 regs.depth_view.z_read_only=regs.depth_view.stencil_read_only=warm!=1;
                 regs.depth_control.depth_write_enable=mixed_planes&&stencil_writer;
@@ -949,7 +952,7 @@ int main(int argc,char** argv){try{
                     regs.depth_control=saved_control;regs.depth_render_control=saved_render;
                     regs.depth_clear=saved_clear;
                 }
-                const float initial_depth=planned_depth?0.25f:warm==1?0.25f:warm==2?0.875f:0.75f;
+                const float initial_depth=(planned_depth||pending_depth_clear)?0.25f:warm==1?0.25f:warm==2?0.875f:0.75f;
                 const u16 packed_depth=u16(initial_depth*65535.f+0.5f);const u8 initial_stencil=u8(37+warm);
                 regs.stencil_ref_front.stencil_test_val=regs.stencil_ref_back.stencil_test_val=initial_stencil;
                 for(u32 sample=0;sample<depth.samples;++sample)for(u32 y=0;y<depth.height;++y)for(u32 x=0;x<depth.width;++x){
@@ -977,7 +980,7 @@ int main(int argc,char** argv){try{
                 const auto image_layout=image_writer?LayoutGuestTexture(image_desc):GuestTextureLayout{};
                 const auto store_address=image_writer?image_desc.address+GuestPixelOffset(image_desc,image_layout,0,0,0,0):target.base_address;
                 std::vector<std::byte> expected(memory,memory+65536);memset(expected.data()+store_address-base,0,4);
-                if((planned_depth?0.875f:initial_depth)>0.5f){const u32 red=planned_depth?0xff000040:0xff0000ff;
+                if((planned_depth?0.875f:pending_depth_clear?0.75f:initial_depth)>0.5f){const u32 red=planned_depth?0xff000040:0xff0000ff;
                     for(u32 sample=0;sample<color.samples;++sample)for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){
                         memcpy(expected.data()+4096+GuestPixelOffset(color,cl,0,0,x,y,sample),&red,4);
                         if(mixed_planes&&stencil_writer){const float z=0.5f;const u16 packed=32768;
@@ -1034,6 +1037,28 @@ int main(int argc,char** argv){try{
                     regs.vs_program=saved_vertex;regs.ps_program=saved_pixel;target=saved_target;
                     regs.depth_control.depth_func=saved_depth_func;
                 }
+                if(pending_depth_clear){
+                    // B retains .25 (plus the actual zero DWORD writer), while
+                    // I was cleared to .75. A second draw into a fresh CB must
+                    // still pass z=.5 < I after metadata was consumed. Reading
+                    // B or losing the clear makes the entire fresh CB fail.
+                    alignas(256) std::array<u32,128> blue{};
+                    initialize(blue,{0xBEEB03FF,15,0x7e000280,0x7e020280,
+                        0x7e0402ff,0x3f800000,0x7e0602ff,0x3f800000,
+                        0xf800000f,0x03020100,0xbf810000},0x4854494c45424931ULL);
+                    regs.ps_program.address=reinterpret_cast<u64>(blue.data())>>8;
+                    target.base_address=base+49152;bind_writer();
+                    cb.base_address=u32((base+61440)>>8);
+                    const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
+                    const auto probe_layout=LayoutGuestTexture(probe);
+                    memset(expected.data()+49152,0,4);const u32 blue_pixel=0xffff0000;
+                    for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
+                        memcpy(expected.data()+61440+GuestPixelOffset(probe,probe_layout,0,0,x,y),&blue_pixel,4);
+                    rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
+                    if(memcmp(memory,expected.data(),65536))
+                        throw std::runtime_error("HTILE clear did not retain I independently from buffer B or consumed metadata twice");
+                    continue;
+                }
                 if(planned_depth)continue;
                 const auto reject=[&]{const std::vector<std::byte> before(memory,memory+65536);bool rejected=false;
                     try{rasterizer.Draw(false);}catch(const std::runtime_error&){rejected=true;}
@@ -1051,7 +1076,7 @@ int main(int argc,char** argv){try{
                     reject();regs.depth_render_control.depth_clear_enable=0;regs.depth_control.depth_write_enable=0;
                 }
             }
-            if(htile&&!stencil_writer&&!planned_depth){
+            if(htile&&!stencil_writer&&!planned_depth&&image_writer){
                 // Rebinding a fresh metadata allocation installs the entry's
                 // initial clear mask. It must not escape the two-writer guard.
                 regs.depth_htile_data_base.address+=1;

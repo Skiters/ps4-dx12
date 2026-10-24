@@ -1255,6 +1255,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     bool depth_attachment_snapshot=false;
     bool shader_depth_overlap=false,shader_stencil_overlap=false;
+    bool shader_image_depth_overlap=false,independent_depth_clear=false;
     const auto record_depth_writer=[&](VAddr address,u64 bytes){
         if(!has_depth||!address||!bytes)return;
         const bool depth_overlap=Overlap(address,bytes,descriptions[8].address,layouts[8].guest_bytes);
@@ -1277,6 +1278,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     for(const auto& stage:stages)for(const auto& image:stage.info->images)if(image.is_written){
         const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
         const auto desc=DescribeGuestTexture(sharp);const auto layout=LayoutGuestTexture(desc);
+        shader_image_depth_overlap|=has_depth&&Overlap(desc.address,layout.guest_bytes,
+            descriptions[8].address,layouts[8].guest_bytes);
         record_depth_writer(desc.address,layout.guest_bytes);
     }
     // Match FindImage -> ResolveDepthOverlap BEFORE shader buffer binding and
@@ -1329,7 +1332,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // Binding a writer invalidates guest-memory equality proofs, and cache
         // uploads can replace overlapping entries. Keep independent prewrite
         // contents rather than a cache pointer. HTILE is also a writer: keep its mask
-        // across replacement and reject a pending clear before shader writes.
+        // across replacement. A buffer writer keeps B separate from the later
+        // HTILE clear of D; an overlapping image writer still needs unification.
         const auto meta=r.depth_buffer.z_info.tile_surface_enable?
             r.depth_htile_data_base.GetAddress():0;
         if(meta){
@@ -1346,9 +1350,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             const auto info=textures_.GetMetaInfo(meta);
             if(!info)throw std::logic_error("Native depth snapshot lost its HTILE owner");
             depth_meta_snapshot=info->clear_mask;
-            if(shader_depth_overlap&&depth_tests.depth&&r.depth_view.slice_start<32&&
+            if(shader_image_depth_overlap&&depth_tests.depth&&r.depth_view.slice_start<32&&
                 (*depth_meta_snapshot&(u32(1)<<r.depth_view.slice_start)))
-                throw std::runtime_error("Native simultaneous buffer/HTILE depth clear requires shared ownership");
+                throw std::runtime_error("Native simultaneous image/HTILE depth clear requires shared ownership");
         }
         diagnostic.Stage("shader-depth-prewrite-snapshot");
         const bool gpu_planes=GuestTextureCache::CanUploadGpuSnapshot(descriptions[8],layouts[8]);
@@ -1734,6 +1738,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 r.depth_htile_data_base.GetAddress():0;
             if(replay_attachments.Beginning())textures_.RegisterMeta(entry,GuestTextureCache::MetaType::HTile,meta,
                 depth_meta_snapshot.value_or(entry.htile_initial_mask));
+            if(replay_attachments.Beginning()&&depth_attachment_snapshot&&shader_depth_overlap&&depth_tests.depth){
+                const auto info=textures_.GetMetaInfo(meta);
+                const bool pending=info&&r.depth_view.slice_start<32&&
+                    (info->clear_mask&(u32(1)<<r.depth_view.slice_start));
+                if(pending){
+                    // BeginRendering clears the selected I after buffer binds.
+                    // Keep its native D/S allocation independent from B and
+                    // validate both physical planes before consuming metadata.
+                    if(shader_image_depth_overlap||!OwnIndependentImage(entry))
+                        throw std::runtime_error("HTILE clear cannot retain independent depth/buffer ownership");
+                    independent_depth_clear=true;
+                }
+            }
             const bool metadata_clear=replay_attachments.Beginning()&&textures_.ConsumeMeta(meta,r.depth_view.slice_start);
             const bool clear_depth=replay_attachments.Beginning()&&depth_tests.depth&&((r.depth_render_control.depth_clear_enable&&
                 r.depth_control.depth_write_enable)||metadata_clear);
@@ -1743,7 +1760,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             depth_write_planes|=draw_write_planes;
             if(clear_depth&&!explicit_depth_clear)
                 ValidateGpuBacking(descriptions[8].address,layouts[8].guest_bytes,true);
-            if((shader_depth_overlap&&(draw_write_planes&1))||(shader_stencil_overlap&&(draw_write_planes&2)))
+            if((shader_depth_overlap&&(draw_write_planes&1)&&!independent_depth_clear)||
+               (shader_stencil_overlap&&(draw_write_planes&2)))
                 throw std::logic_error("Native depth snapshot acquired a competing attachment writer");
             if(metadata_clear&&Diagnostics::Enabled()){
                 static unsigned reported{};
@@ -2029,7 +2047,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // A recorded attachment writer changes original GpuModified history,
         // even when recreation copied a CPU-initialized (GpuModified0) source.
         for(UINT i=0;i<target_count;++i)if(targets[i]&&!retired_color_targets[i])targets[i]->NoteLogicalImageWrite();
-        if(targets[8]&&write_depth_stencil&&(!depth_attachment_snapshot||depth_binding_plan))targets[8]->NoteLogicalImageWrite();
+        if(targets[8]&&write_depth_stencil&&(!depth_attachment_snapshot||depth_binding_plan||independent_depth_clear))targets[8]->NoteLogicalImageWrite();
         if(std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")){
             static u64 writer{};const auto serial=++writer;
             const auto* vs=guest.stages[u32(Shader::SwStage::Vertex)];
