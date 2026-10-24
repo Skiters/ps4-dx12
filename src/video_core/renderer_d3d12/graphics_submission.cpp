@@ -230,6 +230,14 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         if(depth->clear_stencil&&!has_stencil)throw std::invalid_argument("Native stencil clear has no stencil plane");
         depth_view=DepthView(*depth->resource,depth->view,pipeline.DepthFormat(),depth->read_only_depth,depth->read_only_stencil);
         depth_range=DepthRange(resource_desc,depth_view);
+        if(depth->clear_rect){
+            const auto& rect=*depth->clear_rect;
+            const auto width=std::max<UINT64>(1,resource_desc.Width>>depth_range.mip);
+            const auto height=std::max<UINT>(1,resource_desc.Height>>depth_range.mip);
+            if(rect.left<0||rect.top<0||rect.right<rect.left||rect.bottom<rect.top||
+               UINT64(rect.right)>width||UINT64(rect.bottom)>height)
+                throw std::out_of_range("Depth/stencil clear rectangle exceeds its attachment view");
+        }
         for(UINT layer=depth_range.first;layer<depth_range.first+depth_range.count;++layer)
             if((bindings.ShaderAccess(depth->resource->handle.Get(),depth_range.mip,layer,0)&D3D12_RESOURCE_STATE_UNORDERED_ACCESS)||
                (has_stencil&&(bindings.ShaderAccess(depth->resource->handle.Get(),depth_range.mip,layer,1)&D3D12_RESOURCE_STATE_UNORDERED_ACCESS))||
@@ -280,8 +288,10 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         // A beginning clear precedes every shader load. A plane read-only
         // during this draw must therefore be cleared through a separate
         // writable DSV before entering its combined depth/SRV read state.
-        const bool preclear_depth=depth&&depth->resource&&depth->clear_depth&&depth->read_only_depth;
-        const bool preclear_stencil=depth&&depth->resource&&depth->clear_stencil&&depth->read_only_stencil;
+        // D3D12 render-pass load clears cover the entire view, so a smaller
+        // Vulkan render area also needs this bounded preclear plus PRESERVE.
+        const bool preclear_depth=depth&&depth->resource&&depth->clear_depth&&(depth->read_only_depth||depth->clear_rect.has_value());
+        const bool preclear_stencil=depth&&depth->resource&&depth->clear_stencil&&(depth->read_only_stencil||depth->clear_rect.has_value());
         if(preclear_depth||preclear_stencil){
             auto view=depth_view;view.Flags=D3D12_DSV_FLAG_NONE;
             const auto clear_handle=depth_descriptors_->Cpu(1);
@@ -291,7 +301,8 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             depth->resource->Transition(list,D3D12_RESOURCE_STATE_DEPTH_WRITE);
             DX12_API_CALL(list->ClearDepthStencilView(clear_handle,D3D12_CLEAR_FLAGS(
                 (preclear_depth?D3D12_CLEAR_FLAG_DEPTH:0)|(preclear_stencil?D3D12_CLEAR_FLAG_STENCIL:0)),
-                depth->clear_value,depth->stencil_value,0,nullptr));
+                depth->clear_value,depth->stencil_value,depth->clear_rect?1u:0u,
+                depth->clear_rect?&*depth->clear_rect:nullptr));
         }
         std::set<ID3D12Resource*> transitioned_colors;
         for(const auto& color:colors)if(color.resource&&transitioned_colors.insert(color.resource->handle.Get()).second){

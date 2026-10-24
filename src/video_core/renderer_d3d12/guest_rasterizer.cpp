@@ -1845,6 +1845,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             render_height=std::min(render_height,std::max(1u,view.height>>view.first_mip));
         }
         IntersectGuestRenderArea(viewport.scissors,render_width,render_height);
+        if(has_depth&&(depth.clear_depth||depth.clear_stencil)){
+            const auto& view=descriptions[8];
+            if(render_width<std::max(1u,view.width>>view.first_mip)||
+               render_height<std::max(1u,view.height>>view.first_mip))
+                depth.clear_rect=D3D12_RECT{0,0,LONG(render_width),LONG(render_height)};
+        }
         // Bind descriptors only after sample backing replacement and load
         // clears. Ordered storage snapshots must include those clears.
         for(UINT i=0;i<target_count;++i)if(targets[i]){

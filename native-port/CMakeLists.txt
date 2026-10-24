@@ -682,7 +682,7 @@ add_test(NAME native_bc_volume COMMAND native-bc-volume-test "${DXC_DLL}" "${MES
 set_tests_properties(native_bc_volume PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 180)
 target_compile_features(native-graphics-contract-test PRIVATE cxx_std_23)
 target_link_libraries(native-graphics-contract-test PRIVATE shadps4_native_guest_textures shadps4_dxil_compiler)
-foreach(_graphics_contract IN ITEMS minmax minmax-srgb rasterizer-discard cull-both indices16-oob indices32-oob empty-viewports)
+foreach(_graphics_contract IN ITEMS minmax minmax-srgb rasterizer-discard cull-both indices16-oob indices32-oob empty-viewports depth-render-area-clear)
     add_test(NAME native_graphics_${_graphics_contract} COMMAND native-graphics-contract-test "${DXC_DLL}" "${_graphics_contract}")
     set_tests_properties(native_graphics_${_graphics_contract} PROPERTIES ENVIRONMENT "SHADPS4_NATIVE_D3D12_VALIDATION=1" TIMEOUT 60)
 endforeach()

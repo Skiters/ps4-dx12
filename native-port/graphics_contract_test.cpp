@@ -23,9 +23,89 @@ static ComPtr<ID3D12Device> HardwareDevice(){
     }
     throw std::runtime_error("No hardware D3D12 device");
 }
+static void CheckDepthRenderArea(ID3D12Device* device,const wchar_t* dxc){
+    Rasterizer rasterizer(device);
+    auto texture=Texture2D(device,8,8,DXGI_FORMAT_D32_FLOAT_S8X24_UINT,
+        D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,D3D12_RESOURCE_STATE_COMMON);
+    D3D12_DEPTH_STENCIL_VIEW_DESC view{};view.Format=DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+    view.ViewDimension=D3D12_DSV_DIMENSION_TEXTURE2D;
+    Descriptors descriptors(device,D3D12_DESCRIPTOR_HEAP_TYPE_DSV,1,false);
+    device->CreateDepthStencilView(texture.handle.Get(),&view,descriptors.Cpu(0));
+    auto depth_read=TextureTransfer::CreateSubresource(device,texture.handle->GetDesc(),0,true);
+    auto stencil_read=TextureTransfer::CreateSubresource(device,texture.handle->GetDesc(),1,true);
+    if(depth_read.row_bytes!=32||stencil_read.row_bytes!=8)
+        throw std::runtime_error("Unexpected depth/stencil plane footprint");
+    auto writes=UavBuffer(device,16);
+    auto seed=Buffer(device,16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+    const u32 zeros[]{0,0,0,0xdeadbeef};void* mapped{};D3D12_RANGE none{};
+    Check(seed.handle->Map(0,&none,&mapped));memcpy(mapped,zeros,sizeof(zeros));seed.handle->Unmap(0,nullptr);
+    auto written=Buffer(device,16,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+    AmdGpu::Regs regs{};regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;
+    regs.depth_control.depth_enable=1;regs.depth_control.depth_func=AmdGpu::CompareFunc::Never;
+    regs.depth_control.stencil_enable=1;regs.depth_buffer.stencil_read_base=1;
+    regs.depth_buffer.stencil_info.format=AmdGpu::DepthBuffer::StencilFormat::Stencil8;
+    regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Always;
+    const auto state=BuildGuestGraphicsState(regs,{},view.Format);
+    const D3D12_VIEWPORT viewport{0,0,8,8,0,1};const D3D12_RECT scissor{0,0,8,8};
+    const float blend[]{1,1,1,1};
+    const auto ps=Shader::Backend::DX12::CompileDxil(dxc,"void main(){}",Shader::Backend::DX12::Stage::Pixel);
+    for(bool uav:{false,true})for(bool readonly:{false,true}){
+        const std::string source=(uav?"RWByteAddressBuffer writes:register(u0);":"")+
+            std::string("float4 main(uint id:SV_VertexID):SV_Position{")+
+            (uav?"uint old;writes.InterlockedOr(id*4,1,old);":"")+
+            "return float4(id==1?3:-1,id==2?3:-1,.5,1);}";
+        const auto vs=Shader::Backend::DX12::CompileDxil(dxc,source,Shader::Backend::DX12::Stage::Vertex);
+        if(!vs.success||!ps.success)throw std::runtime_error(vs.diagnostics+ps.diagnostics);
+        ShaderPipeline pipeline(device,dxc,{vs.bytecode,ps.bytecode},state.pipeline);
+        for(bool invalid:{false,true}){
+            texture.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_DEPTH_WRITE);
+            rasterizer.RecordingList()->ClearDepthStencilView(descriptors.Cpu(0),
+                D3D12_CLEAR_FLAG_DEPTH|D3D12_CLEAR_FLAG_STENCIL,.25f,37,0,nullptr);
+            ResourceBindings bindings(device,pipeline.Layout());
+            if(uav){
+                writes.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
+                rasterizer.RecordingList()->CopyBufferRegion(writes.handle.Get(),0,seed.handle.Get(),0,16);
+                writes.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                D3D12_UNORDERED_ACCESS_VIEW_DESC buffer{};buffer.Format=DXGI_FORMAT_R32_TYPELESS;
+                buffer.ViewDimension=D3D12_UAV_DIMENSION_BUFFER;buffer.Buffer.NumElements=4;
+                buffer.Buffer.Flags=D3D12_BUFFER_UAV_FLAG_RAW;bindings.Uav(0,0,writes.handle.Get(),buffer);
+            }
+            Rasterizer::DepthAttachment attachment{&texture,view,readonly,readonly,true,.75f,true,91};
+            attachment.clear_rect=D3D12_RECT{1,2,invalid?9L:5L,6};
+            bool rejected=false;
+            try{rasterizer.ExecuteGraphics(pipeline,bindings,state,{},&attachment,
+                std::span(&viewport,1),std::span(&scissor,1),blend,{3},{},nullptr,false);}
+            catch(const std::out_of_range&){rejected=true;}
+            if(rejected!=invalid)throw std::runtime_error("Depth clear bounds validation mismatch");
+            depth_read.Readback(rasterizer.RecordingList(),texture);
+            stencil_read.Readback(rasterizer.RecordingList(),texture);
+            if(uav){
+                writes.Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+                rasterizer.RecordingList()->CopyBufferRegion(written.handle.Get(),0,writes.handle.Get(),0,16);
+            }
+            rasterizer.Finish();std::array<float,64> depths{};std::array<u8,64> stencil{};
+            depth_read.ReadRows(depths.data(),sizeof(depths),32);stencil_read.ReadRows(stencil.data(),stencil.size(),8);
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                const bool cleared=!invalid&&x>=1&&x<5&&y>=2&&y<6;
+                if(depths[y*8+x]!=(cleared?.75f:.25f)||stencil[y*8+x]!=(cleared?91:37))
+                    throw std::runtime_error("Depth/stencil load clear changed bytes outside the render area");
+            }
+            if(uav){D3D12_RANGE range{0,16};Check(written.handle->Map(0,&range,&mapped));
+                u32 words[4];memcpy(words,mapped,16);written.handle->Unmap(0,&none);
+                for(UINT i=0;i<4;++i)if(words[i]!=(i==3?0xdeadbeef:invalid?0:1))
+                    throw std::runtime_error("Bounded clear skipped draw effects or mutated rejected input");
+            }
+            rasterizer.ValidateDebugMessages();
+        }
+    }
+}
 int wmain(int argc,wchar_t** argv){try{
     if(argc!=3)throw std::invalid_argument("Expected DXC path and graphics contract mode");
     const std::wstring_view mode=argv[2];
+    if(mode==L"depth-render-area-clear"){
+        auto device=HardwareDevice();CheckDepthRenderArea(device.Get(),argv[1]);
+        puts("PASS: depth/stencil bounded clear, readonly/writable planes, draw effects and rejection");return 0;
+    }
     const bool blend=mode==L"minmax",srgb=mode==L"minmax-srgb",discard=mode==L"rasterizer-discard";
     const bool cull=mode==L"cull-both",indices16=mode==L"indices16-oob",indices32=mode==L"indices32-oob";
     const bool empty_viewport=mode==L"empty-viewports";

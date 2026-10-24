@@ -412,6 +412,7 @@ public:
         float clear_value{1.0f};
         bool clear_stencil{};
         UINT8 stencil_value{};
+        std::optional<D3D12_RECT> clear_rect;
     };
     struct VertexBinding {Resource* resource{};u64 offset{};UINT bytes{},stride{};};
     struct IndexBinding {Resource* resource{};u64 offset{};UINT bytes{};DXGI_FORMAT format=DXGI_FORMAT_R16_UINT;
