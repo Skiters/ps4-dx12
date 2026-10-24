@@ -82,6 +82,7 @@ public:
         }
     }
     Resource Record(ID3D12GraphicsCommandList* list,Resource& source){
+        const auto prior_state=source.state;const auto prior_subresources=source.subresource_states;
         if(!inherited_&&source.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)source.UavBarrier(list);
         if(!inherited_)for(auto& slice:slices_){
             if(slice.read_samples)slice.read_samples->Record(list,source,slice.source_linear);
@@ -106,6 +107,9 @@ public:
             }
         }
         destination_.Transition(list,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        if(prior_subresources.empty())source.Transition(list,prior_state);
+        else for(UINT sub=0;sub<prior_subresources.size();++sub)
+            source.Transition(list,prior_subresources[sub],sub);
         return destination_;
     }
 };
@@ -223,6 +227,10 @@ void GuestTextureCache::ClearRawStorageImage(Entry& entry,const float (&color)[4
 }
 bool GuestTextureCache::ConvertPackedBacking(Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout,ID3D12GraphicsCommandList* list){
+    // A sampled representation already selected for this logical draw must
+    // keep its allocation while a later attachment recreates the color view.
+    // UploadVersion's independent transfer creates and owns that replacement.
+    if(desc.render_target&&entry.BindingPinned())return false;
     const auto source_desc=entry.texture.handle->GetDesc();
     const bool inherited=entry.layout.expanded_bytes_per_pixel!=0;
     if(inherited&&(!entry.expanded_guest_backing.handle||!entry.expanded_written_mask.handle||

@@ -3849,6 +3849,8 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
     // ReserveMemory/recursive Upload may submit internally. Register this
     // pending lease before recording commands, not only at outer dispatch end.
     if(transfer_submission_)transfer_submission_();
+    const auto previous_image_state=image.texture.state,previous_seed_state=initial.state;
+    const auto previous_image_subresources=image.texture.subresource_states;
     if(image.texture.state==D3D12_RESOURCE_STATE_UNORDERED_ACCESS)image.texture.UavBarrier(list);
     if(!multisampled)image.texture.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
     initial.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);output.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -3870,6 +3872,13 @@ Resource GuestTextureCache::RetileImageVersion(Entry& image,Resource& initial,
         slice.dispatch->Record(list,slice.buffer,output,mask);
     }
     output.UavBarrier(list);
+    // Earlier shader descriptors may still reference this native allocation.
+    // A private retile neither replaces their resource state nor takes over
+    // the caller's seed buffer (which can itself be a retained value copy).
+    if(previous_image_subresources.empty())image.texture.Transition(list,previous_image_state);
+    else for(UINT sub=0;sub<previous_image_subresources.size();++sub)
+        image.texture.Transition(list,previous_image_subresources[sub],sub);
+    initial.Transition(list,previous_seed_state);
     return output;
 }
 void GuestTextureCache::Collect(uint64_t completed){

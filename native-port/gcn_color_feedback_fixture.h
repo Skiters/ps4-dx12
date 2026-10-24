@@ -13,7 +13,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
-    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false){
+    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -47,6 +47,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     auto& cb=regs.color_buffers[0];cb.base_address=u32((base+16384)>>8);
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
+    if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
     const auto target=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
@@ -56,6 +57,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     // the original FLOAT attachment bits, not numerically convert the texel.
     image.data_format=shared_ms?14:4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
+    if(converted_color==1){image.data_format=10;image.num_format=0;image.dst_sel_x=6;}
+    if(converted_color==2){image.data_format=9;image.num_format=1;}
     if(retained_mips||grown_mips)image.last_level=1;
     const auto sampled=DescribeGuestTexture(image);
     const auto sampled_layout=LayoutGuestTexture(sampled);
@@ -65,7 +68,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto same=sampled;same.pitch=target.pitch;
         if(GuestTextureCache::SeparateColorSampledImages(target,layout,same,LayoutGuestTexture(same)))
             throw std::runtime_error("Compatible feedback was misclassified as independent pool reuse");
-    }else if(!retained_mips&&!grown_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
+    }else if(!converted_color&&!retained_mips&&!grown_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
         throw std::runtime_error("Feedback fixture target/sample physical mapping differs");
     AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
     input.data_format=4;input.num_format=4;
@@ -110,6 +113,36 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         cb.base_address=u32((base+16384)>>8);
     }
     draw(seed,false);
+    if(converted_color){
+        if(!raw_domain||!CompatibleGuestPackedStorage(target,sampled))
+            throw std::runtime_error("Converted feedback fixture has no exact packed mapping");
+        draw(left,true);
+        cb.base_address=u32((base+61440)>>8);cb.info.format=4;cb.info.number_type=7;
+        if(converted_color==1){image.data_format=4;image.num_format=7;image.dst_sel_x=4;}
+        const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
+        draw(left,true);
+        const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!raw.resource||raw.bytes!=raw_bytes)throw std::runtime_error("Converted feedback lost independent B");
+        auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        rasterizer.RetainUntilFinish([rb,lease=raw.allocation](u64){});const auto prior=raw.resource->State(0);
+        raw.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,raw.resource->handle.Get(),raw.offset,raw_bytes);
+        raw.resource->Transition(rasterizer.RecordingList(),prior);rasterizer.Finish();
+        void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
+        const bool preserved=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+        D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+        if(!preserved)throw std::runtime_error("Converted feedback published I into independent B");
+        rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+        // R32(1) -> RGBA8.B=128/255 -> half -> R32 probe half.
+        // SNORM10(1) -> half -> quantized256/511 -> R32 probe half.
+        auto expected=physical;const float value=converted_color==1?128.f/1020.f:128.f/511.f;
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+            memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
+        rasterizer.ValidateDebugMessages();
+        if(memcmp(backing,expected.data(),65536))
+            throw std::runtime_error("Converted feedback lost image contents, source state, lifetime or padding");
+        return;
+    }
     if(independent_class){
         // I_color now contains1, physical B still contains.75. The distinct
         // image class must sample B, so the next CB write is.375, never.5.
