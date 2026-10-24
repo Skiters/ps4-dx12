@@ -7,6 +7,7 @@
 #include "shader_recompiler/backend/spirv/emit_spirv_point_capture.h"
 #include "shader_recompiler/runtime_info.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
+#include "video_core/renderer_d3d12/guest_point_transport.h"
 #include <limits>
 #include <bit>
 
@@ -473,30 +474,66 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     if(routed_viewport){ctx.AddCapability(spv::Capability::MultiViewport);
         output_viewport=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);}
     if(routed_layer)output_layer=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
-    struct Varying {Id type,input,output;u32 width;Q qualifier;};
+    struct Varying {Id type,input;u32 width;Q qualifier;u32 location,offset,mask;};
+    struct Output {Id type,variable;u32 width;};
     std::vector<Varying> varyings;
+    std::array<Output,32> varying_outputs{};
+    std::array<Id,32> varying_inputs{};
     u32 output_components=5+u32(routed_viewport)+u32(routed_layer);
-    for(u32 parameter=0;parameter<Shader::IR::NumParams;++parameter){
+    // The same guest parameter may be consumed with flat, smooth and linear
+    // interpolation at once. Keep separate clipping values, but reuse the
+    // existing PS transport packing for their final point-constant payload.
+    const auto input_count=fs.num_inputs-u32(fs.clip_distance_emulation);
+    NativePointTransport transport;
+    if(fragment&&fs.native_point_input_compaction)
+        transport=BuildNativePointTransport(*fragment,input_count,[&](u32 i){return fs.inputs[i];});
+    const auto add_varying=[&](u32 parameter,u32 location,u32 offset,u32 mask,Q qualifier,u32 output_width){
+        const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
+        const auto type=width==1?f32:ctx.TypeVector(f32,width);
+        const u32 input_location=parameter+u32(config.emulated_clip);
+        const u32 output_location=location+u32(config.emulated_clip);
+        if(input_location>=32||output_location>=32)
+            throw std::runtime_error("Polygon point interface exceeds native varying locations");
+        if(!Sirit::ValidId(varying_inputs[parameter]))
+            varying_inputs[parameter]=ctx.Variable(ctx.TypeArray(type,three),spv::StorageClass::Input,input_location);
+        auto& output=varying_outputs[location];
+        if(!output.width){
+            output.width=output_width;output.type=output_width==1?f32:ctx.TypeVector(f32,output_width);
+            output.variable=ctx.Variable(output.type,spv::StorageClass::Output,output_location);
+            output_components+=output_width;
+        }
+        varyings.push_back({type,varying_inputs[parameter],width,qualifier,location,offset,mask});
+    };
+    if(fragment&&fs.native_point_input_compaction){
+        for(const auto& group:transport.outputs){
+            if(!group.mask||!vertex.stores.GetAny(A::Param0+group.source))continue;
+            std::optional<Q> qualifier;
+            for(u32 i=0;i<input_count;++i)if(fragment->loads.GetAny(A::Param0+i)&&!fs.inputs[i].IsDefault()&&
+                fs.inputs[i].param_index==group.source&&transport.locations[i]==group.location&&
+                transport.offsets[i]==group.component){qualifier=fragment->fs_interpolation[i].primary;break;}
+            if(qualifier==Q::PerVertex)
+                throw std::runtime_error("Polygon point fill needs per-vertex barycentric transport");
+            if(!qualifier)throw std::logic_error("Polygon point transport lost its interpolation source");
+            const auto interpolation=*qualifier==Q::Flat?Q::Flat:*qualifier==Q::NoPerspective?Q::NoPerspective:Q::Smooth;
+            add_varying(group.source,group.location,group.component,group.mask,interpolation,
+                Shader::NativePointOutputWidth(transport.outputs,group.location));
+        }
+    }else for(u32 parameter=0;parameter<Shader::IR::NumParams;++parameter){
         if(!vertex.stores.GetAny(A::Param0+parameter))continue;
         std::optional<Q> qualifier;
-        if(fragment)for(u32 input=0;input<fs.num_inputs-u32(fs.clip_distance_emulation);++input){
+        if(fragment)for(u32 input=0;input<input_count;++input){
             if(!fragment->loads.GetAny(A::Param0+input)||fs.inputs[input].param_index!=parameter||
                 (fs.inputs[input].is_default&&!fs.inputs[input].is_flat))continue;
             const auto q=fs.inputs[input].is_flat?Q::Flat:fragment->fs_interpolation[input].primary;
             if(q==Q::PerVertex)throw std::runtime_error("Polygon point fill needs per-vertex barycentric transport");
             const auto interpolation=q==Q::Flat?Q::Flat:q==Q::NoPerspective?Q::NoPerspective:Q::Smooth;
             if(qualifier&&*qualifier!=interpolation)
-                throw std::runtime_error("Polygon point fill needs duplicated interpolation transport");
+                throw std::runtime_error("Polygon point fill requires the compact fragment transport");
             qualifier=interpolation;
         }
         if(!qualifier)continue;
         const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
-        const auto type=width==1?f32:ctx.TypeVector(f32,width);
-        const u32 location=parameter+u32(config.emulated_clip);
-        if(location>=32)throw std::runtime_error("Polygon point interface exceeds native varying locations");
-        varyings.push_back({type,ctx.Variable(ctx.TypeArray(type,three),spv::StorageClass::Input,location),
-            ctx.Variable(type,spv::StorageClass::Output,location),width,*qualifier});
-        output_components+=width;
+        add_varying(parameter,parameter,0,(1u<<width)-1,*qualifier,width);
     }
     const u32 clip_mask=vertex.stores.flags[Shader::Info::AttributeFlags::Index(A::ClipDistance)];
     const u32 cull_mask=vertex.stores.flags[Shader::Info::AttributeFlags::Index(A::CullDistance)];
@@ -674,10 +711,18 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
               const auto end=ctx.OpUMin(u32_type,n,ctx.OpIAdd(u32_type,first,ci(points_per_instance)));
               loop(end,[&](Id index){
                 std::vector<Shader::Backend::SPIRV::PointOutput> outputs;
+                std::array<std::array<Id,4>,32> packed;
+                for(auto& channels:packed)channels.fill(ctx.OpUndef(f32));
                 for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
-                    const auto value=load(clipped,index,field+1);std::vector<Id> channels;
-                    for(u32 channel=0;channel<varying.width;++channel)channels.push_back(component(value,channel));
-                    outputs.push_back({varying.type,varying.output,varying.width==1?channels[0]:ctx.OpCompositeConstruct(varying.type,channels)});
+                    const auto value=load(clipped,index,field+1);u32 target=varying.offset;
+                    for(u32 channel=0;channel<4;++channel)if(varying.mask&(1u<<channel))
+                        packed[varying.location][target++]=channel<varying.width?
+                            component(value,channel):ctx.OpUndef(f32);
+                }
+                for(u32 location=0;location<32;++location){const auto& output=varying_outputs[location];
+                    if(!output.width)continue;
+                    outputs.push_back({output.type,output.variable,output.width==1?packed[location][0]:
+                        ctx.OpCompositeConstruct(output.type,std::span(packed[location].data(),output.width))});
                 }
                 outputs.push_back({u32_type,output_primitive,ctx.OpLoad(u32_type,primitive)});
                 if(config.emulated_clip)outputs.push_back({vec4,output_clips,load(clipped,index,clip_field)});

@@ -50,7 +50,8 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
         runtime.hw.vs.native_polygon_point_transport=GuestPolygonPointGeometryState(regs);
     if(logical==Shader::SwStage::Fragment){
         ConfigureOrderedColorTargets(runtime, regs,profile_.native_alpha_blend_factor);
-        runtime.hw.fs.native_point_input_compaction=(regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&
+        runtime.hw.fs.native_point_input_compaction=GuestPolygonPointGeometryState(regs)||
+            (regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&
             regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList)||
             (regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs&&
              regs.primitive_type==AmdGpu::PrimitiveType::PointList);

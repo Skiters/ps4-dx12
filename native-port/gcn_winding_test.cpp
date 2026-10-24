@@ -80,8 +80,9 @@ int main(int argc,char** argv){try{
     const auto artifact_mode=std::string(mode);
     if(mode=="polygon-output-capacity"){
         if(!compile_shaders)throw std::invalid_argument("polygon-output-capacity requires explicit compile-shaders mode");
-        for(u32 parameters:{8u,16u,24u})for(bool clip:{false,true}){
+        for(u32 parameters:{8u,16u,24u})for(bool clip:{false,true})for(bool compact:{false,true}){
             Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            fs.native_point_input_compaction=compact;
             fs.num_inputs=parameters;
             for(u32 i=0;i<parameters;++i){
                 fs.inputs[i].param_index=u8(i);fragment.fs_interpolation[i].primary=Shader::Qualifier::Smooth;
@@ -108,6 +109,30 @@ int main(int argc,char** argv){try{
             const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Polygon geometry partition failed signed DXIL validation: "+compiled.diagnostics);
+        }
+        for(bool last:{false,true}){
+            Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            fs.num_inputs=3;fs.native_point_input_compaction=true;
+            const std::array qualifiers{Shader::Qualifier::Smooth,Shader::Qualifier::Flat,Shader::Qualifier::NoPerspective};
+            for(u32 i=0;i<3;++i){fs.inputs[i].param_index=0;fs.inputs[i].is_flat=i==1;
+                fragment.fs_interpolation[i].primary=qualifiers[i];
+                fragment.loads.Set(Shader::IR::Attribute::Param0+i,0);}
+            vertex.stores.Set(Shader::IR::Attribute::Param0,0);
+            GuestPolygonPointConfig config;config.last_provoking=last;
+            const auto words=EmitGuestPolygonPoints(vertex,&fragment,fs,config);
+            std::vector<u32> located;
+            for(size_t offset=5;offset<words.size();){const auto length=words[offset]>>16;
+                if(!length||offset+length>words.size())throw std::runtime_error("Malformed qualified polygon module");
+                if((words[offset]&65535)==u32(spv::Op::OpDecorate)&&length==4&&
+                    words[offset+2]==u32(spv::Decoration::Location))located.push_back(words[offset+3]);
+                offset+=length;}
+            std::sort(located.begin(),located.end());
+            if(located!=std::vector<u32>{0,0,1,2})
+                throw std::runtime_error("Qualified polygon transport duplicated the input or aliased distinct outputs");
+            Shader::Backend::DX12::SpirvConvertOptions options{};options.stage=Shader::Backend::DX12::SpirvStage::Geometry;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Qualified polygon transport failed signed DXIL: "+compiled.diagnostics);
         }
         std::puts("PASS polygon geometry capacity declarations and signed DXIL; GPU behavior NOT_RUN");return 0;
     }
