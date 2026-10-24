@@ -134,7 +134,7 @@ inline void RunOrderedWritableOwnershipAcquisition(ID3D12Device* device){
         "Ordered writable independent acquisition changed GPU image contents");
     rasterizer.ValidateDebugMessages();
 }
-inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false){
+inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false,bool formatted_first=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
@@ -208,10 +208,15 @@ inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false){
         {},true,nullptr,true,true);
     require(textures.Own(seed),"BC/word ordered-stage seed could not retain I");
     std::vector<Rasterizer::ShaderBufferRequest> requests{{base,writable_layout.guest_bytes,true,true,true}};
-    const std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,writable_layout.guest_bytes}};
+    std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,writable_layout.guest_bytes}};
     const std::vector<OrderedGuestImage> images{{sampled,sampled_layout,false,false},
         {writable,writable_layout,true,false}};
-    const std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
+    std::vector<GuestStageBindingSpan> stages{{0,0,0,1},{0,1,1,1},{1,1,1,2}};
+    if(formatted_first){
+        requests.insert(requests.begin(),{base,sampled_layout.guest_bytes,false,true,true});
+        buffers.insert(buffers.begin(),{true,true,false,0,4,sampled_layout.guest_bytes});
+        stages={{0,1,0,1},{1,2,1,1},{2,2,1,2}};
+    }
     auto prepared=PrepareOrderedGuestStages(device,rasterizer,textures,stages,requests,buffers,images,true,
         [](VAddr,u64)->VAddr{throw std::runtime_error("BC/word ordered-stage fixture requested a CPU stream");});
     require(prepared.images[0]&&prepared.images[1]&&prepared.images[0]!=prepared.images[1],
@@ -236,7 +241,8 @@ inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false){
     std::vector<std::byte> observed_late(current.begin(),current.begin()+size_t(writable_layout.guest_bytes));
     early.Resolve(rasterizer.CompletedFence(),observed_early);late.Resolve(rasterizer.CompletedFence(),observed_late);
     require(observed_early==expected_early,"Early BC sampled view did not preserve original logical I or current B padding");
-    require(std::equal(observed_late.begin(),observed_late.end(),current.begin()),
+    require(std::equal(observed_late.begin(),observed_late.end(),
+        formatted_first?expected_early.begin():current.begin()),
         "Late word writable view did not use current B prefix and padding");
     rasterizer.ValidateDebugMessages();
 }
@@ -451,6 +457,8 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device,bool color_views=
     RunOrderedConvertedPackedStages(device);
     RunOrderedBcWordStages(device);
     RunOrderedBcWordStages(device,true);
+    RunOrderedBcWordStages(device,false,true);
+    RunOrderedBcWordStages(device,true,true);
     puts("PASS: ordered stage I/B refreshes preserve shared views, dirty state, streams and complete tiled padding");
     return 0;
 }

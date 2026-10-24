@@ -97,6 +97,14 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(CompatibleGuestColorSubview(desc,layout,old.desc,old.layout)){
                 old.desc=desc;old.layout=layout;return;
             }
+            if(CompatibleGuestBlockWordStorage(old.desc,old.layout,desc,layout)){
+                // The BC allocation owns the complete mip chain. Its terminal
+                // writable word view is a converted prefix, not an unrelated
+                // image domain. Keep the full envelope for an earlier formatted
+                // BindBuffers and refresh each view at its original stage.
+                if(layout.block_extent==4){old.desc=desc;old.layout=layout;}
+                old.has_converted_views=true;return;
+            }
             if(!CompatibleGuestImageMipGeometry(old.desc,old.layout,desc,layout))
                 throw std::runtime_error("Ordered stages have incompatible image physical geometry");
             const auto levels=std::max(old.desc.levels,desc.levels);const bool writable=old.desc.writable||desc.writable;

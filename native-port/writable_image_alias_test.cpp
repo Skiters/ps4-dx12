@@ -360,6 +360,8 @@ int wmain(int argc,wchar_t** argv){try {
     if(argc==5&&std::wstring_view(argv[4])==L"ordered-bc-word"){
         RunOrderedBcWordStages(device.Get());
         RunOrderedBcWordStages(device.Get(),true);
+        RunOrderedBcWordStages(device.Get(),false,true);
+        RunOrderedBcWordStages(device.Get(),true,true);
         puts("PASS: ordered BC sampled I and later UINT writable B retain exact guest storage");
         return 0;
     }
