@@ -1255,6 +1255,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     bool depth_attachment_snapshot=false;
     bool shader_depth_overlap=false,shader_stencil_overlap=false;
+    bool exact_depth_buffer_writer=false;
     bool shader_image_depth_overlap=false,shader_image_stencil_overlap=false,independent_attachment_write=false;
     const auto record_depth_writer=[&](VAddr address,u64 bytes,bool image_writer){
         if(!has_depth||!address||!bytes)return;
@@ -1270,6 +1271,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     for(const auto& stage:stages)for(const auto& buffer:stage.info->buffers)if(buffer.is_written&&!buffer.IsSpecial()){
         const auto sharp=buffer.GetSharp(*stage.info);const auto bytes=sharp.GetSize();
         if(!sharp.base_address||!bytes)continue;
+        exact_depth_buffer_writer|=has_depth&&sharp.base_address==descriptions[8].address;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(sharp.base_address,bytes,descriptions[i].address,layouts[i].guest_bytes))
             throw std::runtime_error("Native simultaneous buffer/color-attachment writes require shared ownership");
@@ -1311,7 +1313,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     if(recreate_color_depth&&depth_feedback)for(UINT i=0;i<target_count;++i)if(color_depth_alias[i])
         gpu_color_feedback[i]=true; // Validated SRVs refer to D, not the retired CB.
-    auto depth_binding_plan=has_depth&&!recreate_color_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8]):nullptr;
+    // Original InvalidateMemoryFromGPU is exact-base; RefreshImage skips MSAA.
+    // A single-sample attachment must observe the B selected AFTER shader
+    // binding invalidates its old I, rather than our earlier native snapshot.
+    auto depth_binding_plan=has_depth&&!recreate_color_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8],
+        false,page_watch_&&exact_depth_buffer_writer&&descriptions[8].samples==1):nullptr;
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;

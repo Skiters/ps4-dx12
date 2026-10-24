@@ -2399,12 +2399,16 @@ GuestTextureCache::Entry* GuestTextureCache::FindImageRecreationBindingSource(co
     return FindCachedDepthRecreationSource(target,layout);
 }
 std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> GuestTextureCache::PlanCachedImageBinding(
-    const GuestTextureDesc& target,const GuestTextureLayout& layout,bool current_buffer_source){
+    const GuestTextureDesc& target,const GuestTextureLayout& layout,bool current_buffer_source,bool pending_exact_buffer_write){
     auto* source=FindImageRecreationBindingSource(target,layout);
-    if(!source&&!current_buffer_source)return {};
+    if(!source&&pending_exact_buffer_write)source=FindDepthViewParent(target,layout);
+    if(!source&&!current_buffer_source&&!pending_exact_buffer_write)return {};
     // A CPU-watched current I remains authoritative after an interior B write.
     // Absence of GPU ownership does not make that image dirty or select B.
-    if(!source){auto [first,last]=address_index_.equal_range(target.address);
+    // An upcoming exact-base buffer writer invalidates I at original buffer
+    // binding. Preserve capacity now, then select current I/B at the actual
+    // attachment bind. A prewrite snapshot of the presently valid I is stale.
+    if(!source&&!pending_exact_buffer_write){auto [first,last]=address_index_.equal_range(target.address);
         for(auto it=first;it!=last;++it){const auto& cached=*it->second;
             if(cached.cpu_watched&&cached.cached_native_current&&!cached.logical_dirty&&
                MatchesGuestMipLayout(cached.layout,layout)&&

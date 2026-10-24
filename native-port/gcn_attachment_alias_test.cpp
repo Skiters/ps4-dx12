@@ -1074,6 +1074,28 @@ int main(int argc,char** argv){try{
                     rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
                     if(memcmp(memory,expected.data(),65536))
                         throw std::runtime_error("Depth attachment write/clear did not retain I independently from buffer B");
+                    if(competing_depth_write){
+                        // I is .5, but the exact-base B writer invalidates it at
+                        // the next bind. Original UpdateImage refreshes D from
+                        // preceding B=.75 (except its real zero DWORD). z=.625
+                        // must therefore pass everywhere except pixel(0,0).
+                        target.base_address=depth.address;bind_writer();
+                        cb.base_address=u32((base+57344)>>8);
+                        regs.depth_control.depth_func=AmdGpu::CompareFunc::Less;
+                        regs.depth_control.depth_write_enable=1;
+                        const float z=.625f;
+                        for(u32 vertex_index=0;vertex_index<3;++vertex_index){
+                            memcpy(memory+vertex_index*32+8,&z,4);
+                            memcpy(expected.data()+vertex_index*32+8,&z,4);
+                        }
+                        const auto refreshed=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
+                        const auto refreshed_layout=LayoutGuestTexture(refreshed);
+                        for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)if(x||y)
+                            memcpy(expected.data()+57344+GuestPixelOffset(refreshed,refreshed_layout,0,0,x,y),&blue_pixel,4);
+                        rasterizer.Draw(false);rasterizer.ReadMemory(base,65536);rasterizer.Finish();
+                        if(memcmp(memory,expected.data(),65536))
+                            throw std::runtime_error("Exact-base buffer writer did not select current B at the actual depth bind");
+                    }
                     continue;
                 }
                 // Owned buffer+attachment writers now have a positive two-
