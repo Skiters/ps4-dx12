@@ -132,8 +132,8 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
         {10,11,12,12,11,13},{10,11,12,11,13,12},{10,11,12,12,11,13},
         {10,11,11,12,12,13},{10,11,12,13},{10,11,12},{10,11,12,13},{10,11,12,13},{},{10,11,12}}};
     for(u32 variant=0;variant<types.size();++variant)for(u32 element:{2u,4u})
-    for(u32 marker:std::array{0u,99u,element==2?65535u:UINT32_MAX})for(u32 shape=0;shape<3;++shape){
-        std::vector<u32> input{marker,10,11,12,13,marker,20,marker,30,31,32,marker};
+    for(u32 marker:std::array{0u,99u,element==2?65535u:UINT32_MAX})for(u32 shape=0;shape<3;++shape)for(u32 swap=0;swap<4;++swap){
+        std::vector<u32> input{marker,10,11,12,13,marker,20,marker,30,31,32,marker,marker};
         std::vector<u32> expected_indices=short_sequences[variant];
         if(shape==1){input.clear();expected_indices.clear();
             for(UINT n=0;n<65;++n){input.insert(input.end(),{marker,10,11,12,13});
@@ -148,7 +148,15 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
         auto arguments=renderer.AcquireTransientBuffer(36);
         auto result=Buffer(device,output_bytes+36,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         void* bytes{};D3D12_RANGE none{};Check(seed.handle->Map(0,&none,&bytes));memset(bytes,0xcd,size_t(total));
-        for(size_t i=0;i<input.size();++i)memcpy(static_cast<std::byte*>(bytes)+offset+i*element,&input[i],element);
+        std::vector<std::byte> encoded(input.size()*element);
+        for(size_t i=0;i<input.size();++i)memcpy(encoded.data()+i*element,&input[i],element);
+        constexpr UINT lanes[4][4]{{0,1,2,3},{1,0,3,2},{3,2,1,0},{2,3,0,1}};
+        for(size_t byte=0;byte<encoded.size();++byte){
+            const auto start=byte&~size_t(3);const auto lane=byte%4;
+            const auto selected=start+4<=encoded.size()?start+lanes[swap][lane]:
+                swap==1?(byte^1):byte;
+            static_cast<std::byte*>(bytes)[offset+byte]=encoded[selected];
+        }
         seed.handle->Unmap(0,nullptr);
         renderer.RetainUntilFinish([seed,source,output,arguments,result](u64){});
         auto* list=renderer.RecordingList();source.Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -165,7 +173,7 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
             rejected=false;try{pass.RecordRestart(renderer,plan,&source,offset,available,element,marker,draw,output,output);}
             catch(const std::invalid_argument&){rejected=true;}
             if(!rejected)throw std::runtime_error("Segmented expansion accepted aliased output/arguments");
-            pass.RecordRestart(renderer,plan,available?&source:nullptr,available?offset:0,available,element,marker,draw,output,arguments);
+            pass.RecordRestart(renderer,plan,available?&source:nullptr,available?offset:0,available,element,marker,draw,output,arguments,swap);
         }
         if(source.State(0)!=previous)throw std::runtime_error("Segmented expansion changed source state");
         if(arguments.State(0)!=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT||output.State(0)!=D3D12_RESOURCE_STATE_INDEX_BUFFER)

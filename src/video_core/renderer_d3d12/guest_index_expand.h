@@ -66,6 +66,6 @@ public:
     // arguments; no host readback or dummy primitives are used.
     void RecordRestart(Rasterizer&,const GuestIndexExpansion&,Resource* source,u64 offset,
         u32 available,u32 element,u32 marker,const Rasterizer::DrawArguments&,
-        Resource& output,Resource& arguments);
+        Resource& output,Resource& arguments,u32 swap_mode=0);
 };
 }
