@@ -1,3 +1,7 @@
+## Current continuation — 2026-10-25
+
+Production 67b8050 (dual-source ordered blending and clipped/routed polygon points); clean Release compile/link PASS, runtime NOT_RUN. The seven-area port remains in progress; ALL fixture/game execution is deferred until implementation completes. See the first section of SESSION_HANDOFF.md for exact remaining gaps, hashes and commands. No app replacement or performance acceptance. This supersedes older current-state declarations below.
+
 ## Retired color / current depth attachment continuation — 2026-10-25
 
 CURRENT production e43073a. GuestTextureCache::CanRecreateColorDepthAttachments admits equal-base, one-sample, proven direct-word color/depth geometry. GuestRasterizer prepares the color owner before depth recreation, keeps the retired color native attachment pinned for the draw/replays, and excludes it from ownership reacquisition, logical writes and physical downloads. This matches pinned PrepareRenderState -> ResolveDepthOverlap/FreeImage -> BeginRendering ordering. The color draw still executes. Clear/compression, shared shader feedback, shifted/MSAA mappings remain explicit gaps; this is not full shared-storage closure.
