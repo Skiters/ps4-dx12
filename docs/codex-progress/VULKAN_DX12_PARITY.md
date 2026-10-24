@@ -1,6 +1,6 @@
 ## Current implementation continuation — 2026-10-25
 
-Production f93bd4d: narrow sRGB fallback, polygon GS output partition/depth clamp and independent color/depth overlap classes connected. Clean Release compile/link PASS26.465s; ALL latest behavior NOT_RUN. Mixed-blend-constants has no identified remaining pinned MRT code gap; other six areas retain code work. See first SESSION_HANDOFF.md section for gaps, hashes, commands and prepared fixtures. No app update, runtime archive or GPU/game execution. Continue development; supersedes older current declarations below.
+Production9ef7343: polygon qualifier/strip/provoking/bias and shared color/depth CMASK/MSAA ordering connected. Clean Release compile/link PASS21.127s; ALL latest behavior NOT_RUN. Mixed blending connected; six other areas retain code gaps. See SESSION_HANDOFF.md first section for exact gaps/identities/commands/prepared cases. No app replacement/runtime archive/GPU or game execution. Continue development; supersedes older current declarations below.
 
 ## Current continuation — 2026-10-25
 

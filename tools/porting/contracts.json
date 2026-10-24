@@ -18530,7 +18530,7 @@
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw",
-      "missing_semantics": "Equal-base single-sample direct color/depth recreation and distinct BlockDim attachment classes are connected (e43073a, f93bd4d), runtime NOT_RUN. Remaining: CMASK/FMASK clear/compression, shared shader feedback, shifted/MSAA attachment mappings, and opaque depth/stencil DMA independent ownership. Same-plane depth write feedback remains excluded by pinned Vulkan.",
+      "missing_semantics": "Equal-base supported direct-word/channel-to-MS-depth recreation, independent BlockDim classes, retired-CB CMASK after copy and delayed sample backing conversion connected through9ef7343; behavior NOT_RUN. Remaining: compression/shared shader feedback/shifted mappings, ordered alternate sample storage, opaque D/S DMA independent ownership. Same-plane depth write feedback excluded by pinned Vulkan.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: depth/color alias and simultaneous buffer/HTILE guards",
       "groups": [
         2,
@@ -18556,7 +18556,7 @@
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "Clipped point expansion after TriangleList/Fan/Polygon VS or triangular TES is connected, including point size/layer/viewport, GS output partitioning and viewport depth clamp. Remaining: strip provoking mapping, original GS triangles, rectangle/quad auxiliary output, polygon bias, fully unclamped depth, duplicate/per-vertex interpolation, buffered transport when varying slots are exhausted. Latest behavior NOT_RUN.",
+      "missing_semantics": "Clipped VS/TES polygon points, strip/fan provoking, duplicate interpolation, original polygon bias with viewport clamp, misc routing and GS output partition are connected. Remaining: original GS triangles, auxiliary rectangle/quad output, fully unclamped depth/bias, per-vertex interpolation, exhausted varying transport. Latest behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_graphics_state.cpp: Guest point polygon fill requires native clipping and point rasterization",
       "groups": [
         34,
@@ -18662,5 +18662,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "f93bd4d: mixed-blend-constants implementation connected; other six areas retain concrete code gaps. ALL new fixture/game execution deferred until implementation completion; compile/link only."
+  "seven_area_continuation": "Production9ef7343; clean Release compile/link PASS; all behavior execution deferred until seven-area implementation completion. Mixed blending connected; six other areas retain explicit gaps. See SESSION_HANDOFF.md first section."
 }
