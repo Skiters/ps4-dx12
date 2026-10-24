@@ -183,7 +183,8 @@ inline bool GuestPolygonPointGeometryState(const AmdGpu::Regs& regs){
     using P=AmdGpu::PrimitiveType;
     const bool vertex_triangles=regs.stage_enable.raw==Stages::Vs&&
         (regs.primitive_type==P::TriangleList||regs.primitive_type==P::TriangleFan||
-         regs.primitive_type==P::Polygon||regs.primitive_type==P::TriangleStrip);
+         regs.primitive_type==P::Polygon||regs.primitive_type==P::TriangleStrip||
+         regs.primitive_type==P::RectList||regs.primitive_type==P::QuadList);
     const bool tessellated_triangles=regs.stage_enable.raw==Stages::LsHs&&
         regs.primitive_type==P::PatchPrimitive&&regs.tess_config.type!=AmdGpu::TessellationType::Isoline;
     return regs.polygon_control.PolyMode()==AmdGpu::PolygonMode::Point&&

@@ -164,6 +164,28 @@ int main(int argc,char** argv){try{
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Polygon depth bias failed signed DXIL: "+compiled.diagnostics);
         }
+        for(const auto type:{Shader::Backend::SPIRV::AuxShaderType::RectListTCS,
+            Shader::Backend::SPIRV::AuxShaderType::QuadListTCS,Shader::Backend::SPIRV::AuxShaderType::PassthroughTES}){
+            Shader::HwFragmentRuntimeInfo fs{};fs.num_inputs=2;
+            fs.inputs[0].param_index=fs.inputs[1].param_index=7;fs.inputs[1].is_flat=true;
+            const bool domain=type==Shader::Backend::SPIRV::AuxShaderType::PassthroughTES;
+            const auto words=Shader::Backend::SPIRV::EmitAuxilaryTessShader(type,fs,
+                type==Shader::Backend::SPIRV::AuxShaderType::RectListTCS?3:4);
+            u32 locations{};
+            for(size_t offset=5;offset<words.size();){const auto count=words[offset]>>16;
+                if(!count||count>words.size()-offset)throw std::runtime_error("Malformed auxiliary tessellation module");
+                if((words[offset]&65535)==u32(spv::Op::OpDecorate)&&count==4&&
+                    words[offset+2]==u32(spv::Decoration::Location)&&words[offset+3]==7)++locations;
+                offset+=count;
+            }
+            if(locations!=2)throw std::runtime_error("Auxiliary tessellation duplicated a shared parameter interface");
+            Shader::Backend::DX12::SpirvConvertOptions options{};
+            options.stage=domain?Shader::Backend::DX12::SpirvStage::TessellationEvaluation:
+                Shader::Backend::DX12::SpirvStage::TessellationControl;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Auxiliary polygon parameter transport failed signed DXIL: "+compiled.diagnostics);
+        }
         std::puts("PASS polygon geometry capacity, interpolation and bias signed DXIL; GPU behavior NOT_RUN");return 0;
     }
     const bool capture_instance_gcn=mode=="capture-instance-gcn";

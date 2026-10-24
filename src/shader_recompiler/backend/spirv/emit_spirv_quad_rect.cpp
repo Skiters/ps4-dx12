@@ -21,6 +21,11 @@ constexpr u32 SPIRV_VERSION_1_5 = 0x00010500;
 struct QuadRectListEmitter : public Sirit::Module {
     explicit QuadRectListEmitter(const HwFragmentRuntimeInfo& fs_info_, u32 input_vertices_)
         : Sirit::Module{SPIRV_VERSION_1_5}, fs_info{fs_info_}, input_vertices{input_vertices_} {
+        if(fs_info.num_inputs>std::size(fs_info.inputs))
+            throw std::out_of_range("Invalid auxiliary tessellation fragment input count");
+        for(u32 i=0;i<fs_info.num_inputs;++i)
+            if(!fs_info.inputs[i].IsDefault()&&fs_info.inputs[i].param_index>=32)
+                throw std::out_of_range("Invalid auxiliary tessellation parameter location");
         void_id = TypeVoid();
         bool_id = TypeBool();
         float_id = TypeFloat(32);
@@ -260,11 +265,13 @@ private:
             gl_per_vertex = AddOutput(gl_per_vertex_type);
         }
         outputs.reserve(fs_info.num_inputs);
+        u32 seen_parameters{};
         for (int i = 0; i < fs_info.num_inputs; i++) {
             const auto& input = fs_info.inputs[i];
-            if (input.IsDefault()) {
+            if (input.IsDefault() || (seen_parameters & (1u << input.param_index))) {
                 continue;
             }
+            seen_parameters |= 1u << input.param_index;
             outputs.emplace_back(AddOutput(model == spv::ExecutionModel::TessellationControl
                                                ? TypeArray(vec4_id, Int(4))
                                                : vec4_id));
@@ -284,11 +291,13 @@ private:
         gl_in = AddInput(gl_per_vertex_array);
         const Id float_arr{TypeArray(vec4_id, Int(input_vertices))};
         inputs.reserve(fs_info.num_inputs);
+        u32 seen_parameters{};
         for (int i = 0; i < fs_info.num_inputs; i++) {
             const auto& input = fs_info.inputs[i];
-            if (input.IsDefault()) {
+            if (input.IsDefault() || (seen_parameters & (1u << input.param_index))) {
                 continue;
             }
+            seen_parameters |= 1u << input.param_index;
             inputs.emplace_back(AddInput(float_arr));
             Decorate(inputs.back(), spv::Decoration::Location, input.param_index);
         }

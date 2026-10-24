@@ -328,6 +328,17 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
             if(found==auxiliary_.end()) {
                 auto stage=std::make_unique<GuestShaderStage>();
                 stage->id=ReserveStageId();stage->auxiliary=true;stage->info.sw_stage=logical;
+                // The auxiliary TES forwards complete parameter vectors. The
+                // polygon-point GS consumes that interface, not the original
+                // VS's export mask (which may be sparse or differently sized).
+                if(logical==SwStage::TessellationEval){
+                    for(u32 i=0;i<fragment_runtime.num_inputs;++i){
+                        const auto& input=fragment_runtime.inputs[i];
+                        if(input.IsDefault())continue;
+                        for(u32 component=0;component<4;++component)
+                            stage->info.stores.Set(Shader::IR::Attribute::Param0+input.param_index,component);
+                    }
+                }
                 stage->spirv=words;
                 found=auxiliary_.emplace(std::move(words),std::move(stage)).first;
             }
@@ -345,7 +356,9 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
         const auto& poly=regs.polygon_control;
         auto words=EmitGuestPolygonPoints(producer->info,fragment?&fragment->info:nullptr,
             fragment?fragment->runtime.hw.fs:Shader::HwFragmentRuntimeInfo{},
-            {bool(poly.cull_front),bool(poly.cull_back),poly.front_face==AmdGpu::FrontFace::CounterClockwise,
+            {bool(poly.cull_front)&&regs.primitive_type!=AmdGpu::PrimitiveType::RectList,
+             bool(poly.cull_back)&&regs.primitive_type!=AmdGpu::PrimitiveType::RectList,
+             poly.front_face==AmdGpu::FrontFace::CounterClockwise,
              poly.provoking_vtx_last==AmdGpu::ProvokingVtxLast::Last,
              producer==vertex&&profile_.needs_clip_distance_emulation&&
                  producer->info.stores.GetAny(Shader::IR::Attribute::ClipDistance),

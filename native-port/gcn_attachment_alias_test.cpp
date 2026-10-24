@@ -99,7 +99,7 @@ int main(int argc,char** argv){try{
         mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned"||
         mode=="color-independent-class-owned"||mode=="color-depth-independent-owned"||mode=="color-depth-clear-owned"||mode=="color-depth-msaa-owned"||mode=="color-depth-sampled-owned"||mode=="color-retained-mips-owned"||mode=="color-grown-mips-owned"||mode=="color-shifted-mip-owned"||mode=="color-converted-rgba8-owned"||mode=="color-converted-snorm10-owned"||mode=="color-depth-compressed-clear-owned";
     const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||
-        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned";
+        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned"||mode=="polygon-aux-points-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
     const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
@@ -214,7 +214,9 @@ int main(int argc,char** argv){try{
             mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned",mode=="color-depth-shared-owned"||mode=="color-depth-clear-owned"||mode=="color-depth-compressed-clear-owned",
             mode=="color-independent-class-owned",mode=="color-depth-independent-owned",mode=="color-depth-clear-owned"||mode=="color-depth-compressed-clear-owned",mode=="color-depth-msaa-owned",mode=="color-depth-sampled-owned",mode=="color-retained-mips-owned"||mode=="color-shifted-mip-owned",mode=="color-grown-mips-owned",mode=="color-shifted-mip-owned",mode=="color-converted-rgba8-owned"?1:mode=="color-converted-snorm10-owned"?2:0,mode=="color-depth-compressed-clear-owned");
     }else if(snorm_color){
-        if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned")
+        if(mode=="polygon-aux-points-owned")
+            RunAuxPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
+        else if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned")
             RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned",mode=="polygon-points-depth-clamp-owned",mode=="polygon-points-depth-bias-owned");
         else RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,
                 mode=="snorm-dual-source-owned");
