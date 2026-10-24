@@ -18200,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Converted/reallocated feedback beyond proven same-layer mip growth, changed-layer or shifted target rebind remain. Compatible typed/rebased snapshots, retained color mip allocations and same-layer mip growth are connected through799b610, behavior NOT_RUN. Preserve pinned synchronization and independent B/I.",
+      "missing_semantics": "Exact packed feedback, converted shifted views, shifted CB mip/CMASK rebind and retained mip/layer growth connected through bca4aeb; behavior NOT_RUN. Broader converted/competing multiview feedback outside proven physical mapping remains; retain source allocation, state and independent B/I ordering.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18544,7 +18544,8 @@
           "ordered-stages converted packed10 formatted-middle"
         ],
         "evidence": "F:/PS4Dev/handoff/native-port-comparison-20261019/ordered-current-image-0dabfe7.json"
-      }
+      },
+      "latest_connected_color_domains": "b486aee: cached RT owners admitted into exact packed ordered domains; a5a01cb/63b7634/14a9d4d/bca4aeb connect shifted color and changed-layer mappings with retained states and full parent conversion. New fixtures compile/link only; runtime NOT_RUN. Earlier verified hashes do not validate latest binary."
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
@@ -18681,5 +18682,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "Production0dabfe7 after96d28fc/9c7d979/b6b59c5/799b610/bed2cb9: shared sampled-depth prefetch, retained and grown color mip attachments, BC/word formatted domains and active converted-image read ordering CONNECTED. Clean tracked Release compile/link PASS17.178s; ALL behavior NOT_RUN by user instruction (test only after seven implementations). Six broad areas still have concrete code gaps; mixed blending connected, unaccepted. SESSION_HANDOFF.md first section is authoritative. Reused trees, no app replacement/runtime archive/game or fixture execution. Continue development, do not stop at checkpoint."
+  "seven_area_continuation": "Production b486aee: color shifted/grown/converted storage and ordered cached CB domains connected. Six broad areas remain incomplete; mixed blending connected, runtime pending. ALL tests deferred until seven implementations complete. Reuse builds; no app replacement or binaries archived. SESSION_HANDOFF first section is authoritative; continue after checkpoint."
 }

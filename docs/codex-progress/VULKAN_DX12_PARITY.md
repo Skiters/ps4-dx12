@@ -1,3 +1,7 @@
+## Converted color storage continuation — 2026-10-25
+
+Production b486aee after a5a01cb,63b7634,14a9d4d,bca4aeb. Shifted CB mip/CMASK addressing, color mip/layer growth, pinned packed feedback, converted shifted views and ordered cached-CB domains are connected. Clean tracked Release compile/link PASS16.828s (command-20261025-040000-23468.log). All executable fixtures/GPU/game tests remain NOT_RUN until the seven implementations are complete. Compilation is not behavior/FPS acceptance. Six broad areas still have concrete gaps; mixed blending is connected but runtime unaccepted. Continue development, not completion. SESSION_HANDOFF first section is authoritative.
+
 ## Current implementation continuation — 2026-10-25
 
 Production0dabfe7 after96d28fc/9c7d979/b6b59c5/799b610/bed2cb9: shared sampled-depth prefetch, retained and grown color mip attachments, BC/word formatted domains and active converted-image read ordering CONNECTED. Clean tracked Release compile/link PASS17.178s; ALL behavior NOT_RUN by user instruction (test only after seven implementations). Six broad areas still have concrete code gaps; mixed blending connected, unaccepted. SESSION_HANDOFF.md first section is authoritative. Reused trees, no app replacement/runtime archive/game or fixture execution. Continue development, do not stop at checkpoint.
