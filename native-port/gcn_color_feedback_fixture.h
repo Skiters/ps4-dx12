@@ -12,7 +12,7 @@ template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
-    bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false){
+    bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -126,7 +126,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             throw std::runtime_error("Distinct color images lost B/I separation, cached contents or padding");
         return;
     }
-    if(shared_depth||independent_depth||shared_ms){
+    if(shared_depth||independent_depth||shared_ms||shared_sampled){
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
         if(shared_ms){db.z_info.num_samples=2;regs.aa_config.msaa_num_samples=2;}
@@ -149,6 +149,33 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto shifted=depth;shifted.address+=256;
         if(GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,shifted,LayoutGuestTexture(shifted)))
             throw std::runtime_error("Shifted attachment recreation was admitted without a physical plan");
+        if(shared_sampled){
+            regs.depth_control.depth_write_enable=0;
+            // D inherits old C=1. PS samples D and writes .5 to the retained
+            // retired CB. The next draw must still see D=1, not that CB write.
+            draw(left,true);draw(left,true);
+            const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+            if(!raw.resource||raw.bytes!=raw_bytes)throw std::runtime_error("Shared sampled depth lost resident B");
+            auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            rasterizer.RetainUntilFinish([rb,lease=raw.allocation](u64){});const auto prior=raw.resource->State(0);
+            raw.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,raw.resource->handle.Get(),raw.offset,raw_bytes);
+            raw.resource->Transition(rasterizer.RecordingList(),prior);rasterizer.Finish();
+            void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
+            const bool preserved=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+            D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+            if(!preserved)throw std::runtime_error("Shared sampled depth published I into independent raw B");
+            regs.depth_control={};cb.base_address=u32((base+61440)>>8);
+            const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
+            draw(left,true);rasterizer.Finish();rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+            auto expected=physical;const float value=.5f;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
+            rasterizer.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Shared sampled depth lost prefetch ownership/order or published retired color");
+            return;
+        }
         if(shared_ms){
             // The original RGBA32 payload must reach D32x4 before CB is
             // expanded to four physical samples. Draw only the left half;

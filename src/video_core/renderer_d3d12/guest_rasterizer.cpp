@@ -1265,8 +1265,19 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
     const bool recreate_color_depth=std::ranges::any_of(color_depth_alias,[](bool value){return value;});
-    if(recreate_color_depth&&(depth_feedback||depth_attachment_snapshot))
-        throw std::runtime_error("Shared color/depth attachments with shader feedback need an ordered recreation plan");
+    if(recreate_color_depth&&depth_attachment_snapshot)
+        throw std::runtime_error("Shared color/depth attachments with shader writes need an ordered recreation plan");
+    if(recreate_color_depth&&depth_feedback)for(const auto& stage:stages)for(const auto& image:stage.info->images){
+        const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
+        const auto view=DescribeGuestTexture(sharp);const auto layout=LayoutGuestTexture(view);
+        bool shared=Overlap(view.address,layout.guest_bytes,descriptions[8].address,layouts[8].guest_bytes);
+        for(UINT i=0;i<target_count;++i)shared|=color_depth_alias[i]&&
+            Overlap(view.address,layout.guest_bytes,descriptions[i].address,layouts[i].guest_bytes);
+        if(shared&&(image.is_written||!CompatibleGuestSampledStorage(descriptions[8],view)))
+            throw std::runtime_error("Shared depth feedback has competing image interpretations");
+    }
+    if(recreate_color_depth&&depth_feedback)for(UINT i=0;i<target_count;++i)if(color_depth_alias[i])
+        gpu_color_feedback[i]=true; // Validated SRVs refer to D, not the retired CB.
     auto depth_binding_plan=has_depth&&!recreate_color_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8]):nullptr;
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
@@ -1358,12 +1369,31 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     GuestTextureCache::Entry* feedback_depth{};
     std::shared_ptr<void> feedback_depth_pin;
+    std::array<GuestTextureCache::Entry*,8> feedback_colors{};
+    std::array<std::shared_ptr<void>,8> feedback_color_pins{};
+    if(recreate_color_depth&&depth_feedback)for(UINT i=0;i<target_count;++i)if(color_depth_alias[i]){
+        // Pinned PrepareRenderState selects CB before DB and shader images.
+        // Keep that exact CB alive while DB recreation retires its logical
+        // owner. A later Upload(CB) would wrongly recreate D back into C.
+        auto& color=textures_.Upload(descriptions[i],
+            std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
+            RecordingList(),CompletedFence(),{},false,nullptr,false,false,GuestTextureCache::UploadPurpose::Preparation);
+        feedback_color_pins[i]=textures_.PinBinding(color);feedback_colors[i]=&color;
+        if(!textures_.OwnIndependentShaderImage(color))
+            throw std::runtime_error("Prefetched feedback color cannot retain its source ownership");
+    }
     if(depth_feedback&&!depth_attachment_snapshot&&!depth_binding_plan){
         feedback_depth=&textures_.Upload(descriptions[8],
             std::span(reinterpret_cast<const std::byte*>(descriptions[8].address),size_t(layouts[8].guest_bytes)),
             RecordingList(),CompletedFence(),stencil_memory,false,nullptr,false,false,
             GuestTextureCache::UploadPurpose::Preparation);
         feedback_depth_pin=textures_.PinBinding(*feedback_depth);
+        for(UINT i=0;i<target_count;++i)if(feedback_colors[i]){
+            const auto& color=*feedback_colors[i];
+            if(color.gpu_owned||!color.logical_dirty||!feedback_depth->gpu_owned||!feedback_depth->buffer_alias_version)
+                throw std::logic_error("Depth feedback prefetch did not retire the selected color owner");
+            retired_color_targets[i]=true;
+        }
     }
     // D3D12 cannot place one subresource in RENDER_TARGET and SHADER_RESOURCE
     // states simultaneously.  Materialize the previous color contents and
@@ -1603,7 +1633,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(replay_prepared)return;
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
-            auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return textures_.Upload(descriptions[i],
+            auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return feedback_colors[i]?*feedback_colors[i]:textures_.Upload(descriptions[i],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
                 RecordingList(),CompletedFence());});
             bindings.RetainAllocation(replay_attachments.BindingPin(i));bindings.RetainAllocation(entry.texture.allocation);
