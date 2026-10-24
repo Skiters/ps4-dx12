@@ -547,6 +547,8 @@ bool GuestTextureCache::HasOwnedShaderStorage(const GuestTextureDesc& desc)const
     const auto [first,last]=address_index_.equal_range(desc.address);
     for(auto it=first;it!=last;++it)if(it->second->gpu_owned&&
         (CompatibleGuestShaderStorage(it->second->desc,desc)||CanBindReadonlyWordView(*it->second,desc)||
+         (CompatibleGuestColorSubview(it->second->desc,it->second->layout,desc,LayoutGuestTexture(desc))&&
+          CanBindNativeWordFormat(*it->second,desc))||
          (it->second->desc.depth_target&&CompatibleGuestDepthSubview(it->second->desc,it->second->layout,
              desc,LayoutGuestTexture(desc)))||CompatibleGuestPackedStorage(it->second->desc,desc)))return true;
     return false;
@@ -607,13 +609,14 @@ bool CompatibleGuestShaderMipPrefixes(GuestTextureDesc a,const GuestTextureLayou
 }
 bool CompatibleGuestColorSampledMapping(const GuestTextureDesc& target,const GuestTextureLayout& physical,
     const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
-    if(!target.render_target||target.depth_target||!CompatibleGuestSampledStorage(target,sampled)||
+    if(!target.render_target||target.depth_target||sampled.render_target||
+       !CompatibleGuestColorSubview(target,physical,sampled,sampled_layout)||
        target.first_mip>=target.levels||sampled.first_mip>=sampled.levels||
        !target.view_layers||!sampled.view_layers||target.first_layer>=target.layers||sampled.first_layer>=sampled.layers||
        target.view_layers>target.layers-target.first_layer||sampled.view_layers>sampled.layers-sampled.first_layer)return false;
     // Compatible native views can normalize pow2/storage hints. A disjoint
     // guest-memory proof additionally needs the actual physical mip mapping.
-    if(physical.format!=sampled_layout.format||physical.guest_bytes!=sampled_layout.guest_bytes||
+    if(physical.guest_bytes!=sampled_layout.guest_bytes||
        physical.bytes_per_pixel!=sampled_layout.bytes_per_pixel||physical.block_extent!=sampled_layout.block_extent||
        physical.expanded_bytes_per_pixel!=sampled_layout.expanded_bytes_per_pixel||physical.mips.size()!=sampled_layout.mips.size())return false;
     for(size_t i=0;i<physical.mips.size();++i){const auto& a=physical.mips[i];const auto& b=sampled_layout.mips[i];
@@ -674,7 +677,11 @@ bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextu
     }
     auto owner=source,target=view;owner.layers=target.layers;owner.levels=target.levels;
     owner.render_target=target.render_target=false;
-    return CompatibleGuestSampledStorage(owner,target);
+    // Mutable numeric views share the physical bits. Keep expanded encodings
+    // excluded above and validate the actual native cast permission at binding.
+    // Normalizing only these comparison copies preserves the owner's codec,
+    // guest role and allocation lifetime.
+    return CompatibleGuestSampledStorage(owner,target)||CompatibleGuestShaderStorage(owner,target);
 }
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc> attachments){
     // CB slice_max bounds a view as well as the requested storage. The original
@@ -1230,11 +1237,13 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
-    if(shader_alias&&desc.data_format!=sampled_view.data_format&&!CanBindNativeWordFormat(*this,sampled_view))
+    if(((shader_alias&&desc.data_format!=sampled_view.data_format)||
+        (color_alias&&layout.format!=LayoutGuestTexture(sampled_view).format))&&
+       !CanBindNativeWordFormat(*this,sampled_view))
         throw std::invalid_argument("Native image word alias requires a compatible resource format list");
     Entry view;view.desc=sampled_view;view.desc.stencil_address=desc.stencil_address;
     if(color_alias)view.desc.layers=desc.layers;
-    view.layout=shader_alias||block_alias||depth_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
+    view.layout=shader_alias||block_alias||depth_alias||color_alias?LayoutGuestTexture(sampled_view):layout;return view.Srv();
 }
 void EncodeGuestSubresource(const GuestTextureDesc& d,const GuestTextureLayout& l,
     std::span<std::byte> guest,std::span<const std::byte> linear,uint32_t mip,uint32_t layer) {
@@ -1358,7 +1367,9 @@ D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(const GuestTextureDe
         throw std::invalid_argument("Incompatible native render target view");
     if(!texture.handle||!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
         throw std::invalid_argument("Native color parent lacks render target capability");
-    Entry view;view.desc=attachment;view.layout=layout;view.texture.handle=texture.handle;
+    if(!CanBindNativeWordFormat(*this,attachment))
+        throw std::invalid_argument("Native color parent lacks the requested render target format cast");
+    Entry view;view.desc=attachment;view.layout=LayoutGuestTexture(attachment);view.texture.handle=texture.handle;
     view.desc.layers=desc.layers;
     return view.Rtv(mip);
 }
@@ -2143,6 +2154,7 @@ bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTe
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
     if(CompatibleGuestColorSubview(entry.desc,entry.layout,desc,layout)&&
+       CanBindNativeWordFormat(entry,desc)&&
        (!desc.render_target||(entry.texture.handle&&
         (entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))))return true;
     if(CompatibleGuestDepthSubview(entry.desc,entry.layout,desc,layout))return true;

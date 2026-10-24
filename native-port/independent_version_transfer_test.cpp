@@ -735,6 +735,18 @@ static void RunColorArraySubviews(ID3D12Device* device){
     require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Different physical pitch accepted");
     invalid=sampled;invalid.layers=invalid.view_layers=7;
     require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Out-of-bounds layer view accepted");
+    auto integer=one;integer.number_format=4;
+    require(CompatibleGuestColorSubview(sampled,layout,integer,LayoutGuestTexture(integer)),
+        "Mutable color numeric view rejected");
+    const auto integer_srv=parent.Srv(integer);
+    require(integer_srv.Format==DXGI_FORMAT_R16G16_UINT&&
+        integer_srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
+        integer_srv.Texture2DArray.ArraySize==1,"Mutable SRV lost numeric format or parent array");
+    integer.render_target=true;
+    require(parent.Rtv(integer).Format==DXGI_FORMAT_R16G16_UINT,"Mutable RTV retained the owner format");
+    auto expanded=integer;expanded.data_format=9;expanded.number_format=5;
+    require(!CompatibleGuestColorSubview(sampled,layout,expanded,LayoutGuestTexture(expanded)),
+        "Expanded signed packed color was accepted as direct bits");
     GuestImageReadback readback(device,parent,renderer.RecordingList());
     const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
     auto observed=physical;readback.Resolve(renderer.CompletedFence(),observed);

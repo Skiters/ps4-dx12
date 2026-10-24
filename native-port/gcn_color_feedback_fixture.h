@@ -11,7 +11,7 @@ namespace NativeDX12 {
 template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize,bool raw_domain=false){
+    const Initialize& initialize,bool raw_domain=false,bool integer_view=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -45,7 +45,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
     image.type=u64(AmdGpu::ImageType::Color2D);image.width=image.height=7;image.pitch=15;
-    image.data_format=4;image.num_format=7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
+    // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
+    // the original FLOAT attachment bits, not numerically convert the texel.
+    image.data_format=4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
     const auto sampled=DescribeGuestTexture(image);
     if(!CompatibleGuestColorSampledMapping(target,layout,sampled,LayoutGuestTexture(sampled)))
