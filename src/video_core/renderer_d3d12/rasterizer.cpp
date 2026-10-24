@@ -1806,8 +1806,12 @@ Resource Rasterizer::CapturePreparedShaderBuffer(VAddr address,u64 bytes){
         throw std::logic_error("Prepared guest buffer envelope was replaced");
     const auto capacity=(bytes+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
         ~u64(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1);
-    auto snapshot=Buffer(device_.Get(),capacity,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+    // AcquireBuffer reclaims only retired unpinned pool pages, then checks the
+    // actual adapter budget. It neither changes prepared mappings nor Finish-es
+    // the command list, so the authoritative source selected above stays valid.
+    auto snapshot=AcquireBuffer(capacity);
     RetainUntilFinish([backing=source.gpu,snapshot](u64){(void)backing;(void)snapshot;});
+    snapshot.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
     source.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
     DX12_API_CALL(RecordingList()->CopyBufferRegion(snapshot.handle.Get(),0,source.gpu.handle.Get(),
         address-source.base,bytes));

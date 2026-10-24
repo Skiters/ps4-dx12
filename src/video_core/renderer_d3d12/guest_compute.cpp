@@ -840,7 +840,6 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     });
     std::map<std::pair<VAddr,u64>,std::shared_ptr<const std::vector<std::byte>>> image_snapshots;
     std::map<std::pair<VAddr,u64>,std::shared_ptr<Resource>> gpu_image_snapshots;
-    u64 gpu_snapshot_bytes{};
     std::vector<std::shared_ptr<void>> preserved_image_pins;
     // Grow/reinterpret an independent cached prefix before final buffer views
     // exist. Upload's private I/B transfer can extend native buffer envelopes;
@@ -916,18 +915,17 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         if(GuestTextureCache::CanUploadGpuSnapshot(input,input_layout,image.buffer_writer_alias)&&
            image.buffer_source_residency){
             auto existing=gpu_image_snapshots.find(key);
-            const auto capacity=(key.second+D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1)&
-                ~u64(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1);
             if(existing!=gpu_image_snapshots.end()){
                 image.gpu_snapshot=existing->second;continue;
             }
-            if(capacity<=64*1024*1024-gpu_snapshot_bytes){
-                diagnostic.Stage("buffer-image-gpu-prewrite-snapshot");
-                image.gpu_snapshot=std::make_shared<Resource>(rasterizer.CaptureShaderBuffer(key.first,key.second,false));
-                gpu_image_snapshots.emplace(key,image.gpu_snapshot);gpu_snapshot_bytes+=capacity;
-                Diagnostics::Count("buffer-image.gpu-snapshot.bytes",key.second);
-                continue;
-            }
+            // Snapshot residency is governed by the shared native buffer
+            // allocator and real adapter budget. A fixed per-draw byte cap
+            // must not turn a supported GPU-owned source into CPU publication.
+            diagnostic.Stage("buffer-image-gpu-prewrite-snapshot");
+            image.gpu_snapshot=std::make_shared<Resource>(rasterizer.CaptureShaderBuffer(key.first,key.second,false));
+            gpu_image_snapshots.emplace(key,image.gpu_snapshot);
+            Diagnostics::Count("buffer-image.gpu-snapshot.bytes",key.second);
+            continue;
         }
         auto& snapshot=image_snapshots[key];
         if(!snapshot){
