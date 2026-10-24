@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=36,PipelineVersion=6;
+constexpr u32 StageVersion=37,PipelineVersion=6;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";

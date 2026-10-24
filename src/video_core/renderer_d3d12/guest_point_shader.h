@@ -43,6 +43,7 @@ std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool
     std::span<const Shader::NativePointOutput> transport={});
 struct GuestPolygonPointConfig {
     bool cull_front{},cull_back{},front_ccw{},last_provoking{},emulated_clip{};
+    bool clip_depth{true};
 };
 // Clip the completed triangle, then expand its surviving polygon vertices.
 // No guest shader is evaluated again for the generated clipping vertices.

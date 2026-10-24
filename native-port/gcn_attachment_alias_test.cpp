@@ -98,7 +98,7 @@ int main(int argc,char** argv){try{
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned"||
         mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned";
     const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||
-        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned";
+        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
     const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
@@ -212,8 +212,8 @@ int main(int argc,char** argv){try{
             mode=="color-feedback-buffer-owned"||mode=="color-feedback-uint-buffer-owned",
             mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned",mode=="color-depth-shared-owned");
     }else if(snorm_color){
-        if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned")
-            RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned");
+        if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned")
+            RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned",mode=="polygon-points-depth-clamp-owned");
         else RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,
                 mode=="snorm-dual-source-owned");
     }else if(mixed_samples){
@@ -1522,7 +1522,7 @@ int main(int argc,char** argv){try{
         puts("PASS: 24 actual GCN packed16 mixed-constant draws, original guest words/swizzles, missing alpha, masks, MSAA1/2/4/8, layers and padding");
         return 0;
     }
-    if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"){
+    if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"){
         puts("PASS: actual GCN polygon points, clipped corners, original winding, exact additive counts, routing and backing guards");
         return 0;
     }

@@ -4,7 +4,8 @@
 namespace NativeDX12 {
 template<class Program,class Initialize>
 void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool routed=false){
+    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool routed=false,
+    bool depth_clamped=false){
     alignas(256) std::array<u32,128> pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0xf800080f,0x00000000,0xbf810000},
         0x504f4c59504f494eull);
@@ -26,7 +27,7 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
         memset(memory,0xa7,65536);
         for(u32 i=0;i<3;++i){const auto j=reverse&&i?3-i:i;
-            const float position[]{test.xy[j][0],test.xy[j][1],.5f,1.f};
+            const float position[]{test.xy[j][0],test.xy[j][1],depth_clamped?(reverse?1.5f:-.5f):.5f,1.f};
             memcpy(memory+i*32,position,sizeof(position));
             const float size=3.f;const u32 layer=1,viewport=1;
             memcpy(memory+i*32+16,&size,4);memcpy(memory+i*32+20,&layer,4);memcpy(memory+i*32+24,&viewport,4);}
@@ -49,6 +50,10 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         auto& vp=regs.viewport_control;vp.xscale_enable=vp.yscale_enable=vp.xoffset_enable=vp.yoffset_enable=vp.zscale_enable=1;
         regs.viewports[0].xscale=4;regs.viewports[0].yscale=-4;regs.viewports[0].xoffset=regs.viewports[0].yoffset=4.5f;
         regs.viewports[0].zscale=1;
+        if(depth_clamped){
+            regs.clipper_control.zclip_near_disable=regs.clipper_control.zclip_far_disable=1;
+            vp.zoffset_enable=1;regs.viewports[0].zscale=.5f;regs.viewports[0].zoffset=.25f;
+        }
         if(routed){regs.viewports[1]=regs.viewports[0];regs.viewports[1].yscale=4;}
         regs.screen_scissor.bottom_right_x=regs.window_scissor.bottom_right_x=regs.generic_scissor.bottom_right_x=8;
         regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=regs.generic_scissor.bottom_right_y=8;
@@ -62,6 +67,19 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         const auto desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto layout=LayoutGuestTexture(desc);
         for(u32 layer=0;layer<desc.layers;++layer)for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const float seed=0;
             memcpy(memory+4096+GuestPixelOffset(desc,layout,0,layer,x,y),&seed,4);}
+        GuestTextureDesc depth_desc{};GuestTextureLayout depth_layout{};
+        if(depth_clamped){
+            auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=u32((base+8192)>>8);
+            db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
+            db.depth_size.pitch_tile_max=1;db.depth_size.height_tile_max=0;db.depth_slice.tile_max=1;
+            gpu.last_db_extent={8,8};
+            regs.depth_control.depth_enable=regs.depth_control.depth_write_enable=1;
+            regs.depth_control.depth_func=AmdGpu::CompareFunc::Always;
+            depth_desc=DescribeGuestDepthBuffer(db,regs.depth_view,gpu.last_db_extent);
+            depth_layout=LayoutGuestTexture(depth_desc);
+            for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x){const float seed=1.f;
+                memcpy(memory+8192+GuestPixelOffset(depth_desc,depth_layout,0,0,x,y),&seed,4);}
+        }
         auto& blend=regs.blend_control[0];blend.enable=1;
         blend.color_src_factor=blend.color_dst_factor=AmdGpu::BlendControl::BlendFactor::One;
         blend.color_func=AmdGpu::BlendControl::BlendFunc::Add;
@@ -76,8 +94,12 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
                     const auto offset=4096+GuestPixelOffset(desc,layout,0,routed?1:0,u32(x),u32(y));
                     float value;memcpy(&value,expected.data()+offset,4);value+=.25f;
                     memcpy(expected.data()+offset,&value,4);
+                    if(depth_clamped){const float z=reverse?.75f:.25f;
+                        memcpy(expected.data()+8192+GuestPixelOffset(depth_desc,depth_layout,0,0,u32(x),u32(y)),&z,4);}
                 }}
-        rasterizer.Draw(false);rasterizer.ReadMemory(desc.address,layout.guest_bytes);rasterizer.Finish();
+        rasterizer.Draw(false);rasterizer.ReadMemory(desc.address,layout.guest_bytes);
+        if(depth_clamped)rasterizer.ReadMemory(depth_desc.address,depth_layout.guest_bytes);
+        rasterizer.Finish();
         rasterizer.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),expected.size()))
             throw std::runtime_error("Polygon points changed clipped corners, culling, additive count or padding");

@@ -337,7 +337,8 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
             {bool(poly.cull_front),bool(poly.cull_back),poly.front_face==AmdGpu::FrontFace::CounterClockwise,
              poly.provoking_vtx_last==AmdGpu::ProvokingVtxLast::Last,
              producer==vertex&&profile_.needs_clip_distance_emulation&&
-                 producer->info.stores.GetAny(Shader::IR::Attribute::ClipDistance)});
+                 producer->info.stores.GetAny(Shader::IR::Attribute::ClipDistance),
+             regs.clipper_control.ZclipEnable()});
         auto found=auxiliary_.find(words);
         if(found==auxiliary_.end()){
             auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;

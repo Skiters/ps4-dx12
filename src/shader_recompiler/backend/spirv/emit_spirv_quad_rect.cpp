@@ -511,7 +511,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
         clips=ctx.Variable(ctx.TypeArray(distances,three),spv::StorageClass::Input,{},spv::BuiltIn::ClipDistance);}
     if(cull_mask){ctx.AddCapability(spv::Capability::CullDistance);
         culls=ctx.Variable(ctx.TypeArray(distances,three),spv::StorageClass::Input,{},spv::BuiltIn::CullDistance);}
-    const u32 planes=6+std::popcount(clip_mask),capacity=3+planes;
+    const u32 planes=(config.clip_depth?6:4)+std::popcount(clip_mask),capacity=3+planes;
     const u32 size_field=1+u32(varyings.size()),clip_field=size_field+u32(sized);
     const u32 fields=clip_field+u32(clip_mask!=0)*2;
     // D3D GS instancing appends each instance's output in instance-ID order
@@ -598,7 +598,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     selection(visible,[&]{
         // Sutherland-Hodgman in homogeneous clip space. A convex triangle
         // gains at most one vertex per plane; no CPU readback or shader replay.
-        std::vector<u32> clipping_planes{0,1,2,3,4,5};
+        std::vector<u32> clipping_planes{0,1,2,3};
+        if(config.clip_depth){clipping_planes.push_back(4);clipping_planes.push_back(5);}
         for(u32 channel=0;channel<8;++channel)if(clip_mask&(1u<<channel))clipping_planes.push_back(6+channel);
         u32 side{};
         for(const auto plane:clipping_planes){
@@ -683,7 +684,14 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                 if(routed_viewport)outputs.push_back({u32_type,output_viewport,viewport});
                 if(routed_layer)outputs.push_back({u32_type,output_layer,ctx.OpCompositeExtract(u32_type,misc,1u)});
                 const auto size=sized?component(load(clipped,index,size_field),0):fone;
-                Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,load(clipped,index,0),size,viewport,true,
+                auto p=load(clipped,index,0);
+                // The original depth clamp uses the selected viewport's range.
+                // Clamp the point's clip-space Z before mapping that viewport;
+                // hardware clamping the enlarged replay viewport to[0,1]
+                // would give a different result for e.g.[.25,.75].
+                if(!config.clip_depth)p=ctx.OpCompositeInsert(vec4,
+                    ctx.OpFClamp(f32,component(p,2),fzero,component(p,3)),p,2u);
+                Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,p,size,viewport,config.clip_depth,
                     output_position,outputs,{},ctx.OpLogicalNot(b1,front));
               },first);
             });
