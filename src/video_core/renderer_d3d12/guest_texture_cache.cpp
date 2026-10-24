@@ -2457,7 +2457,8 @@ GuestTextureCache::Entry& GuestTextureCache::BindPlannedImage(const CachedImageB
         }
     }
     if(FindIndependentUploadSource(target,layout)||FindCachedDepthRecreationSource(target,layout)||
-       (parent&&!parent->logical_dirty&&(parent->gpu_owned||parent->cpu_watched))){
+       (parent&&((!parent->logical_dirty&&(parent->gpu_owned||parent->cpu_watched))||
+                 (target.samples>1&&parent->cached_native_current)))){
         const auto depth=std::span(reinterpret_cast<const std::byte*>(target.address),size_t(layout.guest_bytes));
         const auto stencil=target.stencil_address?std::span(reinterpret_cast<const std::byte*>(target.stencil_address),
             size_t(LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes)):std::span<const std::byte>{};
@@ -3034,6 +3035,29 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
          CanBindReadonlyBcMipPrefix(*independent_source,d,layout))?
         independent_source:nullptr;
     Entry* reuse=independent_reuse;
+    bool retained_multisample=false;
+    if(!guest_snapshot&&d.samples>1&&purpose==UploadPurpose::Binding){
+        // Pinned RefreshImage returns before uploading dirty MSAA images.
+        // CPU/exact-base B writes invalidate equality with memory, not native
+        // sample contents. Retain the current allocation and inactive sample
+        // history; explicit copy/recreation snapshots still take their own path.
+        Entry* retained{};
+        for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;
+            if(!existing->cached_native_current||!existing->texture.handle||
+               !MatchesGuestUploadStorage(*existing,d,layout))continue;
+            if(retained&&retained->texture.handle.Get()!=existing->texture.handle.Get())
+                throw std::runtime_error("Ambiguous retained multisample image");
+            retained=existing;
+        }
+        if(retained){
+            // Standalone/unowned cache users need no page-ownership service.
+            // Existing GPU/independent owners, however, must retain their guard.
+            if(acquire_independent_&&!acquire_independent_(*retained)&&
+               (retained->gpu_owned||retained->buffer_alias_version))
+                throw std::runtime_error("Retained multisample contents lost independent ownership");
+            reuse=retained;retained_multisample=true;
+        }
+    }
     for(auto indexed=owned_first;indexed!=owned_last;++indexed){auto* existing=indexed->second;
       if(guest_snapshot&&existing->cpu_watched){
         if(release_immutable_)release_immutable_(*existing);existing->cpu_watched=false;
@@ -3046,7 +3070,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
            !memcmp(existing->stencil_snapshot.data(),stencil_bytes.data(),size_t(stencil_layout.guest_bytes)))));
       if((pending_coherent||(!guest_snapshot&&!existing->logical_dirty&&(existing->gpu_owned||existing->cpu_watched)))&&
         MatchesGuestUploadStorage(*existing,d,layout)){
-        if(!independent_source&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
+        if(!retained_multisample&&!independent_source&&(!reuse||(existing->desc==d&&reuse->desc!=d)))reuse=existing;
       }
     }
     if(reuse){

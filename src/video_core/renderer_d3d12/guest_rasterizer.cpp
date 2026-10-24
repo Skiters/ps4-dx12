@@ -1276,9 +1276,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         exact_depth_buffer_writer|=has_depth&&sharp.base_address==descriptions[8].address;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(sharp.base_address,bytes,descriptions[i].address,layouts[i].guest_bytes)){
-            if(!page_watch_||descriptions[i].samples!=1||(color_feedback[i]&&!gpu_color_feedback[i])||color_storage_feedback[i]||
+            if(!page_watch_||(color_feedback[i]&&!gpu_color_feedback[i])||color_storage_feedback[i]||
                color_depth_alias[i]||separate_color_depth[i])
-                throw std::runtime_error("Simultaneous color/buffer writes require an independent single-sample attachment without competing images");
+                throw std::runtime_error("Simultaneous color/buffer writes require an independent attachment without competing image writes");
             color_buffer_overlap[i]=true;
             exact_color_buffer_writer[i]|=sharp.base_address==descriptions[i].address;
         }
