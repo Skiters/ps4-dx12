@@ -18556,7 +18556,7 @@
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "Clipped VS/TES polygon points, strip/fan provoking, duplicate interpolation, original polygon bias with viewport clamp, misc routing and GS output partition are connected. Remaining: original GS triangles, auxiliary rectangle/quad output, fully unclamped depth/bias, per-vertex interpolation, exhausted varying transport. Latest behavior NOT_RUN.",
+      "missing_semantics": "Clipped VS/TES polygon points, strip/fan provoking, duplicate interpolation, original bias with viewport clamp, sparse export liveness/misc routing and output partition connected throughbd3aaea. Remaining: original GS triangles, auxiliary rectangle/quad output, fully unclamped depth/bias, per-vertex interpolation, genuinely exhausted live varying transport. Latest behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_graphics_state.cpp: Guest point polygon fill requires native clipping and point rasterization",
       "groups": [
         34,
@@ -18577,7 +18577,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Tessellation/auxiliary primitive streams, original capture system values, eight-byte native SO counter backing/publication and complete CPU restart patch segments are connected. Remaining: GPU-native multidraw/restart index expansion and large-source/active-part scheduling. Known indirect fixture lifetime correction compiled, rerun deferred. Do not repeat completed EsGs/tessellation bridge.",
+      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart compaction and byte decoding, exact indirect counts/per-instance capture packets and expanded producer bounds connected through80e12b0; all latest behavior NOT_RUN. Remaining: GPU-native multidraw expansion and large-source/active-part scheduling. Do not repeat completed EsGs/tessellation bridge. Known stream fixture correction remains unexecuted.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,
@@ -18662,5 +18662,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "Production9ef7343; clean Release compile/link PASS; all behavior execution deferred until seven-area implementation completion. Mixed blending connected; six other areas retain explicit gaps. See SESSION_HANDOFF.md first section."
+  "seven_area_continuation": "Production80e12b0; clean Release compile/link PASS21.449s; all behavior execution deferred until seven-area implementation completion. Mixed blending connected; six other areas retain explicit gaps. See SESSION_HANDOFF.md first section."
 }

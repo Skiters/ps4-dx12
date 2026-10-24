@@ -1,6 +1,6 @@
 ## Current implementation continuation — 2026-10-25
 
-Production9ef7343: polygon qualifier/strip/provoking/bias and shared color/depth CMASK/MSAA ordering connected. Clean Release compile/link PASS21.127s; ALL latest behavior NOT_RUN. Mixed blending connected; six other areas retain code gaps. See SESSION_HANDOFF.md first section for exact gaps/identities/commands/prepared cases. No app replacement/runtime archive/GPU or game execution. Continue development; supersedes older current declarations below.
+Production80e12b0: GPU restart/decode/indirect counts and original capture integration; sparse polygon output liveness connected. Clean tracked Release compile/link PASS21.449s; ALL behavior NOT_RUN. Earlier shared attachment/polygon/blending work retained. Six broad areas still have concrete code gaps. SESSION_HANDOFF.md first section is authoritative. No app replacement/runtime archive/GPU or game execution. Continue development.
 
 ## Current continuation — 2026-10-25
 
