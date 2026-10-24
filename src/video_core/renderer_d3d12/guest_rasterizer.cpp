@@ -818,7 +818,8 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
     if(!image||!image->texture.handle)return false;
     const auto native=image->texture.handle->GetDesc();
     if(native.Dimension!=D3D12_RESOURCE_DIMENSION_TEXTURE2D||native.Width!=d.width||native.Height!=d.height||
-       native.MipLevels!=1||native.DepthOrArraySize!=d.layers||native.SampleDesc.Count!=d.samples||
+       native.MipLevels!=1||native.DepthOrArraySize!=d.layers||
+       native.SampleDesc.Count!=(retired?image->RequestedBackingSamples():d.samples)||
        !(native.Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))return false;
     std::shared_ptr<GuestRawColorClear::Program> raw_program;
     if(!clear->rtv_compatible){
@@ -1510,6 +1511,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     GraphicsRuntime runtime{};runtime.first_vertex=guest_first_vertex;
     runtime.base_instance=draw.first_instance;runtime.indexed=indexed;
     runtime.yz_flip_mask=viewport.flip_mask;runtime.SetViewports(viewport.viewports,expanded_points,viewport.clip_transforms);
+    for(UINT i=0;i<target_count;++i)if((state.ordered_color_mask&(1u<<i))&&
+        descriptions[i].samples!=state.pipeline.SampleDesc.Count)
+        throw std::runtime_error("Ordered color with alternate sample backing needs physical sample storage views");
     std::array<GuestTextureCache::Entry*,9> targets{};
     std::array<bool,9> readback_rows{};
     std::vector<std::unique_ptr<GuestImageReadback>> readbacks;
@@ -1602,39 +1606,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                         throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
                 }else OwnImage(entry);
             }
-            if(replay_attachments.Beginning())textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
-            if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
-                throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
             targets[i]=&entry;
-            if(state.ordered_color_mask&(1u<<i)){
-                if(descriptions[i].samples==1){
-                    const auto first=descriptions[i].first_layer;
-                    const auto count=descriptions[i].view_layers;
-                    for(UINT layer=first;layer<first+count;++layer)
-                        entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-                                                 layer*entry.desc.levels);
-                    const auto view=entry.OrderedColorUav(descriptions[i]);
-                    bindings.Uav(Shader::NativeOrderedColor::Register(i),
-                                 Shader::NativeOrderedColor::DescriptorSet,
-                                 entry.texture.handle.Get(),view);
-                }else{
-                    auto transfer=std::ranges::find(ordered_multisample,&entry,
-                        &OrderedMultisampleTransfer::entry);
-                    if(transfer==ordered_multisample.end()){
-                        auto lease=textures_.PrepareMultisampleStorage(entry,descriptions[i]);
-                        lease->Record(RecordingList(),entry.texture,entry.storage_samples,
-                                      entry.storage_linear,false);
-                        ordered_multisample.push_back({&entry,std::move(lease)});
-                    }
-                    for(UINT sample=0;sample<descriptions[i].samples;++sample){
-                        auto& plane=entry.storage_samples.at(sample);
-                        bindings.RetainAllocation(plane.allocation);
-                        bindings.Uav(Shader::NativeOrderedColor::Register(i,sample),
-                                     Shader::NativeOrderedColor::DescriptorSet,
-                                     plane.handle.Get(),entry.StorageUav(descriptions[i],sample));
-                    }
-                }
-            }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
         if(has_depth) {
             const auto depth_bytes=depth_attachment_snapshot?std::span<const std::byte>(depth_guest_snapshot):
@@ -1710,6 +1682,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             (i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
         }
+        // PrepareRenderState selects CB then DB using the original sample
+        // payload. Only BeginRendering changes CB's physical sample backing.
+        // In particular RGBA32 -> D32x4 must read the original four channels,
+        // not a prematurely expanded color resource.
+        for(UINT i=0;i<target_count;++i)if(targets[i]){
+            auto& entry=*targets[i];
+            if(replay_attachments.Beginning())textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
+            if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
+                throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
+            bindings.RetainAllocation(entry.texture.allocation);
+        }
         // Pinned PrepareRenderState performs CB->D recreation before
         // BeginRendering registers and clears CB. Clearing before the copy
         // would incorrectly inject CB's future clear value into current D.
@@ -1721,6 +1704,40 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 buffer.info.compression?buffer.FmaskAddress():0);
             MaterializeColorClear(buffer,descriptions[i],layouts[i],true,&entry,true);
             textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
+        }
+        // Bind descriptors only after sample backing replacement and load
+        // clears. Ordered storage snapshots must include those clears.
+        for(UINT i=0;i<target_count;++i)if(targets[i]){
+            auto& entry=*targets[i];
+            if(state.ordered_color_mask&(1u<<i)){
+                if(descriptions[i].samples==1){
+                    const auto first=descriptions[i].first_layer;
+                    const auto count=descriptions[i].view_layers;
+                    for(UINT layer=first;layer<first+count;++layer)
+                        entry.texture.Transition(RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                                 layer*entry.desc.levels);
+                    const auto view=entry.OrderedColorUav(descriptions[i]);
+                    bindings.Uav(Shader::NativeOrderedColor::Register(i),
+                                 Shader::NativeOrderedColor::DescriptorSet,
+                                 entry.texture.handle.Get(),view);
+                }else{
+                    auto transfer=std::ranges::find(ordered_multisample,&entry,
+                        &OrderedMultisampleTransfer::entry);
+                    if(transfer==ordered_multisample.end()){
+                        auto lease=textures_.PrepareMultisampleStorage(entry,descriptions[i]);
+                        lease->Record(RecordingList(),entry.texture,entry.storage_samples,
+                                      entry.storage_linear,false);
+                        ordered_multisample.push_back({&entry,std::move(lease)});
+                    }
+                    for(UINT sample=0;sample<descriptions[i].samples;++sample){
+                        auto& plane=entry.storage_samples.at(sample);
+                        bindings.RetainAllocation(plane.allocation);
+                        bindings.Uav(Shader::NativeOrderedColor::Register(i,sample),
+                                     Shader::NativeOrderedColor::DescriptorSet,
+                                     plane.handle.Get(),entry.StorageUav(descriptions[i],sample));
+                    }
+                }
+            }else attachments[i]={&entry.texture,entry.Rtv(descriptions[i])};
         }
         bindings.Prepare();
         std::set<ID3D12Resource*> feedback_copies;

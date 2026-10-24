@@ -12,10 +12,14 @@ template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
-    bool independent_class=false,bool independent_depth=false,bool shared_clear=false){
+    bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
+    if(shared_ms)initialize(seed,{0xBEEB03FF,15,
+        0x7e0002ff,0x3e000000,0x7e0202ff,0x3e800000,
+        0x7e0402ff,0x3f000000,0x7e0602ff,0x3f400000,
+        0xf800000f,0x03020100,0xbf810000},0x4645454447430041ULL);
     const auto sample=[&](auto& program,u32 x,u64 hash){
         // image_load R -> v4, multiply by exactly .5, export to R32_FLOAT.
         initialize(program,{0xBEEB03FF,15,0x7e000280U|x,0x7e020280,
@@ -31,7 +35,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     regs.color_export_format.raw=u32(AmdGpu::ShaderExportFormat::ABGR_32);
     regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
     regs.color_control.rop3=AmdGpu::ColorControl::LogicOp::Copy;
-    regs.color_target_mask.raw=regs.color_shader_mask.raw=1;
+    regs.color_target_mask.raw=regs.color_shader_mask.raw=shared_ms?15:1;
     regs.clipper_control.clip_space=AmdGpu::ClipSpace::ZeroToW;
     auto& vp=regs.viewport_control;
     vp.xscale_enable=vp.yscale_enable=vp.xoffset_enable=vp.yoffset_enable=vp.zscale_enable=1;
@@ -40,7 +44,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     regs.screen_scissor.bottom_right_x=regs.window_scissor.bottom_right_x=regs.generic_scissor.bottom_right_x=8;
     regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=regs.generic_scissor.bottom_right_y=8;
     auto& cb=regs.color_buffers[0];cb.base_address=u32((base+16384)>>8);
-    cb.info.format=4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
+    cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
     const auto target=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
     const auto layout=LayoutGuestTexture(target);
@@ -49,7 +53,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     if(independent_class)image.pitch=31;
     // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
     // the original FLOAT attachment bits, not numerically convert the texel.
-    image.data_format=4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
+    image.data_format=shared_ms?14:4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
     const auto sampled=DescribeGuestTexture(image);
     const auto sampled_layout=LayoutGuestTexture(sampled);
@@ -122,9 +126,10 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             throw std::runtime_error("Distinct color images lost B/I separation, cached contents or padding");
         return;
     }
-    if(shared_depth||independent_depth){
+    if(shared_depth||independent_depth||shared_ms){
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
+        if(shared_ms){db.z_info.num_samples=2;regs.aa_config.msaa_num_samples=2;}
         db.depth_size.pitch_tile_max=independent_depth?3:1;
         db.depth_size.height_tile_max=0;db.depth_slice.tile_max=independent_depth?3:1;
         gpu.last_db_extent={8,8};
@@ -144,6 +149,36 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto shifted=depth;shifted.address+=256;
         if(GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,shifted,LayoutGuestTexture(shifted)))
             throw std::runtime_error("Shifted attachment recreation was admitted without a physical plan");
+        if(shared_ms){
+            // The original RGBA32 payload must reach D32x4 before CB is
+            // expanded to four physical samples. Draw only the left half;
+            // the right half distinguishes every transferred channel.
+            regs.generic_scissor.bottom_right_x=4;
+            draw(seed,false);
+            const auto current_b=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+            if(!current_b.resource||current_b.bytes!=raw_bytes)
+                throw std::runtime_error("Shared MS attachments lost resident B");
+            auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+            rasterizer.RetainUntilFinish([rb,lease=current_b.allocation](u64){});
+            const auto prior=current_b.resource->State(0);
+            current_b.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+            rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,current_b.resource->handle.Get(),current_b.offset,raw_bytes);
+            current_b.resource->Transition(rasterizer.RecordingList(),prior);
+            rasterizer.Finish();void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
+            const bool unchanged=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+            D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+            if(!unchanged)throw std::runtime_error("Shared MS attachments published color or depth into raw B");
+            rasterizer.ReadMemory(depth.address,dl.guest_bytes);rasterizer.Finish();
+            auto expected=physical;constexpr float channels[]{.125f,.25f,.5f,.75f};
+            for(UINT sample=0;sample<4;++sample)for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x){
+                const float value=x<4?.5f:channels[sample];
+                memcpy(expected.data()+16384+GuestPixelOffset(depth,dl,0,0,x,y,sample),&value,4);
+            }
+            rasterizer.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Shared MS attachments lost channel/sample order, depth writer or physical padding");
+            return;
+        }
         if(shared_clear){
             cb.info.fast_clear=1;cb.cmask_base_address=u32((base+49152)>>8);
             cb.clear_word0=0x3f400000; // .75: must clear retired CB AFTER the copy into D.

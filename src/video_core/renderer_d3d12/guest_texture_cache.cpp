@@ -2184,7 +2184,7 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextu
 bool GuestTextureCache::CanRecreateColorDepthAttachments(const GuestTextureDesc& color,
     const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
     return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
-        depth.depth_target&&!depth.render_target&&!depth.writable&&color.samples==1&&depth.samples==1&&
+        depth.depth_target&&!depth.render_target&&!depth.writable&&
         color.address==depth.address&&CanMapIndependentDepthImage(color,color_layout,depth,depth_layout);
 }
 bool GuestTextureCache::SeparateColorSampledImages(const GuestTextureDesc& color,
