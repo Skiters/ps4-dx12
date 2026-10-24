@@ -137,7 +137,7 @@ std::span<const DXGI_FORMAT> WritableWordCasts(const GuestTextureDesc& d,bool su
 bool IsOrderedScalarClass(const GuestTextureDesc& d){
     return (d.data_format==1||d.data_format==2)&&
         (d.number_format==0||d.number_format==1||d.number_format==4||d.number_format==5||
-         (d.data_format==2&&d.number_format==7));
+         (d.data_format==2&&d.number_format==7)||(d.data_format==1&&d.number_format==9));
 }
 bool IsOrderedFloatWordClass(const GuestTextureDesc& d){
     return d.number_format==7&&(d.data_format==4||d.data_format==11||d.data_format==14);
@@ -170,7 +170,7 @@ bool IsOrderedColorClass(const GuestTextureDesc& d) {
         !d.one_dimensional&&!d.volume_depth&&!d.first_mip&&d.levels==1&&
         std::has_single_bit(d.samples)&&d.samples<=8&&
         (IsOrderedScalarClass(d)||IsOrderedIntegerClass(d)||IsOrderedPacked16Class(d)||(d.data_format==9&&(d.number_format==0||d.number_format==1))||
-         (d.data_format==3&&(d.number_format==0||d.number_format==1))||
+         (d.data_format==3&&(d.number_format==0||d.number_format==1||d.number_format==9))||
          (d.data_format==10&&(d.number_format==0||d.number_format==1||d.number_format==9))||
          ((d.data_format==5||d.data_format==12)&&(d.number_format==0||d.number_format==1||d.number_format==7))||
          IsOrderedFloatWordClass(d)||(d.data_format==6&&d.number_format==7));
@@ -344,7 +344,7 @@ bool GuestTextureCache::CanTransferIndependentMultisample(const GuestTextureDesc
     const UINT bytes=bytes8?bytes8:bytes16?bytes16:d.data_format==4?4:d.data_format==11?8:d.data_format==14?16:0;
     const bool number=d.number_format==4||d.number_format==5||(!bytes8&&d.number_format==7)||
         ((bytes8||bytes16)&&(d.number_format==0||d.number_format==1))||
-        (d.data_format==10&&d.number_format==9);
+        (bytes8&&d.number_format==9);
     // Raw RGBA8 moves its already-packed DWORD through R32_UINT views;
     // ordinary RGBA8 retains its four-component integer transfer.
     return (!(d.data_format==10&&d.UsesRaw32())||layout.format==DXGI_FORMAT_R32_UINT)&&
@@ -742,8 +742,10 @@ namespace {
 uint32_t Align(uint32_t n,uint32_t a){return (n+a-1)&~(a-1);}
 uint32_t Pow2(uint32_t n){return std::bit_ceil(n);}
 std::pair<DXGI_FORMAT,uint32_t> Format(uint32_t data,uint32_t number){
-    if(data==1){switch(number){case 0:return {DXGI_FORMAT_R8_UNORM,1};case 1:return {DXGI_FORMAT_R8_SNORM,1};case 4:return {DXGI_FORMAT_R8_UINT,1};case 5:return {DXGI_FORMAT_R8_SINT,1};}}
-    if(data==3){switch(number){case 0:return {DXGI_FORMAT_R8G8_UNORM,2};case 1:return {DXGI_FORMAT_R8G8_SNORM,2};case 4:return {DXGI_FORMAT_R8G8_UINT,2};case 5:return {DXGI_FORMAT_R8G8_SINT,2};}}
+    // Same unsupported-format fallback as pinned Vulkan Instance::GetSupportedFormat:
+    // D3D12 has no R8/RG8 sRGB view. Preserve bytes and use UNORM for reads/writes.
+    if(data==1){switch(number){case 0:case 9:return {DXGI_FORMAT_R8_UNORM,1};case 1:return {DXGI_FORMAT_R8_SNORM,1};case 4:return {DXGI_FORMAT_R8_UINT,1};case 5:return {DXGI_FORMAT_R8_SINT,1};}}
+    if(data==3){switch(number){case 0:case 9:return {DXGI_FORMAT_R8G8_UNORM,2};case 1:return {DXGI_FORMAT_R8G8_SNORM,2};case 4:return {DXGI_FORMAT_R8G8_UINT,2};case 5:return {DXGI_FORMAT_R8G8_SINT,2};}}
     if(data==10){switch(number){case 0:return {DXGI_FORMAT_R8G8B8A8_UNORM,4};case 1:return {DXGI_FORMAT_R8G8B8A8_SNORM,4};case 4:return {DXGI_FORMAT_R8G8B8A8_UINT,4};case 5:return {DXGI_FORMAT_R8G8B8A8_SINT,4};case 9:return {DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,4};}}
     if(data==4){switch(number){case 7:return {DXGI_FORMAT_R32_FLOAT,4};case 4:return {DXGI_FORMAT_R32_UINT,4};case 5:return {DXGI_FORMAT_R32_SINT,4};}}
     if(data==2){switch(number){case 0:return {DXGI_FORMAT_R16_UNORM,2};case 1:return {DXGI_FORMAT_R16_SNORM,2};case 4:return {DXGI_FORMAT_R16_UINT,2};case 5:return {DXGI_FORMAT_R16_SINT,2};case 7:return {DXGI_FORMAT_R16_FLOAT,2};}}
@@ -1296,7 +1298,7 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
         !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !(IsOrderedScalarClass(attachment)||IsOrderedIntegerClass(attachment)||IsOrderedPacked16Class(attachment)||(attachment.data_format==9&&(attachment.number_format==0||attachment.number_format==1))||
-         (attachment.data_format==3&&(attachment.number_format==0||attachment.number_format==1))||
+         (attachment.data_format==3&&(attachment.number_format==0||attachment.number_format==1||attachment.number_format==9))||
          (attachment.data_format==10&&(attachment.number_format==0||attachment.number_format==1||attachment.number_format==9))||
          ((attachment.data_format==5||attachment.data_format==12)&&
           (attachment.number_format==0||attachment.number_format==1||attachment.number_format==7))||

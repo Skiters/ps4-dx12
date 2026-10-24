@@ -49,6 +49,8 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
              color.GetDataFmt() == AmdGpu::DataFormat::Format16) &&
             (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
              color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm ||
+             (color.GetDataFmt() == AmdGpu::DataFormat::Format8 &&
+              color.GetNumberFmt() == AmdGpu::NumberFormat::Srgb) ||
              (color.GetDataFmt() == AmdGpu::DataFormat::Format16 &&
               color.GetNumberFmt() == AmdGpu::NumberFormat::Float))) ||
            (color.GetDataFmt() == AmdGpu::DataFormat::Format2_10_10_10 &&
@@ -62,7 +64,9 @@ inline bool GuestOrderedColorSupported(const AmdGpu::ColorBuffer& color) {
              color.GetDataFmt() == AmdGpu::DataFormat::Format16_16 ||
              color.GetDataFmt() == AmdGpu::DataFormat::Format16_16_16_16) &&
             (color.GetNumberFmt() == AmdGpu::NumberFormat::Unorm ||
-             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm)) ||
+             color.GetNumberFmt() == AmdGpu::NumberFormat::Snorm ||
+             (color.GetDataFmt() == AmdGpu::DataFormat::Format8_8 &&
+              color.GetNumberFmt() == AmdGpu::NumberFormat::Srgb))) ||
            ((color.GetDataFmt() == AmdGpu::DataFormat::Format32 ||
              color.GetDataFmt() == AmdGpu::DataFormat::Format10_11_11 ||
              color.GetDataFmt() == AmdGpu::DataFormat::Format32_32 ||

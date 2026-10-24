@@ -1503,9 +1503,15 @@ void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& resou
         }
         for (const auto& write : info.native_pipeline_writes)
             storage |= NativeImageViewAliases(source,write,info)&&write_mip_overlap(source,write);
-        return std::pair{storage, !query && storage &&
+        const auto sampled_sharp=source.GetSharp(info);
+        // Pinned Instance::GetSupportedFormat falls unsupported R8/RG8 sRGB
+        // back to UNORM. D3D12 has no such sRGB views: coherent UAV reads must
+        // match the ordinary UNORM SRV, without adding a gamma decode.
+        const bool narrow_srgb=sampled_sharp.GetDataFmt()==AmdGpu::DataFormat::Format8||
+            sampled_sharp.GetDataFmt()==AmdGpu::DataFormat::Format8_8;
+        return std::pair{storage, !query && storage && !narrow_srgb &&
             (!original_storage || opcode == IR::Opcode::ImageSampleRaw) &&
-            source.GetSharp(info).GetNumberFmt() == AmdGpu::NumberFormat::Srgb};
+            sampled_sharp.GetNumberFmt() == AmdGpu::NumberFormat::Srgb};
     };
     for (const auto& usage : resources) {
         IR::Inst& inst = *usage.user;

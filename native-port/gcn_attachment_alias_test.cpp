@@ -72,8 +72,10 @@ int main(int argc,char** argv){try{
         std::string_view(argv[3])=="snorm8-mixed-edges-owned"?2:0;
     const bool snorm_mixed_constants=normalized_edges==2||std::string_view(argv[3])=="snorm8-mixed-constants-owned";
     const bool unorm10_mixed_constants=std::string_view(argv[3])=="unorm10-mixed-constants-owned";
+    const bool r8_srgb_fallback=std::string_view(argv[3])=="r8-srgb-fallback-mixed-owned";
+    const bool rg8_srgb_fallback=std::string_view(argv[3])=="rg8-srgb-fallback-mixed-owned";
     const bool rg8_snorm_constants=std::string_view(argv[3])=="rg8-snorm-mixed-constants-owned";
-    const bool rg8_normalized_constants=rg8_snorm_constants||std::string_view(argv[3])=="rg8-unorm-mixed-constants-owned";
+    const bool rg8_normalized_constants=rg8_srgb_fallback||rg8_snorm_constants||std::string_view(argv[3])=="rg8-unorm-mixed-constants-owned";
     const bool rg16_snorm_constants=rg8_snorm_constants||std::string_view(argv[3])=="rg16-snorm-mixed-constants-owned";
     const bool rg16_normalized_constants=rg8_normalized_constants||rg16_snorm_constants||std::string_view(argv[3])=="rg16-unorm-mixed-constants-owned";
     const bool half_mixed_constants=half_edges||std::string_view(argv[3])=="half-mixed-constants-owned";
@@ -84,7 +86,7 @@ int main(int argc,char** argv){try{
         std::string_view(argv[3])=="rgba16-float-mixed-constants-owned"?3:0;
     const bool r11_edges=std::string_view(argv[3])=="r11-mixed-edges-owned";
     const bool r11_mixed_constants=r11_edges||std::string_view(argv[3])=="r11-mixed-constants-owned";
-    const u32 scalar_kind=std::string_view(argv[3])=="r8-unorm-mixed-constants-owned"?1:
+    const u32 scalar_kind=(r8_srgb_fallback||std::string_view(argv[3])=="r8-unorm-mixed-constants-owned")?1:
         std::string_view(argv[3])=="r8-snorm-mixed-constants-owned"?2:
         std::string_view(argv[3])=="r16-unorm-mixed-constants-owned"?3:
         std::string_view(argv[3])=="r16-snorm-mixed-constants-owned"?4:
@@ -1083,12 +1085,20 @@ int main(int argc,char** argv){try{
         std::array<GuestTextureDesc,3> descriptions;
         for(size_t i=0;i<descriptions.size();++i){auto& cb=regs.color_buffers[i];
             cb.base_address=u32((base+4096)>>8);cb.info.format=integer_case?integer_case->format:packed16_format?packed16_format:rg8_normalized_constants?3:scalar_kind?(scalar_kind<=2?1:2):r11_mixed_constants?6:rgba16_kind?12:wide_float_format?wide_float_format:(half_mixed_constants||rg16_normalized_constants)?5:float_mixed_constants?4:(signed_color||unorm10_mixed_constants)?9:10;
-            cb.info.number_type=integer_case?(integer_sint?5:4):srgb_color?6:scalar_kind?(scalar_kind==5?7:(scalar_kind==2||scalar_kind==4)?1:0):rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
+            cb.info.number_type=integer_case?(integer_sint?5:4):(srgb_color||r8_srgb_fallback||rg8_srgb_fallback)?6:scalar_kind?(scalar_kind==5?7:(scalar_kind==2||scalar_kind==4)?1:0):rgba16_kind?(rgba16_kind==3?7:rgba16_kind==2?1:0):float_mixed_constants?7:signed_color?5:(snorm_mixed_constants||rg16_snorm_constants)?1:0;
             cb.attrib.tile_mode_index=linear_attachment?AmdGpu::TileMode::DisplayLinearAligned:AmdGpu::TileMode::Thin1DThin;
             cb.attrib.num_fragments_log2=log2_samples;
             cb.pitch.tile_max=linear_attachment?7:1;cb.slice.tile_max=linear_attachment?15:1;
             cb.view.slice_start=cb.view.slice_max=order[i];
             gpu.last_cb_extent[i]={u16(width),u16(height)};descriptions[i]=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[i]);
+            if(r8_srgb_fallback||rg8_srgb_fallback){
+                const auto expected_format=r8_srgb_fallback?DXGI_FORMAT_R8_UNORM:DXGI_FORMAT_R8G8_UNORM;
+                if(LayoutGuestTexture(descriptions[i]).format!=expected_format||
+                   !GuestOrderedColorSupported(cb))
+                    throw std::runtime_error("Small sRGB attachment lost the pinned UNORM fallback");
+                // Reuse the authored UNORM byte oracle below deliberately:
+                // pinned unsupported R8/RG8 sRGB falls back without gamma.
+            }
         }
         if(mixed_constant_blend){
             using BF=AmdGpu::BlendControl::BlendFactor;
