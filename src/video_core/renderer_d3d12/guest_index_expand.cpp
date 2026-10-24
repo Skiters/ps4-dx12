@@ -27,8 +27,9 @@ void GuestIndexExpandPass::RecordGenerated(Rasterizer& renderer,const GuestIndex
 void GuestIndexExpandPass::RecordInternal(Rasterizer& renderer,const GuestIndexExpansion& plan,
     Resource* source,u64 offset,u32 available,u32 element,Resource& output,bool generated,u32 first){
     std::lock_guard lock(renderer.ExecutionMutex());
-    const AmdGpu::PrimitiveType types[]{AmdGpu::PrimitiveType::TriangleFan,AmdGpu::PrimitiveType::LineLoop,AmdGpu::PrimitiveType::QuadStrip};
-    if(plan.mode>2||(element!=2&&element!=4)||available>plan.input_count||!plan.output_count||
+    const AmdGpu::PrimitiveType types[]{AmdGpu::PrimitiveType::TriangleFan,AmdGpu::PrimitiveType::LineLoop,
+        AmdGpu::PrimitiveType::QuadStrip,AmdGpu::PrimitiveType::TriangleStrip,AmdGpu::PrimitiveType::TriangleStrip};
+    if(plan.mode>4||(element!=2&&element!=4)||available>plan.input_count||!plan.output_count||
        GuestIndexExpansion::Make(types[plan.mode],plan.input_count).output_count!=plan.output_count||
        (!source&&(available||offset))||offset%element)
         throw std::invalid_argument("Invalid GPU index expansion plan/source");

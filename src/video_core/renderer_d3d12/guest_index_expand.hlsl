@@ -18,6 +18,9 @@ void main(uint3 id:SV_DispatchThreadID) {
     uint index;
     if(mode==0){uint primitive=output/3,corner=output%3;index=corner==0?0:primitive+corner;}
     else if(mode==1){uint edge=output/2;index=(edge+output%2)%input_count;}
-    else {uint quad=output/6,corner=output%6;const uint offsets[6]={0,1,2,2,1,3};index=quad*2+offsets[corner];}
+    else if(mode==2){uint quad=output/6,corner=output%6;const uint offsets[6]={0,1,2,2,1,3};index=quad*2+offsets[corner];}
+    else {uint primitive=output/3,corner=output%3,odd=primitive&1;
+        uint offset=mode==4?(corner==2?2:corner==0?odd:1-odd):(corner==0?0:corner==1?1+odd:2-odd);
+        index=primitive+offset;}
     expanded.Store(output*4,read_index(index));
 }

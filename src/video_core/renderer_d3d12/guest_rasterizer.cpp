@@ -1382,7 +1382,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(batch->count_address){index_requests.push_back({batch->count_address,4,false,false,true});
             index_requests.back().publish_dma_residency=false;}
     }
-    const bool expand_primitive=GuestPrimitiveNeedsExpansion(r.primitive_type);
+    const bool polygon_strip=state.polygon_points&&r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip;
+    const bool strip_last_provoking=polygon_strip&&r.polygon_control.provoking_vtx_last==AmdGpu::ProvokingVtxLast::Last;
+    const bool expand_primitive=GuestPrimitiveNeedsExpansion(r.primitive_type)||polygon_strip;
     const bool strip=state.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||state.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
     const bool custom_strip_restart=indexed&&r.enable_primitive_restart&&strip&&
         r.primitive_restart_index!=(r.index_buffer_type.index_type==AmdGpu::IndexType::Index16?0xffffu:0xffffffffu);
@@ -1400,7 +1402,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
     if(expand_primitive&&(!indexed||(!r.enable_primitive_restart&&
        r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None))){
-        const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count);
+        const auto plan=GuestIndexExpansion::Make(r.primitive_type,draw.count,strip_last_provoking);
         if(!plan.output_count)return;
         gpu_expansion=plan;
     }
@@ -1459,7 +1461,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }else for(u32 i=0;i<draw.count;++i)logical.push_back(draw.first+i);
         if(expand_primitive||rewrite_restart)
             logical=ExpandGuestPrimitive(r.primitive_type,logical,indexed&&r.enable_primitive_restart,
-                r.primitive_restart_index,r.ls_hs_config.hs_input_control_points);
+                r.primitive_restart_index,r.ls_hs_config.hs_input_control_points,strip_last_provoking);
         if(logical.empty())return;
         const bool output_narrow=!expand_primitive&&indexed&&narrow;
         if(logical.size()>UINT_MAX/(output_narrow?2u:4u))
@@ -2168,6 +2170,7 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
     const bool native_restart=!indexed||!r.enable_primitive_restart||(strip&&
         r.primitive_restart_index==(r.index_buffer_type.index_type==AmdGpu::IndexType::Index16?0xffffu:0xffffffffu));
     bool native=ClassifyGuestDraw(r)==GuestDrawOperation::Rasterize&&!GuestPrimitiveNeedsExpansion(r.primitive_type)&&
+        !(GuestPolygonPointGeometryState(r)&&r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip)&&
         !(r.depth_render_override.force_z_dirty&&r.depth_render_override.force_z_valid)&&
         !(r.depth_render_override.force_stencil_dirty&&r.depth_render_override.force_stencil_valid)&&
         native_restart&&(!indexed||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None)&&

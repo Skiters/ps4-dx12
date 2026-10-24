@@ -452,6 +452,7 @@ struct PointReplayEmitter : Sirit::Module {
 }
 std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader::Info* fragment,
     const Shader::HwFragmentRuntimeInfo& fs,const GuestPolygonPointConfig& config){
+    if(config.first_provoking>=3)throw std::out_of_range("Invalid polygon point provoking vertex");
     using Sirit::Id;
     using A=Shader::IR::Attribute;
     using Q=Shader::Qualifier;
@@ -605,13 +606,14 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
         ctx.OpStore(cursor,ctx.OpIAdd(u32_type,index,one));ctx.OpBranch(header);ctx.AddLabel(done);
     };
     ctx.OpStore(count,three);
-    const auto misc=Sirit::ValidId(input_misc)?input(uint4,input_misc,ci(config.last_provoking?2:0)):Id{};
+    const auto provoking=ci(config.last_provoking?2:config.first_provoking);
+    const auto misc=Sirit::ValidId(input_misc)?input(uint4,input_misc,provoking):Id{};
     const auto viewport=routed_viewport?ctx.OpCompositeExtract(u32_type,misc,2u):zero;
     for(u32 index=0;index<3;++index){
         ctx.OpStore(pointer(data[0],ci(index),0),input(vec4,position,ci(index)));
         for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
             const auto value=input(varying.type,varying.input,
-                varying.qualifier==Q::Flat?ci(config.last_provoking?2:0):ci(index));
+                varying.qualifier==Q::Flat?provoking:ci(index));
             std::array<Id,4> channels{fzero,fzero,fzero,fzero};
             for(u32 channel=0;channel<varying.width;++channel)
                 channels[channel]=varying.width==1?value:component(value,channel);

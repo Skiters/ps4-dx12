@@ -10,7 +10,7 @@ bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type) {
     return type==P::TriangleFan||type==P::Polygon||type==P::LineLoop||type==P::QuadStrip;
 }
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
-    bool restart,u32 restart_index,u32 patch_points) {
+    bool restart,u32 restart_index,u32 patch_points,bool strip_last_provoking) {
     if(type==AmdGpu::PrimitiveType::PatchPrimitive&&(!patch_points||patch_points>32))
         throw std::out_of_range("Native guest restart patch control point count");
     std::vector<u32> result;
@@ -33,9 +33,10 @@ std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const
             break;
         case P::TriangleStrip:
             if(part.size()>2)for(size_t i=0;i+2<part.size();++i){
-                // Keep the strip's leading vertex for flat interpolation,
-                // while reversing the other two vertices on odd triangles.
-                result.push_back(part[i]);result.push_back(part[i+1+(i&1)]);result.push_back(part[i+2-(i&1)]);
+                // Restart segments reset parity. Rotate the odd triangle to
+                // preserve either original leading i or trailing i+2 vertex.
+                if(strip_last_provoking){result.push_back(part[i+(i&1)]);result.push_back(part[i+1-(i&1)]);result.push_back(part[i+2]);}
+                else {result.push_back(part[i]);result.push_back(part[i+1+(i&1)]);result.push_back(part[i+2-(i&1)]);}
             }
             break;
         case P::LineStrip:
@@ -415,6 +416,7 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
         if(!GuestPolygonPointGeometryState(regs))
             throw std::runtime_error("Guest point polygon stage/topology/bias needs extended clipping and point lowering");
         result.polygon_points=true;
+        if(regs.primitive_type==P::TriangleStrip)result.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         // The auxiliary GS culls the original polygon. Hardware must retain
         // both quad orientations for FrontFacing and two-sided stencil.
         r.CullMode=D3D12_CULL_MODE_NONE;

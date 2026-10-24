@@ -182,7 +182,8 @@ inline bool GuestPolygonPointGeometryState(const AmdGpu::Regs& regs){
     using Stages=AmdGpu::ShaderStageEnable::VgtStages;
     using P=AmdGpu::PrimitiveType;
     const bool vertex_triangles=regs.stage_enable.raw==Stages::Vs&&
-        (regs.primitive_type==P::TriangleList||regs.primitive_type==P::TriangleFan||regs.primitive_type==P::Polygon);
+        (regs.primitive_type==P::TriangleList||regs.primitive_type==P::TriangleFan||
+         regs.primitive_type==P::Polygon||regs.primitive_type==P::TriangleStrip);
     const bool tessellated_triangles=regs.stage_enable.raw==Stages::LsHs&&
         regs.primitive_type==P::PatchPrimitive&&regs.tess_config.type!=AmdGpu::TessellationType::Isoline;
     return regs.polygon_control.PolyMode()==AmdGpu::PolygonMode::Point&&
@@ -197,5 +198,5 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs&,
     UINT patch_control_points=0,bool native_alpha_factor=false);
 bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type);
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
-    bool restart=false,u32 restart_index=~0u,u32 patch_points=0);
+    bool restart=false,u32 restart_index=~0u,u32 patch_points=0,bool strip_last_provoking=false);
 }
