@@ -11,7 +11,7 @@ namespace NativeDX12 {
 template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize,bool raw_domain=false,bool integer_view=false){
+    const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -78,6 +78,37 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             throw std::runtime_error("Feedback draw published physical CPU bytes before explicit readback");
     };
     draw(seed,false);
+    if(shared_depth){
+        auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
+        db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
+        db.depth_size.pitch_tile_max=1;db.depth_size.height_tile_max=0;db.depth_slice.tile_max=1;
+        gpu.last_db_extent={8,8};
+        regs.depth_control.depth_enable=regs.depth_control.depth_write_enable=1;
+        regs.depth_control.depth_func=AmdGpu::CompareFunc::Always;
+        const auto depth=DescribeGuestDepthBuffer(db,regs.depth_view,gpu.last_db_extent);
+        const auto dl=LayoutGuestTexture(depth);
+        if(!GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
+            throw std::runtime_error("Shared attachment fixture lost its original overlap class");
+        auto shifted=depth;shifted.address+=256;
+        if(GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,shifted,LayoutGuestTexture(shifted)))
+            throw std::runtime_error("Shifted attachment recreation was admitted without a physical plan");
+        draw(seed,false); // CB writes1, D writes vertex Z=.5 into the new owner.
+        rasterizer.InvalidateMemory(base,96);
+        for(UINT i=0;i<3;++i){const float z=.25f;memcpy(memory+i*32+8,&z,4);}
+        physical.assign(backing,backing+65536);
+        draw(seed,false); // Repeat D->CB->D recreation, now with Z=.25.
+        regs.depth_control={};cb.base_address=u32((base+61440)>>8);
+        const auto probe_desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
+        const auto probe_layout=LayoutGuestTexture(probe_desc);
+        draw(left,true); // Real original GCN reads CURRENT D and multiplies .5.
+        rasterizer.Finish();rasterizer.ReadMemory(base+61440,probe_layout.guest_bytes);
+        auto expected=physical;const float expected_depth=.125f;
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+            memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&expected_depth,4);
+        if(memcmp(backing,expected.data(),65536))
+            throw std::runtime_error("Shared attachments lost depth owner, published retired color or changed B/padding");
+        return;
+    }
     // Read outside the written rectangle. Successive draws consume the last
     // GPU result; this requires no intra-draw fragment communication.
     regs.generic_scissor.top_left_x=4;draw(left,true);

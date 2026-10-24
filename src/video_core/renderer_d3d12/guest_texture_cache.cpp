@@ -2179,6 +2179,12 @@ bool CompatibleGuestBlockSampledViews(const GuestTextureDesc& a,const GuestTextu
     return MatchesReadonlyBcMipPrefix(a,al,b,bl)||MatchesReadonlyBcMipPrefix(b,bl,a,al)||
         MatchesExpandedReadonlyBc(a,al,b,bl);
 }
+bool GuestTextureCache::CanRecreateColorDepthAttachments(const GuestTextureDesc& color,
+    const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
+    return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
+        depth.depth_target&&!depth.render_target&&!depth.writable&&color.samples==1&&depth.samples==1&&
+        color.address==depth.address&&CanMapIndependentDepthImage(color,color_layout,depth,depth_layout);
+}
 bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
     if((al.block_extent==4)==(bl.block_extent==4))return false;

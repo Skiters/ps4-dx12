@@ -1108,6 +1108,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
     std::array<bool,8> color_storage_feedback{};
+    std::array<bool,8> color_depth_alias{},retired_color_targets{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
     for(UINT i=0;i<8;++i)if(r.color_control.mode!=AmdGpu::ColorControl::OperationMode::Disable&&
@@ -1177,8 +1178,17 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         depth_format=descriptions[8].stencil_address?DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
             layouts[8].bytes_per_pixel==4?DXGI_FORMAT_D32_FLOAT:DXGI_FORMAT_D16_UNORM;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN&&
-            Overlap(descriptions[8].address,layouts[8].guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
-            throw std::runtime_error("Guest depth/color alias requires shared storage");
+            Overlap(descriptions[8].address,layouts[8].guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
+            // ResolveDepthOverlap replaces the logical color owner with D,
+            // while the already selected CB remains alive for this draw.
+            // Native allocations are distinct; their guest authority is not.
+            if(!GuestTextureCache::CanRecreateColorDepthAttachments(descriptions[i],layouts[i],descriptions[8],layouts[8])||
+               r.color_buffers[i].info.fast_clear||r.color_buffers[i].info.compression||
+               (descriptions[8].stencil_address&&Overlap(descriptions[8].stencil_address,stencil_layout.guest_bytes,
+                   descriptions[i].address,layouts[i].guest_bytes)))
+                throw std::runtime_error("Guest depth/color alias requires an exact attachment recreation plan");
+            color_depth_alias[i]=true;
+        }
         for(const auto& stage:stages) {
             for(const auto& image:stage.info->images) {
                 const auto d=DescribeGuestTexture(image.GetSharp(*stage.info));const auto l=LayoutGuestTexture(d);
@@ -1240,7 +1250,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         deferred_color_clear[i]=source&&source->desc.depth_target;
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
     }
-    auto depth_binding_plan=has_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8]):nullptr;
+    const bool recreate_color_depth=std::ranges::any_of(color_depth_alias,[](bool value){return value;});
+    if(recreate_color_depth&&(depth_feedback||depth_attachment_snapshot))
+        throw std::runtime_error("Shared color/depth attachments with shader feedback need an ordered recreation plan");
+    auto depth_binding_plan=has_depth&&!recreate_color_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8]):nullptr;
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
@@ -1568,7 +1581,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     buffer.info.compression?buffer.FmaskAddress():0);
                 textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
             }
-            OwnImage(entry);
+            if(!retired_color_targets[i]){
+                if(color_depth_alias[i]){
+                    if(!textures_.OwnIndependentShaderImage(entry))
+                        throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
+                }else OwnImage(entry);
+            }
             if(replay_attachments.Beginning())textures_.SetBackingSamples(entry,state.pipeline.SampleDesc.Count,RecordingList());
             if(entry.texture.handle->GetDesc().SampleDesc.Count!=state.pipeline.SampleDesc.Count)
                 throw std::runtime_error("Native attachment fallback requires matching physical pipeline samples");
@@ -1614,6 +1632,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 depth_attachment_snapshot,depth_gpu_snapshot.handle?&depth_gpu_snapshot:nullptr,
                 false,false,GuestTextureCache::UploadPurpose::Binding,
                 stencil_gpu_snapshot.handle?&stencil_gpu_snapshot:nullptr);});
+            if(replay_attachments.Beginning())for(UINT i=0;i<target_count;++i)if(color_depth_alias[i]){
+                auto* color=targets[i];
+                if(!color||color==&entry||color->texture.handle==entry.texture.handle||
+                   color->gpu_owned||!color->logical_dirty||!entry.gpu_owned||!entry.buffer_alias_version)
+                    throw std::logic_error("Depth recreation did not retire the earlier color attachment owner");
+                retired_color_targets[i]=true;
+            }
             if(depth_binding_plan){
                 const auto requested=descriptions[8];descriptions[8]=entry.desc;
                 descriptions[8].first_mip=requested.first_mip;descriptions[8].first_layer=requested.first_layer;
@@ -1663,7 +1688,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 read_only_depth,read_only_stencil,
                 clear_depth,r.depth_clear,draw_clear_stencil,UINT8(r.stencil_clear)};
         }
-        for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
+        for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i==8||!retired_color_targets[i])&&
+            (i!=8||(write_depth_stencil&&!depth_attachment_snapshot))){
             OwnImage(*targets[i]);QueueLinearImageDownload(*targets[i]);
         }
         bindings.Prepare();
@@ -1865,7 +1891,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         // A recorded attachment writer changes original GpuModified history,
         // even when recreation copied a CPU-initialized (GpuModified0) source.
-        for(UINT i=0;i<target_count;++i)if(targets[i])targets[i]->NoteLogicalImageWrite();
+        for(UINT i=0;i<target_count;++i)if(targets[i]&&!retired_color_targets[i])targets[i]->NoteLogicalImageWrite();
         if(targets[8]&&write_depth_stencil&&(!depth_attachment_snapshot||depth_binding_plan))targets[8]->NoteLogicalImageWrite();
         if(std::getenv("SHADPS4_NATIVE_DISPLAY_CAPTURE")){
             static u64 writer{};const auto serial=++writer;
@@ -1884,7 +1910,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // A multipart caller records only the final attachment contents.
         if(final_submission){
             std::set<GuestTextureCache::Entry*> downloaded_targets;
-            for(UINT i=0;i<targets.size();++i)if(targets[i]&&!targets[i]->gpu_owned&&(i!=8||write_depth_stencil)&&
+            for(UINT i=0;i<targets.size();++i)if(targets[i]&&(i==8||!retired_color_targets[i])&&
+                !targets[i]->gpu_owned&&(i!=8||write_depth_stencil)&&
                 downloaded_targets.insert(targets[i]).second){
                 readbacks.push_back(std::make_unique<GuestImageReadback>(device_.Get(),*targets[i],RecordingList()));
                 readback_rows[i]=true;

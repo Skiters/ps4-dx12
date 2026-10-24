@@ -407,6 +407,8 @@ public:
     // color image interpretations. These are sources, never direct view reuse.
     Entry* FindIndependentUploadSource(const GuestTextureDesc&,const GuestTextureLayout&)const;
     static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
+    static bool CanRecreateColorDepthAttachments(const GuestTextureDesc&,const GuestTextureLayout&,
+        const GuestTextureDesc&,const GuestTextureLayout&);
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
     static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);
