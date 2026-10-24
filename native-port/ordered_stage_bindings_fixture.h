@@ -247,7 +247,7 @@ inline void RunOrderedBcWordStages(ID3D12Device* device,bool prefix=false,bool f
     rasterizer.ValidateDebugMessages();
 }
 
-inline void RunOrderedConvertedPackedStages(ID3D12Device* device,bool formatted_middle=false){
+inline void RunOrderedConvertedPackedStages(ID3D12Device* device,bool formatted_middle=false,bool color_seed=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
@@ -285,12 +285,14 @@ inline void RunOrderedConvertedPackedStages(ID3D12Device* device,bool formatted_
         throw std::runtime_error("Converted ordered-stage fixture unexpectedly downloaded I into B");});
 
     AmdGpu::Image sharp{};sharp.base_address=base>>8;sharp.width=sharp.height=sharp.pitch=31;
-    sharp.depth=0;sharp.type=u64(AmdGpu::ImageType::Color2D);sharp.data_format=9;sharp.num_format=1;
+    sharp.depth=0;sharp.type=u64(AmdGpu::ImageType::Color2D);sharp.data_format=color_seed?10:9;sharp.num_format=color_seed?4:1;
     sharp.tiling_index=13;sharp.dst_sel_x=4;sharp.dst_sel_y=5;sharp.dst_sel_z=6;sharp.dst_sel_w=7;
     auto sampled=DescribeGuestTexture(sharp);const auto sampled_layout=LayoutGuestTexture(sampled);
-    auto writable=sampled;writable.writable=true;const auto writable_layout=LayoutGuestTexture(writable);
+    auto writable=sampled;writable.writable=true;
+    if(color_seed){writable.data_format=4;writable.number_format=4;}
+    const auto writable_layout=LayoutGuestTexture(writable);
     require(sampled_layout.guest_bytes==writable_layout.guest_bytes&&
-        sampled_layout.expanded_bytes_per_pixel==16&&writable_layout.format==DXGI_FORMAT_R32_UINT&&
+        (color_seed||sampled_layout.expanded_bytes_per_pixel==16)&&writable_layout.format==DXGI_FORMAT_R32_UINT&&
         CompatibleGuestPackedStorage(sampled,writable),"Converted ordered-stage packed domain changed");
     require(sampled_layout.guest_bytes<=65536,"Converted ordered-stage image exceeds fixture allocation");
     std::vector<std::byte> initial(size_t(sampled_layout.guest_bytes),std::byte{0xa6});
@@ -302,8 +304,10 @@ inline void RunOrderedConvertedPackedStages(ID3D12Device* device,bool formatted_
         memcpy(initial.data()+offset,&old_word,4);memcpy(current.data()+offset,&new_word,4);
     }
     memcpy(memory.bytes,current.data(),current.size());
-    auto& seed=textures.Upload(sampled,initial,rasterizer.RecordingList(),rasterizer.CompletedFence(),
-        {},true,nullptr,true,true);
+    auto seed_desc=color_seed?writable:sampled;
+    if(color_seed){seed_desc.writable=false;seed_desc.render_target=true;}
+    auto& seed=textures.Upload(seed_desc,initial,rasterizer.RecordingList(),rasterizer.CompletedFence(),
+        {},!color_seed,nullptr,!color_seed,!color_seed);
     require(textures.Own(seed),"Converted ordered-stage seed could not retain I");
     std::vector<Rasterizer::ShaderBufferRequest> requests{{base,sampled_layout.guest_bytes,true,true,true}};
     std::vector<OrderedGuestBuffer> buffers{{false,false,false,0,4,sampled_layout.guest_bytes}};
@@ -462,6 +466,8 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device,bool color_views=
     RunOrderedWritableOwnershipAcquisition(device);
     RunOrderedConvertedPackedStages(device);
     RunOrderedConvertedPackedStages(device,true);
+    RunOrderedConvertedPackedStages(device,false,true);
+    RunOrderedConvertedPackedStages(device,true,true);
     RunOrderedBcWordStages(device);
     RunOrderedBcWordStages(device,true);
     RunOrderedBcWordStages(device,false,true);

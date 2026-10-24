@@ -98,6 +98,13 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(CompatibleGuestColorSubview(desc,layout,old.desc,old.layout)){
                 old.desc=desc;old.layout=layout;return;
             }
+            if(CompatibleGuestPackedStorage(old.desc,desc)){
+                // A cached CB can be the preceding I for a differently typed
+                // shader image. The packed transfer proves the full physical
+                // envelope even though the original owner has an RT role.
+                // Keep that source until its actual ordered bind, as for BC.
+                old.has_converted_views=true;return;
+            }
             if(CompatibleGuestBlockWordStorage(old.desc,old.layout,desc,layout)){
                 // The BC allocation owns the complete mip chain. Its terminal
                 // writable word view is a converted prefix, not an unrelated
