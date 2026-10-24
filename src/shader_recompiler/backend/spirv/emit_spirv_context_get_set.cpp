@@ -315,6 +315,8 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
     };
     if (IR::IsParam(attr)) {
         const u32 attr_index{u32(attr) - u32(IR::Attribute::Param0)};
+        if(ctx.hw_stage==HwStage::Vertex&&ctx.runtime_info.hw.vs.native_polygon_point_transport&&
+           !(ctx.runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<attr_index)))return;
         if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture){
             const auto& output=ctx.output_params[attr_index];
             if(output.num_components)op_store(ctx.OpAccessChain(output.pointer_type,output.id,ctx.ConstU32(element)));

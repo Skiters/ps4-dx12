@@ -702,7 +702,8 @@ void EmitContext::DefineVertexBlock() {
         (info.stores.GetAny(IR::Attribute::PointSize)||info.stores.GetAny(IR::Attribute::RenderTargetIndex)||
          info.stores.GetAny(IR::Attribute::ViewportIndex));
     if(polygon_misc)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePolygonPointMiscLocation(info,
-        sw_stage==SwStage::Vertex&&profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance)));
+        sw_stage==SwStage::Vertex&&profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
+        runtime_info.hw.vs.native_polygon_point_live_parameters));
     else if(native_vs_points)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePointMiscLocation(info,
         profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
         runtime_info.sw.vs.native_point_live_parameters,runtime_info.sw.vs.native_point_outputs));
@@ -739,6 +740,8 @@ void EmitContext::DefineOutputs() {
             u32 num_attrs = 0u;
             for (u32 i = 0; i < IR::NumParams; i++) {
                 const IR::Attribute param{IR::Attribute::Param0 + i};
+                if(hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
+                   !(runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<i)))continue;
                 const bool compact_points=hw_stage==HwStage::Vertex&&runtime_info.sw.vs.native_point_expansion;
                 const auto width=NativePointOutputWidth(runtime_info.sw.vs.native_point_outputs,i);
                 if (compact_points?!width:!info.stores.GetAny(param)) {
@@ -757,7 +760,7 @@ void EmitContext::DefineOutputs() {
                 clip_distances = Id{DefineOutput(F32[MaxEmulatedClipDistances], 0)};
                 // Point liveness can leave sparse parameters. The separate
                 // clip vector must not overwrite a live parameter at num_attrs.
-                if(!runtime_info.sw.vs.native_point_expansion)
+                if(!runtime_info.sw.vs.native_point_expansion&&!runtime_info.hw.vs.native_polygon_point_transport)
                     output_params[num_attrs] = GetAttributeInfo(
                         AmdGpu::NumberFormat::Float, clip_distances, MaxEmulatedClipDistances, true);
                 Name(clip_distances, fmt::format("cldist_attr{}", 0));
@@ -806,6 +809,8 @@ void EmitContext::DefineOutputs() {
         DefineVertexBlock();
         for (u32 i = 0; i < IR::NumParams; i++) {
             const IR::Attribute param{IR::Attribute::Param0 + i};
+            if(hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
+               !(runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<i)))continue;
             if (!info.stores.GetAny(param)) {
                 continue;
             }

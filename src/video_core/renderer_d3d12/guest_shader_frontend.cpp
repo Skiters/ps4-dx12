@@ -48,6 +48,16 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     auto runtime = VideoCore::BuildGuestRuntimeInfo(regs, compute, hardware, logical, context);
     if(hardware==Shader::HwStage::Vertex)
         runtime.hw.vs.native_polygon_point_transport=GuestPolygonPointGeometryState(regs);
+    if(hardware==Shader::HwStage::Vertex&&runtime.hw.vs.native_polygon_point_transport){
+        const auto* fragment=context.stage_infos[u32(Shader::SwStage::Fragment)];
+        if(regs.num_interp>regs.ps_inputs.size())throw std::runtime_error("Invalid polygon fragment input count");
+        if(fragment)for(u32 i=0;i<regs.num_interp;++i){
+            const auto& input=regs.ps_inputs[i];
+            if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||(input.use_default&&!input.flat_shade))continue;
+            if(input.input_offset>=32)throw std::runtime_error("Invalid polygon fragment parameter");
+            runtime.hw.vs.native_polygon_point_live_parameters|=1u<<input.input_offset;
+        }
+    }
     if(logical==Shader::SwStage::Fragment){
         ConfigureOrderedColorTargets(runtime, regs,profile_.native_alpha_blend_factor);
         runtime.hw.fs.native_point_input_compaction=GuestPolygonPointGeometryState(regs)||

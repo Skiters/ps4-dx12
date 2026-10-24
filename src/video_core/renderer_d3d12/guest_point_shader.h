@@ -31,13 +31,26 @@ inline u32 NativePointMiscLocation(const Shader::Info& vertex,bool emulated_clip
     }
     throw Shader::NativePointCapture::Required("Native point interface needs a free generic varying slot");
 }
-inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip){
-    try{return NativePointMiscLocation(vertex,emulated_clip);}
+inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip,u32 live_parameters=~0u){
+    try{return NativePointMiscLocation(vertex,emulated_clip,live_parameters);}
     catch(const Shader::NativePointCapture::Required&){
         // Ordinary point capture consumes an original point-output GS. It
         // cannot be substituted for this polygon producer when slots run out.
         throw std::runtime_error("Polygon point payload needs a buffered varying transport");
     }
+}
+inline u32 NativePolygonPointLiveParameters(const Shader::Info* fragment,const Shader::HwFragmentRuntimeInfo& fs){
+    if(!fragment)return 0;
+    if(fs.num_inputs<u32(fs.clip_distance_emulation)||fs.num_inputs-u32(fs.clip_distance_emulation)>fs.inputs.size())
+        throw std::invalid_argument("Invalid polygon fragment input count");
+    u32 mask{};
+    for(u32 i=0;i<fs.num_inputs-u32(fs.clip_distance_emulation);++i){
+        const auto& input=fs.inputs[i];
+        if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||input.IsDefault())continue;
+        if(input.param_index>=32)throw std::invalid_argument("Invalid polygon fragment parameter");
+        mask|=1u<<input.param_index;
+    }
+    return mask;
 }
 std::vector<u32> EmitGuestPointGeometry(const Shader::Info&,bool clip_depth,bool emulated_clip=false,u32 live_parameters=~0u,
     std::span<const Shader::NativePointOutput> transport={});

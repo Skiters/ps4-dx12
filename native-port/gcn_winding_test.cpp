@@ -134,6 +134,26 @@ int main(int argc,char** argv){try{
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Qualified polygon transport failed signed DXIL: "+compiled.diagnostics);
         }
+        for(bool emulated_clip:{false,true}){
+            Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            for(u32 p=0;p<32;++p)for(u32 c=0;c<4;++c)vertex.stores.Set(Shader::IR::Attribute::Param0+p,c);
+            vertex.stores.Set(Shader::IR::Attribute::PointSize,0);
+            const u32 live=emulated_clip?30:31;fs.num_inputs=1;fs.native_point_input_compaction=true;
+            fs.inputs[0].param_index=u8(live);fragment.loads.Set(Shader::IR::Attribute::Param0,0);
+            fragment.fs_interpolation[0].primary=Shader::Qualifier::Smooth;
+            const auto mask=NativePolygonPointLiveParameters(&fragment,fs);
+            if(mask!=(1u<<live)||NativePolygonPointMiscLocation(vertex,emulated_clip,mask)!=u32(emulated_clip))
+                throw std::runtime_error("Dead polygon exports consumed the private misc slot");
+            bool rejected{};try{(void)NativePolygonPointMiscLocation(vertex,emulated_clip,~0u);}
+            catch(const std::runtime_error&){rejected=true;}
+            if(!rejected)throw std::runtime_error("Fully live polygon interface silently overwrote a varying");
+            GuestPolygonPointConfig config;config.emulated_clip=emulated_clip;
+            const auto words=EmitGuestPolygonPoints(vertex,&fragment,fs,config);
+            Shader::Backend::DX12::SpirvConvertOptions options{};options.stage=Shader::Backend::DX12::SpirvStage::Geometry;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Sparse polygon payload failed signed DXIL: "+compiled.diagnostics);
+        }
         for(bool floating:{false,true})for(bool clip:{false,true}){
             Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
             GuestPolygonPointConfig config;config.depth_bias_enabled=true;config.float_depth=floating;

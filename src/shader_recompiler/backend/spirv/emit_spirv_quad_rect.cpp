@@ -475,7 +475,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto uint4=ctx.TypeVector(u32_type,4);
     if(sized||routed_viewport||routed_layer)
         input_misc=ctx.Variable(ctx.TypeArray(uint4,three),spv::StorageClass::Input,
-            NativePolygonPointMiscLocation(vertex,config.emulated_clip));
+            NativePolygonPointMiscLocation(vertex,config.emulated_clip,NativePolygonPointLiveParameters(fragment,fs)));
     if(routed_viewport){ctx.AddCapability(spv::Capability::MultiViewport);
         output_viewport=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);}
     if(routed_layer)output_layer=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
