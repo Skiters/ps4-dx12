@@ -1130,6 +1130,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<bool,8> deferred_color_clear{};
     std::array<bool,8> color_feedback{};
     std::array<bool,8> color_storage_feedback{};
+    std::array<bool,8> color_buffer_overlap{},exact_color_buffer_writer{};
+    std::array<std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan>,8> color_binding_plans{};
     std::array<bool,8> color_depth_alias{},separate_color_depth{},retired_color_targets{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
     std::array<DXGI_FORMAT,8> formats{};UINT target_count{};
@@ -1273,8 +1275,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(!sharp.base_address||!bytes)continue;
         exact_depth_buffer_writer|=has_depth&&sharp.base_address==descriptions[8].address;
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN&&
-            Overlap(sharp.base_address,bytes,descriptions[i].address,layouts[i].guest_bytes))
-            throw std::runtime_error("Native simultaneous buffer/color-attachment writes require shared ownership");
+            Overlap(sharp.base_address,bytes,descriptions[i].address,layouts[i].guest_bytes)){
+            if(!page_watch_||descriptions[i].samples!=1||color_feedback[i]||color_storage_feedback[i]||
+               color_depth_alias[i]||separate_color_depth[i])
+                throw std::runtime_error("Simultaneous color/buffer writes require an independent single-sample attachment without competing images");
+            color_buffer_overlap[i]=true;
+            exact_color_buffer_writer[i]|=sharp.base_address==descriptions[i].address;
+        }
         record_depth_writer(sharp.base_address,bytes,false);
     }
     for(const auto& stage:stages)for(const auto& image:stage.info->images)if(image.is_written){
@@ -1294,7 +1301,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // publish its future native class or metadata during physical prewarm.
         auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
         if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
-        deferred_color_clear[i]=color_depth_alias[i]||separate_color_depth[i]||
+        deferred_color_clear[i]=color_buffer_overlap[i]||color_depth_alias[i]||separate_color_depth[i]||
             (source&&(source->desc.depth_target||source->desc.levels<descriptions[i].levels||
                 source->desc.layers<descriptions[i].layers));
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
@@ -1318,6 +1325,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     // binding invalidates its old I, rather than our earlier native snapshot.
     auto depth_binding_plan=has_depth&&!recreate_color_depth?textures_.PlanCachedImageBinding(descriptions[8],layouts[8],
         false,page_watch_&&exact_depth_buffer_writer&&descriptions[8].samples==1):nullptr;
+    // Original buffer binding dirties exact-base I before BeginRendering
+    // refreshes the color image. Reserve B now, but select its contents only
+    // after shader binding; interior writes retain the still-current I.
+    for(UINT i=0;i<target_count;++i)if(color_buffer_overlap[i])
+        color_binding_plans[i]=textures_.PlanCachedImageBinding(descriptions[i],layouts[i],true,
+            exact_color_buffer_writer[i]);
     Resource depth_gpu_snapshot,stencil_gpu_snapshot;
     bool depth_buffer_source=false,stencil_buffer_source=false;
     std::vector<std::byte> depth_guest_snapshot,stencil_guest_snapshot;
@@ -1678,7 +1691,8 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         if(replay_prepared)return;
         if(index_view.resource)bindings.Retain(index_view.resource->handle.Get());
         for(UINT i=0;i<target_count;++i)if(formats[i]!=DXGI_FORMAT_UNKNOWN) {
-            auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return feedback_colors[i]?*feedback_colors[i]:textures_.Upload(descriptions[i],
+            auto& entry=replay_attachments.Select(textures_,i,[&]() -> GuestTextureCache::Entry& {return color_binding_plans[i]?
+                textures_.BindPlannedImage(*color_binding_plans[i],RecordingList(),CompletedFence()):feedback_colors[i]?*feedback_colors[i]:textures_.Upload(descriptions[i],
                 std::span(reinterpret_cast<const std::byte*>(descriptions[i].address),size_t(layouts[i].guest_bytes)),
                 RecordingList(),CompletedFence());});
             bindings.RetainAllocation(replay_attachments.BindingPin(i));bindings.RetainAllocation(entry.texture.allocation);
@@ -1700,6 +1714,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 if(color_depth_alias[i]||separate_color_depth[i]){
                     if(!textures_.OwnIndependentShaderImage(entry))
                         throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
+                }else if(color_buffer_overlap[i]){
+                    if(!OwnIndependentImage(entry))
+                        throw std::runtime_error("Color attachment cannot retain independent buffer/image writes");
                 }else OwnImage(entry);
             }
             targets[i]=&entry;

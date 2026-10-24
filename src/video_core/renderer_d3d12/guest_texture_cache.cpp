@@ -2401,6 +2401,8 @@ GuestTextureCache::Entry* GuestTextureCache::FindImageRecreationBindingSource(co
 std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> GuestTextureCache::PlanCachedImageBinding(
     const GuestTextureDesc& target,const GuestTextureLayout& layout,bool current_buffer_source,bool pending_exact_buffer_write){
     auto* source=FindImageRecreationBindingSource(target,layout);
+    if(!source&&target.render_target&&(current_buffer_source||pending_exact_buffer_write))
+        source=FindValidIndependentImage(target,layout);
     if(!source&&pending_exact_buffer_write)source=FindDepthViewParent(target,layout);
     if(!source&&!current_buffer_source&&!pending_exact_buffer_write)return {};
     // A CPU-watched current I remains authoritative after an interior B write.
@@ -2412,7 +2414,8 @@ std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> GuestTextureCac
         for(auto it=first;it!=last;++it){const auto& cached=*it->second;
             if(cached.cpu_watched&&cached.cached_native_current&&!cached.logical_dirty&&
                MatchesGuestMipLayout(cached.layout,layout)&&
-               (CompatibleGuestShaderStorage(cached.desc,target)||CanBindReadonlyWordView(cached,target)))return {};
+               (CompatibleGuestShaderStorage(cached.desc,target)||CanBindReadonlyWordView(cached,target)||
+                (target.render_target&&MatchesGuestUploadStorage(cached,target,layout))))return {};
         }
     }
     if(!prepare_image_buffer_||!current_image_buffer_||!CanUploadGpuSnapshot(target,layout,target.writable))
@@ -2442,6 +2445,17 @@ GuestTextureCache::Entry& GuestTextureCache::BindPlannedImage(const CachedImageB
     const auto target=ResolveDepthViewStorage(plan.storage_);const auto layout=LayoutGuestTexture(target);
     if(!CanUploadGpuSnapshot(target,layout,target.writable))throw std::runtime_error("Planned image binding lost its exact transfer domain");
     auto* parent=FindDepthViewParent(target,layout);
+    if(!parent&&target.render_target){
+        // Dirtying changes contents, not the current color class or CMASK
+        // owner. Keep its metadata and allocation lifetime across B refresh.
+        auto [first,last]=address_index_.equal_range(target.address);
+        for(auto it=first;it!=last;++it){auto* candidate=it->second;
+            if(!candidate->cached_native_current||!MatchesGuestUploadStorage(*candidate,target,layout))continue;
+            if(parent&&parent->texture.handle.Get()!=candidate->texture.handle.Get())
+                throw std::runtime_error("Ambiguous current color binding parent");
+            parent=candidate;
+        }
+    }
     if(FindIndependentUploadSource(target,layout)||FindCachedDepthRecreationSource(target,layout)||
        (parent&&!parent->logical_dirty&&(parent->gpu_owned||parent->cpu_watched))){
         const auto depth=std::span(reinterpret_cast<const std::byte*>(target.address),size_t(layout.guest_bytes));
@@ -2449,7 +2463,7 @@ GuestTextureCache::Entry& GuestTextureCache::BindPlannedImage(const CachedImageB
             size_t(LayoutGuestTexture(DescribeGuestStencil(target)).guest_bytes)):std::span<const std::byte>{};
         auto& result=Upload(target,depth,list,completed,stencil);
         if(!result.gpu_owned&&(!acquire_independent_||!acquire_independent_(result)))
-            throw std::runtime_error("Actual planned depth binding cannot retain I ownership");
+            throw std::runtime_error("Actual planned image binding cannot retain I ownership");
         return result;
     }
     auto parent_pin=parent?PinBinding(*parent):std::shared_ptr<void>{};
@@ -2462,7 +2476,7 @@ GuestTextureCache::Entry& GuestTextureCache::BindPlannedImage(const CachedImageB
     auto& result=Upload(target,{},list,completed,{},true,&depth.snapshot,target.writable,true,
         UploadPurpose::Preparation,stencil.snapshot.handle?&stencil.snapshot:nullptr);
     if(!acquire_independent_||!acquire_independent_(result))
-        throw std::runtime_error("Actual current-B depth binding cannot retain I ownership");
+        throw std::runtime_error("Actual current-B image binding cannot retain I ownership");
     if(parent&&parent!=&result){
         if(retire_independent_)retire_independent_(*parent);parent->MarkLogicalDirty();
         result.htile_initial_mask=parent->htile_initial_mask;

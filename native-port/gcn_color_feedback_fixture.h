@@ -14,10 +14,17 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1){
+    UINT converted_samples=1,UINT buffer_writer=0){
     if(converted_samples!=1&&(!converted_color||converted_samples!=4))
         throw std::invalid_argument("Converted feedback fixture requires one or four samples");
-    alignas(256) std::array<u32,128> seed{},left{},right{};
+    alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
+    if(buffer_writer){
+        std::vector<u32> words{0xBEEB03FF,15};
+        for(u32 i=0;i<4;++i){words.push_back(0xe0302000U|i*4);words.push_back((128U<<24)|((4+i)<<8));}
+        words.insert(words.end(),{0xbf8c007f,0x7e020280,0xe0700000,0x80010100,
+            0xf80008cf,0x07060504,0xbf810000});
+        initialize(writer_vertex,words,0x434f4c4255465601ULL);
+    }
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
     if(shared_ms)initialize(seed,{0xBEEB03FF,15,
@@ -84,6 +91,12 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     input.data_format=4;input.num_format=4;
     input.dst_sel_x=4;input.dst_sel_y=5;input.dst_sel_z=6;input.dst_sel_w=7;
     memcpy(regs.vs_program.user_data.data(),&input,sizeof(input));
+    AmdGpu::Buffer writer=input;writer.stride=4;writer.num_records=1;writer.base_address=base+16384;
+    if(buffer_writer){
+        regs.vs_program.address=reinterpret_cast<u64>(writer_vertex.data())>>8;
+        regs.vs_program.settings.num_user_regs=8;
+        memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
+    }
     rasterizer.InvalidateMemory(base,65536);memset(memory,0xa5,65536);
     const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
@@ -123,6 +136,41 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         cb.base_address=u32((base+16384)>>8);
     }
     draw(seed,false);
+    if(buffer_writer){
+        if(!raw_domain)throw std::runtime_error("Color writer fixture requires an independent buffer");
+        // First draw made I=1 and wrote only the real zero DWORD to B. A second
+        // exact-base writer invalidates I before refresh, but an interior writer
+        // must retain I. The left half is not redrawn, so these outcomes differ.
+        if(buffer_writer==2)writer.base_address+=4;
+        memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
+        regs.generic_scissor.top_left_x=4;draw(seed,false);
+        regs.generic_scissor.top_left_x=0;
+        writer.base_address=base+57344;
+        memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
+        cb.base_address=u32((base+61440)>>8);
+        const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
+        draw(left,true);
+        const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!raw.resource||raw.bytes!=raw_bytes)throw std::runtime_error("Color writer lost independent B");
+        auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        rasterizer.RetainUntilFinish([rb,lease=raw.allocation](u64){});const auto prior=raw.resource->State(0);
+        raw.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,raw.resource->handle.Get(),raw.offset,raw_bytes);
+        raw.resource->Transition(rasterizer.RecordingList(),prior);rasterizer.Finish();
+        auto expected_b=physical;memset(expected_b.data()+16384,0,buffer_writer==2?8:4);
+        void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
+        const bool preserved=memcmp(bytes,expected_b.data()+16384,raw_bytes)==0;
+        D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+        if(!preserved)throw std::runtime_error("Color attachment overwrote the shader buffer domain");
+        rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+        auto expected=physical;const float value=buffer_writer==2?.5f:0.f;
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+            memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
+        rasterizer.ValidateDebugMessages();
+        if(memcmp(backing,expected.data(),65536))
+            throw std::runtime_error("Color writer selected stale I/B or published unrelated bytes");
+        return;
+    }
     if(converted_color){
         if(!raw_domain||!CompatibleGuestPackedStorage(target,sampled))
             throw std::runtime_error("Converted feedback fixture has no exact packed mapping");
