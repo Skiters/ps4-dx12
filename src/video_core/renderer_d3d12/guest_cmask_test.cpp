@@ -598,9 +598,10 @@ int main(){try {
     std::fill(metadata.begin(),metadata.begin()+2048,std::byte{0});
     Require(!GuestColorClearPending(b,desc,layout,metadata));
     std::fill(metadata.begin()+2048,metadata.begin()+4096,std::byte{0xff});
-    for(uint32_t compressed=0;compressed<2;++compressed)
+    for(uint32_t compressed=0;compressed<4;++compressed)
     for(uint32_t log2_samples=1;log2_samples<=4;++log2_samples){
-        auto msaa=b;msaa.attrib.num_fragments_log2=log2_samples;msaa.info.compression=compressed;
+        auto msaa=b;msaa.attrib.num_fragments_log2=log2_samples;
+        msaa.info.compression=compressed&1;msaa.info.dcc_enable=(compressed>>1)&1;
         const auto msaa_desc=DescribeGuestColorBuffer(msaa,extent);
         const auto msaa_layout=LayoutGuestTexture(msaa_desc);
         std::vector<std::byte> samples(msaa_layout.guest_bytes,std::byte{0xee});
@@ -619,6 +620,7 @@ int main(){try {
         Require(!MaterializeGuestColorClear(msaa,msaa_desc,msaa_layout,samples,masks));
         std::fill(samples.begin(),samples.end(),std::byte{0xee});
         std::fill(masks.begin()+2048,masks.begin()+4096,std::byte{0});
+        msaa.info.cmask_addr_type=1; // Uniform TC-compatible clears need no tile-address decoder.
         Require(MaterializeGuestColorClear(msaa,msaa_desc,msaa_layout,samples,masks));
         Require(std::count_if(samples.begin(),samples.end(),[](auto value){return value!=std::byte{0xee};})==
             17*9*4*msaa_desc.samples);
@@ -626,6 +628,10 @@ int main(){try {
         for(size_t offset=0;offset<decoded.size();offset+=4){
             uint32_t actual{};memcpy(&actual,decoded.data()+offset,4);Require(actual==msaa.clear_word0);
         }
+        masks[2048]=std::byte{0xf0};const auto saved_samples=samples,saved_masks=masks;
+        bool rejected{};try{MaterializeGuestColorClear(msaa,msaa_desc,msaa_layout,samples,masks);}
+        catch(const std::runtime_error&){rejected=true;}
+        Require(rejected&&samples==saved_samples&&masks==saved_masks);
     }
     ComPtr<IDXGIFactory6> factory; Check(DX12_API_CALL(CreateDXGIFactory2(0,IID_PPV_ARGS(&factory))));
     ComPtr<ID3D12Device> device;

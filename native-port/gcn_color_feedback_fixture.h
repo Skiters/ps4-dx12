@@ -48,7 +48,10 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
     if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
-    if(compressed_color){cb.info.compression=1;cb.fmask_base_address=u32((base+57344)>>8);}
+    if(compressed_color){
+        cb.info.compression=cb.info.dcc_enable=1;cb.info.cmask_addr_type=1;
+        cb.fmask_base_address=u32((base+57344)>>8);
+    }
     const auto target=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;

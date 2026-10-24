@@ -791,7 +791,6 @@ bool GuestRasterizer::MaterializeOwnedColorClear(const AmdGpu::ColorBuffer& b,
        !clear||d.UsesRaw32()||
        d.data_format!=clear->data_format||d.number_format!=clear->number_format||
        l.bytes_per_pixel!=clear->pixel_bytes||l.expanded_bytes_per_pixel||l.block_extent!=1||
-       b.info.cmask_addr_type||b.info.dcc_enable||
        !has_backing_(d.address,l.guest_bytes))return false;
     const auto meta_bytes=GuestCmaskBytes(b),slice_bytes=meta_bytes/b.NumSlices();
     if(metadata.size()!=meta_bytes||b.BaseSlice()>=b.NumSlices()||!d.view_layers||
