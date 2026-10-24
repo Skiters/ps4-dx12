@@ -96,7 +96,8 @@ int main(int argc,char** argv){try{
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool color_feedback=mode=="color-feedback-owned"||mode=="color-feedback-buffer-owned"||
-        mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned";
+        mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned"||
+        mode=="color-independent-class-owned";
     const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||
         mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
@@ -209,8 +210,9 @@ int main(int argc,char** argv){try{
     rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
     if(color_feedback){
         RunColorFeedbackGcnFixture(device.Get(),rasterizer,gpu,plain_vertex,memory,backing,base,initialize,
-            mode=="color-feedback-buffer-owned"||mode=="color-feedback-uint-buffer-owned",
-            mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned",mode=="color-depth-shared-owned");
+            mode=="color-feedback-buffer-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-independent-class-owned",
+            mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned",mode=="color-depth-shared-owned",
+            mode=="color-independent-class-owned");
     }else if(snorm_color){
         if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned")
             RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned",mode=="polygon-points-depth-clamp-owned");

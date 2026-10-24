@@ -409,6 +409,8 @@ public:
     static bool CanUploadGpuSnapshot(const GuestTextureDesc&,const GuestTextureLayout&,bool writable_snapshot=false);
     static bool CanRecreateColorDepthAttachments(const GuestTextureDesc&,const GuestTextureLayout&,
         const GuestTextureDesc&,const GuestTextureLayout&);
+    static bool SeparateColorSampledImages(const GuestTextureDesc&,const GuestTextureLayout&,
+        const GuestTextureDesc&,const GuestTextureLayout&);
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
     static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);

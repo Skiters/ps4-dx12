@@ -2187,6 +2187,16 @@ bool GuestTextureCache::CanRecreateColorDepthAttachments(const GuestTextureDesc&
         depth.depth_target&&!depth.render_target&&!depth.writable&&color.samples==1&&depth.samples==1&&
         color.address==depth.address&&CanMapIndependentDepthImage(color,color_layout,depth,depth_layout);
 }
+bool GuestTextureCache::SeparateColorSampledImages(const GuestTextureDesc& color,
+    const GuestTextureLayout& color_layout,const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
+    // ResolveOverlap treats equal addresses with different BlockDim or total
+    // bits/sample as pool reuse, before format/depth conversion. Physical byte
+    // overlap alone must not publish the old attachment into the new image's B.
+    return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
+        !sampled.writable&&!sampled.render_target&&!sampled.depth_target&&!sampled.stencil_address&&
+        color.address==sampled.address&&color_layout.block_extent&&sampled_layout.block_extent&&
+        !MatchesReferenceOverlapClass(color,color_layout,sampled,sampled_layout);
+}
 bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
     if((al.block_extent==4)==(bl.block_extent==4))return false;
@@ -3010,7 +3020,7 @@ GuestTextureCache::Entry& GuestTextureCache::UploadVersion(const GuestTextureDes
                 // be handled/proved by the normal subresource/transfer path.
                 continue;
             }
-            if(existing->desc.address==d.address&&(existing->desc.depth_target||d.depth_target)&&
+            if(existing->desc.address==d.address&&
                !MatchesReferenceOverlapClass(existing->desc,existing->layout,d,layout))continue;
             const bool private_block_view=MatchesReadonlyBlockMipPrefix(existing->desc,existing->layout,d,layout);
             const bool partial_block=!MatchesReferenceBlockImage(existing->desc,existing->layout,d,layout)&&

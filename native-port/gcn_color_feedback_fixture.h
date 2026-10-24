@@ -11,7 +11,8 @@ namespace NativeDX12 {
 template<class Initialize>
 void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
-    const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false){
+    const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
+    bool independent_class=false){
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -45,12 +46,20 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
     image.type=u64(AmdGpu::ImageType::Color2D);image.width=image.height=7;image.pitch=15;
+    if(independent_class)image.pitch=31;
     // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
     // the original FLOAT attachment bits, not numerically convert the texel.
     image.data_format=4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
     const auto sampled=DescribeGuestTexture(image);
-    if(!CompatibleGuestColorSampledMapping(target,layout,sampled,LayoutGuestTexture(sampled)))
+    const auto sampled_layout=LayoutGuestTexture(sampled);
+    if(independent_class){
+        if(!raw_domain||!GuestTextureCache::SeparateColorSampledImages(target,layout,sampled,sampled_layout))
+            throw std::runtime_error("Independent color fixture lost its different BlockDim class");
+        auto same=sampled;same.pitch=target.pitch;
+        if(GuestTextureCache::SeparateColorSampledImages(target,layout,same,LayoutGuestTexture(same)))
+            throw std::runtime_error("Compatible feedback was misclassified as independent pool reuse");
+    }else if(!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
         throw std::runtime_error("Feedback fixture target/sample physical mapping differs");
     AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
     input.data_format=4;input.num_format=4;
@@ -59,6 +68,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     rasterizer.InvalidateMemory(base,65536);memset(memory,0xa5,65536);
     const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
+    if(independent_class){const float source=.75f;
+        memcpy(memory+16384+GuestPixelOffset(sampled,sampled_layout,0,0,0,0),&source,4);}
     std::vector<std::byte> physical(backing,backing+65536);
     // A large original index sharp selects resident B rather than the clean
     // <=16KiB private CPU stream. Establish it before any image writes.
@@ -78,6 +89,37 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             throw std::runtime_error("Feedback draw published physical CPU bytes before explicit readback");
     };
     draw(seed,false);
+    if(independent_class){
+        // I_color now contains1, physical B still contains.75. The distinct
+        // image class must sample B, so the next CB write is.375, never.5.
+        draw(left,true);
+        cb.base_address=u32((base+61440)>>8);image.pitch=15;
+        const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
+        const auto probe_layout=LayoutGuestTexture(probe);
+        draw(left,true); // Return to the preserved CB class: .375*.5=.1875.
+        auto raw_readback=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const auto current_b=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!current_b.resource||current_b.bytes!=raw_bytes)throw std::runtime_error("Independent color lost physical B");
+        rasterizer.RetainUntilFinish([raw_readback,lease=current_b.allocation](u64){});
+        const auto previous=current_b.resource->State(0);
+        current_b.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(raw_readback.handle.Get(),0,
+            current_b.resource->handle.Get(),current_b.offset,raw_bytes);
+        current_b.resource->Transition(rasterizer.RecordingList(),previous);
+        rasterizer.Finish();void* bytes{};D3D12_RANGE range{0,raw_bytes};
+        Check(raw_readback.handle->Map(0,&range,&bytes));
+        const bool preserved=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+        D3D12_RANGE none{};raw_readback.handle->Unmap(0,&none);
+        if(!preserved)throw std::runtime_error("Independent color class replaced physical B with attachment data");
+        rasterizer.ReadMemory(probe.address,probe_layout.guest_bytes);rasterizer.Finish();
+        auto expected=physical;const float result=.1875f;
+        for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
+            memcpy(expected.data()+61440+GuestPixelOffset(probe,probe_layout,0,0,x,y),&result,4);
+        rasterizer.ValidateDebugMessages();
+        if(memcmp(backing,expected.data(),65536))
+            throw std::runtime_error("Distinct color images lost B/I separation, cached contents or padding");
+        return;
+    }
     if(shared_depth){
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;

@@ -1135,7 +1135,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const bool disjoint=!(ordered_mask&(1u<<i))&&DisjointGuestColorSampledViews(descriptions[i],layouts[i],d,l);
                 if(image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes))
                     color_storage_feedback[i]=true;
-                if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
+                const bool separate=!image.is_written&&
+                    GuestTextureCache::SeparateColorSampledImages(descriptions[i],layouts[i],d,l);
+                if(!image.is_written&&!disjoint&&!separate&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_feedback[i]=true;
                     auto view=d;auto requested=l;
                     // Use the same proved parent coordinates as the shader
