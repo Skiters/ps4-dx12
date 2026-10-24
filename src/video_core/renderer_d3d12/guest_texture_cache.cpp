@@ -2511,18 +2511,18 @@ GuestTextureDesc GuestTextureCache::GrowColorAttachmentStorage(const GuestTextur
     if(!target.render_target||sampled.render_target||target.levels>=sampled.levels||
        target.layers!=sampled.layers||target.samples!=1||sampled.samples!=1||
        target.writable||sampled.writable)return target;
-    const auto small=LayoutGuestTexture(target),large=LayoutGuestTexture(sampled);
-    if(!CompatibleGuestColorSubview(sampled,large,target,small))return target;
+    const auto prefix_layout=LayoutGuestTexture(target),full_layout=LayoutGuestTexture(sampled);
+    if(!CompatibleGuestColorSubview(sampled,full_layout,target,prefix_layout))return target;
     // Identical layers keep the old mip-major prefix at the same guest byte
     // offsets. Newly exposed mip bytes are initialized from independent B.
     for(UINT mip=0;mip<target.levels;++mip)
-        if(small.mips[mip].offset!=large.mips[mip].offset)return target;
+        if(prefix_layout.mips[mip].offset!=full_layout.mips[mip].offset)return target;
     auto storage=sampled;storage.render_target=true;
     storage.data_format=target.data_format;storage.number_format=target.number_format;
     storage.native_raw32=target.native_raw32;storage.native_packed10_raw=target.native_packed10_raw;
     storage.first_mip=target.first_mip;storage.first_layer=target.first_layer;
     storage.view_layers=target.view_layers;storage.min_lod=target.min_lod;storage.swizzle=target.swizzle;
-    if(!MatchesGuestMipLayout(large,LayoutGuestTexture(storage)))return target;
+    if(!MatchesGuestMipLayout(full_layout,LayoutGuestTexture(storage)))return target;
     return storage;
 }
 GuestTextureDesc GuestTextureCache::ResolveDepthViewStorage(const GuestTextureDesc& requested)const{
