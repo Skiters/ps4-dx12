@@ -872,7 +872,8 @@ int main(int argc,char** argv){try{
     ComPtr<ID3D12Device> device;Check(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_12_0,IID_PPV_ARGS(&device)));
     ReentrantSubmission(device.Get());
     if(argc>1&&(std::string_view(argv[1])=="physical-proof"||std::string_view(argv[1])=="unaligned-proof"||
-        std::string_view(argv[1])=="cpu-window"||std::string_view(argv[1])=="frame-readback"||std::string_view(argv[1])=="indirect-arguments")){
+        std::string_view(argv[1])=="cpu-window"||std::string_view(argv[1])=="frame-readback"||std::string_view(argv[1])=="indirect-arguments"||
+        std::string_view(argv[1])=="buffer-envelope")){
         const bool indirect=std::string_view(argv[1])=="indirect-arguments";
         const bool cpu_window=std::string_view(argv[1])=="cpu-window"||indirect;const u64 allocation_bytes=cpu_window?1024*1024:65536;
         HANDLE section=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,DWORD(allocation_bytes),nullptr);
@@ -883,6 +884,7 @@ int main(int argc,char** argv){try{
         Require(guest&&physical,"Physical proof aliases");SCOPE_EXIT {UnmapViewOfFile(guest);UnmapViewOfFile(physical);};
         memset(physical,0x4d,SIZE_T(allocation_bytes));
         if(indirect)IndirectArguments(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
+        else if(std::string_view(argv[1])=="buffer-envelope")RunBufferEnvelopeFixture<Fixture>(device.Get(),physical,reinterpret_cast<VAddr>(guest),allocation_bytes);
         else if(std::string_view(argv[1])=="frame-readback")FrameBufferReadback(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else if(cpu_window)CpuDownloadWindow(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
         else if(std::string_view(argv[1])=="unaligned-proof")UnalignedPageWitness(device.Get(),guest,physical,reinterpret_cast<VAddr>(guest));
