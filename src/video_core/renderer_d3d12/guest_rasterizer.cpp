@@ -237,8 +237,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
              ((desc.data_format==4||desc.data_format==11||desc.data_format==13||desc.data_format==14)&&
               (desc.number_format==4||desc.number_format==5||desc.number_format==7))||
              ((desc.data_format==1||desc.data_format==3||desc.data_format==10)&&
-              (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||
-               (desc.data_format==10&&desc.number_format==9)))||
+              (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||desc.number_format==9))||
              ((desc.data_format==2||desc.data_format==5||desc.data_format==12)&&
               (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||desc.number_format==7)))&&
             !layout.expanded_bytes_per_pixel&&GuestProtectionPages(desc.address,layout.guest_bytes)&&
