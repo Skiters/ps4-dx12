@@ -1,3 +1,7 @@
+## Current implementation continuation — 2026-10-25
+
+Production f93bd4d: narrow sRGB fallback, polygon GS output partition/depth clamp and independent color/depth overlap classes connected. Clean Release compile/link PASS26.465s; ALL latest behavior NOT_RUN. Mixed-blend-constants has no identified remaining pinned MRT code gap; other six areas retain code work. See first SESSION_HANDOFF.md section for gaps, hashes, commands and prepared fixtures. No app update, runtime archive or GPU/game execution. Continue development; supersedes older current declarations below.
+
 ## Current continuation — 2026-10-25
 
 Production 67b8050 (dual-source ordered blending and clipped/routed polygon points); clean Release compile/link PASS, runtime NOT_RUN. The seven-area port remains in progress; ALL fixture/game execution is deferred until implementation completes. See the first section of SESSION_HANDOFF.md for exact remaining gaps, hashes and commands. No app replacement or performance acceptance. This supersedes older current-state declarations below.

@@ -1,3 +1,18 @@
+## Current implementation continuation — 2026-10-25
+
+Production f93bd4dc4ddb3296688a1ffff4402f58b672f7b9. This supersedes older current declarations below; continue development, this is NOT completion. Latest user gate defers ALL tests until the seven implementations are complete. No fixture/GPU/game/UI/XInput execution here; compile/link only.
+
+85d073b/332213a connect pinned R8/RG8 sRGB-to-UNORM fallback including ownership. a6d3824 partitions clipped point GS output into ordered invocations without rerunning guest VS/TES; 8fe5d8f adds selected-viewport depth clamp (StageVersion37). a327029/f93bd4d preserve independent sampled color and simultaneous color/depth BlockDim classes at the same address. Matching classes retain explicit depth recreation. Mixed-blend-constants has no identified remaining pinned MRT code gap, behavior pending; RGB32/RGB9E5 are not pinned MRT requirements.
+
+Clean tracked Release f93bd4d compile/link PASS26.465s, F:/Codex-Shared/devtools/logs/command-20261025-023615-34080.log. EXE SHA256 42763b0a12e39018647a213122149a3da7743c7e3cdfe7df57861131fbd64163; PDB 846246c4a39ade0354678801c4ee931bc0b2c0ff433cf1a065f4f78eb6f06236. Exact identity/dependencies: F:/PS4Dev/handoff/native-port-comparison-20261019/independent-attachments-f93bd4d.json. Main core/GCN compile/link PASS27.062s (023427-14948). Reused clean build-release; no executable archive or app replacement. Compiler success is not GPU correctness or FPS evidence.
+
+Prepared/compiled NOT_RUN: r8-srgb-fallback-mixed-owned, rg8-srgb-fallback-mixed-owned; polygon-output-capacity compile-shaders; polygon-points-depth-clamp-owned; color-independent-class-owned (B=.75/I=1, probes .375/.1875); color-depth-independent-owned (C=1/D=.25, probes .5/.125, raw B and padding). Preserve independent oracles.
+
+Remaining code: (1) converted/reallocated color feedback and growth rebind; (2) converted/BC/shifted ordered image domains, attachment growth, native CMASK and >=4GiB tiling; (3) shared CB/DB clears/compression/feedback/shifted-MSAA and opaque D/S DMA ownership; (4) polygon strip provoking, original GS/auxiliary quad output, bias/unclamped depth, duplicate/per-vertex interpolation and exhausted varying slots; (5) mixed blending connected, behavior pending; (6) actual other-vendor shader clock where pinned Vulkan supports it, no constant/CPU substitute; (7) GPU-native multidraw/restart expansion and large-source/active-part scheduling. Existing stream fixture lifetime fix remains unexecuted. Registry updated; do not repeat the completed129-group audit.
+
+NEXT CODEX SESSION — START HERE
+Continue Skiters/ps4-dx12 fix/mixed-cmask against pinned e0a466753a1aacbc8db8253be685bf7ab4d9daae. Read this first section and verify actual HEAD. Continue the concrete code gaps above without reimplementing completed paths. ALL tests deferred until seven-area implementation completion; compile/link in reused trees meanwhile. Preserve unknown files, original Vulkan, profiles/saves, installed core and unresolved crash evidence. Maintain coherent commits, clean build and ordinary push. Continue after checkpoints; do not claim completion from compilation.
+
 ## Dual-source blending and clipped polygon points — 2026-10-25
 
 CURRENT production 67b8050a33195a40bf8e79eb1f9ecc400e953408, preceded by 93f89a3 and bf97844. All test execution remains deferred by the user's latest instruction; compilation/linking only. The seven-area port is still in progress. This section supersedes older current-state declarations below.

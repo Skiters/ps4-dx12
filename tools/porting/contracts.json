@@ -4157,7 +4157,6 @@
         "source_package": "committed",
         "remaining_production_changes": [
           "polygon-point-fill",
-          "mixed-blend-constants",
           "independent-mrt-logic-write-masks"
         ],
         "core_release_build_commit": "378bda3aba1771026b9a2160bfca28a3867433b8"
@@ -18201,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Shared color attachment and shader feedback through the same physical storage; prewrite copies alone do not provide ordered per-fragment feedback.",
+      "missing_semantics": "Converted/reallocated feedback and target rebind after image growth need a retained native storage plan; incompatible mappings still use ResolveMemory/DiscardImages. Compatible typed/rebased GPU snapshots and equal-base independent overlap classes are connected. Do not invent per-fragment communication beyond pinned Vulkan semantics.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18393,7 +18392,7 @@
         "gcn_exe_sha256": "0b97dd7cdee56525d6c4fbb870d6303f0abd04b9da155e4d07cb6d53a47295e9",
         "scope": "128 real GCN cases (8 SNORM/8 SINT load,16 bilinear/swizzle,32+32 MS4,20+12 regressions),12 native memory/expanded fallback/classification checks. Single/4x tested; not every sampler/mip/shape/MS count/writer or whole group/game."
       },
-      "next_unclosed_mechanism": "Preserve an ORIGINAL readonly raw-R9 MSAA I when an actual R32 MSAA writer view arrives. Adapt MatchesGuestUploadStorage, PrepareMultisampleStorage/EnsureMultisampleStorage and Entry::Uav/guest_compute per-plane bindings to validate the writer VIEW and the actual single-sample UAV plane, without setting entry.desc.writable. Retain original class/UID/GpuModified, independent B and pressure/lifetime behavior. Generic original unsupported-count halving/backing/view mapping remains a separate open contract.",
+      "next_unclosed_mechanism": "Converted/BC ordered-stage representations without shared native allocation; shifted image domains and attachment growth/rebind; CMASK native ownership; >=4GiB tiling/chunking. Color-to-MS-depth raw codecs and direct equal-base depth geometry are connected; behavior verification separate.",
       "writable_word_progress_20261018": {
         "source_commit": "696ae216e17148b0eaccfa86577b0c843b74dee7",
         "state": "connected_and_narrow_gpu_pass",
@@ -18531,7 +18530,7 @@
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw",
-      "missing_semantics": "Simultaneous overlapping depth/color attachments and buffer/HTILE depth-clear writers need shared storage/ownership; they are explicitly rejected. Opaque depth/stencil raw-DMA overlap retains the legacy physical-backing/exclusive-image path; ordered independent I/B transfer for this domain is unfinished. Same-plane depth write feedback is not newly required: the pinned renderer explicitly excludes depth feedback.",
+      "missing_semantics": "Equal-base single-sample direct color/depth recreation and distinct BlockDim attachment classes are connected (e43073a, f93bd4d), runtime NOT_RUN. Remaining: CMASK/FMASK clear/compression, shared shader feedback, shifted/MSAA attachment mappings, and opaque depth/stencil DMA independent ownership. Same-plane depth write feedback remains excluded by pinned Vulkan.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: depth/color alias and simultaneous buffer/HTILE guards",
       "groups": [
         2,
@@ -18557,22 +18556,13 @@
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "Polygon-mode point fill must preserve polygon clipping and point rasterization; ordinary VS/GS point primitives already use implemented expansion/capture.",
+      "missing_semantics": "Clipped point expansion after TriangleList/Fan/Polygon VS or triangular TES is connected, including point size/layer/viewport, GS output partitioning and viewport depth clamp. Remaining: strip provoking mapping, original GS triangles, rectangle/quad auxiliary output, polygon bias, fully unclamped depth, duplicate/per-vertex interpolation, buffered transport when varying slots are exhausted. Latest behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_graphics_state.cpp: Guest point polygon fill requires native clipping and point rasterization",
       "groups": [
         34,
         100,
         104,
         108
-      ]
-    },
-    "mixed-blend-constants": {
-      "upstream_symbol": "Vulkan::GraphicsPipeline / Rasterizer::UpdateDynamicState",
-      "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "R32 FLOAT and R16G16 FLOAT ordered fallbacks are connected and narrowly GPU verified for samples1/2/4/8, alongside existing RGBA8 UNORM and packed10 SNORM paths. R16G16 packed-word views use supported explicit native format lists; an equivalent route on adapters lacking that capability remains open. RGBA8 SNORM is additionally connected at f10bc6c through explicit SNORM/R32_UINT casting and eight-bit signed decode/RNE packing, with snorm8-mixed-constants-owned compiled only (GPU NOT_RUN). R16G16 UNORM/SNORM are connected at 4654660 with explicit normalized/R32_UINT cast lists and signed/unsigned sixteen-bit decode/RNE packing; both rg16 normalized GCN modes are compiled only, GPU NOT_RUN. R10G10B10A2 UNORM is connected at d0f6118 with UNORM/UINT/R32_UINT views and independent RGB10/A2 normalization/quantization;112 real GCN variants passed CPU DXIL validation, GPU pixel mode remains NOT_RUN. RG32/RGBA32 FLOAT are connected at 81be956 through per-target Rg32ui/Rgba32ui ordered image types and matching UINT views, preserving all masked 32-bit channels;136 CPU compiler variants passed, vector GPU pixel cases NOT_RUN. RGBA16 UNORM/SNORM/FLOAT are connected at e475638 through paired Rg32ui words with halfword masks and full typed-family cast lists;192 CPU compiler variants passed, three GPU pixel modes NOT_RUN. R11G11B10 FLOAT is connected at 00ded3c with existing R11/R32_UINT casts, direct f32-to-UF11/UF10 RNE and raw masks;200 CPU compiler variants passed, finite pixel mode and conversion boundary GPU checks NOT_RUN. R8/R16 UNORM/SNORM and R16 FLOAT are connected at d16a4a7 with compact native UINT views, scalar decode/quantization and cached typed-UAV support checks on actual use;288 CPU compiler variants passed, five scalar GPU modes NOT_RUN. R8G8 UNORM/SNORM are connected at bb0e119 with full RG8-family/R16_UINT casts and independent byte masks;320 CPU compiler variants passed, two RG8 GPU modes NOT_RUN. Normalized ordered source/destination operands and independently selected factors clamp before blend operations at343e58c, with FLOAT unbounded. UNORM8/SNORM8 boundary fixtures each prepare48 GPU draws, MSAA1/2/4/8 and masks/layers, with literal code-space results and CPU negative controls for missing source/factor clamp and incorrect factor selection. CPU368 real GCN variants passed signed DXIL validation; pixel fixtures compiled, GPU NOT_RUN. Packed16 UNORM565/1555/5551/4444 are additionally connected through native BGR16/R16_UINT cast lists, native bit-width RNE, component masks and lazy per-sample storage; original guest rotations/nibble order stay in the existing tiler. CPU432 GCN translations and11 family-plan cases passed; four24-draw pixel modes are compiled only, GPU NOT_RUN. RGBA8 sRGB is additionally connected through existing complete RGBA8-family/R32_UINT lists, shared EOTF decode, per-fragment inverse EOTF, linear alpha, normalized operand clamps and lazy MSAA scratch. FLOAT/sRGB logic operations pass source through with blending disabled; mixed normalized/nonlogical MRTs force the applicable normalized targets onto ordered logic. CPU464 GCN variants,12 family plans,5 state checks,256-byte sRGB roundtrips and independent literal/negative controls passed; sRGB32-draw blend and16-draw logical pass pixel modes compile only, GPU NOT_RUN. UINT/SINT independent MRT logical operations are now connected for original attachment formats1/2/3/4/5/9/10/11/12/14 through exact exported integer bitcasts, native word views, integer range conversion and per-field masked operations; integer blending is not routed through the floating-point fallback. RGB32 retains its existing sampled-only usage contract. CPU624 GCN variants,22 cast plans,6 state checks and independent logical oracle negatives pass;20 pixel modes32 draws each compile only, GPU NOT_RUN. No whole-group pixel/ordering/game acceptance. Other applicable attachment formats outside these classes still require mixed constant-color/alpha fallback on adapters without native ALPHA_FACTOR; supporting native adapters retain hardware blending. No whole-group or game acceptance.",
-      "evidence": "GuestOrderedColorMask / Entry::OrderedColorUav / Entry::StorageUav / EmitOrderedColorSample R32 bit-preserving float branch; F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-float-verification.json; other formats retain explicit mixed-constant guard",
-      "groups": [
-        34
       ]
     },
     "other-vendor-clock": {
@@ -18587,7 +18577,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Internal primitive-stream pipeline prerequisites are now connected: owned SO declarations/semantic strings/strides in both PSO keys and cached graphics records, versioned persistence and host GS compilation/build integration. CPU ownership/key/serialization/malformed-layout checks and host VS/GS DXIL compile passed; actual SO content GPU fixture is compiled only. This does not yet connect the tessellation bridge or remove the EsGs capture guard. Extend oversized point-output capture fallback to the tessellation+geometry stage domain already accepted by pinned graphics; the currently connected capture route requires EsGs. Dynamic ring scalar-offset paths and complete indirect-batch bounds still need adaptation in that fallback. On-chip geometry and stream output are excluded because the pinned renderer skips them.",
+      "missing_semantics": "Tessellation/auxiliary primitive streams, original capture system values, eight-byte native SO counter backing/publication and complete CPU restart patch segments are connected. Remaining: GPU-native multidraw/restart index expansion and large-source/active-part scheduling. Known indirect fixture lifetime correction compiled, rerun deferred. Do not repeat completed EsGs/tessellation bridge.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,
@@ -18639,6 +18629,22 @@
         "limitations": "No PageWatch/full ownership,all blending/logic/MRT/CMASK/feedback,full original render comparison/core/game/FPS proof; whole-group behavior unchanged"
       },
       "scope_correction": "No same-adapter original/native capability mismatch established requiring a fallback. Original-unsupported NVIDIA is not a missing software path. Native supported-adapter semantic defects fixed and narrowly proven; full acceptance separate."
+    },
+    "mixed-blend-constants": {
+      "upstream_symbol": "Vulkan::GraphicsPipeline / Rasterizer::UpdateDynamicState",
+      "native_symbol": "NativeDX12::BuildGuestGraphicsState",
+      "missing_semantics": "No remaining production gap identified in the pinned MRT format/factor families. Native ALPHA_FACTOR remains preferred where available; ordered fallbacks include original dual-source exports and pinned R8/RG8 sRGB-to-UNORM fallback. Final GPU contents, ordering and game behavior remain unverified.",
+      "evidence": "GuestOrderedColorMask / Entry::OrderedColorUav / Entry::StorageUav / EmitOrderedColorSample R32 bit-preserving float branch; F:/PS4Dev/handoff/physical-backing-proof-20261019/ordered-float-verification.json; other formats retain explicit mixed-constant guard",
+      "groups": [
+        34
+      ],
+      "implementation_status": "connected",
+      "behavior_verification": "not_run_for_latest_binary",
+      "latest_source_commits": [
+        "93f89a3",
+        "85d073b",
+        "332213a"
+      ]
     }
   },
   "artifact_retention_policy": {
@@ -18655,5 +18661,6 @@
     "result": "84.632 s, verified DX12 runtimes, 549 new completed guest frames, graceful exit 0",
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
-  }
+  },
+  "seven_area_continuation": "f93bd4d: mixed-blend-constants implementation connected; other six areas retain concrete code gaps. ALL new fixture/game execution deferred until implementation completion; compile/link only."
 }
