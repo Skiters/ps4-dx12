@@ -119,6 +119,24 @@ inline void RunGuestSubresourceRebaseChecks() {
     const auto xinterleaved=make(25,16,256,128,24,4,9);
     reject(xinterleaved,"xthick interleaved origin changes high pixel z bit",true);
 
+    // Direct color words use the same physical slice proof as BC words.
+    // Enumerate the existing address oracle independently for each new size.
+    for(const auto format:{1u,2u,4u})for(const auto tile:{8u,13u,14u,31u}){
+        Case color{};color.mip=1;color.first=0;
+        color.parent.address=0x200000000ULL;
+        color.parent.width=color.parent.pitch=512;color.parent.height=256;
+        color.parent.levels=2;color.parent.layers=color.parent.view_layers=4;
+        color.parent.data_format=format;color.parent.number_format=4;color.parent.tile_mode=tile;
+        color.parent_layout=LayoutGuestTexture(color.parent);
+        color.local=color.parent;color.local.width=color.local.pitch=256;color.local.height=128;
+        color.local.levels=1;color.local.layers=color.local.view_layers=2;
+        color.local.address+=color.parent_layout.mips[1].offset;
+        color.local_layout=LayoutGuestTexture(color.local);
+        accept(color,tile==14,1,"direct color mip address equality");
+        if(tile==14){auto wrong=color;wrong.local.bank_swizzle=1;
+            reject(wrong,"direct color incorrect bank swizzle",true);}
+    }
+
     // Deliberately malformed proof inputs must fail before any address oracle.
     auto macro_mismatch=thin;macro_mismatch.local_layout.mips[0].macro=false;
     reject(macro_mismatch,"mismatched macro flag");

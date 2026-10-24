@@ -323,7 +323,7 @@ inline void RunOrderedConvertedPackedStages(ID3D12Device* device){
 // GPU transfer/ordering controls. The cache notification adapter
 // supplies the original exact-base dirty event; this is not a PageWatch or
 // whole-graphics shader execution/acceptance test.
-inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
+inline int RunOrderedStageBindingsFixture(ID3D12Device* device,bool color_views=false){
     struct Allocation {
         std::byte* bytes=static_cast<std::byte*>(VirtualAlloc(nullptr,65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
         ~Allocation(){if(bytes)VirtualFree(bytes,0,MEM_RELEASE);}
@@ -332,6 +332,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
     const auto base=reinterpret_cast<VAddr>(memory.bytes),private_base=reinterpret_cast<VAddr>(scratch.bytes);
     for(const bool interior:{false,true})for(const bool refresh:{false,true})for(const bool early_retile:{false,true})
     for(const u8 read_adjust:{u8(0),u8(1),u8(2)})for(const bool prefix_seed:{false,true}){
+        if(color_views&&prefix_seed)continue; // Separate full-storage numeric-view case.
         const auto require=[&](bool value,const std::source_location where=std::source_location::current()){
             if(!value)throw std::runtime_error("Ordered stage cache/physical oracle mismatch at line "+
                 std::to_string(where.line())+" interior="+std::to_string(interior)+" refresh="+std::to_string(refresh)+
@@ -373,7 +374,9 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         AmdGpu::Image sharp{};sharp.base_address=base>>8;sharp.width=sharp.height=sharp.pitch=31;
         sharp.depth=1;sharp.type=u64(AmdGpu::ImageType::Color2DArray);sharp.last_array=1;
         sharp.last_level=1;sharp.data_format=4;sharp.num_format=4;sharp.tiling_index=13;
-        auto desc=DescribeGuestTexture(sharp);desc.writable=true;const auto layout=LayoutGuestTexture(desc);
+        auto desc=DescribeGuestTexture(sharp);desc.writable=!color_views;
+        if(color_views){desc.render_target=true;desc.number_format=7;}
+        const auto layout=LayoutGuestTexture(desc);
         auto seed_desc=desc;if(prefix_seed)seed_desc.levels=1;
         const auto seed_layout=LayoutGuestTexture(seed_desc);
         require(layout.guest_bytes<=65536);
@@ -401,8 +404,11 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
             {true,true,true,read_adjust,1,u64(64-read_adjust)},{true,early_retile,false,0,4,65536},
             {false,false,false,0,4,4},{true,true,false,0,4,65536},
             {false,false,false,0,4,4},{true,true,false,0,4,65536}};
-        std::vector<OrderedGuestImage> images{{desc,layout,true,false}};
-        if(refresh)images.push_back({desc,layout,false,false});
+        auto sampled=desc;
+        if(color_views){sampled.render_target=false;sampled.number_format=4;}
+        const auto sampled_layout=LayoutGuestTexture(sampled);
+        std::vector<OrderedGuestImage> images{{sampled,sampled_layout,!color_views,false}};
+        if(refresh)images.push_back({sampled,sampled_layout,false,false});
         std::vector<GuestStageBindingSpan> stages{
             {0,1,0,0},{1,2,0,1},{2,3,1,refresh?2u:1u},
             {3,4,images.size(),images.size()},{4,5,images.size(),images.size()},
@@ -411,6 +417,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
             [&](VAddr address,u64 bytes){memcpy(scratch.bytes,reinterpret_cast<const void*>(address),size_t(bytes));return private_base;});
         require(prepared.stream_views[0].has_value()&&prepared.images[0]);
         require(prepared.images[0]->desc.levels==desc.levels);
+        if(color_views)require(prepared.images[0]->Srv(sampled).Format==DXGI_FORMAT_R32_UINT);
         if(refresh)require(prepared.images[0]==prepared.images[1]);
         rasterizer.SynchronizePreparedDmaBuffers(requests,prepared.buffers);
         // The last exact-base buffer bind leaves I dirty. Final draw preparation
@@ -439,6 +446,7 @@ inline int RunOrderedStageBindingsFixture(ID3D12Device* device){
         require(!memcmp(scratch.bytes,original.data(),64));
         rasterizer.ValidateDebugMessages();
     }
+    if(color_views){puts("PASS: ordered typed color views retain original I/B stage ordering and complete contents");return 0;}
     RunOrderedWritableOwnershipAcquisition(device);
     RunOrderedConvertedPackedStages(device);
     RunOrderedBcWordStages(device);

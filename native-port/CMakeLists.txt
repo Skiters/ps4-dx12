@@ -563,6 +563,8 @@ target_include_directories(native-writable-image-alias-test PRIVATE
 target_compile_features(native-writable-image-alias-test PRIVATE cxx_std_23)
 add_test(NAME native_ordered_stage_image_buffer_bindings COMMAND native-writable-image-alias-test
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-stages)
+add_test(NAME native_ordered_color_stage_bindings COMMAND native-writable-image-alias-test
+    "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-color-stages)
 add_test(NAME native_ordered_interior_formatted_reads COMMAND native-writable-image-alias-test
     "${_writable_alias_fixture}" "${_compute_mesa}" "${DXC_DLL}" ordered-interior-reads)
 add_test(NAME native_single_stage_interior_formatted_reads COMMAND native-writable-image-alias-test

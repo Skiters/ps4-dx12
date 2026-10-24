@@ -1137,8 +1137,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     color_storage_feedback[i]=true;
                 if(!image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_feedback[i]=true;
+                    auto view=d;auto requested=l;
+                    // Use the same proved parent coordinates as the shader
+                    // binder. The actual native SRVs are copied after binding.
+                    if(auto alias=textures_.RebaseColorSubresource(d,l,true)){
+                        view=alias->view;requested=LayoutGuestTexture(view);
+                    }
                     gpu_color_feedback[i]=gpu_color_feedback[i]&&
-                        CompatibleGuestColorSampledMapping(descriptions[i],layouts[i],d,l);
+                        CompatibleGuestColorSubview(descriptions[i],layouts[i],view,requested);
                 }
             }
         }

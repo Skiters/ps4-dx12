@@ -4,6 +4,7 @@
 #include "video_core/renderer_d3d12/guest_texture_cache.h"
 #include "video_core/renderer_d3d12/guest_image_operations.h"
 #include "video_core/renderer_d3d12/guest_image_ownership.h"
+#include "video_core/renderer_d3d12/guest_tile_address.h"
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include "video_core/renderer_d3d12/rasterizer.h"
 #include "msaa_depth_initialization_fixture.h"
@@ -747,6 +748,28 @@ static void RunColorArraySubviews(ID3D12Device* device){
     auto expanded=integer;expanded.data_format=9;expanded.number_format=5;
     require(!CompatibleGuestColorSubview(sampled,layout,expanded,LayoutGuestTexture(expanded)),
         "Expanded signed packed color was accepted as direct bits");
+    auto shifted=one;shifted.address+=layout.mips[0].slice_bytes;
+    // For this thin macro array the local bank correction must compensate
+    // the parent's nonzero slice. Check every pixel independently below.
+    const GuestTileAddress addressing(AmdGpu::TileMode(sampled.tile_mode),layout.bytes_per_pixel,1);
+    shifted.bank_swizzle=addressing.Bank(0,0,1,0,sampled.bank_swizzle);
+    const auto shifted_layout=LayoutGuestTexture(shifted);
+    for(UINT y=0;y<shifted.height;++y)for(UINT x=0;x<shifted.width;++x)
+        require(sampled.address+GuestPixelOffset(sampled,layout,0,1,x,y)==
+            shifted.address+GuestPixelOffset(shifted,shifted_layout,0,0,x,y),"Shifted color address oracle differs");
+    const auto alias=cache.RebaseColorSubresource(shifted,shifted_layout,true);
+    require(alias&&alias->parent==&parent&&alias->view.address==sampled.address&&
+        alias->view.first_layer==1&&alias->view.view_layers==1,"Shifted color did not retain the parent slice");
+    auto& rebound=cache.Upload(alias->view,physical,renderer.RecordingList(),renderer.CompletedFence());
+    require(&rebound==&parent,"Shifted color allocated a standalone image");
+    const auto shifted_srv=parent.Srv(alias->view);
+    require(shifted_srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
+        shifted_srv.Texture2DArray.FirstArraySlice==1&&shifted_srv.Texture2DArray.ArraySize==1,
+        "Shifted color native SRV lost its selected slice");
+    require(!cache.RebaseColorSubresource(shifted,shifted_layout,false),"Non-array shader accepted an array parent");
+    shifted.bank_swizzle^=1;
+    require(!cache.RebaseColorSubresource(shifted,LayoutGuestTexture(shifted),true),
+        "Shifted color with incorrect bank correction accepted");
     GuestImageReadback readback(device,parent,renderer.RecordingList());
     const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
     auto observed=physical;readback.Resolve(renderer.CompletedFence(),observed);

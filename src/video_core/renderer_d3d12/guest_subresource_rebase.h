@@ -16,9 +16,9 @@ inline bool MatchesGuestSliceAddressing(const GuestTextureDesc& parent,
        first_layer>=parent.layers||local.layers>parent.layers-first_layer||
        parent.volume_depth||local.volume_depth||parent.one_dimensional||local.one_dimensional||
        parent.tile_mode!=local.tile_mode||parent.alt_tile!=local.alt_tile||
-       parent.tile_mode>26||parent.tile_mode==8||parent.samples!=1||local.samples!=1||
+       (parent.tile_mode>26&&parent.tile_mode!=31)||parent.samples!=1||local.samples!=1||
        parent_layout.bytes_per_pixel!=local_layout.bytes_per_pixel||
-       (parent_layout.bytes_per_pixel!=8&&parent_layout.bytes_per_pixel!=16))return false;
+       !std::has_single_bit(parent_layout.bytes_per_pixel)||parent_layout.bytes_per_pixel>16)return false;
     const auto& a=parent_layout.mips[mip];const auto& b=local_layout.mips[0];
     const auto thickness=a.thickness;
     if((thickness!=1&&thickness!=4&&thickness!=8)||b.thickness!=thickness||
@@ -32,6 +32,8 @@ inline bool MatchesGuestSliceAddressing(const GuestTextureDesc& parent,
        a.offset>parent_layout.guest_bytes||
        a.slice_bytes*parent_layers>parent_layout.guest_bytes-a.offset||
        local_layout.guest_bytes!=b.slice_bytes*local_layers)return false;
+    // Linear layouts have no slice-dependent coordinate XORs.
+    if(parent.tile_mode==8||parent.tile_mode==31)return !a.macro&&thickness==1;
     // A thickness-aligned origin retains every low slice bit used by Pixel.
     // Micro's only remaining slice term advances by whole physical groups.
     if(!a.macro)return true;

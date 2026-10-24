@@ -419,6 +419,11 @@ public:
     // The returned description is a binding view, never another guest owner.
     std::optional<GuestTextureDesc> RebaseBlockSubresource(const GuestTextureDesc&,
         const GuestTextureLayout&,bool array)const;
+    struct ColorSubresource {Entry* parent;GuestTextureDesc view;};
+    // Resolve a direct color mip/slice without publishing I into guest memory.
+    // Callers retain parent with PinBinding before any subsequent allocation.
+    std::optional<ColorSubresource> RebaseColorSubresource(const GuestTextureDesc&,
+        const GuestTextureLayout&,bool array)const;
     std::optional<WritableBlockAlias> BeginWritableBlockAlias(const GuestTextureDesc&,
         ID3D12GraphicsCommandList*,uint64_t completed);
     Entry& CommitWritableBlockAlias(WritableBlockAlias&,ID3D12GraphicsCommandList*,uint64_t completed);

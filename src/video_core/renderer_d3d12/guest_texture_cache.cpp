@@ -677,6 +677,9 @@ bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextu
     }
     auto owner=source,target=view;owner.layers=target.layers;owner.levels=target.levels;
     owner.render_target=target.render_target=false;
+    owner.storage_height=target.storage_height=0;
+    owner.storage_slice_bytes=target.storage_slice_bytes=0;
+    owner.pow2_padding=target.pow2_padding=false;
     // Mutable numeric views share the physical bits. Keep expanded encodings
     // excluded above and validate the actual native cast permission at binding.
     // Normalizing only these comparison copies preserves the owner's codec,
@@ -2679,6 +2682,55 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
             }
             if(owner&&owner!=&parent)throw std::runtime_error("Ambiguous shifted BC block-view parent");
             owner=candidate.get();result=view;
+        }
+    }
+    return result;
+}
+std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColorSubresource(
+    const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
+    if(desc.writable||desc.render_target||desc.depth_target||desc.stencil_address||
+       desc.one_dimensional||desc.volume_depth||desc.samples!=1||desc.levels!=1||
+       desc.first_mip||!desc.layers||desc.first_layer>=desc.layers||!desc.view_layers||
+       desc.view_layers>desc.layers-desc.first_layer||layout.mips.size()!=1||
+       layout.block_extent!=1||layout.expanded_bytes_per_pixel||desc.pow2_padding||
+       desc.storage_height||desc.storage_slice_bytes)return std::nullopt;
+    if(FindValidIndependentImage(desc,layout))return std::nullopt;
+    const auto& local=layout.mips[0];
+    if(local.offset||!local.slice_bytes)return std::nullopt;
+    std::optional<ColorSubresource> result;
+    for(const auto& candidate:entries_){auto& parent=*candidate;
+        if(!parent.gpu_owned||parent.logical_dirty||parent.desc.writable||
+           parent.desc.depth_target||parent.desc.stencil_address||parent.desc.samples!=1||
+           parent.desc.volume_depth||parent.desc.one_dimensional||
+           parent.layout.block_extent!=1||parent.layout.expanded_bytes_per_pixel||
+           parent.layout.bytes_per_pixel!=layout.bytes_per_pixel||
+           desc.address<=parent.desc.address||(!array&&parent.desc.layers!=1))continue;
+        const auto delta=desc.address-parent.desc.address;
+        if(delta>=parent.layout.guest_bytes||layout.guest_bytes>parent.layout.guest_bytes-delta)continue;
+        for(UINT mip=0;mip<parent.desc.levels;++mip){const auto& part=parent.layout.mips[mip];
+            if(!part.slice_bytes||delta<part.offset||desc.width!=std::max(parent.desc.width>>mip,1u)||
+               desc.height!=std::max(parent.desc.height>>mip,1u)||desc.pitch!=part.pitch)continue;
+            const auto relative=delta-part.offset;
+            if(!layout.guest_bytes||relative%layout.guest_bytes||relative%part.slice_bytes)continue;
+            const auto layer=relative/part.slice_bytes;
+            if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer||
+               !MatchesGuestSliceAddressing(parent.desc,parent.layout,mip,desc,layout,UINT(layer)))continue;
+            auto view=parent.desc;view.render_target=false;
+            view.data_format=desc.data_format;view.number_format=desc.number_format;
+            view.native_raw32=desc.native_raw32;view.native_packed10_raw=desc.native_packed10_raw;
+            view.sampled_depth=desc.sampled_depth;view.swizzle=desc.swizzle;
+            view.first_mip=mip;view.levels=mip+1;view.min_lod=mip*256;
+            view.first_layer=UINT(layer)+desc.first_layer;view.view_layers=desc.view_layers;
+            if(!CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
+               !CanBindNativeWordFormat(parent,view))continue;
+            if(parent.HasUnprotectedCpuPages())
+                throw std::runtime_error("Color subresource lookup requires boundary validation");
+            if(result&&result->parent!=&parent){
+                if(result->parent->cached_native_current&&!parent.cached_native_current)continue;
+                if(result->parent->cached_native_current==parent.cached_native_current)
+                    throw std::runtime_error("Ambiguous shifted color-view parent");
+            }
+            result=ColorSubresource{&parent,view};
         }
     }
     return result;

@@ -305,6 +305,10 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 desc.view_layers=1;
             }
             auto layout=LayoutGuestTexture(desc);
+            if(sharp&&count==1)if(auto alias=textures->RebaseColorSubresource(desc,layout,array||slice_view)){
+                shader_storage_pins.push_back(textures->PinBinding(*alias->parent));
+                desc=alias->view;layout=LayoutGuestTexture(desc);
+            }
             if(sharp&&count==1)if(auto view=textures->RebaseBlockSubresource(desc,layout,array||slice_view)){
                 desc=*view;layout=LayoutGuestTexture(desc);
             }

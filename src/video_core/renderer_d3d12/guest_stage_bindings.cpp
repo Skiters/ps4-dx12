@@ -93,6 +93,10 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(desc.samples==1&&CompatibleGuestDepthSubview(desc,layout,old.desc,old.layout)){
                 old.desc=desc;old.layout=layout;return;
             }
+            if(CompatibleGuestColorSubview(old.desc,old.layout,desc,layout))return;
+            if(CompatibleGuestColorSubview(desc,layout,old.desc,old.layout)){
+                old.desc=desc;old.layout=layout;return;
+            }
             if(!CompatibleGuestImageMipGeometry(old.desc,old.layout,desc,layout))
                 throw std::runtime_error("Ordered stages have incompatible image physical geometry");
             const auto levels=std::max(old.desc.levels,desc.levels);const bool writable=old.desc.writable||desc.writable;
@@ -103,6 +107,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
     for(const auto& image:images)if(!image.null_resource&&
         (image.storage.writable||std::ranges::any_of(textures.Entries(),[&](const auto& cached){return cached->logical_gpu_modified&&
             (CompatibleGuestImageMipGeometry(image.storage,image.layout,cached->desc,cached->layout)||
+             CompatibleGuestColorSubview(cached->desc,cached->layout,image.storage,image.layout)||
              (image.storage.samples==1&&CompatibleGuestDepthSubview(cached->desc,cached->layout,image.storage,image.layout)));}))&&
         std::ranges::any_of(requests,[&](const auto& buffer){
         return Overlaps(image.storage.address,image.layout.guest_bytes,buffer.address,buffer.size);}))
@@ -118,6 +123,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
             if(!CompatibleGuestShaderStorage(domain.desc,image.storage)&&
                !textures.CanShareReadonlyWordStorage(domain.desc,image.storage)&&
                !CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)&&
+               !CompatibleGuestColorSubview(domain.desc,domain.layout,image.storage,image.layout)&&
                !(domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout))){
                 if(!CompatibleGuestPackedStorage(domain.desc,image.storage)&&
                    !CompatibleGuestBlockWordStorage(domain.desc,domain.layout,image.storage,image.layout))
@@ -214,6 +220,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 // do not retile a future expanded tail into B prematurely.
                 if(previous->logical_gpu_modified&&(!MatchesGuestMipLayout(previous->layout,domain.layout)||
                     (!CompatibleGuestShaderStorage(previous->desc,domain.desc)&&
+                     !CompatibleGuestColorSubview(previous->desc,previous->layout,domain.desc,domain.layout)&&
                      !CompatibleGuestDepthSubview(previous->desc,previous->layout,domain.desc,domain.layout)))&&
                    std::ranges::any_of(buffers,[&](const auto& buffer){const auto index=size_t(&buffer-buffers.data());
                        return buffer.formatted&&!buffer.cpu_stream&&
@@ -318,6 +325,7 @@ OrderedGuestBindings PrepareOrderedGuestStages(ID3D12Device*,Rasterizer& rasteri
                 const bool canonical=CompatibleGuestShaderStorage(domain.desc,image.storage)||
                     textures.CanShareReadonlyWordStorage(domain.desc,image.storage)||
                     CompatibleGuestShaderMipPrefixes(domain.desc,domain.layout,image.storage,image.layout)||
+                    CompatibleGuestColorSubview(domain.desc,domain.layout,image.storage,image.layout)||
                     (domain.desc.samples==1&&CompatibleGuestDepthSubview(domain.desc,domain.layout,image.storage,image.layout));
                 Domain::ConvertedView* converted{};
                 if(!canonical){

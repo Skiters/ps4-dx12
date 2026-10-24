@@ -364,6 +364,7 @@ int wmain(int argc,wchar_t** argv){try {
         return 0;
     }
     if(argc==5&&std::wstring_view(argv[4])==L"ordered-stages")return RunOrderedStageBindingsFixture(device.Get());
+    if(argc==5&&std::wstring_view(argv[4])==L"ordered-color-stages")return RunOrderedStageBindingsFixture(device.Get(),true);
     struct Allocation{void* p;~Allocation(){if(p)VirtualFree(p,0,MEM_RELEASE);}} owner{
         VirtualAlloc(reinterpret_cast<void*>(0x1200000000ULL),65536,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)};
     if(!owner.p)throw std::runtime_error("Cannot allocate guest texture");
