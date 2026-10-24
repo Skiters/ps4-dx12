@@ -23,6 +23,15 @@ struct GuestIndexExpansion {
         if(count>UINT32_MAX/4)throw std::overflow_error("GPU index copy exceeds native view addressing");
         return {7,count,count,0};
     }
+    static bool CanDecodeBatch(AmdGpu::IndexType type,AmdGpu::IndexSwapMode swap,bool restart,u32 maximum){
+        // A shared decode preserves every command's firstIndex only when the
+        // permutation stays within one element. For Index16, Swap32/SwapWord
+        // pair adjacent elements relative to EACH command's own start/end.
+        // Those need per-command expansion, not a whole-buffer permutation.
+        return !restart&&maximum<=UINT32_MAX/4&&swap!=AmdGpu::IndexSwapMode::None&&
+            (type==AmdGpu::IndexType::Index32||
+             (type==AmdGpu::IndexType::Index16&&swap==AmdGpu::IndexSwapMode::Swap16));
+    }
     static bool SupportsRestart(AmdGpu::PrimitiveType type){
         using P=AmdGpu::PrimitiveType;
         switch(type){

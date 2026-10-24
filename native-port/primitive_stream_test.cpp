@@ -336,7 +336,25 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
         }
         const std::array<Rasterizer::VertexBinding,2> vertices{{{&vertex_data,0,128,4},{&instance_data,0,128,4}}};
         for(const bool indexed:std::array{false,true})for(const u32 spacing:std::array<u32,2>{0,32})
-        for(const u32 active:std::array<u32,6>{0,1,2,3,99,UINT32_MAX}){
+        for(const u32 active:std::array<u32,6>{0,1,2,3,99,UINT32_MAX})for(u32 decode=0;decode<5;++decode){
+            if(decode&&(!indexed||spacing!=32||active!=3))continue;
+            Resource decoded_indices;auto selected_index=index_view;
+            if(decode){
+                const u32 element=decode==4?2:4,swap=decode==4?1:decode;
+                auto encoded=Buffer(device.Get(),indices.size()*element,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+                std::array<std::byte,sizeof(indices)> bytes{};
+                for(size_t i=0;i<indices.size();++i)memcpy(bytes.data()+i*element,&indices[i],element);
+                constexpr UINT lanes[4][4]{{0,1,2,3},{1,0,3,2},{3,2,1,0},{2,3,0,1}};
+                Check(encoded.handle->Map(0,&none,&mapped));
+                for(size_t byte=0;byte<indices.size()*element;++byte)
+                    static_cast<std::byte*>(mapped)[byte]=bytes[(byte&~size_t(3))+lanes[swap][byte%4]];
+                encoded.handle->Unmap(0,nullptr);
+                decoded_indices=renderer.AcquireTransientBuffer(sizeof(indices));
+                GuestIndexExpandPass pass(device.Get());
+                pass.Record(renderer,GuestIndexExpansion::Copy(UINT(indices.size())),&encoded,0,
+                    UINT(indices.size()),element,decoded_indices,swap);
+                selected_index={&decoded_indices,0,sizeof(indices),DXGI_FORMAT_R32_UINT};
+            }
             const auto layout=NativeIndirectLayout::Make(indexed,root_runtime?8:4,spacing,3,root_runtime);
             const u32 command_stride=layout.stride,first=u32(layout.offset);
             constexpr u32 guarded=272;
@@ -380,7 +398,7 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
                 const Rasterizer::StreamOutputBinding target{&output,&filled,16,240,0};
                 const auto submit=[&](const Rasterizer::StreamDrawArguments& candidate){
                     renderer.ExecuteGraphics(pipeline,bindings,state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
-                        blend,{0,0},vertices,indexed?&index_view:nullptr,false,&candidate,&target);
+                        blend,{0,0},vertices,indexed?&selected_index:nullptr,false,&candidate,&target);
                 };
                 if(!active){
                     auto bad=batch;bad.max_count=UINT32_MAX;bool rejected{};

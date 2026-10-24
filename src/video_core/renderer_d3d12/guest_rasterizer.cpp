@@ -1478,6 +1478,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     }
     const bool gpu_swap=indexed&&!r.enable_primitive_restart&&!batch&&
         r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None;
+    const bool batch_swap=indexed&&batch&&r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None;
+    if(batch_swap&&!GuestIndexExpansion::CanDecodeBatch(r.index_buffer_type.index_type,
+        r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size))
+        throw std::logic_error("Indirect batch lost its element-local index decode contract");
     std::optional<GuestIndexExpansion> gpu_expansion;
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
     if(gpu_restart||gpu_swap||(expand_primitive&&(!indexed||!r.enable_primitive_restart))){
@@ -1489,7 +1493,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         gpu_expansion=plan;
     }
     const bool resident_indices=indexed&&(!expand_primitive||gpu_expansion.has_value())&&(!rewrite_restart||gpu_restart)&&
-        (gpu_expansion.has_value()||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None);
+        (gpu_expansion.has_value()||batch_swap||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None);
     const auto index_range=[&](UINT element){
         const auto range=GuestIndexRange::Make(r.index_base_address.Address<VAddr>(),index_offset,
             draw.count,r.max_index_size,element,indirect_draw);
@@ -1513,6 +1517,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const auto [address,bytes]=index_range(element);
         resident_index_address=address;resident_index_bytes=bytes;
         resident_index_format=element==2?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
+        if(batch_swap&&bytes)gpu_expansion=GuestIndexExpansion::Copy(bytes/element);
         if(bytes){const auto first=address&~VAddr(3),last=(address+bytes+3)&~VAddr(3);
             index_requests.push_back({first,last-first,false,false,true,u8(address-first),bytes});
             // Source selection happens after shader/attachment binding effects.
@@ -2303,7 +2308,9 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
         !(GuestPolygonPointGeometryState(r)&&r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip)&&
         !(r.depth_render_override.force_z_dirty&&r.depth_render_override.force_z_valid)&&
         !(r.depth_render_override.force_stencil_dirty&&r.depth_render_override.force_stencil_valid)&&
-        native_restart&&(!indexed||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None)&&
+        native_restart&&(!indexed||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None||
+            GuestIndexExpansion::CanDecodeBatch(r.index_buffer_type.index_type,
+                r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size))&&
         (address+offset)%4==0&&count_address%4==0;
     if(native){
         // Private raw-buffer addressing is bounded; larger batches retain
