@@ -13,7 +13,10 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const std::array<u32,128>& vertex,std::byte* memory,std::byte* backing,u64 base,
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
-    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false){
+    bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
+    UINT converted_samples=1){
+    if(converted_samples!=1&&(!converted_color||converted_samples!=4))
+        throw std::invalid_argument("Converted feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{};
     initialize(seed,{0xBEEB03FF,15,0x7e0002ff,0x3f800000,0x7e020280,0x7e040280,
         0x7e0602ff,0x3f800000,0xf800000f,0x03020100,0xbf810000},0x4645454447430001ULL);
@@ -24,6 +27,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const auto sample=[&](auto& program,u32 x,u64 hash){
         // image_load R -> v4, multiply by exactly .5, export to R32_FLOAT.
         initialize(program,{0xBEEB03FF,15,0x7e000280U|x,0x7e020280,
+            0x7e040280U|(converted_samples-1),
             0xf0000100,0x00000400,0xbf8c0000,0x100808ff,0x3f000000,
             0x7e0a0280,0x7e0c0280,0x7e0e02ff,0x3f800000,
             0xf800000f,0x07060504,0xbf810000},hash);
@@ -47,6 +51,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     auto& cb=regs.color_buffers[0];cb.base_address=u32((base+16384)>>8);
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
+    if(converted_samples>1)cb.attrib.num_fragments_log2=2;
     if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
     if(compressed_color){
         cb.info.compression=cb.info.dcc_enable=1;cb.info.cmask_addr_type=1;
@@ -56,6 +61,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
     image.type=u64(AmdGpu::ImageType::Color2D);image.width=image.height=7;image.pitch=15;
+    if(converted_samples>1){image.type=u64(AmdGpu::ImageType::Color2DMsaa);image.last_level=2;}
     if(independent_class)image.pitch=31;
     // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
     // the original FLOAT attachment bits, not numerically convert the texel.
@@ -140,8 +146,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         // R32(1) -> RGBA8.B=128/255 -> half -> R32 probe half.
         // SNORM10(1) -> half -> quantized256/511 -> R32 probe half.
         auto expected=physical;const float value=converted_color==1?128.f/1020.f:128.f/511.f;
+        for(UINT sample=0;sample<converted_samples;++sample)
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
-            memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
+            memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y,sample),&value,4);
         rasterizer.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),65536))
             throw std::runtime_error("Converted feedback lost image contents, source state, lifetime or padding");

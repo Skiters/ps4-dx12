@@ -1181,8 +1181,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     }
                     gpu_color_feedback[i]=gpu_color_feedback[i]&&
                         (CompatibleGuestColorSubview(descriptions[i],layouts[i],view,requested)||
-                         (descriptions[i].samples==1&&view.samples==1&&
-                          CompatibleGuestPackedStorage(descriptions[i],view)&&
+                         (CompatibleGuestPackedStorage(descriptions[i],view)&&
                           GuestTextureCache::CanUploadGpuSnapshot(descriptions[i],layouts[i])&&
                           GuestTextureCache::CanUploadGpuSnapshot(view,requested)));
                 }
