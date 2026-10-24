@@ -78,6 +78,39 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    if(mode=="polygon-output-capacity"){
+        if(!compile_shaders)throw std::invalid_argument("polygon-output-capacity requires explicit compile-shaders mode");
+        for(u32 parameters:{8u,16u,24u})for(bool clip:{false,true}){
+            Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            fs.num_inputs=parameters;
+            for(u32 i=0;i<parameters;++i){
+                fs.inputs[i].param_index=u8(i);fragment.fs_interpolation[i].primary=Shader::Qualifier::Smooth;
+                for(u32 lane=0;lane<4;++lane){vertex.stores.Set(Shader::IR::Attribute::Param0+i,lane);
+                    fragment.loads.Set(Shader::IR::Attribute::Param0+i,lane);}
+            }
+            if(clip)for(u32 i=0;i<8;++i)vertex.stores.Set(Shader::IR::Attribute::ClipDistance,i);
+            const auto words=EmitGuestPolygonPoints(vertex,&fragment,fs,{});
+            u32 vertices{},instances{};
+            for(size_t offset=5;offset<words.size();){
+                const u32 length=words[offset]>>16;
+                if(!length||offset+length>words.size())throw std::runtime_error("Malformed polygon geometry module");
+                if((words[offset]&65535)==u32(spv::Op::OpExecutionMode)&&length>=4){
+                    if(words[offset+2]==u32(spv::ExecutionMode::OutputVertices))vertices=words[offset+3];
+                    if(words[offset+2]==u32(spv::ExecutionMode::Invocations))instances=words[offset+3];
+                }
+                offset+=length;
+            }
+            if(instances<=1||instances>32||!vertices||vertices%4||
+               vertices*(5+parameters*4)>1024||instances*(vertices/4)<(clip?17u:9u))
+                throw std::runtime_error("Polygon geometry partition violates capacity or drops a possible corner");
+            Shader::Backend::DX12::SpirvConvertOptions options{};
+            options.stage=Shader::Backend::DX12::SpirvStage::Geometry;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Polygon geometry partition failed signed DXIL validation: "+compiled.diagnostics);
+        }
+        std::puts("PASS polygon geometry capacity declarations and signed DXIL; GPU behavior NOT_RUN");return 0;
+    }
     const bool capture_instance_gcn=mode=="capture-instance-gcn";
     if(capture_instance_gcn){
         if(!compile_shaders)throw std::invalid_argument("capture-instance-gcn is an explicit CPU compiler regression");

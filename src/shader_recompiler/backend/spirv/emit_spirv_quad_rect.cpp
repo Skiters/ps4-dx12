@@ -514,14 +514,22 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const u32 planes=6+std::popcount(clip_mask),capacity=3+planes;
     const u32 size_field=1+u32(varyings.size()),clip_field=size_field+u32(sized);
     const u32 fields=clip_field+u32(clip_mask!=0)*2;
-    if(capacity*4*output_components>1024)
-        throw std::runtime_error("Polygon point payload exceeds native geometry output capacity; needs capture");
+    // D3D GS instancing appends each instance's output in instance-ID order
+    // (functional spec13.2.1). Partition only the completed polygon vertices;
+    // each instance clips the same immutable producer payload, without rerunning
+    // any guest VS/TES effects. The1024-scalar limit applies per instance.
+    const u32 points_per_instance=std::min(capacity,1024/(4*output_components));
+    if(!points_per_instance)throw std::runtime_error("Polygon point vertex exceeds native geometry output capacity");
+    const u32 instances=(capacity+points_per_instance-1)/points_per_instance;
+    if(instances>32)throw std::runtime_error("Polygon point output exceeds native geometry instance capacity");
+    const auto invocation=instances>1?
+        ctx.Variable(u32_type,spv::StorageClass::Input,{},spv::BuiltIn::InvocationId):Id{};
     const auto runtime=Shader::Backend::SPIRV::DefinePointRuntime(ctx);ctx.interfaces.push_back(runtime);
     const auto main=ctx.OpFunction(void_type,spv::FunctionControlMask::MaskNone,ctx.TypeFunction(void_type));
     ctx.AddExecutionMode(main,spv::ExecutionMode::Triangles);
     ctx.AddExecutionMode(main,spv::ExecutionMode::OutputTriangleStrip);
-    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,capacity*4);
-    ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,1u);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::OutputVertices,points_per_instance*4);
+    ctx.AddExecutionMode(main,spv::ExecutionMode::Invocations,instances);
     ctx.AddEntryPoint(spv::ExecutionModel::Geometry,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
     const auto fn_u32=ctx.TypePointer(spv::StorageClass::Function,u32_type);
     const auto fn_float=ctx.TypePointer(spv::StorageClass::Function,f32);
@@ -548,8 +556,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
         ctx.OpBranchConditional(condition,active,done);ctx.AddLabel(active);
         body();ctx.OpBranch(done);ctx.AddLabel(done);
     };
-    const auto loop=[&](Id bound,const auto& body){
-        ctx.OpStore(cursor,zero);
+    const auto loop=[&](Id bound,const auto& body,Id first=Id{}){
+        ctx.OpStore(cursor,Sirit::ValidId(first)?first:zero);
         const auto header=ctx.OpLabel(),active=ctx.OpLabel(),step=ctx.OpLabel(),done=ctx.OpLabel();
         ctx.OpBranch(header);ctx.AddLabel(header);
         const auto index=ctx.OpLoad(u32_type,cursor);
@@ -660,7 +668,10 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
             auto keep=ctx.ConstantTrue(b1);
             if(config.cull_front)keep=ctx.OpLogicalAnd(b1,keep,ctx.OpLogicalNot(b1,front));
             if(config.cull_back)keep=ctx.OpLogicalAnd(b1,keep,front);
-            selection(keep,[&]{loop(n,[&](Id index){
+            selection(keep,[&]{
+              const auto first=instances>1?ctx.OpIMul(u32_type,ctx.OpLoad(u32_type,invocation),ci(points_per_instance)):zero;
+              const auto end=ctx.OpUMin(u32_type,n,ctx.OpIAdd(u32_type,first,ci(points_per_instance)));
+              loop(end,[&](Id index){
                 std::vector<Shader::Backend::SPIRV::PointOutput> outputs;
                 for(u32 field=0;field<varyings.size();++field){const auto& varying=varyings[field];
                     const auto value=load(clipped,index,field+1);std::vector<Id> channels;
@@ -674,7 +685,8 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
                 const auto size=sized?component(load(clipped,index,size_field),0):fone;
                 Shader::Backend::SPIRV::EmitPointStrip(ctx,runtime,load(clipped,index,0),size,viewport,true,
                     output_position,outputs,{},ctx.OpLogicalNot(b1,front));
-            });});
+              },first);
+            });
         });
     });
     ctx.OpReturn();ctx.OpFunctionEnd();return ctx.Assemble();
