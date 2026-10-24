@@ -21,6 +21,7 @@
 #include "readonly_numeric_views_fixture.h"
 #include "color_to_ms_depth_fixture.h"
 #include "readonly_depth_conversion_fixture.h"
+#include "large_image_transfer_fixture.h"
 #include "video_core/renderer_d3d12/texture_resources.h"
 #include <cstring>
 #include <cstdio>
@@ -789,6 +790,7 @@ int main(int argc,char** argv){try{
         (argc==5&&std::string_view(argv[1])=="--cached-depth-color"&&std::string_view(argv[2])=="19"&&std::string_view(argv[4])=="rt")||
         (argc==3&&std::string_view(argv[1])=="--cached-packed-color-depth"&&std::string_view(argv[2])=="19");
     auto device=CreateFormatTestDevice(packed19_rt?DXGI_FORMAT_B4G4R4A4_UNORM:DXGI_FORMAT_UNKNOWN);
+    if(argc==2&&strcmp(argv[1],"--large-image-transfer")==0){RunLargeImageTransferFixture(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--readonly-depth-conversion")==0){RunReadonlyDepthConversion(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());return 0;}

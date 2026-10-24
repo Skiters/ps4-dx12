@@ -394,13 +394,14 @@ Rasterizer::Mapping& Rasterizer::Find(VAddr address,u64 size,bool gds,u64 batch_
     catch(...){stored->initial_upload_failed=true;throw;}
     return *stored;
 }
-Resource Rasterizer::AcquireBuffer(u64 size){
+Resource Rasterizer::AcquireBuffer(u64 size,u64 maximum_capacity){
+    if(size>maximum_capacity)throw std::invalid_argument("Buffer exceeds its consumer capacity limit");
     const auto completed=scheduler_.Completed();
     auto best=buffer_pool_.end();
     for(auto it=buffer_pool_.begin();it!=buffer_pool_.end();++it){
         if(it->gpu.allocation&&it->gpu.allocation.use_count()>1)continue;
         const auto capacity=it->gpu.handle->GetDesc().Width;
-        if(it->fence<=completed&&capacity>=size&&capacity-size<=std::max<u64>(65536,size/4)&&
+        if(it->fence<=completed&&capacity>=size&&capacity<=maximum_capacity&&capacity-size<=std::max<u64>(65536,size/4)&&
            (best==buffer_pool_.end()||capacity<best->gpu.handle->GetDesc().Width))best=it;
     }
     if(best==buffer_pool_.end()){
@@ -1784,6 +1785,33 @@ void Rasterizer::ValidatePreparedShaderBufferRange(VAddr address,u64 bytes){
     if(address-source.base>source.size||bytes>source.size-(address-source.base))
         throw std::logic_error("Late image binding exceeds the prepared buffer envelope");
 }
+void Rasterizer::PrepareImageBufferSource(VAddr address,u64 bytes){
+    std::lock_guard lock(execution_mutex_);
+    if(!bytes||address%4||bytes%4||address>UINT64_MAX-bytes)
+        throw std::invalid_argument("Invalid image buffer source range");
+    std::vector<ShaderBufferRequest> preceding_ranges;
+    std::vector<ShaderBufferView> preceding_views;
+    if(!PreparedDmaBuffer(address,bytes)){
+        // Keep witnesses alive across allocation/Finish and verify the whole
+        // preceding arena, including tails outside the new image. The physical
+        // preparation path grows the union and copies GPU B, never formatted I.
+        for(auto it=FirstOverlapping(address);it!=mappings_.end()&&it->first<address+bytes;++it){
+            const auto& source=it->second;
+            if(source.initial_upload_failed||!source.backing_version)
+                throw std::logic_error("Late image source has no preservable buffer generation");
+            preceding_ranges.push_back({source.base,source.size,false,true,true});
+            preceding_ranges.back().publish_dma_residency=false;
+            preceding_views.push_back({source.gpu.handle,0,source.size,{},source.gpu.allocation,source.backing_version});
+        }
+    }
+    ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
+    PreparePhysicalDmaBuffers(std::span(&request,1));
+    ValidatePreparedShaderBufferRange(address,bytes);
+    // The final BeforeBind callback reselects the actual shader descriptors.
+    // This earlier check also rejects a lost tail/generation before an image
+    // copy can consume the new source or publish its residency.
+    if(!preceding_views.empty())(void)RefreshPreparedShaderBuffers(preceding_ranges,preceding_views);
+}
 Rasterizer::PreparedBufferBinding Rasterizer::BorrowPreparedShaderBuffer(VAddr address,u64 bytes){
     std::lock_guard lock(execution_mutex_);
     const auto view=PreparedDmaBuffer(address,bytes);
@@ -1809,7 +1837,11 @@ Resource Rasterizer::CapturePreparedShaderBuffer(VAddr address,u64 bytes){
     // AcquireBuffer reclaims only retired unpinned pool pages, then checks the
     // actual adapter budget. It neither changes prepared mappings nor Finish-es
     // the command list, so the authoritative source selected above stays valid.
-    auto snapshot=AcquireBuffer(capacity);
+    // Byte-addressed image shaders also validate the native resource width.
+    // An otherwise suitable oversized pooled B must not turn a <4 GiB image
+    // snapshot into an unaddressable resource. Larger non-image callers retain
+    // their existing requested capacity.
+    auto snapshot=AcquireBuffer(capacity,std::max<u64>(capacity,UINT32_MAX));
     RetainUntilFinish([backing=source.gpu,snapshot](u64){(void)backing;(void)snapshot;});
     snapshot.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_DEST);
     source.gpu.Transition(RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);

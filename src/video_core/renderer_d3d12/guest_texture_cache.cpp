@@ -1811,7 +1811,7 @@ bool GuestTextureCache::CanUploadGpuSnapshot(const GuestTextureDesc& d,const Gue
     return (!d.writable||writable_snapshot)&&(!d.stencil_address||(depth&&d.stencil_address%4==0))&&
         (d.samples==1||CanTransferIndependentMultisample(d,layout)||
          (depth&&d.levels==1&&std::has_single_bit(d.samples)&&d.samples<=16))&&d.address%4==0&&
-        layout.guest_bytes%4==0&&layout.guest_bytes<=64*1024*1024&&
+        GuestTiler::CanAddressGuestBytes(layout.guest_bytes)&&
         (!layout.expanded_bytes_per_pixel||HasExactPackedExpansion(d,layout));
 }
 bool MatchesGuestMipLayout(const GuestTextureLayout& source,const GuestTextureLayout& target){
@@ -2600,7 +2600,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
        desc.render_target||desc.depth_target||desc.stencil_address||desc.one_dimensional||
        desc.volume_depth||desc.samples!=1||desc.pow2_padding||desc.storage_height||
        desc.storage_slice_bytes||layout.mips.size()!=1||desc.address%4||
-       !layout.guest_bytes||layout.guest_bytes%4||layout.guest_bytes>64*1024*1024||
+       !GuestTiler::CanAddressGuestBytes(layout.guest_bytes)||
        (!native_bc&&(layout.expanded_bytes_per_pixel||layout.block_extent!=1||desc.number_format!=4||
        !((desc.data_format==11&&layout.bytes_per_pixel==8)||
          (desc.data_format==14&&layout.bytes_per_pixel==16))||

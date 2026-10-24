@@ -172,11 +172,10 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
         const bool seed_resident=desc.samples==1&&(desc.levels>image.desc.levels||desc.layers>image.desc.layers)&&
             IsGpuBufferModified(desc.address,layout.guest_bytes);
         const auto capture=[this](u64 address,u64 bytes){
-                ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
-                if(textures_.IsPlannedImageBind())ValidatePreparedShaderBufferRange(address,bytes);
-                // Refresh current CPU/store-marker contents within the already
-                // reserved envelope; a late snapshot must not reuse stale B.
-                PreparePhysicalDmaBuffers(std::span(&request,1));
+                // Bind-time source selection can inherit a larger depth class
+                // than prewarm saw. Grow physical B with generation continuity;
+                // final shader descriptors are selected after this callback.
+                PrepareImageBufferSource(address,bytes);
                 return CapturePreparedShaderBuffer(address,bytes);
             };
         auto captured=cached?textures_.CaptureCachedDepthRecreationVersion(image,desc,layout,RecordingList(),CompletedFence(),capture):
@@ -192,13 +191,10 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
     textures_.SetCachedDepthRecreationTransfer([image_transfer](auto& image,const auto& desc,const auto& layout){
         return image_transfer(image,desc,layout,true);});
     textures_.SetImageBufferSources([this](u64 address,u64 bytes){
-        ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
-        PreparePhysicalDmaBuffers(std::span(&request,1));
+        PrepareImageBufferSource(address,bytes);
     },[this](u64 address,u64 bytes){
-        ValidatePreparedShaderBufferRange(address,bytes);
         const bool resident=IsGpuBufferModified(address,bytes);
-        ShaderBufferRequest request{address,bytes,false,true,true};request.publish_dma_residency=false;
-        PreparePhysicalDmaBuffers(std::span(&request,1));
+        PrepareImageBufferSource(address,bytes);
         return GuestTextureCache::BufferImageSource{CapturePreparedShaderBuffer(address,bytes),resident};
     });
     textures_.SetIndependentBlockExpansion([this](auto& image,const auto& desc,const auto& layout){
@@ -246,7 +242,7 @@ void GuestRasterizer::SetBackingAccess(std::function<bool(VAddr,u64)> has,
              ((desc.data_format==2||desc.data_format==5||desc.data_format==12)&&
               (desc.number_format==0||desc.number_format==1||desc.number_format==4||desc.number_format==5||desc.number_format==7)))&&
             !layout.expanded_bytes_per_pixel&&GuestProtectionPages(desc.address,layout.guest_bytes)&&
-            layout.guest_bytes<=64*1024*1024&&has_backing_(desc.address,layout.guest_bytes);
+            GuestTiler::CanAddressGuestBytes(layout.guest_bytes)&&has_backing_(desc.address,layout.guest_bytes);
     };
     const auto readonly_word=[this](const auto& desc,const auto& layout){
         return !desc.writable&&layout.HostBytesPerPixel()==4&&

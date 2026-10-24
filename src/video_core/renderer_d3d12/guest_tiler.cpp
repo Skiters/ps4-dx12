@@ -100,7 +100,7 @@ std::shared_ptr<GuestTiler::Lease> GuestTiler::Prepare(
 }
 std::shared_ptr<GuestTiler::Lease> GuestTiler::PrepareMaskedMerge(
     Resource& input,Resource& output,Resource& mask,uint64_t bytes){
-    if(!input.handle||!output.handle||!mask.handle||!bytes||bytes%4||bytes>64*1024*1024||
+    if(!input.handle||!output.handle||!mask.handle||!CanAddressGuestBytes(bytes)||
        input.handle.Get()==output.handle.Get()||input.handle.Get()==mask.handle.Get()||
        output.handle.Get()==mask.handle.Get())
         throw std::invalid_argument("Invalid packed guest backing merge");
@@ -118,6 +118,17 @@ std::shared_ptr<GuestTiler::Lease> GuestTiler::PrepareMaskedMerge(
 }
 std::shared_ptr<GuestTiler::Lease> GuestTiler::BindBuffers(Resource& input,Resource& output,Resource& mask,
     const std::array<uint32_t,30>& constants,bool clear_targets){
+    // Validate every dispatch dimension before allocating descriptors or
+    // recording any transitions. Masked merge uses rows of 16384 DWORDs;
+    // even the maximum addressable envelope fits in 65535 rows.
+    const uint64_t columns=uint64_t(constants[17])*constants[23];
+    const uint64_t groups=(columns+255)/256;
+    const uint64_t slices=uint64_t(constants[24])*constants[11];
+    if(!groups||groups>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION||
+       !constants[18]||constants[18]>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION||
+       !slices||slices>D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION||
+       columns>UINT32_MAX-255)
+        throw std::out_of_range("Native tiling dispatch exceeds shader/grid addressing");
     const auto source_bytes=input.handle->GetDesc().Width;
     auto lease=std::make_shared<Lease>();
     lease->root=root_;lease->pipeline=pipeline_;

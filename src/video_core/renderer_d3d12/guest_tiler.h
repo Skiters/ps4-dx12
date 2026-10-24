@@ -12,6 +12,14 @@ class GuestTiler {
     ComPtr<ID3D12RootSignature> root_;
     ComPtr<ID3D12PipelineState> pipeline_;
 public:
+    // The shader addresses bytes with uint. Snapshot buffers are rounded to
+    // the default allocation alignment, so keep that full envelope below 4 GiB.
+    // This is an addressing limit, not a residency budget.
+    static constexpr uint64_t MaxGuestBytes=uint64_t(UINT32_MAX)&
+        ~uint64_t(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT-1);
+    static constexpr bool CanAddressGuestBytes(uint64_t bytes){
+        return bytes&&!(bytes%4)&&bytes<=MaxGuestBytes;
+    }
     struct NativeFormat {
         uint32_t data_format,number_format,guest_bytes,host_bytes,expanded_bytes;
         bool depth;

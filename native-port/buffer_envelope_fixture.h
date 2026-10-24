@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "video_core/renderer_d3d12/rasterizer.h"
+#include "video_core/renderer_d3d12/guest_dma.h"
 #include "common/scope_exit.h"
 #include <cstring>
 #include <stdexcept>
@@ -429,6 +430,34 @@ void RunBufferEnvelopeFixture(ID3D12Device* device,std::byte* physical,VAddr bas
         require(commits==0&&committed==0&&renderer.guard_releases==0,
             "Joining B versions changed CPU ownership or released guards");
         for(size_t i=0;i<bytes;++i)require(physical[i]==std::byte{0x31},"Joining B versions changed physical CPU backing");
+        renderer.ValidateDebugMessages();
+    }
+    {
+        // A bind-time image source grows after an earlier shader selected B.
+        // Physical capacity must not publish residency or retile I into B0.
+        memset(physical,0x31,size_t(bytes));u64 commits{},committed{};
+        Adapter renderer(device);attach(renderer,commits,committed);SCOPE_EXIT {renderer.Finish();};
+        Rasterizer::ShaderBufferRequest source{base+4096,4096,false,true,true};
+        source.publish_dma_residency=false;
+        auto selected=renderer.PrepareShaderBuffers(std::span(&source,1));
+        renderer.FillPreparedShaderBuffer(source.address,source.size,0x41424344,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        renderer.PrepareImageBufferSource(base+2048,8192);
+        renderer.PrepareImageBufferSource(base,16384);
+        const auto current=renderer.RefreshPreparedShaderBuffers(std::span(&source,1),selected);
+        require(current.front().resource.Get()!=selected.front().resource.Get()&&current.front().offset==4096,
+            "Late image capacity did not preserve the preceding shader generation");
+        require(renderer.DmaMemory().ResidentIntersections(base,16384).empty(),
+            "Late image source preparation published semantic B residency");
+        bool rejected=false;
+        try{renderer.PrepareImageBufferSource(base+1,4096);}catch(const std::invalid_argument&){rejected=true;}
+        require(rejected,"Unaligned late image source was accepted");
+        const auto result=read(renderer,base,16384);
+        for(size_t offset=0;offset<result.size();offset+=4){u32 word{};memcpy(&word,result.data()+offset,4);
+            require(word==(offset>=4096&&offset<8192?0x41424344U:0x31313131U),
+                "Late image source lost GPU B or changed physical padding");
+        }
+        require(commits==0&&committed==0,"Late image growth published GPU contents to physical B");
+        for(size_t i=0;i<bytes;++i)require(physical[i]==std::byte{0x31},"Late image growth changed B0");
         renderer.ValidateDebugMessages();
     }
     {

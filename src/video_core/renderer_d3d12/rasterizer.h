@@ -106,7 +106,7 @@ private:
     std::function<bool(VAddr,u64)> release_cpu_pages_;
     std::function<bool(VAddr,u64,bool)> transfer_buffer_watch_;
     std::function<u64(VAddr,u64)> protected_backing_epoch_;
-    Resource AcquireBuffer(u64);
+    Resource AcquireBuffer(u64,u64 maximum_capacity=UINT64_MAX);
     void RetireBuffer(Mapping&);
     void InstallCpuWatch(Mapping&);
     unsigned read_only_batches_{};
@@ -298,6 +298,10 @@ public:
     // semantic residency. Images must preserve these when demoting ownership.
     std::vector<std::pair<VAddr,u64>> GpuOwnedBufferProtectionRanges(VAddr,u64)const;
     void ValidatePreparedShaderBufferRange(VAddr address,u64 bytes);
+    // Capacity/current physical B only, before final native descriptor binding.
+    // Late image recreation may grow the envelope; preserve all overlapping
+    // prepared generations without publishing formatted I or B residency.
+    void PrepareImageBufferSource(VAddr address,u64 bytes);
     Resource CapturePreparedShaderBuffer(VAddr address,u64 bytes);
     struct PreparedBufferBinding {Resource* resource;u64 offset,bytes;std::shared_ptr<const BufferBackingVersion> version;};
     // Borrow only under ExecutionMutex after all allocation/ownership callbacks.
