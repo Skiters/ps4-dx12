@@ -7,10 +7,11 @@
 #include <optional>
 namespace Shader {
 // A source-allocation proof, never a replacement for guest tessellation levels.
-// Missing, conditional or dynamic factor writes retain the hardware maximum.
+// Missing or dynamic factor writes retain the hardware maximum. A conditional
+// writer is usable only when every terminating path writes the required factors.
 struct TessellationFactorBounds {
     u8 written{},dynamic{};
-    bool unconditional{};
+    u8 guaranteed{};
     float maximum{};
     void Record(u32 factor,std::optional<float> value){
         if(factor>=6)return;
@@ -21,7 +22,7 @@ struct TessellationFactorBounds {
     u32 SegmentBound(u8 required=63)const{
         // Isolines consume outer0/1; triangles consume outer0/1/2 and inner0.
         // Unused domain factors need not be written by the original HS.
-        if(!required||(required&~63u)||!unconditional||(written&required)!=required||(dynamic&required)||
+        if(!required||(required&~63u)||(guaranteed&required)!=required||(written&required)!=required||(dynamic&required)||
            !std::isfinite(maximum)||maximum<0||maximum>=32)
             return 64;
         // Covers integer, fractional-even/odd and power-of-two partitioning.

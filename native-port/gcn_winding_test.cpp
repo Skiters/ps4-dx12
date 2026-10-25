@@ -15,6 +15,7 @@
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
 #include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/ir/post_order.h"
 #include "shader_recompiler/ir/passes/ir_passes.h"
 #include "common/serdes.h"
 #include "common/path_util.h"
@@ -180,7 +181,42 @@ int main(int argc,char** argv){try{
                 if(unused.SegmentBound(required)!=4||unused.SegmentBound()!=64)
                     throw std::runtime_error("Unused factor changed the domain proof or admitted a quad");}
         }
-        std::puts("PASS tessellation factor collection, persistence and complete bounded allocation; GPU NOT_RUN");return 0;
+        for(const u8 required:std::array<u8,3>{3,0x17,63})for(u32 scenario=0;scenario<6;++scenario){
+            Shader::Info flow_info{};flow_info.hw_stage=Shader::HwStage::Hull;
+            flow_info.sw_stage=Shader::SwStage::TessellationControl;
+            Shader::IR::Block start(pool),left(pool),right(pool),merge(pool);
+            Shader::IR::Program flow(flow_info);
+            flow.syntax_list.push_back({.data={.block=&start},.type=Shader::IR::AbstractSyntaxNode::Type::Block});
+            const auto write=[&](Shader::IR::Block& block,u8 mask,float value){
+                for(u32 factor=0;factor<6;++factor)if(mask&(1u<<factor))
+                    block.AppendNewInst(Shader::IR::Opcode::SetPatch,
+                        {Shader::IR::Value(Shader::IR::Patch(factor)),Shader::IR::Value(value)});
+            };
+            if(scenario<4){
+                start.AddBranch(&left);start.AddBranch(&right);left.AddBranch(&merge);
+                // Scenario 3 is an early return missing every factor.
+                if(scenario!=3)right.AddBranch(&merge);
+                write(left,required,2.f);
+                if(scenario!=3)write(right,scenario==1?u8(required&~1u):required,3.f);
+                if(scenario==2){
+                    right.AppendNewInst(Shader::IR::Opcode::GetAttribute,
+                        {Shader::IR::Value(Shader::IR::Attribute::Param0),Shader::IR::Value(0u),Shader::IR::Value(0u)});
+                    auto* dynamic=&right.back();
+                    right.AppendNewInst(Shader::IR::Opcode::SetPatch,
+                        {Shader::IR::Value(Shader::IR::Patch::TessellationLodLeft),Shader::IR::Value(dynamic)});
+                }
+            }else{
+                start.AddBranch(&left);left.AddBranch(&right);left.AddBranch(&merge);right.AddBranch(&left);
+                write(right,required,3.f);
+                if(scenario==5)write(start,required,2.f);
+            }
+            flow.post_order_blocks=Shader::IR::PostOrder(&start);
+            Shader::Optimization::CollectShaderInfoPass(flow,Shader::Profile{});
+            const u32 expected=scenario==0||scenario==5?4u:64u;
+            if(flow_info.tessellation_bounds.SegmentBound(required)!=expected)
+                throw std::runtime_error("HS must-write proof lost branch/early-return/loop or dynamic-factor semantics");
+        }
+        std::puts("PASS tessellation factor collection, CFG must-write proof, persistence and complete bounded allocation; GPU NOT_RUN");return 0;
     }
     if(mode=="polygon-output-capacity"){
         if(!compile_shaders)throw std::invalid_argument("polygon-output-capacity requires explicit compile-shaders mode");

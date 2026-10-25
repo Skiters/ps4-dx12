@@ -71,7 +71,7 @@ template<class IO,class InfoType> void InfoFields(IO& io,InfoType& info){
     io.Field(info.stores_tess_level_outer);
     io.Field(info.stores_tess_level_inner);
     io.Fields(info.tessellation_bounds.written,info.tessellation_bounds.dynamic,
-        info.tessellation_bounds.unconditional,info.tessellation_bounds.maximum);
+        info.tessellation_bounds.guaranteed,info.tessellation_bounds.maximum);
     io.Field(info.translation_failed);
     io.Field(info.fs_interpolation);
     io.Fields(info.gs_copy_data.num_attrs,info.gs_copy_data.output_vertices,info.gs_copy_data.num_comps);

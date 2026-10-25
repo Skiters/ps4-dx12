@@ -4,6 +4,7 @@
 #include "core/emulator_settings.h"
 #include "shader_recompiler/ir/program.h"
 #include "shader_recompiler/profile.h"
+#include <unordered_map>
 
 namespace Shader::Optimization {
 
@@ -221,13 +222,71 @@ void Visit(Info& info, const IR::Inst& inst) {
     }
 }
 
+// Must-write dataflow on the structured CFG. Start at the lattice top and meet
+// predecessor outputs; the entry boundary is empty even if it has a back edge.
+// This proves writes on all terminating paths, including loop bypasses and early
+// returns. It never uses a loop body that might not execute as an initial value.
+static u8 GuaranteedTessellationFactors(const IR::Program& program) {
+    const auto& blocks = program.post_order_blocks;
+    if (blocks.empty()) return 0;
+    const IR::Block* entry{};
+    if (!program.syntax_list.empty()) {
+        if (program.syntax_list.front().type != IR::AbstractSyntaxNode::Type::Block) return 0;
+        entry = program.syntax_list.front().data.block;
+    } else if (blocks.size() == 1) {
+        entry = blocks.front(); // Standalone IR clients without a structured list.
+    } else {
+        return 0;
+    }
+    struct State { u8 writes{}, out{63}; bool pending{true}; };
+    std::vector<State> states(blocks.size());
+    std::unordered_map<const IR::Block*, size_t> indices;
+    std::vector<size_t> work;
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        if (!indices.emplace(blocks[i], i).second) return 0;
+        work.push_back(i);
+        for (const auto& inst : blocks[i]->Instructions()) {
+            if (inst.GetOpcode() == IR::Opcode::SetPatch &&
+                inst.Arg(0).Patch() <= IR::Patch::TessellationLodInteriorV) {
+                states[i].writes |= u8(1u << u32(inst.Arg(0).Patch()));
+            }
+        }
+    }
+    if (!indices.contains(entry)) return 0;
+    // Missing CFG nodes must not create a proof. Production PostOrder contains
+    // exactly the entry-reachable graph; reject incomplete external IR clients.
+    for (const auto* block : blocks) {
+        for (const auto* pred : block->ImmPredecessors()) if (!indices.contains(pred)) return 0;
+        for (const auto* succ : block->ImmSuccessors()) if (!indices.contains(succ)) return 0;
+        if (block != entry && block->ImmPredecessors().empty()) return 0;
+    }
+    while (!work.empty()) {
+        const size_t i = work.back(); work.pop_back();
+        states[i].pending = false;
+        u8 incoming = blocks[i] == entry ? 0 : 63;
+        for (const auto* pred : blocks[i]->ImmPredecessors()) {
+            incoming &= states[indices.at(pred)].out;
+        }
+        const u8 out = incoming | states[i].writes;
+        if (out == states[i].out) continue;
+        states[i].out = out;
+        for (const auto* succ : blocks[i]->ImmSuccessors()) {
+            const size_t next = indices.at(succ);
+            if (!states[next].pending) { states[next].pending = true; work.push_back(next); }
+        }
+    }
+    u8 result = 63;
+    bool has_exit{};
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        if (blocks[i]->ImmSuccessors().empty()) { result &= states[i].out; has_exit = true; }
+    }
+    return has_exit ? result : 0;
+}
+
 void CollectShaderInfoPass(IR::Program& program, const Profile& profile) {
     Info& info = program.info;
     info.tessellation_bounds={};
-    info.tessellation_bounds.unconditional=program.post_order_blocks.size()==1&&
-        std::all_of(program.syntax_list.begin(),program.syntax_list.end(),[](const auto& node){
-            return node.type==IR::AbstractSyntaxNode::Type::Block||node.type==IR::AbstractSyntaxNode::Type::Return;
-        });
+    info.tessellation_bounds.guaranteed = GuaranteedTessellationFactors(program);
     for (IR::Block* const block : program.post_order_blocks) {
         for (IR::Inst& inst : block->Instructions()) {
             Visit(info, inst);
