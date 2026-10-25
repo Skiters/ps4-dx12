@@ -692,7 +692,7 @@ bool CompatibleGuestColorStorageSubview(const GuestTextureDesc& source,const Gue
     // A native color image can serve storage and ordered color output. Prove
     // the complete physical subresource mapping before sharing an allocation;
     // ordinary RTV/UAV simultaneous access is still never used.
-    if(!((source.render_target&&view.writable)||(source.writable&&view.render_target))||
+    if(!((source.render_target&&view.writable)||(source.writable&&!view.writable))||
        view.data_format!=source.data_format||
        source.samples!=1||view.samples!=1)return false;
     auto source_color=source,view_color=view;
@@ -1253,6 +1253,8 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
     const bool depth_alias=desc.depth_target&&
         CompatibleGuestDepthSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
     const bool color_alias=CompatibleGuestColorSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view));
+    const bool storage_color_alias=CompatibleGuestColorStorageSubview(desc,layout,sampled_view,LayoutGuestTexture(sampled_view))&&
+        CanBindNativeWordFormat(*this,sampled_view);
     const bool shader_alias=!sampled_view.writable&&
         (CompatibleGuestShaderStorage(desc,sampled_view)||
          CanBindReadonlyWordSrv(*this,sampled_view)||
@@ -1260,7 +1262,7 @@ D3D12_SHADER_RESOURCE_VIEW_DESC GuestTextureCache::Entry::Srv(const GuestTexture
              sampled_view,LayoutGuestTexture(sampled_view))));
     const bool block_alias=layout.block_extent==4&&!sampled_view.writable&&
         CanBindReadonlyBcView(*this,sampled_view,LayoutGuestTexture(sampled_view));
-    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias&&!depth_alias&&!color_alias)||sampled_view.first_mip>=sampled_view.levels||
+    if((!CompatibleGuestSampledStorage(desc,sampled_view)&&!shader_alias&&!block_alias&&!depth_alias&&!color_alias&&!storage_color_alias)||sampled_view.first_mip>=sampled_view.levels||
        sampled_view.first_layer>=sampled_view.layers||!sampled_view.view_layers||
        sampled_view.view_layers>sampled_view.layers-sampled_view.first_layer)
         throw std::invalid_argument("Incompatible native sampled view storage/range");
@@ -2847,7 +2849,7 @@ std::optional<GuestTextureDesc> GuestTextureCache::RebaseBlockSubresource(
 }
 std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColorSubresource(
     const GuestTextureDesc& desc,const GuestTextureLayout& layout,bool array)const{
-    if(desc.writable||desc.depth_target||desc.stencil_address||
+    if(desc.depth_target||desc.stencil_address||
        desc.one_dimensional||desc.volume_depth||desc.samples!=1||desc.levels!=1||
        desc.first_mip||!desc.layers||desc.first_layer>=desc.layers||!desc.view_layers||
        desc.view_layers>desc.layers-desc.first_layer||layout.mips.size()!=1||
@@ -2858,7 +2860,7 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
     if(local.offset||!local.slice_bytes)return std::nullopt;
     std::optional<ColorSubresource> result;
     for(const auto& candidate:entries_){auto& parent=*candidate;
-        if(!parent.gpu_owned||parent.logical_dirty||parent.desc.writable||
+        if(!parent.gpu_owned||parent.logical_dirty||
            parent.desc.depth_target||parent.desc.stencil_address||parent.desc.samples!=1||
            parent.desc.volume_depth||parent.desc.one_dimensional||
            parent.layout.block_extent!=1||
@@ -2875,15 +2877,21 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
             const auto layer=relative/part.slice_bytes;
             if(layer>=parent.desc.layers||desc.layers>parent.desc.layers-layer||
                !MatchesGuestSliceAddressing(parent.desc,parent.layout,mip,desc,layout,UINT(layer)))continue;
-            auto view=parent.desc;view.render_target=desc.render_target;
+            auto view=parent.desc;view.render_target=desc.render_target;view.writable=desc.writable;
             view.data_format=desc.data_format;view.number_format=desc.number_format;
             view.native_raw32=desc.native_raw32;view.native_packed10_raw=desc.native_packed10_raw;
             view.sampled_depth=desc.sampled_depth;view.swizzle=desc.swizzle;
-            view.first_mip=mip;view.levels=desc.render_target?parent.desc.levels:mip+1;view.min_lod=mip*256;
+            view.first_mip=mip;view.levels=(desc.render_target||desc.writable)?parent.desc.levels:mip+1;view.min_lod=mip*256;
             view.first_layer=UINT(layer)+desc.first_layer;view.view_layers=desc.view_layers;
-            const bool direct=CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))&&
+            const bool direct=(CompatibleGuestColorSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
+                CompatibleGuestColorStorageSubview(parent.desc,parent.layout,view,LayoutGuestTexture(view))||
+                (desc.writable&&CompatibleGuestWritableStorage(parent.desc,view)))&&
                 CanBindNativeWordFormat(parent,view)&&
+                (!desc.writable||(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))&&
                 (!desc.render_target||(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET));
+            // A writable parent must remain the same native allocation. Do
+            // not replace its live storage with a converted view snapshot.
+            if(!direct&&(parent.desc.writable||desc.writable))continue;
             if(!direct){
                 // A native cast is not available for every physically identical
                 // guest view (R32/RG16/RGBA8 and expanded signed packed10). Convert

@@ -696,11 +696,12 @@ static void RunCurrentIndependentBinding(ID3D12Device* device){
     require(observed_old==expected_old&&observed_new==expected_new,"Current binding lost new contents or mutated pinned old GPU version");
     renderer.ValidateDebugMessages();puts("PASS: current original image class and pinned preceding GPU contents");
 }
-static void RunColorArraySubviews(ID3D12Device* device){
+static void RunColorArraySubviews(ID3D12Device* device,bool writable_parent=false){
     Rasterizer renderer(device);GuestTextureCache cache(device);SCOPE_EXIT {renderer.Finish();};
     const auto require=[](bool v,const char* m){if(!v)throw std::runtime_error(m);};
     GuestTextureDesc sampled;sampled.address=0x40000;sampled.width=sampled.height=64;sampled.pitch=128;
     sampled.layers=sampled.view_layers=6;sampled.data_format=5;sampled.number_format=7;sampled.tile_mode=14;
+    sampled.writable=writable_parent;
     const auto layout=LayoutGuestTexture(sampled);
     std::vector<std::byte> physical(layout.guest_bytes,std::byte{0x11}),expected=physical;
     cache.SetOwnershipAcquirer([](auto& image){image.buffer_alias_version=true;
@@ -708,13 +709,15 @@ static void RunColorArraySubviews(ID3D12Device* device){
     auto& parent=cache.Upload(sampled,physical,renderer.RecordingList(),renderer.CompletedFence());
     auto pin=cache.PinBinding(parent);require(cache.Own(parent),"Color array ownership");
     Descriptors rtvs(device,D3D12_DESCRIPTOR_HEAP_TYPE_RTV,6,false);
+    Descriptors uavs(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,true);
+    Descriptors cpu_uavs(device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,1,false);
     constexpr u16 halves[]{0x3000,0x3400,0x3600,0x3800,0x3900,0x3a00};
     for(UINT layer=0;layer<6;++layer){
-        auto attachment=sampled;attachment.render_target=true;attachment.layers=layer+1;
+        auto attachment=sampled;attachment.render_target=true;attachment.writable=false;attachment.layers=layer+1;
         attachment.first_layer=layer;attachment.view_layers=1;attachment.storage_height=64;
         attachment.storage_slice_bytes=layout.mips[0].slice_bytes;
         const auto requested=LayoutGuestTexture(attachment);
-        require(CompatibleGuestColorSubview(sampled,layout,attachment,requested),"Compatible color face rejected");
+        require((writable_parent?CompatibleGuestColorStorageSubview(sampled,layout,attachment,requested):CompatibleGuestColorSubview(sampled,layout,attachment,requested)),"Compatible color face rejected");
         auto& selected=cache.Upload(attachment,std::span(physical).first(requested.guest_bytes),
             renderer.RecordingList(),renderer.CompletedFence());
         require(&selected==&parent,"CB face binding split the original color array");
@@ -730,15 +733,15 @@ static void RunColorArraySubviews(ID3D12Device* device){
         for(size_t pixel=0;pixel<pixels.size();pixel+=2){pixels[pixel]=halves[layer];pixels[pixel+1]=0x3800;}
         EncodeGuestSubresource(sampled,layout,expected,std::as_bytes(std::span(pixels)),0,layer);
     }
-    auto one=sampled;one.layers=one.view_layers=1;
+    auto one=sampled;one.writable=false;one.layers=one.view_layers=1;
     const auto srv=parent.Srv(one);require(srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
         srv.Texture2DArray.ArraySize==1,"One-layer SRV lost native array dimension");
     auto invalid=one;invalid.pitch*=2;
-    require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Different physical pitch accepted");
-    invalid=sampled;invalid.layers=invalid.view_layers=7;
-    require(!CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)),"Out-of-bounds layer view accepted");
+    require(!(writable_parent?CompatibleGuestColorStorageSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)):CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid))),"Different physical pitch accepted");
+    invalid=sampled;invalid.writable=false;invalid.layers=invalid.view_layers=7;
+    require(!(writable_parent?CompatibleGuestColorStorageSubview(sampled,layout,invalid,LayoutGuestTexture(invalid)):CompatibleGuestColorSubview(sampled,layout,invalid,LayoutGuestTexture(invalid))),"Out-of-bounds layer view accepted");
     auto integer=one;integer.number_format=4;
-    require(CompatibleGuestColorSubview(sampled,layout,integer,LayoutGuestTexture(integer)),
+    require((writable_parent?CompatibleGuestColorStorageSubview(sampled,layout,integer,LayoutGuestTexture(integer)):CompatibleGuestColorSubview(sampled,layout,integer,LayoutGuestTexture(integer))),
         "Mutable color numeric view rejected");
     const auto integer_srv=parent.Srv(integer);
     require(integer_srv.Format==DXGI_FORMAT_R16G16_UINT&&
@@ -747,7 +750,7 @@ static void RunColorArraySubviews(ID3D12Device* device){
     integer.render_target=true;
     require(parent.Rtv(integer).Format==DXGI_FORMAT_R16G16_UINT,"Mutable RTV retained the owner format");
     auto expanded=integer;expanded.data_format=9;expanded.number_format=5;
-    require(!CompatibleGuestColorSubview(sampled,layout,expanded,LayoutGuestTexture(expanded)),
+    require(!(writable_parent?CompatibleGuestColorStorageSubview(sampled,layout,expanded,LayoutGuestTexture(expanded)):CompatibleGuestColorSubview(sampled,layout,expanded,LayoutGuestTexture(expanded))),
         "Expanded signed packed color was accepted as direct bits");
     auto shifted=one;shifted.address+=layout.mips[0].slice_bytes;
     // For this thin macro array the local bank correction must compensate
@@ -767,6 +770,49 @@ static void RunColorArraySubviews(ID3D12Device* device){
     require(shifted_srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
         shifted_srv.Texture2DArray.FirstArraySlice==1&&shifted_srv.Texture2DArray.ArraySize==1,
         "Shifted color native SRV lost its selected slice");
+    if(writable_parent){
+        auto shifted_target=shifted;shifted_target.render_target=true;
+        const auto target_alias=cache.RebaseColorSubresource(shifted_target,shifted_layout,true);
+        require(target_alias&&target_alias->parent==&parent&&!target_alias->view.writable&&
+            target_alias->view.layers==sampled.layers,"Shifted RTV lost writable parent identity/extent");
+        auto& selected=cache.Upload(target_alias->view,physical,renderer.RecordingList(),renderer.CompletedFence());
+        require(&selected==&parent,"Shifted RTV copied the writable parent");
+        const auto view=parent.Rtv(target_alias->view);
+        require(view.Texture2DArray.FirstArraySlice==1&&view.Texture2DArray.ArraySize==1,
+            "Shifted writable-parent RTV selected the wrong slice");
+        device->CreateRenderTargetView(parent.texture.handle.Get(),&view,rtvs.Cpu(1));
+        parent.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_RENDER_TARGET);
+        const float value[]{.875f,.25f,0,1};
+        renderer.RecordingList()->ClearRenderTargetView(rtvs.Cpu(1),value,0,nullptr);
+        std::vector<u16> pixels(size_t(sampled.width)*sampled.height*2);
+        for(size_t pixel=0;pixel<pixels.size();pixel+=2){pixels[pixel]=0x3b00;pixels[pixel+1]=0x3400;}
+        EncodeGuestSubresource(sampled,layout,expected,std::as_bytes(std::span(pixels)),0,1);
+        auto storage_view=shifted;storage_view.writable=true;storage_view.address+=layout.mips[0].slice_bytes;
+        storage_view.bank_swizzle=addressing.Bank(0,0,2,0,sampled.bank_swizzle);
+        const auto storage_layout=LayoutGuestTexture(storage_view);
+        for(UINT y=0;y<storage_view.height;++y)for(UINT x=0;x<storage_view.width;++x)
+            require(sampled.address+GuestPixelOffset(sampled,layout,0,2,x,y)==
+                storage_view.address+GuestPixelOffset(storage_view,storage_layout,0,0,x,y),"Shifted UAV address oracle differs");
+        const auto storage_alias=cache.RebaseColorSubresource(storage_view,storage_layout,true);
+        require(storage_alias&&storage_alias->parent==&parent&&storage_alias->view.writable&&
+            storage_alias->view.first_layer==2,"Shifted UAV lost its native parent/slice");
+        auto& writable=cache.Upload(storage_alias->view,physical,renderer.RecordingList(),renderer.CompletedFence());
+        require(&writable==&parent,"Shifted UAV split its parent allocation");
+        const auto uav=parent.Uav(storage_alias->view,storage_alias->view.first_mip);
+        require(uav.ViewDimension==D3D12_UAV_DIMENSION_TEXTURE2DARRAY&&uav.Texture2DArray.FirstArraySlice==2&&
+            uav.Texture2DArray.ArraySize==1,"Shifted UAV descriptor selected incorrect layers");
+        const auto slot=uavs.Allocate(0),cpu_slot=cpu_uavs.Allocate(0);
+        device->CreateUnorderedAccessView(parent.texture.handle.Get(),nullptr,&uav,uavs.Cpu(slot));
+        device->CreateUnorderedAccessView(parent.texture.handle.Get(),nullptr,&uav,cpu_uavs.Cpu(cpu_slot));
+        ID3D12DescriptorHeap* heaps[]{uavs.Heap()};renderer.RecordingList()->SetDescriptorHeaps(1,heaps);
+        parent.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        const float stored[]{.625f,.875f,0,1};
+        renderer.RecordingList()->ClearUnorderedAccessViewFloat(uavs.Gpu(slot),cpu_uavs.Cpu(cpu_slot),parent.texture.handle.Get(),stored,0,nullptr);
+        parent.texture.UavBarrier(renderer.RecordingList());
+        require(cache.Own(parent),"Shifted UAV write lost parent ownership");
+        for(size_t pixel=0;pixel<pixels.size();pixel+=2){pixels[pixel]=0x3900;pixels[pixel+1]=0x3b00;}
+        EncodeGuestSubresource(sampled,layout,expected,std::as_bytes(std::span(pixels)),0,2);
+    }
     require(!cache.RebaseColorSubresource(shifted,shifted_layout,false),"Non-array shader accepted an array parent");
     shifted.bank_swizzle^=1;
     require(!cache.RebaseColorSubresource(shifted,LayoutGuestTexture(shifted),true),
@@ -834,6 +880,7 @@ int main(int argc,char** argv){try{
     }
     if(argc==2&&strcmp(argv[1],"--readonly-depth-conversion")==0){RunReadonlyDepthConversion(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--current-independent-binding")==0){RunCurrentIndependentBinding(device.Get());return 0;}
+    if(argc==2&&strcmp(argv[1],"--writable-color-array-subviews")==0){RunColorArraySubviews(device.Get(),true);return 0;}
     if(argc==2&&strcmp(argv[1],"--color-array-subviews")==0){RunColorArraySubviews(device.Get());RunConvertedColorSubresource(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--converted-clear-pressure")==0){RunConvertedClearPressure(device.Get());return 0;}
     if(argc==2&&strcmp(argv[1],"--requested-sample-backings")==0){for(UINT samples:{1u,8u})RunRequestedSampleBackings(device.Get(),samples);return 0;}
