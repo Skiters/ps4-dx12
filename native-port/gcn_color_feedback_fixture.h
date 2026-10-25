@@ -76,6 +76,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
     if(converted_color==1){image.data_format=10;image.num_format=0;image.dst_sel_x=6;}
     if(converted_color==2){image.data_format=9;image.num_format=1;}
+    if(converted_color==3){image.data_format=5;image.num_format=7;image.dst_sel_x=5;}
     if(retained_mips||grown_mips)image.last_level=1;
     const auto sampled=DescribeGuestTexture(image);
     const auto sampled_layout=LayoutGuestTexture(sampled);
@@ -235,11 +236,21 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         return;
     }
     if(converted_color){
-        if(!raw_domain||!CompatibleGuestPackedStorage(target,sampled))
-            throw std::runtime_error("Converted feedback fixture has no exact packed mapping");
+        if(!raw_domain||!GuestTextureCache::CanTransferColorFeedback(target,layout,sampled,sampled_layout))
+            throw std::runtime_error("Converted feedback fixture has no exact GPU word mapping");
+        if(converted_color==3){
+            if(CompatibleGuestPackedStorage(target,sampled)||CompatibleGuestColorSubview(target,layout,sampled,sampled_layout))
+                throw std::runtime_error("RG16 feedback no longer exercises the independent word-class transfer");
+            auto invalid=sampled;invalid.pitch*=2;
+            if(GuestTextureCache::CanTransferColorFeedback(target,layout,invalid,LayoutGuestTexture(invalid)))
+                throw std::runtime_error("Color feedback admitted different physical geometry");
+            invalid=sampled;invalid.writable=true;
+            if(GuestTextureCache::CanTransferColorFeedback(target,layout,invalid,LayoutGuestTexture(invalid)))
+                throw std::runtime_error("Color feedback admitted a competing image writer");
+        }
         draw(left,true);
         cb.base_address=u32((base+61440)>>8);cb.info.format=4;cb.info.number_type=7;
-        if(converted_color==1){image.data_format=4;image.num_format=7;image.dst_sel_x=4;}
+        if(converted_color==1||converted_color==3){image.data_format=4;image.num_format=7;image.dst_sel_x=4;}
         const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
         draw(left,true);
         const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
@@ -256,7 +267,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
         // R32(1) -> RGBA8.B=128/255 -> half -> R32 probe half.
         // SNORM10(1) -> half -> quantized256/511 -> R32 probe half.
-        auto expected=physical;const float value=converted_color==1?128.f/1020.f:128.f/511.f;
+        // R32(1) bits3f800000 -> RG16.G half bits3f80=1.875 -> .9375 -> .46875.
+        auto expected=physical;const float value=converted_color==1?128.f/1020.f:converted_color==3?.46875f:128.f/511.f;
         for(UINT sample=0;sample<converted_samples;++sample)
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
             memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y,sample),&value,4);

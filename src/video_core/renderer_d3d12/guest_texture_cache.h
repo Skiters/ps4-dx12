@@ -418,6 +418,10 @@ public:
         const GuestTextureDesc&,const GuestTextureLayout&);
     static bool SeparateColorSampledImages(const GuestTextureDesc&,const GuestTextureLayout&,
         const GuestTextureDesc&,const GuestTextureLayout&);
+    // Exact physical word-class conversion through retained GPU I snapshots;
+    // never a reinterpretation of incompatible D3D12 resource descriptors.
+    static bool CanTransferColorFeedback(const GuestTextureDesc&,const GuestTextureLayout&,
+        const GuestTextureDesc&,const GuestTextureLayout&);
     // Structural raw 8/16/32-bit component contract; typed views and MSAA quality still
     // require the existing device checks during allocation/transfer preparation.
     static bool CanTransferIndependentMultisample(const GuestTextureDesc&,const GuestTextureLayout&);

@@ -1900,12 +1900,14 @@ bool MatchesReferenceColorImage(GuestTextureDesc source,const GuestTextureLayout
     // Pinned texture_cache/host_compatibility.cpp groups ordinary uncompressed
     // color formats by texel bits (8/16/32/64/96/128 here). Equal-sized BC blocks
     // and depth/stencil are separate classes and must not enter this predicate.
-    if(source.render_target||view.render_target||source.depth_target||view.depth_target||
+    // Attachment usage does not change that class. This is a transfer-source
+    // predicate, never permission to cast incompatible native resource views.
+    if(source.depth_target||view.depth_target||
        source.stencil_address||view.stencil_address||source_layout.block_extent!=1||view_layout.block_extent!=1||
        !MatchesGuestMipLayout(source_layout,view_layout))return false;
     switch(source_layout.bytes_per_pixel){case 1:case 2:case 4:case 8:case 12:case 16:break;default:return false;}
     source.data_format=view.data_format=4;source.number_format=view.number_format=4;
-    source.writable=view.writable=false;
+    source.writable=view.writable=source.render_target=view.render_target=false;
     source.native_packed10_raw=view.native_packed10_raw=source.native_raw32=view.native_raw32=false;
     source.storage_height=view.storage_height=0;source.storage_slice_bytes=view.storage_slice_bytes=0;
     source.pow2_padding=view.pow2_padding=false;
@@ -2216,6 +2218,13 @@ bool GuestTextureCache::SeparateColorSampledImages(const GuestTextureDesc& color
         !sampled.writable&&!sampled.render_target&&!sampled.depth_target&&!sampled.stencil_address&&
         color.address==sampled.address&&color_layout.block_extent&&sampled_layout.block_extent&&
         !MatchesReferenceOverlapClass(color,color_layout,sampled,sampled_layout);
+}
+bool GuestTextureCache::CanTransferColorFeedback(const GuestTextureDesc& color,
+    const GuestTextureLayout& color_layout,const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
+    return color.render_target&&!color.writable&&!sampled.render_target&&!sampled.writable&&
+        (CompatibleGuestPackedStorage(color,sampled)||
+         MatchesReferenceColorImage(color,color_layout,sampled,sampled_layout))&&
+        CanUploadGpuSnapshot(color,color_layout)&&CanUploadGpuSnapshot(sampled,sampled_layout);
 }
 bool GuestTextureCache::SeparateColorDepthAttachments(const GuestTextureDesc& color,
     const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
