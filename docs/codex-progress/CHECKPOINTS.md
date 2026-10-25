@@ -1,3 +1,7 @@
+## Shared color/storage and zero-restart integration — 2026-10-25
+
+Production a948d3c after d9cf233/8ed47e9/e4ae556. Connected, ALL executable checks NOT_RUN under the current user instruction. Main core and GCN fixture compile/link PASS18.071s (064011-17980); clean tracked Release PASS20.663s (064116-30736). Identity: F:/PS4Dev/handoff/native-port-comparison-20261019/shared-mips-a948d3c.json. No app-core replacement, runtime archive or behavior/FPS claim. Continue production beyond this checkpoint; SESSION_HANDOFF first section is authoritative.
+
 ## Continued integration: auxiliary polygon transport, independent storage and tessellation bounds — 2026-10-25
 
 Production922ddca after98622b2/0d9c5ab/2325301. Connected, ALL executable tests NOT_RUN until seven-area implementations finish. Clean Release922ddca PASS42.077s061929-23748; main core PASS34.698s061759-29256, winding fixture compile/link PASS11.256s061845-11480, primitive fixture compile/link PASS7.648s061857-18676. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/tessellation-bound-922ddca.json. No app-core replacement, runtime copies or behavior/FPS claims. SESSION_HANDOFF first section authoritative; keep developing beyond checkpoints.
