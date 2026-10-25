@@ -2837,12 +2837,13 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
                 (!desc.render_target||(parent.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET));
             if(!direct){
                 // A native cast is not available for every physically identical
-                // guest view (R32/RGBA8 and expanded signed packed10). Convert
+                // guest view (R32/RG16/RGBA8 and expanded signed packed10). Convert
                 // the complete parent, keeping the selected mip/slice. A local
                 // standalone upload would incorrectly initialize it from B.
                 view.levels=parent.desc.levels;
                 const auto converted_layout=LayoutGuestTexture(view);
-                if(!CompatibleGuestPackedStorage(parent.desc,view)||
+                if((!CompatibleGuestPackedStorage(parent.desc,view)&&
+                    !MatchesReferenceColorImage(parent.desc,parent.layout,view,converted_layout))||
                    !CanUploadGpuSnapshot(parent.desc,parent.layout)||
                    !CanUploadGpuSnapshot(view,converted_layout))continue;
             }

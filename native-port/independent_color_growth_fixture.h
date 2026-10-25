@@ -7,8 +7,9 @@
 namespace NativeDX12 {
 inline void RunConvertedColorSubresource(ID3D12Device* device){
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
-    for(const UINT tile:{0u,8u}){
+    for(const UINT tile:{0u,8u})for(const UINT format:{5u,10u})for(const bool attachment:{false,true}){
         Rasterizer renderer(device);GuestTextureCache cache(device);
+        SCOPE_EXIT {renderer.Finish();};
         GuestTextureDesc source;source.address=0x40000;source.width=source.height=source.pitch=16;
         source.levels=3;source.layers=source.view_layers=2;source.tile_mode=tile;
         source.data_format=4;source.number_format=4;source.render_target=true;
@@ -23,10 +24,28 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
         parent.buffer_alias_version=parent.buffer_alias_watch=true;parent.SetGpuOwned(true);
         parent.NoteLogicalImageWrite();auto pin=cache.PinBinding(parent);
         cache.SetOwnershipResolver([](auto&){throw std::runtime_error("Converted mip published its image");});
+        // B has unrelated texels but matching physical padding. A transfer
+        // must use every live texel from I and leave this source B unchanged.
+        auto seed_bytes=original;
+        for(UINT mip=0;mip<source.levels;++mip)for(UINT layer=0;layer<source.layers;++layer)
+        for(UINT y=0;y<(source.height>>mip);++y)for(UINT x=0;x<(source.width>>mip);++x)
+            memset(seed_bytes.data()+GuestPixelOffset(source,layout,mip,layer,x,y),0xa5,4);
+        auto upload=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        auto seed=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        void* mapped{};D3D12_RANGE empty{};Check(upload.handle->Map(0,&empty,&mapped));
+        memcpy(mapped,seed_bytes.data(),seed_bytes.size());upload.handle->Unmap(0,nullptr);
+        renderer.RecordingList()->CopyBufferRegion(seed.handle.Get(),0,upload.handle.Get(),0,layout.guest_bytes);
+        seed.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        renderer.RetainUntilFinish([upload,seed](u64){});
+        cache.SetIndependentVersionTransfer([&](auto& image,u64 address,u64 bytes){
+            require(address==source.address&&bytes==layout.guest_bytes,"Converted mip transfer lost full envelope");
+            return cache.RetileBufferVersion(image,seed,renderer.RecordingList(),renderer.CompletedFence());
+        },[](auto& image){image.buffer_alias_version=image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;},
+          [](auto& image){image.SetGpuOwned(false);image.buffer_alias_version=image.buffer_alias_watch=false;});
         auto local=source;local.address+=layout.mips[1].offset+layout.mips[1].slice_bytes;
         local.width=local.height=8;local.pitch=layout.mips[1].pitch;
-        local.levels=local.layers=local.view_layers=1;local.render_target=false;
-        local.data_format=10;local.number_format=4;
+        local.levels=local.layers=local.view_layers=1;local.render_target=attachment;
+        local.data_format=format;local.number_format=4;
         const auto physical=LayoutGuestTexture(local);
         for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
             require(source.address+GuestPixelOffset(source,layout,1,1,x,y)==
@@ -41,14 +60,26 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
         std::vector<std::byte> unrelated(layout.guest_bytes,std::byte{0xa5});
         auto& converted=cache.Upload(alias->view,unrelated,renderer.RecordingList(),renderer.CompletedFence());
         const auto srv=converted.Srv(alias->view);
-        require(srv.Format==DXGI_FORMAT_R8G8B8A8_UINT&&
+        require(srv.Format==(format==5?DXGI_FORMAT_R16G16_UINT:DXGI_FORMAT_R8G8B8A8_UINT)&&
             srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
             srv.Texture2DArray.MostDetailedMip==1&&srv.Texture2DArray.FirstArraySlice==1,
             "Converted mip SRV lost format or selected subresource");
+        if(attachment){const auto rtv=converted.Rtv(alias->view,1);
+            require(rtv.Format==srv.Format&&rtv.ViewDimension==D3D12_RTV_DIMENSION_TEXTURE2DARRAY&&
+                rtv.Texture2DArray.MipSlice==1&&rtv.Texture2DArray.FirstArraySlice==1&&
+                rtv.Texture2DArray.ArraySize==1,"Converted mip RTV lost selected subresource");}
+        auto seed_readback=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        renderer.RetainUntilFinish([seed_readback](u64){});
+        seed.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        renderer.RecordingList()->CopyBufferRegion(seed_readback.handle.Get(),0,seed.handle.Get(),0,layout.guest_bytes);
         GuestImageReadback readback(device,converted,renderer.RecordingList());
         const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
         auto actual=original;readback.Resolve(renderer.CompletedFence(),actual);
         require(actual==original,"Converted shifted mip lost current I, another mip/layer or padding");
+        D3D12_RANGE range{0,size_t(layout.guest_bytes)};Check(seed_readback.handle->Map(0,&range,&mapped));
+        const bool independent=memcmp(mapped,seed_bytes.data(),seed_bytes.size())==0;
+        seed_readback.handle->Unmap(0,&empty);
+        require(independent,"Converted shifted mip overwrote physical source B");
         renderer.ValidateDebugMessages();
     }
 }
