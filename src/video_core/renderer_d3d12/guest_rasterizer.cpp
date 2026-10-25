@@ -1273,6 +1273,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     bool shader_depth_overlap=false,shader_stencil_overlap=false;
     bool exact_depth_buffer_writer=false;
     bool shader_image_depth_overlap=false,shader_image_stencil_overlap=false,independent_attachment_write=false;
+    bool separate_depth_storage=false;
     const auto record_depth_writer=[&](VAddr address,u64 bytes,bool image_writer){
         if(!has_depth||!address||!bytes)return;
         const bool depth_overlap=Overlap(address,bytes,descriptions[8].address,layouts[8].guest_bytes);
@@ -1301,6 +1302,16 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     for(const auto& stage:stages)for(const auto& image:stage.info->images)if(image.is_written){
         const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
         const auto desc=DescribeGuestTexture(sharp);const auto layout=LayoutGuestTexture(desc);
+        auto color=desc;color.render_target=true;
+        if(has_depth&&!image.is_depth&&GuestTextureCache::SeparateColorDepthAttachments(
+            color,layout,descriptions[8],layouts[8])){
+            // The pinned overlap classifier leaves these as distinct images,
+            // also for storage usage. Keep D/S ownership instead of snapshotting
+            // or publishing it into the shader image's independent B domain.
+            separate_depth_storage|=Overlap(desc.address,layout.guest_bytes,
+                descriptions[8].address,layouts[8].guest_bytes);
+            continue;
+        }
         shader_image_depth_overlap|=has_depth&&Overlap(desc.address,layout.guest_bytes,
             descriptions[8].address,layouts[8].guest_bytes);
         shader_image_stencil_overlap|=has_depth&&descriptions[8].stencil_address&&
@@ -1772,7 +1783,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const ShaderBufferRequest resident{stencil_desc.address,stencil_layout.guest_bytes,false,true,true};
                 DmaMemory().ObserveResidentSharps(std::span(&resident,1));
             }
-            if(std::ranges::any_of(separate_color_depth,[](bool value){return value;})&&
+            if((separate_depth_storage||std::ranges::any_of(separate_color_depth,[](bool value){return value;}))&&
                !OwnIndependentImage(entry))
                 throw std::runtime_error("Independent depth attachment cannot retain separate buffer/image ownership");
             textures_.PublishBufferResidency(entry);

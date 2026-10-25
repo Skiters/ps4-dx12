@@ -456,6 +456,17 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         for(UINT i=0;i<3;++i){const float z=.25f;memcpy(memory+i*32+8,&z,4);}
         physical.assign(backing,backing+65536);
         draw(seed,false); // Repeat D->CB->D recreation, now with Z=.25.
+        if(storage_writer){
+            if(!independent_depth)throw std::invalid_argument("Storage/depth fixture requires independent images");
+            alignas(256) std::array<u32,128> store{};
+            initialize(store,{0xBEEB03FF,15,0x7e000280,0x7e020280,0x7e0802ff,0x3f000000,
+                0xf0200100,0x00000400,0xbf810000},0x4450544853544f31ULL);
+            regs.color_target_mask.raw=0;
+            regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=1;
+            draw(store,true); // Storage C=.5 and native D=.25, with optional S=37.
+            regs.color_target_mask.raw=1;
+            regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=8;
+        }
         regs.depth_control={};cb.base_address=u32((base+61440)>>8);
         if(independent_stencil){
             // Retained S must hold the GPU-written37, not its physical0xa5 seed.
@@ -474,7 +485,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             // GCN, while the resident raw buffer remains the initial bytes.
             auto expected=physical;
             for(const UINT plane:{0u,1u}){
-                const float value=plane?.125f:.5f;
+                const float value=plane?.125f:storage_writer?.25f:.5f;
                 image.pitch=plane?depth.pitch-1:15;
                 image.base_address=(plane?depth.address:target.address)>>8;
                 image.tiling_index=plane&&shifted_depth?depth.tile_mode:target.tile_mode;
