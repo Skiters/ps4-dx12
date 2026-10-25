@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -145,20 +145,27 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.vs_program.settings.num_user_regs=4;
     }
     draw(seed,false);
-    if(disjoint_mips){
+    if(disjoint_mips||separate_targets){
         D3D12_FEATURE_DATA_D3D12_OPTIONS19 options{};
-        Check(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19,&options,sizeof(options)));
-        if(!options.MismatchingOutputDimensionsSupported)
+        if(disjoint_mips)Check(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19,&options,sizeof(options)));
+        if(disjoint_mips&&!options.MismatchingOutputDimensionsSupported)
             throw std::runtime_error("Disjoint mip fixture requires mismatching output dimensions support");
-        if(!raw_domain||!retained_mips)throw std::runtime_error("Disjoint mip fixture lost its full parent/B precondition");
+        if(!raw_domain||(disjoint_mips&&!retained_mips)||separate_targets%256)
+            throw std::runtime_error("MRT fixture lost its parent/B or address precondition");
         alignas(256) std::array<u32,128> mrt{};
         initialize(mrt,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0x7e020280,0x7e040280,
             0x7e0602ff,0x3f800000,0xf800000f,0x03020100,
             0x7e0002ff,0x3f400000,0xf800001f,0x03020100,0xbf810000},0x434f4c4d49504d31ULL);
-        const auto mip_address=sampled.address+sampled_layout.mips[1].offset;
+        const auto mip_address=separate_targets?u64(s64(target.address)+separate_targets):sampled.address+sampled_layout.mips[1].offset;
         if(mip_address&255)throw std::runtime_error("MRT mip is not register aligned");
         auto& cb1=regs.color_buffers[1];cb1=cb;cb1.base_address=u32(mip_address>>8);
-        cb1.pitch.tile_max=cb1.slice.tile_max=0;gpu.last_cb_extent[1]={4,4};
+        if(separate_targets){
+            gpu.last_cb_extent[1]={8,8};
+            const auto other=DescribeGuestColorBuffer(cb1,gpu.last_cb_extent[1]);
+            if(!GuestTextureCache::SeparateColorAttachments(target,layout,other,LayoutGuestTexture(other))||
+               GuestTextureCache::SeparateColorAttachments(target,layout,target,layout))
+                throw std::runtime_error("MRT chance overlap misclassified a shared image");
+        }else {cb1.pitch.tile_max=cb1.slice.tile_max=0;gpu.last_cb_extent[1]={4,4};}
         regs.color_target_mask.raw=regs.color_shader_mask.raw=0x11;
         regs.color_export_format.raw=u32(AmdGpu::ShaderExportFormat::ABGR_32)*0x11;
         draw(mrt,false); // Mip0 upper-left4x4=.25; mip1=.75; mip0 exterior=1.
@@ -175,7 +182,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
                 throw std::runtime_error("Disjoint MRT mips lost current image, render-area intersection or B/padding");
             physical.assign(backing,backing+65536);
         };
-        check(left,.125f);check(right,.5f);image.base_level=1;check(left,.375f);
+        check(left,.125f);
+        if(separate_targets){image.base_address=mip_address>>8;check(left,.375f);}
+        else {check(right,.5f);image.base_level=1;check(left,.375f);}
         const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
         if(!raw.resource||raw.bytes!=raw_bytes)throw std::runtime_error("Disjoint MRT lost resident B");
         auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);

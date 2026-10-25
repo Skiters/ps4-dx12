@@ -1135,6 +1135,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<bool,8> color_feedback{};
     std::array<bool,8> color_storage_feedback{};
     std::array<bool,8> color_buffer_overlap{},exact_color_buffer_writer{};
+    std::array<bool,8> separate_color_targets{};
     std::array<std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan>,8> color_binding_plans{};
     std::array<bool,8> color_depth_alias{},separate_color_depth{},retired_color_targets{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
@@ -1163,6 +1164,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         for(UINT j=0;j<i;++j)if(formats[j]!=DXGI_FORMAT_UNKNOWN&&
             Overlap(descriptions[i].address,layouts[i].guest_bytes,descriptions[j].address,layouts[j].guest_bytes)){
             const auto& a=descriptions[i];const auto& b=descriptions[j];
+            if(GuestTextureCache::SeparateColorAttachments(a,layouts[i],b,layouts[j])){
+                separate_color_targets[i]=separate_color_targets[j]=true;continue;
+            }
             const bool disjoint=a.first_layer>=b.first_layer+b.view_layers||
                 b.first_layer>=a.first_layer+a.view_layers||
                 (mismatching_output_dimensions_&&a.first_mip!=b.first_mip);
@@ -1304,7 +1308,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // publish its future native class or metadata during physical prewarm.
         auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
         if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
-        deferred_color_clear[i]=color_buffer_overlap[i]||color_depth_alias[i]||separate_color_depth[i]||
+        deferred_color_clear[i]=color_buffer_overlap[i]||separate_color_targets[i]||color_depth_alias[i]||separate_color_depth[i]||
             (source&&(source->desc.depth_target||source->desc.levels<descriptions[i].levels||
                 source->desc.layers<descriptions[i].layers));
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
@@ -1718,7 +1722,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
             }
             if(!retired_color_targets[i]){
-                if(color_depth_alias[i]||separate_color_depth[i]){
+                if(color_depth_alias[i]||separate_color_depth[i]||separate_color_targets[i]){
                     if(!textures_.OwnIndependentShaderImage(entry))
                         throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
                 }else if(color_buffer_overlap[i]){

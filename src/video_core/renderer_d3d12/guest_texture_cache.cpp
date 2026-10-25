@@ -2232,6 +2232,12 @@ bool GuestTextureCache::CanTransferColorFeedback(const GuestTextureDesc& color,
          MatchesReferenceColorImage(color,color_layout,sampled,sampled_layout))&&
         CanUploadGpuSnapshot(color,color_layout)&&CanUploadGpuSnapshot(sampled,sampled_layout);
 }
+bool GuestTextureCache::SeparateColorAttachments(const GuestTextureDesc& first,
+    const GuestTextureLayout& first_layout,const GuestTextureDesc& second,const GuestTextureLayout& second_layout){
+    if(!second.render_target||second.writable||second.depth_target||second.stencil_address)return false;
+    auto sampled=second;sampled.render_target=false;
+    return SeparateColorSampledImages(first,first_layout,sampled,second_layout);
+}
 bool GuestTextureCache::SeparateColorDepthAttachments(const GuestTextureDesc& color,
     const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
     // ResolveOverlap checks pool-reuse geometry before ResolveDepthOverlap,
