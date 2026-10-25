@@ -1,3 +1,7 @@
+## Current continuation: 671a07e — 2026-10-25
+
+Read [shifted views and tessellation control flow](SHIFTED_VIEWS_TESSELLATION_20261025.md) before the historical entries below. Connected: writable parent subviews, original undefined polygon inputs, active-domain CFG factor bounds (StageVersion49). Main and clean Release compile/link PASS; all executable checks NOT_RUN. Identity cfg-bound-671a07e.json in the existing native-port-comparison-20261019 handoff folder. Continue the remaining image-alias and polygon/capture production paths; do not stop at this checkpoint. Installed core unchanged.
+
 ## Shared color/storage and zero-restart integration — 2026-10-25
 
 Production a948d3c after d9cf233/8ed47e9/e4ae556. Connected, ALL executable checks NOT_RUN under the current user instruction. Main core and GCN fixture compile/link PASS18.071s (064011-17980); clean tracked Release PASS20.663s (064116-30736). Identity: F:/PS4Dev/handoff/native-port-comparison-20261019/shared-mips-a948d3c.json. No app-core replacement, runtime archive or behavior/FPS claim. Continue production beyond this checkpoint; SESSION_HANDOFF first section is authoritative.

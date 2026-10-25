@@ -18213,7 +18213,8 @@
         22,
         45,
         50
-      ]
+      ],
+      "current_continuation": "See docs/codex-progress/SHIFTED_VIEWS_TESSELLATION_20261025.md, production671a07e. Current details supersede stale historical claims; behavior NOT_RUN."
     },
     "formatted-alias-ordering": {
       "upstream_symbol": "Vulkan::BufferCache::EnsureResident / SynchronizeMemoryFromImage / Rasterizer::BindResources / TextureCache::ResolveOverlap / ExpandImage",
@@ -18545,7 +18546,8 @@
         ],
         "evidence": "F:/PS4Dev/handoff/native-port-comparison-20261019/ordered-current-image-0dabfe7.json"
       },
-      "latest_connected_color_domains": "Through3e6af19: exact packed MSAA feedback, HTILE-cleared independent I beside buffer B, expanded compression flag semantics; previous color mip/layer and ordered-domain changes retained. Compile/link only, runtime NOT_RUN. Ordinary D16/D32/S ownership is already connected; T#16 remains open."
+      "latest_connected_color_domains": "Through3e6af19: exact packed MSAA feedback, HTILE-cleared independent I beside buffer B, expanded compression flag semantics; previous color mip/layer and ordered-domain changes retained. Compile/link only, runtime NOT_RUN. Ordinary D16/D32/S ownership is already connected; T#16 remains open.",
+      "current_continuation": "See docs/codex-progress/SHIFTED_VIEWS_TESSELLATION_20261025.md, production671a07e. Current details supersede stale historical claims; behavior NOT_RUN."
     },
     "depth-color-shared-storage": {
       "upstream_symbol": "Vulkan::TextureCache::FindDepthTarget / FindRenderTarget / CopyColorAndDepth",
@@ -18565,18 +18567,6 @@
         "d9460d1: actual image bind preserves current cached MSAA contents through CPU/B dirtying, matching pinned TextureCache::RefreshImage. Explicit snapshots still transfer. Prepared four-sample color-buffer fixture compiled, NOT_RUN."
       ]
     },
-    "signed-packed10-attachment": {
-      "upstream_symbol": "Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState",
-      "native_symbol": "NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState",
-      "missing_semantics": "Normalized SNORM blending still needs exact ordered per-fragment post-blend quantization; arbitrary mixed MRT logic masks remain unimplemented. Unblended/masked/XOR packed SNORM1/2/4/8 and compatible shared SINT MRT logic now connected and narrowly GPU verified. Existing sampled/storage signed packed paths stay connected.",
-      "evidence": "guest_graphics_state.cpp: explicit SNORM blend / independent MRT logic mask guards; native-port/gcn_snorm_attachment_fixture.h; F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json",
-      "groups": [
-        13,
-        14,
-        15,
-        80
-      ]
-    },
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
@@ -18587,7 +18577,8 @@
         100,
         104,
         108
-      ]
+      ],
+      "current_continuation": "See docs/codex-progress/SHIFTED_VIEWS_TESSELLATION_20261025.md, production671a07e. Current details supersede stale historical claims; behavior NOT_RUN."
     },
     "other-vendor-clock": {
       "upstream_symbol": "Shader::Backend::SPIRV::EmitMemtime",
@@ -18620,7 +18611,8 @@
         124,
         125,
         126
-      ]
+      ],
+      "current_continuation": "See docs/codex-progress/SHIFTED_VIEWS_TESSELLATION_20261025.md, production671a07e. Current details supersede stale historical claims; behavior NOT_RUN."
     }
   },
   "resolved_production_gaps": {
@@ -18669,6 +18661,18 @@
         "85d073b",
         "332213a"
       ]
+    },
+    "signed-packed10-attachment": {
+      "upstream_symbol": "Vulkan::SurfaceFormat / GraphicsPipeline / Rasterizer::UpdateDynamicState",
+      "native_symbol": "NativeDX12::LayoutGuestTexture / BuildGuestGraphicsState",
+      "missing_semantics": "Implementation connected by 3b88639 (ROV SNORM blending) and bcc852b (independent MRT logic). The previous missing-code statement was stale. Final acceptance remains pending; do not infer GPU correctness from later builds.",
+      "evidence": "guest_graphics_state.cpp: explicit SNORM blend / independent MRT logic mask guards; native-port/gcn_snorm_attachment_fixture.h; F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\SNORM_FUNCTION_VERIFICATION.json",
+      "groups": [
+        13,
+        14,
+        15,
+        80
+      ]
     }
   },
   "artifact_retention_policy": {
@@ -18686,5 +18690,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "## Shared color/storage and zero-restart integration — 2026-10-25\n\nProduction a948d3c after d9cf233/8ed47e9/e4ae556. Connected, ALL executable checks NOT_RUN under the current user instruction. Main core and GCN fixture compile/link PASS18.071s (064011-17980); clean tracked Release PASS20.663s (064116-30736). Identity: F:/PS4Dev/handoff/native-port-comparison-20261019/shared-mips-a948d3c.json. No app-core replacement, runtime archive or behavior/FPS claim. Continue production beyond this checkpoint; SESSION_HANDOFF first section is authoritative."
+  "seven_area_continuation": "# Shifted writable views and tessellation control flow\n\nProduction checkpoint: 671a07e, after b8807f8, 47ffa7e and 4fdd1f6.\nAll executable checks NOT_RUN by the current user instruction. Compile/link is\nnot runtime, image, synchronization or FPS acceptance. Installed core unchanged.\n\n- b8807f8: RebaseColorSubresource retains writable parents and exact shifted\n  mip/layer views. Entry::Srv/Rtv/Uav require actual native cast/usage support.\n  No converted snapshot of a writable owner. Prepared\n  writable-color-array-subviews uses RTV/UAV writes, full-parent readback and\n  padding oracle; compile/link only (064747-17388). Clean Release PASS\n  (064829-11044), identity shifted-writable-b8807f8.json.\n- 47ffa7e: polygon POINT PerVertexKHR and barycentric inputs lower to OpUndef;\n  ordinary point primitives and defined inputs retain their semantics. The\n  [Vulkan KHR contract](https://docs.vulkan.org/spec/latest/chapters/primsrast.html#primsrast-barycentric-interpolation)\n  leaves these accesses undefined outside FILL. Do not reintroduce a\n  three-vertex transport requirement for undefined accesses. Prepared\n  polygon-undefined-inputs retains stores and defined inputs and tests the\n  ordinary-point negative control; NOT_RUN, including its DXIL conversion mode.\n  Fixture compile/link PASS (065304-12548), clean PASS (065417-11424), identity\n  polygon-undefined-47ffa7e.json.\n- 4fdd1f6/671a07e: DrawInternal selects active isoline/triangle/quad factors.\n  CollectShaderInfoPass computes guaranteed writes through CFG predecessor\n  intersections. Branches, early returns and loop bypasses cannot manufacture\n  a bound. Missing/dynamic factors retain64; guest tessellation is unchanged.\n  Cache StageVersion49. Prepared tessellation-source-bounds adds18 CFG/domain\n  cases; NOT_RUN. Main core compile/link PASS33.106s (070003-23852), fixture\n  PASS8.420s (070105-32092), clean Release PASS40.043s (070127-17608).\n\nAll identities are small JSON files under\nF:/PS4Dev/handoff/native-port-comparison-20261019/:\ndomain-bound-4fdd1f6.json and cfg-bound-671a07e.json supplement the files above.\nFull compiler logs: F:/Codex-Shared/devtools/logs/command-20261025-*.log.\nNo runtime archives or new binary acceptance claims.\n\nRemaining: shifted simultaneous shader SRV/UAV promotion and attachment mapping\nbeyond cache lookup; shared MS/expanded image domains; original-GS polygon\ntriangles, unclamped polygon depth/bias, full varying payload; general large or\ndynamic tessellation source scheduling. Mixed blending is connected/unaccepted.\nOther-vendor clock remains conditional on the pinned original hardware capability.\nPinned vk_rasterizer.cpp:1559 rejects custom restart values other than0xffff and\n0xffffffff. Our complete CPU fallback for custom32 is connected; native batching\nof additional markers is an optimization, not absent pinned functionality.\n\nContinue production after this checkpoint. Do not repeat the129-group audit.\nPreserve unknown edits, profiles, original reference and unresolved crash data.\nReuse main/clean build trees and perform normal pushes. All executable tests\nremain deferred until the seven implementations finish.\n"
 }
