@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,i32 shifted_depth=0){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -312,7 +312,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
         if(shifted_depth){
             if(!independent_depth||shifted_depth%256)throw std::invalid_argument("Shifted depth fixture requires an aligned independent image");
-            db.z_read_base=db.z_write_base=u32((i64(base+16384)+shifted_depth)>>8);
+            db.z_read_base=db.z_write_base=u32((s64(base+16384)+shifted_depth)>>8);
         }
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
         if(shared_ms){db.z_info.num_samples=2;regs.aa_config.msaa_num_samples=2;}
