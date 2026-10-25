@@ -1,3 +1,7 @@
+## Continued integration: strip restart and color word feedback — 2026-10-25
+
+Production30453d1 aftera1621ca: per-command indirect strip restart and compatible color word-class feedback are connected. ALL executable tests remain NOT_RUN until seven-area implementations finish. Clean Release30453d1 PASS26.667s053134-6680; core compile/link PASS19.456s053045-19264, GCN fixture compile/link PASS10.204s053105-6116. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/color-word-feedback-30453d1.json. No installed-core replacement, runtime archives or behavior/FPS acceptance. Continue production; SESSION_HANDOFF first section is authoritative.
+
 ## Retired color / current depth attachment continuation — 2026-10-25
 
 CURRENT production e43073a. GuestTextureCache::CanRecreateColorDepthAttachments admits equal-base, one-sample, proven direct-word color/depth geometry. GuestRasterizer prepares the color owner before depth recreation, keeps the retired color native attachment pinned for the draw/replays, and excludes it from ownership reacquisition, logical writes and physical downloads. This matches pinned PrepareRenderState -> ResolveDepthOverlap/FreeImage -> BeginRendering ordering. The color draw still executes. Clear/compression, shared shader feedback, shifted/MSAA mappings remain explicit gaps; this is not full shared-storage closure.

@@ -18200,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Exact packed single/MSAA feedback, converted shifted/grown views, shifted CB mip/CMASK and feedback beside buffer writes and retained MSAA invalidation semantics connected through d9460d1; behavior NOT_RUN. Broader converted/competing multiview feedback outside proved mappings remain; preserve native allocation/state and independent B/I ordering.596b37d admits disjoint color mips with Options19 capability and smallest render-area scissors. Behavior NOT_RUN.",
+      "missing_semantics": "30453d1 connects exact uncompressed color word-class feedback via independent GPU retile/upload (including R32/RG16), without I-to-CPU/B publication or native-incompatible view casting. Retained/disjoint/packed/MSAA and buffer-writer paths already connected. Remaining competing and multiview interpretations outside proved physical mappings. Behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18601,7 +18601,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart/byte decoding, per-instance GPU capture packets, expanded producer bounds and element-local swapped native indirect batches connected through3e51362; latest behavior NOT_RUN. Remaining GPU-native batch primitive expansion/restart and large-source/active-part scheduling. Do not redo completed EsGs/tessellation bridge.8969255 connects bounded per-command16-bit pair swaps using GPU-authored IBVs/active-count dispatch; batch restart/primitive expansion and large scheduling remain. Behavior NOT_RUN.",
+      "missing_semantics": "a1621ca connects bounded per-command16-bit strip restart (nonzero custom/fixed marker, all swaps) and32-bit fixed-marker swapped batches; preserves legal0xffff and missing-index0.8969255 pair-relative GPU IBVs and prior original ES/GS/tessellation capture remain connected. Remaining marker0/32-bit custom collision domains, native batch primitive expansion and large/active-source scheduling. Behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,
@@ -18686,5 +18686,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "Production8969255 after596b37d,47463e1,b614dc9,b38a8c4: disjoint color mips on Options19 hardware, smallest-target render area, bounded D/S load clears, compact sparse polygon parameters, auxiliary cache reflection and per-command pair-swapped indirect index views connected. Clean tracked Release compile/link PASS31.161s (051758-18760); main core+primitive-stream fixture compile/link PASS10.329s (051724-15048). ALL executable tests NOT_RUN until seven-area implementations finish. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/indirect-pairs-8969255.json. Six broad areas retain concrete gaps; mixed blending connected/unaccepted. No installed-core replacement or runtime copies. SESSION_HANDOFF first section authoritative; continue production work after checkpoint."
+  "seven_area_continuation": "Production30453d1 aftera1621ca: per-command indirect strip restart and compatible color word-class feedback are connected. ALL executable tests remain NOT_RUN until seven-area implementations finish. Clean Release30453d1 PASS26.667s053134-6680; core compile/link PASS19.456s053045-19264, GCN fixture compile/link PASS10.204s053105-6116. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/color-word-feedback-30453d1.json. No installed-core replacement, runtime archives or behavior/FPS acceptance. Continue production; SESSION_HANDOFF first section is authoritative."
 }

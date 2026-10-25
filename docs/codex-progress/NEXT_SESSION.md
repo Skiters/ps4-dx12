@@ -1,3 +1,7 @@
+## Continued integration: strip restart and color word feedback — 2026-10-25
+
+Production30453d1 aftera1621ca: per-command indirect strip restart and compatible color word-class feedback are connected. ALL executable tests remain NOT_RUN until seven-area implementations finish. Clean Release30453d1 PASS26.667s053134-6680; core compile/link PASS19.456s053045-19264, GCN fixture compile/link PASS10.204s053105-6116. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/color-word-feedback-30453d1.json. No installed-core replacement, runtime archives or behavior/FPS acceptance. Continue production; SESSION_HANDOFF first section is authoritative.
+
 ## Render area / polygon cache / indirect indices — 2026-10-25
 
 Production8969255 after596b37d,47463e1,b614dc9,b38a8c4: disjoint color mips on Options19 hardware, smallest-target render area, bounded D/S load clears, compact sparse polygon parameters, auxiliary cache reflection and per-command pair-swapped indirect index views connected. Clean tracked Release compile/link PASS31.161s (051758-18760); main core+primitive-stream fixture compile/link PASS10.329s (051724-15048). ALL executable tests NOT_RUN until seven-area implementations finish. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/indirect-pairs-8969255.json. Six broad areas retain concrete gaps; mixed blending connected/unaccepted. No installed-core replacement or runtime copies. SESSION_HANDOFF first section authoritative; continue production work after checkpoint.
