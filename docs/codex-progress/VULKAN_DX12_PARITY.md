@@ -1,4 +1,8 @@
-## Current continuation: 671a07e — 2026-10-25
+## Current continuation: 9cdf3a2 — 2026-10-25
+
+Latest: 655a422 shifted shader UAV access/cold parent mapping; ed35cc3 canonical shifted color/storage draw envelope; 9cdf3a2 oversized source capture partitioned by original instance. Main/clean Release compile/link PASS, all executable checks NOT_RUN. StageVersion51. See the latest section of [the continuation](SHIFTED_VIEWS_TESSELLATION_20261025.md) for exact build evidence, identities, prepared tests and remaining work. Continue production; original-GS polygon triangles and oversized single-instance sources are still open. App core unchanged.
+
+### Earlier 671a07e checkpoint
 
 Read [shifted views and tessellation control flow](SHIFTED_VIEWS_TESSELLATION_20261025.md) before the historical entries below. Connected: writable parent subviews, original undefined polygon inputs, active-domain CFG factor bounds (StageVersion49). Main and clean Release compile/link PASS; all executable checks NOT_RUN. Identity cfg-bound-671a07e.json in the existing native-port-comparison-20261019 handoff folder. Continue the remaining image-alias and polygon/capture production paths; do not stop at this checkpoint. Installed core unchanged.
 
