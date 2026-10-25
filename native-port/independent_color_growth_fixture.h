@@ -7,7 +7,8 @@
 namespace NativeDX12 {
 inline void RunConvertedColorSubresource(ID3D12Device* device){
     const auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
-    for(const UINT tile:{0u,8u})for(const UINT format:{5u,10u})for(const bool attachment:{false,true}){
+    for(const UINT tile:{0u,8u})for(const UINT format:{5u,10u})for(const bool attachment:{false,true})
+    for(const UINT selected:{0u,1u}){
         Rasterizer renderer(device);GuestTextureCache cache(device);
         SCOPE_EXIT {renderer.Finish();};
         GuestTextureDesc source;source.address=0x40000;source.width=source.height=source.pitch=16;
@@ -42,17 +43,17 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
             return cache.RetileBufferVersion(image,seed,renderer.RecordingList(),renderer.CompletedFence());
         },[](auto& image){image.buffer_alias_version=image.buffer_alias_watch=true;image.SetGpuOwned(true);return true;},
           [](auto& image){image.SetGpuOwned(false);image.buffer_alias_version=image.buffer_alias_watch=false;});
-        auto local=source;local.address+=layout.mips[1].offset+layout.mips[1].slice_bytes;
-        local.width=local.height=8;local.pitch=layout.mips[1].pitch;
+        auto local=source;local.address+=layout.mips[selected].offset+selected*layout.mips[selected].slice_bytes;
+        local.width=local.height=source.width>>selected;local.pitch=layout.mips[selected].pitch;
         local.levels=local.layers=local.view_layers=1;local.render_target=attachment;
         local.data_format=format;local.number_format=4;
         const auto physical=LayoutGuestTexture(local);
-        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
-            require(source.address+GuestPixelOffset(source,layout,1,1,x,y)==
+        for(UINT y=0;y<local.height;++y)for(UINT x=0;x<local.width;++x)
+            require(source.address+GuestPixelOffset(source,layout,selected,selected,x,y)==
                 local.address+GuestPixelOffset(local,physical,0,0,x,y),"Converted mip physical oracle");
         const auto alias=cache.RebaseColorSubresource(local,physical,true);
         require(alias&&alias->parent==&parent&&alias->view.address==source.address&&
-            alias->view.first_mip==1&&alias->view.first_layer==1&&alias->view.view_layers==1&&
+            alias->view.first_mip==selected&&alias->view.first_layer==selected&&alias->view.view_layers==1&&
             alias->view.levels==3&&alias->view.layers==2,"Converted mip lost complete parent envelope");
         auto invalid=local;invalid.pitch*=2;
         require(!cache.RebaseColorSubresource(invalid,LayoutGuestTexture(invalid),true),
@@ -62,20 +63,20 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
         const auto srv=converted.Srv(alias->view);
         require(srv.Format==(format==5?DXGI_FORMAT_R16G16_UINT:DXGI_FORMAT_R8G8B8A8_UINT)&&
             srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
-            srv.Texture2DArray.MostDetailedMip==1&&srv.Texture2DArray.FirstArraySlice==1,
+            srv.Texture2DArray.MostDetailedMip==selected&&srv.Texture2DArray.FirstArraySlice==selected,
             "Converted mip SRV lost format or selected subresource");
         auto expected=original;Descriptors rtvs(device,D3D12_DESCRIPTOR_HEAP_TYPE_RTV,1,false);
-        if(attachment){const auto rtv=converted.Rtv(alias->view,1);
+        if(attachment){const auto rtv=converted.Rtv(alias->view,selected);
             require(rtv.Format==srv.Format&&rtv.ViewDimension==D3D12_RTV_DIMENSION_TEXTURE2DARRAY&&
-                rtv.Texture2DArray.MipSlice==1&&rtv.Texture2DArray.FirstArraySlice==1&&
+                rtv.Texture2DArray.MipSlice==selected&&rtv.Texture2DArray.FirstArraySlice==selected&&
                 rtv.Texture2DArray.ArraySize==1,"Converted mip RTV lost selected subresource");
             device->CreateRenderTargetView(converted.texture.handle.Get(),&rtv,rtvs.Cpu(0));
             converted.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_RENDER_TARGET);
             const float clear[]{17,49,23,71};
             renderer.RecordingList()->ClearRenderTargetView(rtvs.Cpu(0),clear,0,nullptr);
             const u32 word=format==5?0x00310011:0x47173111;
-            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
-                memcpy(expected.data()+GuestPixelOffset(source,layout,1,1,x,y),&word,4);
+            for(UINT y=0;y<local.height;++y)for(UINT x=0;x<local.width;++x)
+                memcpy(expected.data()+GuestPixelOffset(source,layout,selected,selected,x,y),&word,4);
             converted.NoteLogicalImageWrite();}
         auto seed_readback=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         renderer.RetainUntilFinish([seed_readback](u64){});

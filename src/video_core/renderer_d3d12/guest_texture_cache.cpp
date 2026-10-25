@@ -2834,7 +2834,7 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
            parent.layout.block_extent!=1||
            (parent.layout.expanded_bytes_per_pixel&&!HasExactPackedExpansion(parent.desc,parent.layout))||
            parent.layout.bytes_per_pixel!=layout.bytes_per_pixel||
-           desc.address<=parent.desc.address||(!array&&parent.desc.layers!=1))continue;
+           desc.address<parent.desc.address||(!array&&parent.desc.layers!=1))continue;
         const auto delta=desc.address-parent.desc.address;
         if(delta>=parent.layout.guest_bytes||layout.guest_bytes>parent.layout.guest_bytes-delta)continue;
         for(UINT mip=0;mip<parent.desc.levels;++mip){const auto& part=parent.layout.mips[mip];
@@ -2857,7 +2857,8 @@ std::optional<GuestTextureCache::ColorSubresource> GuestTextureCache::RebaseColo
             if(!direct){
                 // A native cast is not available for every physically identical
                 // guest view (R32/RG16/RGBA8 and expanded signed packed10). Convert
-                // the complete parent, keeping the selected mip/slice. A local
+                // the complete parent, including a smaller root-mip view at
+                // the same base, and keep the selected mip/slice. A local
                 // standalone upload would incorrectly initialize it from B.
                 view.levels=parent.desc.levels;
                 const auto converted_layout=LayoutGuestTexture(view);
