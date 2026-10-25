@@ -64,10 +64,19 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
             srv.ViewDimension==D3D12_SRV_DIMENSION_TEXTURE2DARRAY&&
             srv.Texture2DArray.MostDetailedMip==1&&srv.Texture2DArray.FirstArraySlice==1,
             "Converted mip SRV lost format or selected subresource");
+        auto expected=original;Descriptors rtvs(device,D3D12_DESCRIPTOR_HEAP_TYPE_RTV,1,false);
         if(attachment){const auto rtv=converted.Rtv(alias->view,1);
             require(rtv.Format==srv.Format&&rtv.ViewDimension==D3D12_RTV_DIMENSION_TEXTURE2DARRAY&&
                 rtv.Texture2DArray.MipSlice==1&&rtv.Texture2DArray.FirstArraySlice==1&&
-                rtv.Texture2DArray.ArraySize==1,"Converted mip RTV lost selected subresource");}
+                rtv.Texture2DArray.ArraySize==1,"Converted mip RTV lost selected subresource");
+            device->CreateRenderTargetView(converted.texture.handle.Get(),&rtv,rtvs.Cpu(0));
+            converted.texture.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_RENDER_TARGET);
+            const float clear[]{17,49,23,71};
+            renderer.RecordingList()->ClearRenderTargetView(rtvs.Cpu(0),clear,0,nullptr);
+            const u32 word=format==5?0x00310011:0x47173111;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+GuestPixelOffset(source,layout,1,1,x,y),&word,4);
+            converted.NoteLogicalImageWrite();}
         auto seed_readback=Buffer(device,layout.guest_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
         renderer.RetainUntilFinish([seed_readback](u64){});
         seed.Transition(renderer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -75,7 +84,7 @@ inline void RunConvertedColorSubresource(ID3D12Device* device){
         GuestImageReadback readback(device,converted,renderer.RecordingList());
         const auto fence=renderer.Flush();cache.Submitted(fence);readback.Submitted(fence);renderer.Finish();
         auto actual=original;readback.Resolve(renderer.CompletedFence(),actual);
-        require(actual==original,"Converted shifted mip lost current I, another mip/layer or padding");
+        require(actual==expected,"Converted shifted mip lost current I, another mip/layer or padding");
         D3D12_RANGE range{0,size_t(layout.guest_bytes)};Check(seed_readback.handle->Map(0,&range,&mapped));
         const bool independent=memcmp(mapped,seed_bytes.data(),seed_bytes.size())==0;
         seed_readback.handle->Unmap(0,&empty);
