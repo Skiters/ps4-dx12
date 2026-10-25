@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false,bool shared_storage=false){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false,UINT shared_storage=0){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -57,6 +57,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=regs.generic_scissor.bottom_right_y=8;
     auto& cb=regs.color_buffers[0];cb.base_address=u32((base+16384)>>8);
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
+    const UINT shared_channels=shared_storage>>8?shared_storage>>8:1;
+    if(shared_storage){cb.info.format=shared_channels==4?14:shared_channels==2?11:4;
+        regs.color_target_mask.raw=regs.color_shader_mask.raw=(1u<<shared_channels)-1;}
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
     if(converted_samples>1)cb.attrib.num_fragments_log2=2;
     if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
@@ -77,6 +80,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
     // the original FLOAT attachment bits, not numerically convert the texel.
     image.data_format=shared_ms?14:4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
+    if(shared_storage){image.num_format=shared_storage&255;image.data_format=cb.info.format;}
     image.dst_sel_x=4;image.dst_sel_y=5;image.dst_sel_z=6;image.dst_sel_w=7;
     if(converted_color==1){image.data_format=10;image.num_format=0;image.dst_sel_x=6;}
     if(converted_color==2){image.data_format=9;image.num_format=1;}
@@ -152,9 +156,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto invalid=written;invalid.pitch*=2;
         if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
             throw std::runtime_error("Shared storage accepted incompatible pitch");
-        invalid=written;invalid.number_format=4;
+        invalid=written;invalid.number_format=0;
         if(CompatibleGuestColorStorageSubview(target,layout,invalid,sampled_layout))
-            throw std::runtime_error("Shared storage accepted a different typed image format");
+            throw std::runtime_error("Shared storage accepted an unsupported typed image format");
         invalid=written;invalid.samples=4;
         if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
             throw std::runtime_error("Shared storage accepted an MS image");
@@ -162,22 +166,27 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         // A single invocation stores .5 at x=4, reads that write back, and
         // exports half at x=0. Separate native copies lose one of these values.
         initialize(store,{0xBEEB03FF,15,0x7e000284,0x7e020280,
-            0x7e0802ff,0x3f000000,0xf0200100,0x00000400,0xbf8c0000,
+            0x7e0802ff,0x3f000000,0x7e0a02ff,0x3f000000,
+            0x7e0c02ff,0x3f000000,0x7e0e02ff,0x3f000000,
+            0xf0200000u|(((1u<<shared_channels)-1)<<8),0x00000400,0xbf8c0000,
             0xf0000100,0x00000400,0xbf8c0000,0x100808ff,0x3f000000,
             0xf800000f,0x04040404,0xbf810000},0x434f4c5348415231ULL);
         regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=1;
         draw(store,true);draw(store,true); // exercise reuse as well as first binding
         regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=8;
         sample(exterior,7,0x434f4c5348415232ULL);
+        cb.info.format=4;regs.color_target_mask.raw=regs.color_shader_mask.raw=1;
         const std::array<const std::array<u32,128>*,3> probes{&left,&right,&exterior};
         const std::array<float,3> expected_values{.125f,.25f,.5f};
         auto expected=physical;
-        for(UINT i=0;i<probes.size();++i){
+        for(UINT channel=0;channel<shared_channels;++channel)for(UINT i=0;i<probes.size();++i){
+            image.dst_sel_x=4+channel;
             cb.base_address=u32((base+61440)>>8);draw(*probes[i],true);
             const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
             rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+            const float value=i==2&&(channel==1||channel==2)?0.f:expected_values[i];
             for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
-                memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&expected_values[i],4);
+                memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&value,4);
             rasterizer.ValidateDebugMessages();
             if(memcmp(backing,expected.data(),65536))
                 throw std::runtime_error("Shared storage lost image contents, ordering or unrelated physical bytes");

@@ -689,12 +689,13 @@ bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextu
 }
 bool CompatibleGuestColorStorageSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
     const GuestTextureDesc& view,const GuestTextureLayout& requested){
-    // A typed R32 image can serve both storage and ordered color output. Prove
+    // A typed 32-bit-channel image can serve storage and ordered color output. Prove
     // the complete physical subresource mapping before sharing an allocation;
     // ordinary RTV/UAV simultaneous access is still never used.
     if(!((source.render_target&&view.writable)||(source.writable&&view.render_target))||
-       source.data_format!=4||view.data_format!=4||source.number_format!=view.number_format||
+       (source.data_format!=4&&source.data_format!=11&&source.data_format!=14)||view.data_format!=source.data_format||
        (source.number_format!=4&&source.number_format!=5&&source.number_format!=7)||
+       (view.number_format!=4&&view.number_format!=5&&view.number_format!=7)||
        source.samples!=1||view.samples!=1)return false;
     auto owner=source,target=view;owner.writable=target.writable=false;
     return CompatibleGuestColorSubview(owner,physical,target,requested);
