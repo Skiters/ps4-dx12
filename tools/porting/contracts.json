@@ -18200,7 +18200,7 @@
     "color-attachment-feedback": {
       "upstream_symbol": "Vulkan::Rasterizer::BindResources / BeginRendering",
       "native_symbol": "NativeDX12::GuestRasterizer::Draw / ExecuteGuestResources",
-      "missing_semantics": "Exact packed single/MSAA feedback, converted shifted/grown views, shifted CB mip/CMASK and feedback beside buffer writes and retained MSAA invalidation semantics connected through d9460d1; behavior NOT_RUN. Broader converted/competing multiview feedback outside proved mappings remain; preserve native allocation/state and independent B/I ordering.",
+      "missing_semantics": "Exact packed single/MSAA feedback, converted shifted/grown views, shifted CB mip/CMASK and feedback beside buffer writes and retained MSAA invalidation semantics connected through d9460d1; behavior NOT_RUN. Broader converted/competing multiview feedback outside proved mappings remain; preserve native allocation/state and independent B/I ordering.596b37d admits disjoint color mips with Options19 capability and smallest render-area scissors. Behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_rasterizer.cpp: Draw alias guards; guest_compute.cpp: image-domain guards",
       "groups": [
         2,
@@ -18580,7 +18580,7 @@
     "polygon-point-fill": {
       "upstream_symbol": "Vulkan::Rasterizer::UpdateDynamicState",
       "native_symbol": "NativeDX12::BuildGuestGraphicsState",
-      "missing_semantics": "VS/TES and auxiliary rectangle/quad polygon points, provoking/interpolation, clamped original bias and sparse export/partition transport connected through e1d244e (StageVersion42); behavior NOT_RUN. Remaining original GS triangles, fully unclamped depth/bias, PerVertex and exhausted live varying transport.",
+      "missing_semantics": "VS/TES and auxiliary rectangle/quad polygon points, provoking/interpolation, clamped original bias and sparse export/partition transport connected through e1d244e (StageVersion42); behavior NOT_RUN. Remaining original GS triangles, fully unclamped depth/bias, PerVertex and exhausted live varying transport. b614dc9/b38a8c4 add compact sparse VS/TES locations and persisted auxiliary output reflection (StageVersion44). Behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_graphics_state.cpp: Guest point polygon fill requires native clipping and point rasterization",
       "groups": [
         34,
@@ -18601,7 +18601,7 @@
     "point-capture-stage-domain": {
       "upstream_symbol": "Vulkan::PipelineCache::GetGraphicsPipeline / Shader::Backend::SPIRV::EmitEmitVertex",
       "native_symbol": "NativeDX12::GuestShaderFrontend::BuildPointCaptureGraphics",
-      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart/byte decoding, per-instance GPU capture packets, expanded producer bounds and element-local swapped native indirect batches connected through3e51362; latest behavior NOT_RUN. Remaining GPU-native batch primitive expansion/restart/pair-relative16-bit swaps and large-source/active-part scheduling. Do not redo completed EsGs/tessellation bridge.",
+      "missing_semantics": "Original tessellation/auxiliary streams, SO lifetime, GPU restart/byte decoding, per-instance GPU capture packets, expanded producer bounds and element-local swapped native indirect batches connected through3e51362; latest behavior NOT_RUN. Remaining GPU-native batch primitive expansion/restart and large-source/active-part scheduling. Do not redo completed EsGs/tessellation bridge.8969255 connects bounded per-command16-bit pair swaps using GPU-authored IBVs/active-count dispatch; batch restart/primitive expansion and large scheduling remain. Behavior NOT_RUN.",
       "evidence": "src/video_core/renderer_d3d12/guest_shader_frontend.cpp: BuildPointCaptureGraphics EsGs guard; native point capture contract",
       "groups": [
         104,
@@ -18686,5 +18686,5 @@
     "limits": "world/image/XInput and FPS not verified because the target-window helper failed",
     "evidence": "F:\\PS4Dev\\handoff\\storage-cleanup-20261018\\INTEGRATION_RESULT_378bda3.json"
   },
-  "seven_area_continuation": "Production d9460d1: independent D/S and single-sample color-buffer writes, late exact-base refresh/interior retention and supported color feedback connected; dirty MSAA retains native contents instead of B refresh. Six broad areas retain concrete gaps; mixed blending connected/unaccepted. ALL tests deferred; clean Release compile/link PASS, not correctness/FPS acceptance. SESSION_HANDOFF first section authoritative. Continue after checkpoint; no app replacement or runtime archive."
+  "seven_area_continuation": "Production8969255 after596b37d,47463e1,b614dc9,b38a8c4: disjoint color mips on Options19 hardware, smallest-target render area, bounded D/S load clears, compact sparse polygon parameters, auxiliary cache reflection and per-command pair-swapped indirect index views connected. Clean tracked Release compile/link PASS31.161s (051758-18760); main core+primitive-stream fixture compile/link PASS10.329s (051724-15048). ALL executable tests NOT_RUN until seven-area implementations finish. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/indirect-pairs-8969255.json. Six broad areas retain concrete gaps; mixed blending connected/unaccepted. No installed-core replacement or runtime copies. SESSION_HANDOFF first section authoritative; continue production work after checkpoint."
 }
