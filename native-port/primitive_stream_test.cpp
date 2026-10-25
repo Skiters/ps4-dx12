@@ -207,7 +207,8 @@ V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
     V o;o.position=float4(0,0,0,1);o.payload=uint4(vertex,instance,0x7fc12345u,0x80000000u);return o;
 })",DXIL::Stage::Vertex);
     if(!strip_vertex.success)throw std::runtime_error(strip_vertex.diagnostics);
-    for(const bool narrow:std::array{false,true})for(u32 swap=0;swap<4;++swap){
+    for(const u32 restart_case:std::array<u32,3>{0,1,2})for(u32 swap=0;swap<4;++swap){
+        const bool narrow=restart_case!=0;const bool zero_restart=restart_case==2;
         // Custom16-bit restart must not cut legitimate0xffff. Each indirect
         // command receives its own widened IBV; strip parity resets at markers.
         auto strip_state=state;strip_state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
@@ -221,7 +222,7 @@ V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
         ShaderPipeline::GraphicsShaders shaders;shaders.vertex=strip_vertex.bytecode;shaders.geometry=reader_geometry.bytecode;
         ShaderPipeline pipeline(device.Get(),dxc,shaders,strip_state.pipeline);
         ResourceBindings bindings(device.Get(),pipeline.Layout());
-        const u32 marker=narrow?0x7777:UINT32_MAX,element=narrow?2:4;
+        const u32 marker=zero_restart?0:narrow?0x7777:UINT32_MAX,element=narrow?2:4;
         const std::array<u32,13> logical{21,22,23,marker,0xffff,31,32,33,marker,41,42,43,44};
         std::vector<std::byte> encoded(logical.size()*element);
         for(size_t i=0;i<logical.size();++i)memcpy(encoded.data()+i*element,&logical[i],element);
@@ -233,7 +234,7 @@ V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
         auto upload=Buffer(device.Get(),920,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
         void* mapped{};D3D12_RANGE none{};Check(upload.handle->Map(0,&none,&mapped));memset(mapped,0xcd,920);
         memcpy(static_cast<std::byte*>(mapped)+element,encoded.data(),encoded.size());
-        for(u32 command=0;command<2;++command){const std::array<u32,5> args{13,command+1,1,command?u32(-1):2,7+command};
+        for(u32 command=0;command<2;++command){const std::array<u32,5> args{zero_restart?17u:13u,command+1,1,command?u32(-1):2,7+command};
             memcpy(static_cast<std::byte*>(mapped)+96+command*32,args.data(),20);}
         const u64 zero=0;memcpy(static_cast<std::byte*>(mapped)+912,&zero,8);upload.handle->Unmap(0,nullptr);
         auto commands=renderer.AcquireTransientBuffer(plan.command_bytes),count=renderer.AcquireTransientBuffer(4);

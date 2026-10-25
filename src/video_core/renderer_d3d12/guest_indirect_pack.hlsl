@@ -57,6 +57,14 @@ void main(uint3 id : SV_DispatchThreadID) {
     for(uint command_word=0;command_word<words;++command_word)
         commands.Store(output_offset+prefix+command_word*4,source.Load(input_offset+command_word*4));
     if(index_views)commands.Store(output_offset+prefix+8,0); // private view starts at guest firstIndex
+    if(index_views&&index_restart&&index_marker==0){
+        // Missing guest indices read as zero. In this specialization every
+        // missing index is a restart token, hence no vertex/primitive work.
+        // A widened hardware IBV instead returns literal0 beyond its end,
+        // which would create spurious vertices. End before that cut-only tail.
+        uint first=source.Load(input_offset+8);
+        commands.Store(output_offset+prefix,min(source.Load(input_offset),index_available-min(first,index_available)));
+    }
     // Copy all viewport/flip/depth fields and padding without float conversion.
     if(runtime_stride){
     for(uint runtime_word=0;runtime_word<runtime_stride/4;++runtime_word)

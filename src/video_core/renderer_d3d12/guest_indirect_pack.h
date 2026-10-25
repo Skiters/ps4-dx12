@@ -38,8 +38,9 @@ struct GuestIndirectIndexDecode {
         // complete per-command path instead of truncating guest operations.
         const bool pairs=swap==AmdGpu::IndexSwapMode::Swap32||swap==AmdGpu::IndexSwapMode::SwapWord;
         // A widened strip marker cannot collide with any16-bit guest index.
-        // Marker0 also cuts padded missing indices, so it needs expansion.
-        const bool widened_restart=restart&&strip&&marker&&marker<=0xffff&&
+        // With marker0, the robust zero suffix contains only restart tokens;
+        // the packer removes that suffix, not any guest vertex invocation.
+        const bool widened_restart=restart&&strip&&marker<=0xffff&&
             (swap!=AmdGpu::IndexSwapMode::None||marker!=0xffff);
         return type==AmdGpu::IndexType::Index16&&((!restart&&pairs)||widened_restart)&&
             count&&u64(std::max(1u,available))*count<=16ull*1024*1024;

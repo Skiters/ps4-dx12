@@ -63,7 +63,7 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
     const u64 index_bytes=decode?GuestIndirectIndexDecode::OutputBytes(decode->available,plan.count):0;
     if(decode){
         if(!decode->output||decode->swap_mode>3||decode->offset%2||
-           (decode->restart&&(!decode->marker||decode->marker>0xffff))||
+           (decode->restart&&decode->marker>0xffff)||
            (!decode->source&&(decode->available||decode->offset))||index_bytes>UINT32_MAX||
            u64((std::max(1u,decode->available)+127)/128)*plan.count>UINT32_MAX/128)
             throw std::invalid_argument("Invalid per-command indirect index decode");
