@@ -101,7 +101,8 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     const ComputeInvocation& invocation,Shader::PushData push,std::span<const std::byte> runtime_data,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache* textures,VAddr border_colors,
     std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false,
-    std::shared_ptr<ResourceLayout> logical_layout={}) {
+    std::shared_ptr<ResourceLayout> logical_layout={},
+    std::span<const GuestTextureDesc> writable_color_parents={}) {
     Diagnostics::Scope diagnostic(Diagnostics::Kind::Resources,"metadata-and-layout");
     std::lock_guard lock(rasterizer.ExecutionMutex());
     if(stages.empty()||!submit)throw std::invalid_argument("Empty native guest stage set/command");
@@ -128,6 +129,12 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
     std::vector<ImagePending> images;
     struct WritableParent {GuestTextureDesc desc;GuestTextureLayout layout;};
     std::vector<WritableParent> writable_parents;
+    for(auto desc:writable_color_parents){
+        if(!desc.render_target||desc.writable||desc.depth_target||desc.samples!=1)
+            throw std::invalid_argument("Invalid shared color/storage parent");
+        desc.render_target=false;desc.writable=true;
+        writable_parents.push_back({desc,LayoutGuestTexture(desc)});
+    }
     if(textures)for(const auto& stage:stages)if(stage.info)for(const auto& image:stage.info->images){
         if(!image.is_written||image.is_depth||image.NumBindings(*stage.info)!=1)continue;
         const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
@@ -323,9 +330,14 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 for(const auto& parent:writable_parents){
                     if(parent.layout.guest_bytes<parent_bytes)continue;
                     if(auto view=MapGuestWritableShaderSubview(parent.desc,parent.layout,desc,layout,array||slice_view)){
-                        if(mapped&&parent.layout.guest_bytes==parent_bytes&&
-                           !CompatibleGuestWritableStorage(*mapped,*view))
-                            throw std::runtime_error("Ambiguous writable shader subresource parents");
+                        if(mapped&&parent.layout.guest_bytes==parent_bytes){
+                            auto a=*mapped,b=*view;a.writable=b.writable=false;
+                            if(!CompatibleGuestColorSubview(a,LayoutGuestTexture(a),b,LayoutGuestTexture(b)))
+                                throw std::runtime_error("Ambiguous writable shader subresource parents");
+                            // Prefer the first (attachment) envelope. Equivalent
+                            // shader metadata may omit its padded CB fields.
+                            continue;
+                        }
                         mapped=*view;parent_bytes=parent.layout.guest_bytes;
                     }
                 }
@@ -1501,8 +1513,9 @@ void ExecuteGuestGraphicsResources(ID3D12Device* device,Rasterizer& rasterizer,
     const Shader::PushData& push,const GraphicsRuntime& runtime,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache& textures,VAddr border_colors,
     std::span<const Rasterizer::ShaderBufferRequest> read_buffers,bool replayable_bindings,
-    std::shared_ptr<ResourceLayout> logical_layout) {
+    std::shared_ptr<ResourceLayout> logical_layout,
+    std::span<const GuestTextureDesc> writable_color_parents) {
     if(pipeline.IsCompute())throw std::invalid_argument("Native graphics command has compute PSO");
-    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers,replayable_bindings,std::move(logical_layout));
+    ExecuteGuestResources(device,rasterizer,pipeline,stages,{},push,std::as_bytes(std::span(&runtime,1)),submit,&textures,border_colors,read_buffers,replayable_bindings,std::move(logical_layout),writable_color_parents);
 }
 }

@@ -3,6 +3,7 @@
 #include "video_core/renderer_d3d12/guest_rasterizer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/cb_db_extent.h"
+#include "video_core/renderer_d3d12/guest_subresource_rebase.h"
 #include <array>
 #include <cstring>
 #include <vector>
@@ -15,6 +16,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
     UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false,UINT shared_storage=0){
+    const bool shifted_storage=bool(shared_storage&0x80000000u);
+    const bool cold_shared_storage=bool(shared_storage&0x40000000u);shared_storage&=0x3fffffffu;
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -61,6 +64,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     if(shared_storage){cb.info.format=shared_storage>>16?shared_storage>>16:shared_channels==4?14:shared_channels==2?11:4;
         regs.color_target_mask.raw=regs.color_shader_mask.raw=(1u<<shared_channels)-1;}
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
+    if(shifted_storage)cb.view.slice_start=cb.view.slice_max=1;
     if(converted_samples>1)cb.attrib.num_fragments_log2=2;
     if(converted_color==2){cb.info.format=9;cb.info.number_type=1;}
     if(compressed_color){
@@ -71,6 +75,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const auto layout=LayoutGuestTexture(target);
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
     image.type=u64(AmdGpu::ImageType::Color2D);image.width=image.height=7;image.pitch=15;
+    if(shifted_storage)image.base_address=(base+16384+layout.mips[0].slice_bytes)>>8;
     if(converted_samples>1){image.type=u64(AmdGpu::ImageType::Color2DMsaa);image.last_level=2;}
     if(independent_class&&!shifted_color)image.pitch=31;
     if(shifted_color){
@@ -94,7 +99,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         auto same=sampled;same.pitch=target.pitch;same.address=target.address;
         if(GuestTextureCache::SeparateColorSampledImages(target,layout,same,LayoutGuestTexture(same)))
             throw std::runtime_error("Compatible feedback was misclassified as independent pool reuse");
-    }else if(!converted_color&&!retained_mips&&!grown_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
+    }else if(!shifted_storage&&!converted_color&&!retained_mips&&!grown_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
         throw std::runtime_error("Feedback fixture target/sample physical mapping differs");
     AmdGpu::Buffer input{};input.base_address=base;input.stride=32;input.num_records=3;
     input.data_format=4;input.num_format=4;
@@ -107,6 +112,11 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         memcpy(regs.vs_program.user_data.data()+4,&writer,sizeof(writer));
     }
     rasterizer.InvalidateMemory(base,65536);memset(memory,0xa5,65536);
+    if(cold_shared_storage){
+        const float initial=1.f;
+        for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+            memcpy(memory+(target.address-base)+GuestPixelOffset(target,layout,0,target.first_layer,x,y),&initial,4);
+    }
     const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
     if(independent_class){const float source=.75f;
@@ -148,18 +158,25 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.vs_program.address=reinterpret_cast<u64>(vertex.data())>>8;
         regs.vs_program.settings.num_user_regs=4;
     }
-    draw(seed,false);
+    if(!cold_shared_storage)draw(seed,false);
     if(shared_storage){
         auto written=sampled;written.writable=true;
         const auto full=GuestTextureCache::GrowColorAttachmentStorage(target,sampled);
         const auto full_layout=LayoutGuestTexture(full);
-        if(!raw_domain||full.levels!=sampled.levels||!CompatibleGuestColorStorageSubview(full,full_layout,written,sampled_layout))
+        if(shifted_storage){
+            auto owner=full;owner.render_target=false;owner.writable=true;
+            const auto mapped=MapGuestWritableShaderSubview(owner,full_layout,written,sampled_layout,true);
+            if(!mapped||mapped->first_layer!=1)throw std::runtime_error("Shifted color/storage lost selected layer mapping");
+            written=*mapped;
+        }
+        const auto written_layout=LayoutGuestTexture(written);
+        if(!raw_domain||full.levels!=sampled.levels||!CompatibleGuestColorStorageSubview(full,full_layout,written,written_layout))
             throw std::runtime_error("Shared storage fixture lost its exact native mapping");
         auto invalid=written;invalid.pitch*=2;
         if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,LayoutGuestTexture(invalid)))
             throw std::runtime_error("Shared storage accepted incompatible pitch");
         invalid=written;invalid.number_format=6;
-        if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,sampled_layout))
+        if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,written_layout))
             throw std::runtime_error("Shared storage accepted an unsupported typed image format");
         invalid=written;invalid.samples=4;
         if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,LayoutGuestTexture(invalid)))
@@ -178,6 +195,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=8;
         sample(exterior,7,0x434f4c5348415232ULL);
         cb.info.format=4;regs.color_target_mask.raw=regs.color_shader_mask.raw=1;
+        if(shifted_storage)cb.view.slice_start=cb.view.slice_max=0;
         const std::array<const std::array<u32,128>*,3> probes{&left,&right,&exterior};
         const std::array<float,3> expected_values{.125f,.25f,.5f};
         auto expected=physical;

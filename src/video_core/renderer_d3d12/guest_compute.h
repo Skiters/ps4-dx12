@@ -7,6 +7,7 @@
 #include <functional>
 namespace NativeDX12 {
 class GuestTextureCache;
+struct GuestTextureDesc;
 struct ComputeInvocation {
     u32 groups[3]{1,1,1};
     u32 base[3]{};
@@ -36,5 +37,6 @@ void ExecuteGuestGraphicsResources(ID3D12Device*,Rasterizer&,const ShaderPipelin
     std::span<const GuestResourceStage>,const Shader::PushData&,const GraphicsRuntime&,
     const std::function<void(ResourceBindings&)>& submit,GuestTextureCache&,VAddr border_colors=0,
     std::span<const Rasterizer::ShaderBufferRequest> read_buffers={},bool replayable_bindings=false,
-    std::shared_ptr<ResourceLayout> logical_layout={});
+    std::shared_ptr<ResourceLayout> logical_layout={},
+    std::span<const GuestTextureDesc> writable_color_parents={});
 }

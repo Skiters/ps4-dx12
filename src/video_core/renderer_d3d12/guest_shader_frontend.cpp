@@ -41,10 +41,22 @@ u32 StorageColorMask(const AmdGpu::Regs& regs,const Shader::Info* info,u32 mrt_m
     u32 result{};
     const auto observe=[&](const AmdGpu::Image& image,bool depth){
         if(!image||depth)return;
+        const auto image_desc=DescribeGuestTexture(image);
+        const auto image_bytes=LayoutGuestTexture(image_desc).guest_bytes;
         for(u32 i=0;i<Shader::MaxColorBuffers;++i){const auto& color=regs.color_buffers[i];
             if((mrt_mask&(1u<<i))&&color&&regs.color_target_mask.GetMask(i)&&
                color.GetDataFmt()==image.GetDataFmt()&&color.NumSamples()==1&&
-               color.Address()==image.Address()&&GuestOrderedColorSupported(color))result|=1u<<i;
+               GuestOrderedColorSupported(color)){
+                const u64 color_bytes=u64(AmdGpu::NumBitsPerBlock(color.GetDataFmt())/8)*
+                    (u64(color.slice.tile_max)+1)*64*color.NumSlices();
+                // Conservatively select ordered output for overlapping ranges.
+                // The binding pass still requires the exact physical mapping;
+                // unrelated pool images remain separate native allocations.
+                const bool overlap=image.Address()>=color.Address()?
+                    image.Address()-color.Address()<color_bytes:
+                    color.Address()-image.Address()<image_bytes;
+                if(overlap)result|=1u<<i;
+            }
         }
     };
     for(const auto& image:info->images)if(image.is_written)observe(image.GetSharp(*info),image.is_depth);

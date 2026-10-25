@@ -96,7 +96,7 @@ int main(int argc,char** argv){try{
     const bool signed_color=signed_logic||std::string_view(argv[3])=="signed-color";
     const auto mode=std::string_view(argv[3]);
     const bool depth_storage=mode=="depth-storage-independent-owned"||mode=="depth-storage-shifted-owned"||mode=="depth-storage-stencil-owned";
-    const UINT shared_color_storage=(mode=="color-storage-shared-owned"||mode=="color-storage-shared-retained-mips-owned"||mode=="color-storage-shared-grown-mips-owned")?7:mode=="color-storage-shared-uint-owned"?4:mode=="color-storage-shared-sint-owned"?5:
+    const UINT shared_color_storage=mode=="color-storage-shared-shifted-cold-owned"?0xc0000007u:mode=="color-storage-shared-shifted-owned"?0x80000007u:(mode=="color-storage-shared-owned"||mode=="color-storage-shared-retained-mips-owned"||mode=="color-storage-shared-grown-mips-owned")?7:mode=="color-storage-shared-uint-owned"?4:mode=="color-storage-shared-sint-owned"?5:
         mode=="color-storage-shared-rg32-owned"?(2u<<8)|7:mode=="color-storage-shared-rg32-uint-owned"?(2u<<8)|4:mode=="color-storage-shared-rg32-sint-owned"?(2u<<8)|5:
         mode=="color-storage-shared-rgba32-owned"?(4u<<8)|7:mode=="color-storage-shared-rgba32-uint-owned"?(4u<<8)|4:mode=="color-storage-shared-rgba32-sint-owned"?(4u<<8)|5:
         mode=="color-storage-shared-r16-owned"?(2u<<16)|(1u<<8)|7:mode=="color-storage-shared-rg16-owned"?(5u<<16)|(2u<<8)|7:

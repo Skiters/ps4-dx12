@@ -20,6 +20,7 @@
 #include "common/scope_exit.h"
 #include "guest_color_clear.h"
 #include "guest_raw_color_clear.h"
+#include "guest_subresource_rebase.h"
 #include "diagnostics.h"
 #include "display_capture.h"
 #include "texture_resources.h"
@@ -1177,8 +1178,15 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         }
         for(const auto& stage:stages) {
             for(const auto& image:stage.info->images) {
-                const auto d=DescribeGuestTexture(image.GetSharp(*stage.info));const auto l=LayoutGuestTexture(d);
+                auto d=DescribeGuestTexture(image.GetSharp(*stage.info));auto l=LayoutGuestTexture(d);
                 const auto ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
+                if(image.is_written&&(ordered_mask&(1u<<i))){
+                    auto owner=descriptions[i];owner.render_target=false;owner.writable=true;
+                    auto local=d;local.writable=true;
+                    if(auto view=MapGuestWritableShaderSubview(owner,layouts[i],local,l,true)){
+                        d=*view;d.writable=false;l=LayoutGuestTexture(d);
+                    }
+                }
                 const bool disjoint=!(ordered_mask&(1u<<i))&&DisjointGuestColorSampledViews(descriptions[i],layouts[i],d,l);
                 // ResolveOverlap's independent pool/chance classes do not
                 // become the same image merely because a shader writes one.
@@ -2152,6 +2160,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             }
         }
     };
+    std::vector<GuestTextureDesc> writable_color_parents;
+    for(UINT i=0;i<target_count;++i)if(shared_color_storage[i])
+        writable_color_parents.push_back(descriptions[i]);
     if(capture&&capture->stream_patch_vertices){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
         // Auxiliary patches have fixed unit factors; original HS/DS factors
@@ -2232,7 +2243,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                                 submit_replay(*bindings,part.last,&actual_records);
                             },arena,&actual_records,&clear_dispatch);
                     });
-            },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout);
+            },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout,writable_color_parents);
     }else if(capture){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
         // No GS invocation exists for an incomplete primitive, but retain one
@@ -2260,7 +2271,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                     ExecuteGraphics(producer_pipeline,bindings,producer_state,{},nullptr,viewport.viewports,
                         viewport.scissors,r.blend_constants,instance,{},index_view.resource?&index_view:nullptr,false,
                         gpu_restart?&restarted:nullptr);
-                },textures_,r.ta_bc_base.Address(),index_requests);
+                },textures_,r.ta_bc_base.Address(),index_requests,false,{},writable_color_parents);
         },[&](Resource& buffer,const DrawArguments& replay){
             output_draw=replay;auto replay_runtime=runtime;
             replay_runtime.first_vertex=replay_runtime.base_instance=replay_runtime.indexed=0;
@@ -2268,7 +2279,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             // ownership resolution cannot leave pre-producer SRVs cached here.
             ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,replay_stages,push,replay_runtime,
                 [&](ResourceBindings& bindings){NativePointCapturePass::BindReplay(bindings,buffer,plan.bytes);submit_replay(bindings);},
-                textures_,r.ta_bc_base.Address());
+                textures_,r.ta_bc_base.Address(),{},false,{},writable_color_parents);
         });
     }else if(batch){
         const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count,batch->with_runtime,batch_index_decode);
@@ -2320,9 +2331,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const StreamDrawArguments packet{&commands,0,batch->max_count,plan.command_stride,&count,0,
                     plan.with_runtime?&constants:nullptr,plan.index_views?&index_storage:nullptr};
                 submit_replay(bindings,true,&packet);
-            },textures_,r.ta_bc_base.Address(),index_requests,true);
+            },textures_,r.ta_bc_base.Address(),index_requests,true,{},writable_color_parents);
     }else ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,submit_replay,
-        textures_,r.ta_bc_base.Address(),index_requests);
+        textures_,r.ta_bc_base.Address(),index_requests,false,{},writable_color_parents);
     if(bound_capture_id){
         Finish();ValidateDebugMessages();
         for(auto& capture:bound_buffer_captures){
