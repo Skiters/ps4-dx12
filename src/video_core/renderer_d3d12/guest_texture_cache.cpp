@@ -689,14 +689,16 @@ bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextu
 }
 bool CompatibleGuestColorStorageSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
     const GuestTextureDesc& view,const GuestTextureLayout& requested){
-    // A typed 32-bit-channel image can serve storage and ordered color output. Prove
+    // A native color image can serve storage and ordered color output. Prove
     // the complete physical subresource mapping before sharing an allocation;
     // ordinary RTV/UAV simultaneous access is still never used.
     if(!((source.render_target&&view.writable)||(source.writable&&view.render_target))||
-       (source.data_format!=4&&source.data_format!=11&&source.data_format!=14)||view.data_format!=source.data_format||
-       (source.number_format!=4&&source.number_format!=5&&source.number_format!=7)||
-       (view.number_format!=4&&view.number_format!=5&&view.number_format!=7)||
+       view.data_format!=source.data_format||
        source.samples!=1||view.samples!=1)return false;
+    auto source_color=source,view_color=view;
+    source_color.render_target=view_color.render_target=true;
+    source_color.writable=view_color.writable=false;
+    if(!IsOrderedColorClass(source_color)||!IsOrderedColorClass(view_color))return false;
     auto owner=source,target=view;owner.writable=target.writable=false;
     return CompatibleGuestColorSubview(owner,physical,target,requested);
 }
@@ -2586,10 +2588,11 @@ GuestTextureDesc GuestTextureCache::ResolveColorViewStorage(const GuestTextureDe
     const auto layout=LayoutGuestTexture(requested);
     auto* parent=FindValidIndependentImage(requested,layout);
     if(!parent)if(auto rebased=RebaseColorSubresource(requested,layout,true))return rebased->view;
-    if(!parent||!CompatibleGuestColorSubview(parent->desc,parent->layout,requested,layout))
+    if(!parent||(!CompatibleGuestColorSubview(parent->desc,parent->layout,requested,layout)&&
+        !CompatibleGuestColorStorageSubview(parent->desc,parent->layout,requested,layout)))
         return requested;
     auto storage=parent->desc;
-    storage.render_target=true;
+    storage.render_target=true;storage.writable=false;
     storage.data_format=requested.data_format;storage.number_format=requested.number_format;
     storage.native_raw32=requested.native_raw32;storage.native_packed10_raw=requested.native_packed10_raw;
     storage.first_mip=requested.first_mip;storage.first_layer=requested.first_layer;

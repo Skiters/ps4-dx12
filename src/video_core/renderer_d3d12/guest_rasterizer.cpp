@@ -1153,7 +1153,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // Original PrepareRenderState prefetches CB; BindTextures can then
         // expand that image and BeginRendering rebinds the grown allocation.
         // Establish the same full storage envelope before prewrite captures.
-        for(const auto& stage:stages)for(const auto& image:stage.info->images)if(!image.is_written){
+        for(const auto& stage:stages)for(const auto& image:stage.info->images){
             const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
             descriptions[i]=GuestTextureCache::GrowColorAttachmentStorage(
                 descriptions[i],DescribeGuestTexture(sharp));

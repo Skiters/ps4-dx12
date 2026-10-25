@@ -57,8 +57,8 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     regs.screen_scissor.bottom_right_y=regs.window_scissor.bottom_right_y=regs.generic_scissor.bottom_right_y=8;
     auto& cb=regs.color_buffers[0];cb.base_address=u32((base+16384)>>8);
     cb.info.format=shared_ms?14:4;cb.info.number_type=7;cb.attrib.tile_mode_index=AmdGpu::TileMode::Thin1DThin;
-    const UINT shared_channels=shared_storage>>8?shared_storage>>8:1;
-    if(shared_storage){cb.info.format=shared_channels==4?14:shared_channels==2?11:4;
+    const UINT shared_channels=(shared_storage>>8)&255?(shared_storage>>8)&255:1;
+    if(shared_storage){cb.info.format=shared_storage>>16?shared_storage>>16:shared_channels==4?14:shared_channels==2?11:4;
         regs.color_target_mask.raw=regs.color_shader_mask.raw=(1u<<shared_channels)-1;}
     cb.pitch.tile_max=cb.slice.tile_max=1;gpu.last_cb_extent[0]={8,8};
     if(converted_samples>1)cb.attrib.num_fragments_log2=2;
@@ -151,16 +151,18 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     draw(seed,false);
     if(shared_storage){
         auto written=sampled;written.writable=true;
-        if(!raw_domain||!CompatibleGuestColorStorageSubview(target,layout,written,sampled_layout))
-            throw std::runtime_error("Shared storage fixture lost its exact native R32 mapping");
+        const auto full=GuestTextureCache::GrowColorAttachmentStorage(target,sampled);
+        const auto full_layout=LayoutGuestTexture(full);
+        if(!raw_domain||full.levels!=sampled.levels||!CompatibleGuestColorStorageSubview(full,full_layout,written,sampled_layout))
+            throw std::runtime_error("Shared storage fixture lost its exact native mapping");
         auto invalid=written;invalid.pitch*=2;
-        if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
+        if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,LayoutGuestTexture(invalid)))
             throw std::runtime_error("Shared storage accepted incompatible pitch");
-        invalid=written;invalid.number_format=0;
-        if(CompatibleGuestColorStorageSubview(target,layout,invalid,sampled_layout))
+        invalid=written;invalid.number_format=6;
+        if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,sampled_layout))
             throw std::runtime_error("Shared storage accepted an unsupported typed image format");
         invalid=written;invalid.samples=4;
-        if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
+        if(CompatibleGuestColorStorageSubview(full,full_layout,invalid,LayoutGuestTexture(invalid)))
             throw std::runtime_error("Shared storage accepted an MS image");
         alignas(256) std::array<u32,128> store{},exterior{};
         // A single invocation stores .5 at x=4, reads that write back, and
@@ -190,6 +192,18 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             rasterizer.ValidateDebugMessages();
             if(memcmp(backing,expected.data(),65536))
                 throw std::runtime_error("Shared storage lost image contents, ordering or unrelated physical bytes");
+            physical=expected;
+        }
+        if(retained_mips||grown_mips){
+            image.base_level=1;image.dst_sel_x=4;draw(left,true);
+            const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
+            rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+            const float mip_value=.375f;
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&mip_value,4);
+            rasterizer.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Shared storage lost untouched parent mip contents or padding");
             physical=expected;
         }
         const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);

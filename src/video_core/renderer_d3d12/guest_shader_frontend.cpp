@@ -18,9 +18,7 @@ u32 StorageColorMask(const AmdGpu::Regs& regs,const Shader::Info* info,u32 mrt_m
     if(!info||regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Normal)return 0;
     u32 result{};
     const auto observe=[&](const AmdGpu::Image& image,bool depth){
-        if(!image||depth||(image.GetDataFmt()!=AmdGpu::DataFormat::Format32&&
-            image.GetDataFmt()!=AmdGpu::DataFormat::Format32_32&&
-            image.GetDataFmt()!=AmdGpu::DataFormat::Format32_32_32_32))return;
+        if(!image||depth)return;
         for(u32 i=0;i<Shader::MaxColorBuffers;++i){const auto& color=regs.color_buffers[i];
             if((mrt_mask&(1u<<i))&&color&&regs.color_target_mask.GetMask(i)&&
                color.GetDataFmt()==image.GetDataFmt()&&color.NumSamples()==1&&
