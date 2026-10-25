@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,i32 shifted_depth=0){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -310,10 +310,14 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     }
     if(shared_depth||independent_depth||shared_ms||shared_sampled){
         auto& db=regs.depth_buffer;db.z_read_base=db.z_write_base=cb.base_address;
+        if(shifted_depth){
+            if(!independent_depth||shifted_depth%256)throw std::invalid_argument("Shifted depth fixture requires an aligned independent image");
+            db.z_read_base=db.z_write_base=u32((i64(base+16384)+shifted_depth)>>8);
+        }
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
         if(shared_ms){db.z_info.num_samples=2;regs.aa_config.msaa_num_samples=2;}
-        db.depth_size.pitch_tile_max=independent_depth?3:1;
-        db.depth_size.height_tile_max=0;db.depth_slice.tile_max=independent_depth?3:1;
+        db.depth_size.pitch_tile_max=independent_depth&&!shifted_depth?3:1;
+        db.depth_size.height_tile_max=0;db.depth_slice.tile_max=independent_depth&&!shifted_depth?3:1;
         gpu.last_db_extent={8,8};
         regs.depth_control.depth_enable=regs.depth_control.depth_write_enable=1;
         regs.depth_control.depth_func=AmdGpu::CompareFunc::Always;
@@ -323,7 +327,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             if(!raw_domain||!GuestTextureCache::SeparateColorDepthAttachments(target,layout,depth,dl)||
                GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
                 throw std::runtime_error("Independent depth fixture lost its distinct overlap class");
-            auto same=depth;same.pitch=target.pitch;
+            auto same=depth;same.pitch=target.pitch;same.address=target.address;
             if(GuestTextureCache::SeparateColorDepthAttachments(target,layout,same,LayoutGuestTexture(same)))
                 throw std::runtime_error("Equal color/depth geometry was misclassified as pool reuse");
         }else if(!GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
@@ -410,8 +414,12 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             // D must not retire C. Sample both independently through actual
             // GCN, while the resident raw buffer remains the initial bytes.
             auto expected=physical;
-            for(const auto [pitch,value]:std::array<std::pair<u32,float>,2>{{{15,.5f},{31,.125f}}}){
-                image.pitch=pitch;draw(left,true);rasterizer.Finish();
+            for(const UINT plane:{0u,1u}){
+                const float value=plane?.125f:.5f;
+                image.pitch=plane?depth.pitch-1:15;
+                image.base_address=(plane?depth.address:target.address)>>8;
+                image.tiling_index=plane&&shifted_depth?depth.tile_mode:target.tile_mode;
+                draw(left,true);rasterizer.Finish();
                 rasterizer.ReadMemory(probe_desc.address,probe_layout.guest_bytes);
                 for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
                     memcpy(expected.data()+61440+GuestPixelOffset(probe_desc,probe_layout,0,0,x,y),&value,4);

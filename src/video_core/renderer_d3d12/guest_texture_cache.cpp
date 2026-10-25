@@ -2230,10 +2230,17 @@ bool GuestTextureCache::SeparateColorDepthAttachments(const GuestTextureDesc& co
     const GuestTextureLayout& color_layout,const GuestTextureDesc& depth,const GuestTextureLayout& depth_layout){
     // ResolveOverlap checks pool-reuse geometry before ResolveDepthOverlap,
     // including when both images were selected as attachments in this draw.
-    return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
-        depth.depth_target&&!depth.render_target&&!depth.writable&&!depth.stencil_address&&
-        color.address==depth.address&&color_layout.block_extent&&depth_layout.block_extent&&
-        !MatchesReferenceOverlapClass(color,color_layout,depth,depth_layout);
+    if(!color.render_target||color.writable||color.depth_target||color.stencil_address||
+       !depth.depth_target||depth.render_target||depth.writable||depth.stencil_address||
+       !color_layout.block_extent||!depth_layout.block_extent)return false;
+    if(color.address==depth.address)
+        return !MatchesReferenceOverlapClass(color,color_layout,depth,depth_layout);
+    // At unequal addresses the pinned cache asks MipOf/SliceOf, not
+    // ResolveDepthOverlap. Chance overlaps retain independent images; never
+    // recreate D from an unrelated byte range or publish either image into B.
+    return color.address>depth.address?
+        !HasPossibleReferenceSubresourceBase(color,color_layout,depth,depth_layout):
+        !HasPossibleReferenceSubresourceBase(depth,depth_layout,color,color_layout);
 }
 bool CompatibleGuestBlockWordStorage(const GuestTextureDesc& a,const GuestTextureLayout& al,
     const GuestTextureDesc& b,const GuestTextureLayout& bl){
