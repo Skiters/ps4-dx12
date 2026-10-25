@@ -219,6 +219,37 @@ int main(int argc,char** argv){try{
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Auxiliary polygon parameter transport failed signed DXIL: "+compiled.diagnostics);
         }
+        for(const auto type:{Shader::Backend::SPIRV::AuxShaderType::RectListTCS,
+            Shader::Backend::SPIRV::AuxShaderType::QuadListTCS,Shader::Backend::SPIRV::AuxShaderType::PassthroughTES}){
+            Shader::Info vertex{};Shader::HwFragmentRuntimeInfo fs{};fs.num_inputs=32;
+            for(u32 p=0;p<32;++p){vertex.stores.Set(Shader::IR::Attribute::Param0+p,p%4);fs.inputs[p].param_index=p;}
+            const auto packed=NativePolygonPointOutputs(vertex,~0u);
+            const bool domain=type==Shader::Backend::SPIRV::AuxShaderType::PassthroughTES;
+            const auto words=Shader::Backend::SPIRV::EmitAuxilaryTessShader(type,fs,
+                type==Shader::Backend::SPIRV::AuxShaderType::RectListTCS?3:4,packed,domain?0:1);
+            std::vector<u32> locations;
+            for(size_t offset=5;offset<words.size();){const auto count=words[offset]>>16;
+                if(!count||count>words.size()-offset)throw std::runtime_error("Malformed packed auxiliary module");
+                if((words[offset]&65535)==u32(spv::Op::OpDecorate)&&count==4&&
+                   words[offset+2]==u32(spv::Decoration::Location))locations.push_back(words[offset+3]);
+                offset+=count;
+            }
+            std::sort(locations.begin(),locations.end());
+            std::vector<u32> expected;for(u32 i=0;i<8;++i){expected.push_back(i);expected.push_back(i+u32(!domain));}
+            std::sort(expected.begin(),expected.end());
+            if(locations!=expected)throw std::runtime_error("Packed auxiliary transport lost row/clip-offset identity");
+            vertex.stores.flags[Shader::Info::AttributeFlags::Index(Shader::IR::Attribute::Param0)]=2;
+            const auto remapped=NativePolygonPointOutputs(vertex,~0u);
+            if(words==Shader::Backend::SPIRV::EmitAuxilaryTessShader(type,fs,
+                type==Shader::Backend::SPIRV::AuxShaderType::RectListTCS?3:4,remapped,domain?0:1))
+                throw std::runtime_error("Auxiliary shader cache collapsed distinct logical component maps");
+            Shader::Backend::DX12::SpirvConvertOptions options{};
+            options.stage=domain?Shader::Backend::DX12::SpirvStage::TessellationEvaluation:
+                Shader::Backend::DX12::SpirvStage::TessellationControl;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Packed auxiliary transport failed signed DXIL: "+compiled.diagnostics);
+        }
         std::puts("PASS polygon geometry capacity, interpolation and bias signed DXIL; GPU behavior NOT_RUN");return 0;
     }
     const bool capture_instance_gcn=mode=="capture-instance-gcn";

@@ -19,8 +19,12 @@ using Sirit::Id;
 constexpr u32 SPIRV_VERSION_1_5 = 0x00010500;
 
 struct QuadRectListEmitter : public Sirit::Module {
-    explicit QuadRectListEmitter(const HwFragmentRuntimeInfo& fs_info_, u32 input_vertices_)
-        : Sirit::Module{SPIRV_VERSION_1_5}, fs_info{fs_info_}, input_vertices{input_vertices_} {
+    explicit QuadRectListEmitter(const HwFragmentRuntimeInfo& fs_info_, u32 input_vertices_,
+        std::span<const NativePointOutput> transport_,u32 input_location_offset_)
+        : Sirit::Module{SPIRV_VERSION_1_5}, fs_info{fs_info_}, input_vertices{input_vertices_},
+          transport{transport_}, input_location_offset{input_location_offset_} {
+        if(!transport.empty()&&transport.size()!=32)
+            throw std::invalid_argument("Invalid auxiliary polygon transport");
         if(fs_info.num_inputs>std::size(fs_info.inputs))
             throw std::out_of_range("Invalid auxiliary tessellation fragment input count");
         for(u32 i=0;i<fs_info.num_inputs;++i)
@@ -265,6 +269,21 @@ private:
             gl_per_vertex = AddOutput(gl_per_vertex_type);
         }
         outputs.reserve(fs_info.num_inputs);
+        if(!transport.empty()){
+            for(u32 row=0;row<32;++row){
+                if(!NativePointOutputWidth(transport,row))continue;
+                outputs.emplace_back(AddOutput(model==spv::ExecutionModel::TessellationControl?
+                    TypeArray(vec4_id,Int(4)):vec4_id));
+                Decorate(outputs.back(),spv::Decoration::Location,row);
+                // Keep the logical transport in the auxiliary SPIR-V identity:
+                // equal row counts need not have equal guest reflection masks.
+                std::string name="packed";
+                for(const auto& item:transport)if(item.mask&&item.location==row)
+                    name+="_p"+std::to_string(item.source)+"m"+std::to_string(item.mask)+"c"+std::to_string(item.component);
+                Name(outputs.back(),name);
+            }
+            return;
+        }
         u32 seen_parameters{};
         for (int i = 0; i < fs_info.num_inputs; i++) {
             const auto& input = fs_info.inputs[i];
@@ -291,6 +310,16 @@ private:
         gl_in = AddInput(gl_per_vertex_array);
         const Id float_arr{TypeArray(vec4_id, Int(input_vertices))};
         inputs.reserve(fs_info.num_inputs);
+        if(!transport.empty()){
+            for(u32 row=0;row<32;++row){
+                if(!NativePointOutputWidth(transport,row))continue;
+                if(row+input_location_offset>=32)
+                    throw std::out_of_range("Auxiliary polygon varying exceeds native locations");
+                inputs.emplace_back(AddInput(float_arr));
+                Decorate(inputs.back(),spv::Decoration::Location,row+input_location_offset);
+            }
+            return;
+        }
         u32 seen_parameters{};
         for (int i = 0; i < fs_info.num_inputs; i++) {
             const auto& input = fs_info.inputs[i];
@@ -306,6 +335,8 @@ private:
 private:
     HwFragmentRuntimeInfo fs_info;
     u32 input_vertices;
+    std::span<const NativePointOutput> transport;
+    u32 input_location_offset;
     Id main;
     Id void_id;
     Id bool_id;
@@ -337,8 +368,9 @@ private:
 };
 
 std::vector<u32> EmitAuxilaryTessShader(AuxShaderType type, const HwFragmentRuntimeInfo& fs_info,
-                                     u32 input_vertices) {
-    QuadRectListEmitter ctx{fs_info, input_vertices};
+                                     u32 input_vertices,std::span<const NativePointOutput> transport,
+                                     u32 input_location_offset) {
+    QuadRectListEmitter ctx{fs_info, input_vertices,transport,input_location_offset};
     switch (type) {
     case AuxShaderType::RectListTCS:
         ctx.EmitRectListTCS();

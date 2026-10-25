@@ -751,7 +751,8 @@ void EmitContext::DefineOutputs() {
                 if ((compact_points||polygon_compact)?!width:!info.stores.GetAny(param)) {
                     continue;
                 }
-                const u32 num_components = (compact_points||polygon_compact)?width:info.stores.NumComponents(param);
+                const u32 num_components = polygon_compact&&runtime_info.hw.vs.native_polygon_point_full_rows?4:
+                    (compact_points||polygon_compact)?width:info.stores.NumComponents(param);
                 const u32 location=i;
                 const Id id{
                     DefineOutput(F32[num_components], location + (needs_clip_distance_emulation ? 1 : 0))};

@@ -49,11 +49,12 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     if(hardware==Shader::HwStage::Vertex)
         runtime.hw.vs.native_polygon_point_transport=GuestPolygonPointGeometryState(regs);
     if(hardware==Shader::HwStage::Vertex&&runtime.hw.vs.native_polygon_point_transport){
-        // Auxiliary rectangle/quad TCS/TES still use their declared original
-        // locations. Direct VS and original TES can compact the GS interface.
-        runtime.hw.vs.native_polygon_point_compact_parameters=
-            regs.primitive_type!=AmdGpu::PrimitiveType::RectList&&
-            regs.primitive_type!=AmdGpu::PrimitiveType::QuadList;
+        runtime.hw.vs.native_polygon_point_compact_parameters=true;
+        // Auxiliary rectangle/quad interpolation operates on float4 rows.
+        // Its used components carry exactly the same guest export mapping.
+        runtime.hw.vs.native_polygon_point_full_rows=
+            regs.primitive_type==AmdGpu::PrimitiveType::RectList||
+            regs.primitive_type==AmdGpu::PrimitiveType::QuadList;
         const auto* fragment=context.stage_infos[u32(Shader::SwStage::Fragment)];
         if(regs.num_interp>regs.ps_inputs.size())throw std::runtime_error("Invalid polygon fragment input count");
         if(fragment)for(u32 i=0;i<regs.num_interp;++i){
@@ -324,19 +325,29 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
         using namespace Shader::Backend::SPIRV;
         const auto* fragment=result.stages[u32(SwStage::Fragment)];
         const Shader::HwFragmentRuntimeInfo fragment_runtime=fragment?fragment->runtime.hw.fs:Shader::HwFragmentRuntimeInfo{};
+        const auto* polygon_vertex=result.stages[u32(SwStage::Vertex)];
+        const bool compact_polygon=GuestPolygonPointGeometryState(regs)&&polygon_vertex;
+        const auto polygon_outputs=compact_polygon?NativePolygonPointOutputs(polygon_vertex->info,
+            NativePolygonPointLiveParameters(fragment?&fragment->info:nullptr,fragment_runtime)):
+            std::array<Shader::NativePointOutput,32>{};
         const auto add_auxiliary=[&](AuxShaderType type,SwStage logical) {
             const auto index=u32(logical);
             if(result.stages[index])throw std::runtime_error("Guest rectangle/quad has conflicting tessellation stages");
             const u32 input_vertices=type==AuxShaderType::RectListTCS?3:4;
-            auto words=EmitAuxilaryTessShader(type,fragment_runtime,input_vertices);
+            const u32 input_shift=compact_polygon&&logical==SwStage::TessellationControl&&
+                profile_.needs_clip_distance_emulation&&polygon_vertex->info.stores.GetAny(Shader::IR::Attribute::ClipDistance);
+            auto words=EmitAuxilaryTessShader(type,fragment_runtime,input_vertices,
+                compact_polygon?std::span<const Shader::NativePointOutput>(polygon_outputs):std::span<const Shader::NativePointOutput>{},input_shift);
             auto found=auxiliary_.find(words);
             if(found==auxiliary_.end()) {
                 auto stage=std::make_unique<GuestShaderStage>();
                 stage->id=ReserveStageId();stage->auxiliary=true;stage->info.sw_stage=logical;
-                // The auxiliary TES forwards complete parameter vectors. The
-                // polygon-point GS consumes that interface, not the original
-                // VS's export mask (which may be sparse or differently sized).
-                if(logical==SwStage::TessellationEval){
+                // Ordinary auxiliary TES forwards complete parameter vectors;
+                // polygon TES forwards the packed producer components instead.
+                if(logical==SwStage::TessellationEval&&compact_polygon){
+                    for(const auto& output:polygon_outputs)for(u32 c=0;c<4;++c)
+                        if(output.mask&(1u<<c))stage->info.stores.Set(Shader::IR::Attribute::Param0+output.source,c);
+                }else if(logical==SwStage::TessellationEval){
                     for(u32 i=0;i<fragment_runtime.num_inputs;++i){
                         const auto& input=fragment_runtime.inputs[i];
                         if(input.IsDefault())continue;
@@ -372,7 +383,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
              poly.NeedsBias(),regs.depth_buffer.z_info.format!=AmdGpu::DepthBuffer::ZFormat::Z16,
              poly.enable_polygon_offset_front?regs.poly_offset.front_offset:regs.poly_offset.back_offset,
              (poly.enable_polygon_offset_front?regs.poly_offset.front_scale:regs.poly_offset.back_scale)/16.f,
-             regs.poly_offset.depth_bias,!producer->auxiliary});
+             regs.poly_offset.depth_bias,true});
         auto found=auxiliary_.find(words);
         if(found==auxiliary_.end()){
             auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;

@@ -4,10 +4,23 @@
 namespace NativeDX12 {
 template<class Program,class Initialize>
 void RunAuxPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
-    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base){
+    const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool packed_parameters=false){
     alignas(256) std::array<u32,128> pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0xf800080f,0x00000000,0xbf810000},
         0x504f4c5941555801ull);
+    alignas(256) std::array<u32,128> packed_vertex{};
+    if(packed_parameters){
+        std::vector<u32> vs{0xBEEB03FF,15};
+        for(u32 c=0;c<4;++c){vs.push_back(0xe0302000u|c*4);vs.push_back((128u<<24)|((4+c)<<8));}
+        vs.insert(vs.end(),{0xbf8c007f,0x7e1002ff,0x3c000000});
+        for(u32 p=0;p<32;++p){vs.push_back(0xf8000000u|((32+p)<<4)|(1u<<(p%4)));vs.push_back(0x08080808);}
+        vs.insert(vs.end(),{0xf80008cf,0x07060504,0xbf810000});
+        initialize(packed_vertex,vs,0x504f4c5941505631ull);
+        std::vector<u32> ps{0xBEEB03FF,15,0x7e000280};
+        for(u32 p=0;p<32;++p){ps.push_back(0xc8060002u|(p<<10)|((p%4)<<8));ps.push_back(0x06000300);}
+        ps.insert(ps.end(),{0xf800080f,0x00000000,0xbf810000});
+        initialize(pixel,ps,0x504f4c5941505031ull);
+    }
     for(bool rectangle:{false,true})for(bool reverse:{false,true}){
         rasterizer.ReadMemory(base,65536);rasterizer.Finish();rasterizer.UnmapMemory(base,65536);
         rasterizer.MapMemory(base,65536);rasterizer.NotifyHostMapping(base,65536,true,true);
@@ -20,8 +33,10 @@ void RunAuxPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gp
             const float p[]{xy[index][0],xy[index][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=rectangle?AmdGpu::PrimitiveType::RectList:AmdGpu::PrimitiveType::QuadList;
-        regs.num_indices=count;regs.vs_program.address=reinterpret_cast<u64>(vertex.data())>>8;
-        regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=1;
+        regs.num_indices=count;regs.vs_program.address=reinterpret_cast<u64>(packed_parameters?packed_vertex.data():vertex.data())>>8;
+        regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=packed_parameters?2:1;
+        if(packed_parameters){regs.num_interp=32;for(u32 p=0;p<32;++p){
+            regs.ps_inputs[p].input_offset=p;regs.ps_inputs[p].flat_shade=1;}}
         regs.ps_program.address=reinterpret_cast<u64>(pixel.data())>>8;regs.ps_program.settings.num_vgprs=1;
         regs.color_export_format.raw=u32(AmdGpu::ShaderExportFormat::ABGR_32);
         regs.color_control.mode=AmdGpu::ColorControl::OperationMode::Normal;
