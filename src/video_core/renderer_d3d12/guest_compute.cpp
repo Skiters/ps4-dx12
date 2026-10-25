@@ -6,6 +6,7 @@
 #include "guest_image_ownership.h"
 #include "guest_stage_bindings.h"
 #include "guest_point_capture.h"
+#include "guest_subresource_rebase.h"
 #include "diagnostics.h"
 #include "guest_dma.h"
 #include "shader_recompiler/native_dma.h"
@@ -125,6 +126,15 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
         std::optional<size_t> ordered_transfer;std::optional<size_t> storage_group;
         GuestTextureCache::Entry* ordered_entry{};};
     std::vector<ImagePending> images;
+    struct WritableParent {GuestTextureDesc desc;GuestTextureLayout layout;};
+    std::vector<WritableParent> writable_parents;
+    if(textures)for(const auto& stage:stages)if(stage.info)for(const auto& image:stage.info->images){
+        if(!image.is_written||image.is_depth||image.NumBindings(*stage.info)!=1)continue;
+        const auto sharp=image.GetSharp(*stage.info);if(!sharp)continue;
+        auto desc=DescribeGuestTexture(sharp);desc.writable=true;
+        desc.native_raw32=image.native_raw32;desc.native_packed10_raw=image.native_packed10_raw;
+        writable_parents.push_back({desc,LayoutGuestTexture(desc)});
+    }
     struct ShaderImageStorage {GuestTextureDesc desc;GuestTextureLayout layout;
         std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan> cached_plan;};
     std::vector<ShaderImageStorage> shader_image_storage;
@@ -305,6 +315,22 @@ static void ExecuteGuestResources(ID3D12Device* device,Rasterizer& rasterizer,
                 desc.view_layers=1;
             }
             auto layout=LayoutGuestTexture(desc);
+            if(sharp&&count==1&&desc.writable){
+                // Plan the complete storage before overlap checks or uploads,
+                // independent of descriptor order and previous cache residency.
+                std::optional<GuestTextureDesc> mapped;
+                u64 parent_bytes=layout.guest_bytes;
+                for(const auto& parent:writable_parents){
+                    if(parent.layout.guest_bytes<parent_bytes)continue;
+                    if(auto view=MapGuestWritableShaderSubview(parent.desc,parent.layout,desc,layout,array||slice_view)){
+                        if(mapped&&parent.layout.guest_bytes==parent_bytes&&
+                           !CompatibleGuestWritableStorage(*mapped,*view))
+                            throw std::runtime_error("Ambiguous writable shader subresource parents");
+                        mapped=*view;parent_bytes=parent.layout.guest_bytes;
+                    }
+                }
+                if(mapped){desc=*mapped;layout=LayoutGuestTexture(desc);}
+            }
             if(sharp&&count==1)if(auto alias=textures->RebaseColorSubresource(desc,layout,array||slice_view)){
                 shader_storage_pins.push_back(textures->PinBinding(*alias->parent));
                 desc=alias->view;layout=LayoutGuestTexture(desc);

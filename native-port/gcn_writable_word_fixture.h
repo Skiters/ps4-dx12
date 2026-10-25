@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "gcn_readonly_numeric_fixture.h"
+#include "video_core/renderer_d3d12/guest_subresource_rebase.h"
 
 namespace NativeDX12 {
 // Real T# loads, image_load/image_store and S_BARRIER through Liverpool/GCN.
@@ -141,5 +142,77 @@ inline void RunWritableWordGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverp
     printf("SCALAR donor data=%u number=%u packed-writer=%u\n",scalar_format,scalar_number,packed_writer);
     puts(cached_seed?"PASS:8 actual GCN cached mutable32 I(GpuModified0/1) views, separate raw B, before/after barrier and full65536 bytes":
         "PASS:8 actual GCN signed packed10/R32 stores, before/after S_BARRIER, both descriptor orders, warm reuse and full65536 bytes");
+}
+// Cold/warm parent-array stores observed through a physically shifted child.
+// Only the output buffer is downloaded between dispatches: the second dispatch
+// must see the first image store through I, not a CPU re-upload of guest B.
+inline void RunShiftedWritableGcnFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
+    std::byte* memory,std::byte* backing,u64 base){
+    constexpr u32 Bytes=65536,ImageOffset=16384,OutputOffset=57344,Old=0x11223344;
+    struct alignas(256) Code {std::array<u32,256> words{};} code;
+    alignas(256) std::array<AmdGpu::Image,2> table{};
+    gpu.BindRasterizer(&rasterizer);
+    struct Drain {GuestRasterizer& r;AmdGpu::Liverpool& g;
+        ~Drain(){g.WaitGpuIdle();try{r.Finish();}catch(...){}g.BindRasterizer(nullptr);}} drain{rasterizer,gpu};
+    for(u32 tile:{8u,5u})for(bool reverse:{false,true}){
+        rasterizer.ReadMemory(base,Bytes);rasterizer.Finish();
+        rasterizer.UnmapMemory(base,Bytes);rasterizer.MapMemory(base,Bytes);
+        rasterizer.NotifyHostMapping(base,Bytes,true,true);memset(memory,0xa7,Bytes);
+        AmdGpu::Image parent{};parent.base_address=(base+ImageOffset)>>8;
+        parent.type=u64(AmdGpu::ImageType::Color2DArray);parent.width=parent.height=parent.pitch=31;
+        parent.depth=1;parent.last_array=1;parent.data_format=4;parent.num_format=4;parent.tiling_index=tile;
+        parent.dst_sel_x=4;parent.dst_sel_y=5;parent.dst_sel_z=6;parent.dst_sel_w=7;
+        auto full=DescribeGuestTexture(parent);full.writable=true;const auto layout=LayoutGuestTexture(full);
+        if(layout.guest_bytes>OutputOffset-ImageOffset)throw std::runtime_error("Shifted fixture image exceeds arena");
+        for(u32 layer=0;layer<2;++layer)for(u32 y=0;y<32;++y)for(u32 x=0;x<32;++x)
+            memcpy(memory+ImageOffset+GuestPixelOffset(full,layout,0,layer,x,y),&Old,4);
+        auto child=parent;child.type=u64(AmdGpu::ImageType::Color2D);child.depth=child.last_array=0;
+        child.base_address=(base+ImageOffset+layout.mips[0].slice_bytes)>>8;
+        auto local=DescribeGuestTexture(child);local.writable=true;
+        const auto mapped=MapGuestWritableShaderSubview(full,layout,local,LayoutGuestTexture(local),true);
+        if(!mapped||mapped->first_layer!=1||mapped->address!=full.address||mapped->layers!=2)
+            throw std::runtime_error("Shifted shader mapping lost its parent coordinates");
+        auto bad=local;bad.alt_tile=!bad.alt_tile;
+        if(MapGuestWritableShaderSubview(full,layout,bad,LayoutGuestTexture(bad),true)||
+           MapGuestWritableShaderSubview(full,layout,local,LayoutGuestTexture(local),false))
+            throw std::runtime_error("Shifted shader mapping admitted incompatible addressing or a non-array binding");
+        table=reverse?std::array<AmdGpu::Image,2>{parent,child}:std::array<AmdGpu::Image,2>{child,parent};
+        const u32 read=reverse?0x00060000:0x00040000,write=reverse?0x00040000:0x00060000;
+        AmdGpu::Buffer output{};output.base_address=base+OutputOffset;output.stride=4;output.num_records=1024;
+        output.data_format=4;output.num_format=4;output.dst_sel_x=4;output.dst_sel_y=5;output.dst_sel_z=6;output.dst_sel_w=7;
+        std::vector<std::byte> expected(memory,memory+Bytes);
+        for(u32 warm=0;warm<2;++warm){
+            const u32 value=warm?0x778899aa:0x55667788;
+            // v0/v1/v2 = x1/y0/layer1. Child read ignores v2; array store uses it.
+            std::vector<u32> words{0xc0c80100,0xc0cc0108,0xbf8c0000,
+                0x7e000281,0x7e020280,0x7e040281,
+                0xf0000f00,read|0x0400,0xbf8c0000,
+                0x7e1802ff,value,0x7e1a0280,0x7e1c0280,0x7e1e0281,
+                0xf0204f00,write|0x0c00,0xbf8c0000,0xbf8a0000,
+                0xf0000f00,read|0x0800,0xbf8c0000};
+            for(u32 lane=0;lane<8;++lane){words.push_back(0xe0700000|lane*4);words.push_back(0x80010000|((lane+4)<<8));}
+            words.push_back(0xbf810000);code.words.fill(0);std::copy(words.begin(),words.end(),code.words.begin());
+            AmdGpu::BinaryInfo binary{};binary.signature=binary.signature_ref;binary.length=u32(words.size()*4);
+            binary.shader_hash=0x5348494654554156ull+warm+u64(reverse)*16+u64(tile)*256;
+            memcpy(code.words.data()+192,&binary,sizeof(binary));
+            AmdGpu::ComputeProgram compute{};compute.address=reinterpret_cast<u64>(code.words.data())>>8;
+            compute.num_thread_x.full=compute.num_thread_y.full=compute.num_thread_z.full=1;
+            compute.dim_x=compute.dim_y=compute.dim_z=1;compute.settings.num_user_regs=8;
+            compute.settings.num_vgprs=5;compute.settings.num_sgprs=3;
+            const u64 pointer=reinterpret_cast<u64>(table.data());memcpy(compute.user_data.data(),&pointer,8);
+            memcpy(compute.user_data.data()+4,&output,sizeof(output));
+            constexpr u32 count=sizeof(compute)/4;
+            std::vector<u32> packets{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::SetShReg,count,AmdGpu::PM4ShaderType::ShaderCompute}.raw,0x200};
+            const auto registers=std::bit_cast<std::array<u32,count>>(compute);packets.insert(packets.end(),registers.begin(),registers.end());
+            packets.insert(packets.end(),{AmdGpu::PM4Type3Header{AmdGpu::PM4ItOpcode::DispatchDirect,3,AmdGpu::PM4ShaderType::ShaderCompute}.raw,1,1,1,1});
+            gpu.SubmitGfx(packets,{});gpu.WaitGpuIdle();
+            const std::array<u32,8> values{warm?0x55667788:Old,0,0,1,value,0,0,1};
+            memcpy(expected.data()+OutputOffset,values.data(),sizeof(values));
+            rasterizer.ReadMemory(output.base_address,output.GetSize());rasterizer.Finish();rasterizer.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),Bytes))
+                throw std::runtime_error("Shifted parent/child UAV lost before/after barrier values, retained I or untouched B/padding");
+        }
+    }
+    puts("PASS shifted parent/child GCN storage, cold/warm, both descriptor orders, linear/micro and full backing oracle");
 }
 } // namespace NativeDX12

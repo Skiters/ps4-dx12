@@ -71,4 +71,42 @@ inline bool MatchesGuestSliceAddressing(const GuestTextureDesc& parent,
     return true;
 }
 
+// Prove a shader view's coordinates inside a writable parent before either
+// shader access promotion or resource creation. This works on a cold cache;
+// address overlap alone must never merge the original independent image pools.
+inline std::optional<GuestTextureDesc> MapGuestWritableShaderSubview(
+    const GuestTextureDesc& parent,const GuestTextureLayout& physical,
+    const GuestTextureDesc& local,const GuestTextureLayout& requested,bool array){
+    if(!parent.writable||!local.writable||parent.render_target||local.render_target||
+       parent.depth_target||local.depth_target||parent.stencil_address||local.stencil_address||
+       parent.one_dimensional||local.one_dimensional||parent.volume_depth||local.volume_depth||
+       parent.samples!=1||local.samples!=1||parent.data_format!=local.data_format||
+       physical.block_extent!=1||requested.block_extent!=1||physical.expanded_bytes_per_pixel||
+       requested.expanded_bytes_per_pixel||physical.bytes_per_pixel!=requested.bytes_per_pixel||
+       !parent.levels||physical.mips.size()!=parent.levels||local.levels!=1||local.first_mip||
+       requested.mips.size()!=1||local.pow2_padding||!local.layers||
+       local.first_layer>=local.layers||!local.view_layers||local.view_layers>local.layers-local.first_layer||
+       local.storage_height||local.storage_slice_bytes||(!array&&parent.layers!=1)||
+       local.address<parent.address)return std::nullopt;
+    const u64 delta=local.address-parent.address;
+    if(!requested.guest_bytes||delta>=physical.guest_bytes||requested.guest_bytes>physical.guest_bytes-delta)
+        return std::nullopt;
+    for(u32 mip=0;mip<parent.levels;++mip){const auto& part=physical.mips[mip];
+        if(!part.slice_bytes||delta<part.offset||local.width!=std::max(parent.width>>mip,1u)||
+           local.height!=std::max(parent.height>>mip,1u)||local.pitch!=part.pitch)continue;
+        const u64 relative=delta-part.offset;
+        if(relative%requested.guest_bytes||relative%part.slice_bytes)continue;
+        const u64 layer=relative/part.slice_bytes;
+        if(layer>=parent.layers||local.layers>parent.layers-layer||
+           !MatchesGuestSliceAddressing(parent,physical,mip,local,requested,u32(layer)))continue;
+        auto view=parent;
+        view.number_format=local.number_format;view.native_raw32=local.native_raw32;
+        view.native_packed10_raw=local.native_packed10_raw;view.sampled_depth=local.sampled_depth;
+        view.swizzle=local.swizzle;view.first_mip=mip;view.min_lod=mip*256;
+        view.first_layer=u32(layer)+local.first_layer;view.view_layers=local.view_layers;
+        if(CompatibleGuestWritableStorage(parent,view))return view;
+    }
+    return std::nullopt;
+}
+
 } // namespace NativeDX12

@@ -3,6 +3,7 @@
 #include "guest_point_shader.h"
 #include "guest_point_transport.h"
 #include "guest_graphics_state.h"
+#include "guest_subresource_rebase.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
 #include "video_core/amdgpu/liverpool.h"
@@ -14,6 +15,27 @@
 
 namespace NativeDX12 {
 namespace {
+void IncludeShiftedStorageReads(std::vector<Shader::NativeImageWrite>& writes,
+    std::span<const Shader::Info* const> infos){
+    const auto original_writes=writes;
+    for(const auto* info:infos)if(info)for(const auto& image:info->images){
+        if(image.is_written||image.is_depth||image.NumBindings(*info)!=1)continue;
+        const auto sharp=image.GetSharp(*info);if(!sharp)continue;
+        auto local=DescribeGuestTexture(sharp);local.writable=true;
+        const auto local_layout=LayoutGuestTexture(local);
+        const bool array=image.is_array||image.NeedsNativeSliceView(*info)||sharp.GetType()==AmdGpu::ImageType::Cube;
+        for(const auto& write:original_writes){
+            if(write.is_depth||!write.sharp||write.sharp.Address()>sharp.Address())continue;
+            auto parent=DescribeGuestTexture(write.sharp);parent.writable=true;
+            if(MapGuestWritableShaderSubview(parent,LayoutGuestTexture(parent),local,local_layout,array)){
+                // This read sharp is a proved view of an actual writer. Feed
+                // its original coordinates to the existing storage-read lowering;
+                // the binder applies the identical physical mapping afterwards.
+                writes.push_back({sharp,image.is_array,false});break;
+            }
+        }
+    }
+}
 u32 StorageColorMask(const AmdGpu::Regs& regs,const Shader::Info* info,u32 mrt_mask){
     if(!info||regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Normal)return 0;
     u32 result{};
@@ -326,6 +348,9 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
                 signed_packed_views.push_back({sharp,image.is_array,image.is_depth});
         }
     }
+    std::vector<const Shader::Info*> image_infos;
+    for(const auto* stage:result.stages)if(stage)image_infos.push_back(&stage->info);
+    IncludeShiftedStorageReads(pipeline_writes,image_infos);
     if (!pipeline_writes.empty()) {
         bindings = {};
         context.stage_infos.fill(nullptr);
@@ -519,7 +544,16 @@ GuestGraphicsStages GuestShaderFrontend::BuildBufferedPointCapture(const GuestGr
 GuestShaderStage& GuestShaderFrontend::BuildCompute(AmdGpu::Liverpool& gpu) {
     VideoCore::GuestRuntimeContext context{profile_};
     Shader::Backend::Bindings bindings{};
-    return Translate(gpu.regs, &gpu.GetCsRegs(), Shader::HwStage::Compute, Shader::SwStage::Compute,
+    auto& original=Translate(gpu.regs, &gpu.GetCsRegs(), Shader::HwStage::Compute, Shader::SwStage::Compute,
         AmdGpu::GetParams(gpu.GetCsRegs()), context, bindings);
+    std::vector<Shader::NativeImageWrite> writes;
+    for(const auto& image:original.info.images)if(image.is_written)
+        writes.push_back({image.GetSharp(original.info),image.is_array,image.is_depth});
+    const auto actual_writes=writes.size();
+    const Shader::Info* infos[]{&original.info};IncludeShiftedStorageReads(writes,infos);
+    if(writes.size()==actual_writes)return original;
+    bindings={};
+    return Translate(gpu.regs,&gpu.GetCsRegs(),Shader::HwStage::Compute,Shader::SwStage::Compute,
+        AmdGpu::GetParams(gpu.GetCsRegs()),context,bindings,writes);
 }
 }

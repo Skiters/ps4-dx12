@@ -116,7 +116,8 @@ int main(int argc,char** argv){try{
         mode=="writable-packed10-cached-rg16-float-owned"?7:4):mode=="writable-packed10-cached-sint-owned"?5:
         mode=="writable-packed10-cached-float-owned"?7:4;
     const bool cached_writable_word=cached_r11||cached_rg16||cached_word_number!=4||mode=="writable-packed10-cached-word-owned";
-    const bool writable_word=cached_writable_word||mode=="writable-packed10-word-owned";
+    const bool shifted_writable=mode=="writable-shifted-array-owned";
+    const bool writable_word=shifted_writable||cached_writable_word||mode=="writable-packed10-word-owned";
     const bool linear_download=mode=="linear-download-owned";
     const bool r16_overlap=mode=="r16-overlap-owned";
     const bool r32_overlap=mode=="r32-overlap-owned";
@@ -239,7 +240,8 @@ int main(int argc,char** argv){try{
         else if(shared_exponent_msaa)RunSharedExponentMsaaGcnFixture(rasterizer,gpu,memory,backing,base);
         else RunSharedExponentGcnFixture(rasterizer,gpu,memory,backing,base,shared_exponent_sample,shared_exponent_extremes,shared_exponent_word);
     }else if(writable_word){
-        RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_r11?6:cached_rg16?5:4,packed_word_writer);
+        if(shifted_writable)RunShiftedWritableGcnFixture(rasterizer,gpu,memory,backing,base);
+        else RunWritableWordGcnFixture(rasterizer,gpu,memory,backing,base,cached_writable_word,cached_word_number,cached_r11?6:cached_rg16?5:4,packed_word_writer);
     }else if(readonly_numeric){
         RunReadonlyNumericGcnFixture(rasterizer,gpu,memory,backing,base,readonly_numeric_exclusive,readonly_mutable32,readonly_signed_word,readonly_packed_sample,readonly_packed_ms);
     }else if(cached_depth_storage){
