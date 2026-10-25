@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -293,7 +293,18 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     if(independent_class){
         // I_color now contains1, physical B still contains.75. The distinct
         // image class must sample B, so the next CB write is.375, never.5.
-        draw(left,true);
+        const auto storage_image=image;
+        if(storage_writer){
+            alignas(256) std::array<u32,128> store{};
+            // One fragment writes I_storage(0,0)=.5 and I_color(0,0)=.25.
+            // Distinct native images must retain both; B stays at .75/0xA5.
+            initialize(store,{0xBEEB03FF,15,0x7e000280,0x7e020280,
+                0x7e0802ff,0x3f000000,0xf0200100,0x00000400,0xbf8c0000,
+                0x7e0802ff,0x3e800000,0xf800000f,0x04040404,0xbf810000},0x434f4c53544f5231ULL);
+            regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=1;
+            draw(store,true);
+            regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=8;
+        }else draw(left,true);
         cb.base_address=u32((base+61440)>>8);image.pitch=15;image.base_address=target.address>>8;
         const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
         const auto probe_layout=LayoutGuestTexture(probe);
@@ -313,12 +324,25 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         D3D12_RANGE none{};raw_readback.handle->Unmap(0,&none);
         if(!preserved)throw std::runtime_error("Independent color class replaced physical B with attachment data");
         rasterizer.ReadMemory(probe.address,probe_layout.guest_bytes);rasterizer.Finish();
-        auto expected=physical;const float result=.1875f;
+        auto expected=physical;const float result=storage_writer?.125f:.1875f;
         for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
             memcpy(expected.data()+61440+GuestPixelOffset(probe,probe_layout,0,0,x,y),&result,4);
         rasterizer.ValidateDebugMessages();
         if(memcmp(backing,expected.data(),65536))
             throw std::runtime_error("Distinct color images lost B/I separation, cached contents or padding");
+        if(storage_writer){
+            const auto check=[&](const auto& program,float value){
+                physical=expected;draw(program,true);
+                rasterizer.ReadMemory(probe.address,probe_layout.guest_bytes);rasterizer.Finish();
+                for(u32 y=0;y<8;++y)for(u32 x=0;x<8;++x)
+                    memcpy(expected.data()+61440+GuestPixelOffset(probe,probe_layout,0,0,x,y),&value,4);
+                rasterizer.ValidateDebugMessages();
+                if(memcmp(backing,expected.data(),65536))
+                    throw std::runtime_error("Independent image_store lost storage contents, attachment exterior or physical isolation");
+            };
+            image=storage_image;check(left,.25f);
+            image.pitch=15;image.base_address=target.address>>8;check(right,.5f);
+        }
         return;
     }
     if(shared_depth||independent_depth||shared_ms||shared_sampled){
