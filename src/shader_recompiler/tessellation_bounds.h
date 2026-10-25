@@ -18,8 +18,11 @@ struct TessellationFactorBounds {
         if(!value||!std::isfinite(*value)){dynamic|=u8(1u<<factor);return;}
         maximum=std::max(maximum,*value);
     }
-    u32 SegmentBound()const{
-        if(!unconditional||written!=63||dynamic||!std::isfinite(maximum)||maximum<0||maximum>=32)
+    u32 SegmentBound(u8 required=63)const{
+        // Isolines consume outer0/1; triangles consume outer0/1/2 and inner0.
+        // Unused domain factors need not be written by the original HS.
+        if(!required||(required&~63u)||!unconditional||(written&required)!=required||(dynamic&required)||
+           !std::isfinite(maximum)||maximum<0||maximum>=32)
             return 64;
         // Covers integer, fractional-even/odd and power-of-two partitioning.
         // The strict next power of two also covers an odd segment above an

@@ -159,6 +159,27 @@ int main(int argc,char** argv){try{
         Shader::Optimization::CollectShaderInfoPass(program,Shader::Profile{});
         if(info.tessellation_bounds.SegmentBound()!=64)
             throw std::runtime_error("Conditional HS incorrectly acquired a constant output proof");
+        for(const u8 required:std::array<u8,3>{3,0x17,63}){
+            Shader::Info domain_info{};domain_info.hw_stage=Shader::HwStage::Hull;
+            domain_info.sw_stage=Shader::SwStage::TessellationControl;
+            Shader::IR::Block body(pool);Shader::IR::Program domain_program(domain_info);
+            for(u32 factor=0;factor<6;++factor)if(required&(1u<<factor))
+                body.AppendNewInst(Shader::IR::Opcode::SetPatch,
+                    {Shader::IR::Value(Shader::IR::Patch(factor)),Shader::IR::Value(2.f)});
+            domain_program.post_order_blocks.push_back(&body);
+            Shader::Optimization::CollectShaderInfoPass(domain_program,Shader::Profile{});
+            if(domain_info.tessellation_bounds.SegmentBound(required)!=4)
+                throw std::runtime_error("Complete isoline/triangle/quad factors lost their source bound");
+            auto missing=domain_info.tessellation_bounds;missing.written&=~1u;
+            if(missing.SegmentBound(required)!=64)
+                throw std::runtime_error("Missing active domain factor incorrectly bounded the source");
+            auto dynamic=domain_info.tessellation_bounds;dynamic.Record(0,std::nullopt);
+            if(dynamic.SegmentBound(required)!=64)
+                throw std::runtime_error("Dynamic active domain factor incorrectly bounded the source");
+            if(required!=63){auto unused=domain_info.tessellation_bounds;unused.Record(5,std::nullopt);
+                if(unused.SegmentBound(required)!=4||unused.SegmentBound()!=64)
+                    throw std::runtime_error("Unused factor changed the domain proof or admitted a quad");}
+        }
         std::puts("PASS tessellation factor collection, persistence and complete bounded allocation; GPU NOT_RUN");return 0;
     }
     if(mode=="polygon-output-capacity"){
