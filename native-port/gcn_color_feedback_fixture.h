@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -328,6 +328,16 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             db.z_read_base=db.z_write_base=u32((s64(base+16384)+shifted_depth)>>8);
         }
         db.z_info.format=AmdGpu::DepthBuffer::ZFormat::Z32Float;db.z_info.tile_mode_index=5;
+        if(independent_stencil){
+            if(!independent_depth)throw std::invalid_argument("Independent stencil requires separate color/depth images");
+            db.stencil_info.format=AmdGpu::DepthBuffer::StencilFormat::Stencil8;
+            db.stencil_read_base=db.stencil_write_base=u32((base+49152)>>8);
+            regs.depth_control.stencil_enable=1;
+            regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Always;
+            regs.stencil_control.stencil_zpass_front=AmdGpu::StencilFunc::ReplaceTest;
+            regs.stencil_ref_front.stencil_test_val=37;
+            regs.stencil_ref_front.stencil_write_mask=255;
+        }
         if(shared_ms){db.z_info.num_samples=2;regs.aa_config.msaa_num_samples=2;}
         db.depth_size.pitch_tile_max=independent_depth&&!shifted_depth?3:1;
         db.depth_size.height_tile_max=0;db.depth_slice.tile_max=independent_depth&&!shifted_depth?3:1;
@@ -343,6 +353,9 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
             auto same=depth;same.pitch=target.pitch;same.address=target.address;
             if(GuestTextureCache::SeparateColorDepthAttachments(target,layout,same,LayoutGuestTexture(same)))
                 throw std::runtime_error("Equal color/depth geometry was misclassified as pool reuse");
+            if(independent_stencil){auto overlap=depth;overlap.stencil_address=target.address;
+                if(GuestTextureCache::SeparateColorDepthAttachments(target,layout,overlap,LayoutGuestTexture(overlap)))
+                    throw std::runtime_error("Independent depth admitted a competing stencil/color plane");}
         }else if(!GuestTextureCache::CanRecreateColorDepthAttachments(target,layout,depth,dl))
             throw std::runtime_error("Shared attachment fixture lost its original overlap class");
         auto shifted=depth;shifted.address+=256;
@@ -420,6 +433,15 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         physical.assign(backing,backing+65536);
         draw(seed,false); // Repeat D->CB->D recreation, now with Z=.25.
         regs.depth_control={};cb.base_address=u32((base+61440)>>8);
+        if(independent_stencil){
+            // Retained S must hold the GPU-written37, not its physical0xa5 seed.
+            // Both color probes are gated by the actual native stencil test.
+            regs.depth_control.stencil_enable=1;
+            regs.depth_control.stencil_ref_func=AmdGpu::CompareFunc::Equal;
+            regs.stencil_control={};regs.stencil_ref_front={};
+            regs.stencil_ref_front.stencil_test_val=37;
+            regs.stencil_ref_front.stencil_mask=255;
+        }
         if(shared_clear){cb.info.fast_clear=0;cb.cmask_base_address=0;regs.generic_scissor.bottom_right_x=8;}
         const auto probe_desc=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
         const auto probe_layout=LayoutGuestTexture(probe_desc);

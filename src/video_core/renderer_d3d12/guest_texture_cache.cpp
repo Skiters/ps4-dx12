@@ -2243,8 +2243,14 @@ bool GuestTextureCache::SeparateColorDepthAttachments(const GuestTextureDesc& co
     // ResolveOverlap checks pool-reuse geometry before ResolveDepthOverlap,
     // including when both images were selected as attachments in this draw.
     if(!color.render_target||color.writable||color.depth_target||color.stencil_address||
-       !depth.depth_target||depth.render_target||depth.writable||depth.stencil_address||
+       !depth.depth_target||depth.render_target||depth.writable||
        !color_layout.block_extent||!depth_layout.block_extent)return false;
+    if(depth.stencil_address){
+        const auto stencil=LayoutGuestTexture(DescribeGuestStencil(depth));
+        if(color.address<=depth.stencil_address?
+           depth.stencil_address-color.address<color_layout.guest_bytes:
+           color.address-depth.stencil_address<stencil.guest_bytes)return false;
+    }
     if(color.address==depth.address)
         return !MatchesReferenceOverlapClass(color,color_layout,depth,depth_layout);
     // At unequal addresses the pinned cache asks MipOf/SliceOf, not
