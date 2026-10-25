@@ -1,3 +1,7 @@
+## Continued integration: auxiliary polygon transport, independent storage and tessellation bounds — 2026-10-25
+
+Production922ddca after98622b2/0d9c5ab/2325301. Connected, ALL executable tests NOT_RUN until seven-area implementations finish. Clean Release922ddca PASS42.077s061929-23748; main core PASS34.698s061759-29256, winding fixture compile/link PASS11.256s061845-11480, primitive fixture compile/link PASS7.648s061857-18676. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/tessellation-bound-922ddca.json. No app-core replacement, runtime copies or behavior/FPS claims. SESSION_HANDOFF first section authoritative; keep developing beyond checkpoints.
+
 ## Continued integration: independent image overlaps and packed polygon components — 2026-10-25
 
 Production dddbe02, including ac9baec. Connected implementation; ALL executable tests NOT_RUN until the seven-area implementation work finishes. Clean tracked Release compile/link PASS19.495s, command-20261025-060041-23428.log. Main core PASS11.436s055849-12660; winding fixture compile/link PASS8.490s055901-34512; GCN fixture compile/link PASS10.261s060004-31332. Identity: F:/PS4Dev/handoff/native-port-comparison-20261019/polygon-components-dddbe02.json. No behavior/FPS acceptance or app-core replacement. SESSION_HANDOFF first section is authoritative; continue production after checkpoint.
