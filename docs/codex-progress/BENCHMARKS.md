@@ -1,3 +1,7 @@
+## Continued integration: independent image overlaps and packed polygon components — 2026-10-25
+
+Production dddbe02, including ac9baec. Connected implementation; ALL executable tests NOT_RUN until the seven-area implementation work finishes. Clean tracked Release compile/link PASS19.495s, command-20261025-060041-23428.log. Main core PASS11.436s055849-12660; winding fixture compile/link PASS8.490s055901-34512; GCN fixture compile/link PASS10.261s060004-31332. Identity: F:/PS4Dev/handoff/native-port-comparison-20261019/polygon-components-dddbe02.json. No behavior/FPS acceptance or app-core replacement. SESSION_HANDOFF first section is authoritative; continue production after checkpoint.
+
 ## Continued integration: strip restart and color word feedback — 2026-10-25
 
 Production30453d1 aftera1621ca: per-command indirect strip restart and compatible color word-class feedback are connected. ALL executable tests remain NOT_RUN until seven-area implementations finish. Clean Release30453d1 PASS26.667s053134-6680; core compile/link PASS19.456s053045-19264, GCN fixture compile/link PASS10.204s053105-6116. Identity F:/PS4Dev/handoff/native-port-comparison-20261019/color-word-feedback-30453d1.json. No installed-core replacement, runtime archives or behavior/FPS acceptance. Continue production; SESSION_HANDOFF first section is authoritative.
