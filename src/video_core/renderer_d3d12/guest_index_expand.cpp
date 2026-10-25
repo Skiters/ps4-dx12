@@ -139,14 +139,14 @@ void GuestIndexExpandPass::RecordRestart(Rasterizer& renderer,const GuestIndexEx
 Resource GuestIndexExpandPass::InstanceArguments(Rasterizer& renderer,Resource& arguments,const Rasterizer::DrawArguments& draw){
     std::lock_guard lock(renderer.ExecutionMutex());
     if(!arguments.handle||arguments.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
-       arguments.handle->GetDesc().Width<20||draw.instances!=1||draw.first)
-        throw std::invalid_argument("Captured restart requires one complete normalized indexed instance");
+       arguments.handle->GetDesc().Width<20||draw.first)
+        throw std::invalid_argument("Captured restart requires a complete normalized indexed instance range");
     ComPtr<ID3D12Device> device,owner;Check(root_->GetDevice(IID_PPV_ARGS(&device)));
     Check(arguments.handle->GetDevice(IID_PPV_ARGS(&owner)));
     if(owner.Get()!=device.Get())throw std::invalid_argument("Captured restart arguments belong to another device");
     auto output=renderer.AcquireTransientBuffer(20);
     auto tail=Buffer(device.Get(),16,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
-    const u32 words[]{1,0,u32(draw.base_vertex),draw.first_instance};void* bytes{};D3D12_RANGE none{};
+    const u32 words[]{draw.instances,0,u32(draw.base_vertex),draw.first_instance};void* bytes{};D3D12_RANGE none{};
     Check(tail.handle->Map(0,&none,&bytes));memcpy(bytes,words,sizeof(words));tail.handle->Unmap(0,nullptr);
     renderer.RetainUntilFinish([arguments,output,tail](u64){});
     auto* list=renderer.RecordingList();const auto previous=arguments.State(0);

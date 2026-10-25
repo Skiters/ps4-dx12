@@ -140,6 +140,52 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
             Tests::CheckDrawSysvalsGpu(device.Get(),renderer,dxc,capture_sysval_vertex.bytecode,true);
         renderer.ValidateDebugMessages();puts("PASS: Vulkan direct/expanded draw sysvals");return 0;
     }
+    if(std::string_view(argv[3])=="source-instance-partitions"){
+        D3D12_SO_DECLARATION_ENTRY declaration{0,"CAPTURE",0,0,4,0};const UINT stride=16;
+        StreamOutputLayout layout({&declaration,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM});
+        auto stream_state=state;stream_state.pipeline.StreamOutput=layout.Desc();
+        ShaderPipeline::GraphicsShaders shaders;shaders.vertex=vertex.bytecode;shaders.geometry=geometry.bytecode;
+        ShaderPipeline pipeline(device.Get(),dxc,shaders,stream_state.pipeline);
+        PrimitiveStreamPass pass(device.Get());
+        const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
+        for(u32 instances:{5u,0u}){
+            const PrimitiveStreamInstances parts(PrimitiveStreamRange::Make(16,6,3,0,6),instances,192);
+            u32 completed{};ID3D12Resource* previous{};
+            for(u32 i=0;i<parts.Count();++i){const auto part=parts.At(i);
+                const auto captured=pass.Capture(renderer,16,part.range.capacity_vertices,3,
+                    [&](PrimitiveStreamLease& lease){
+                        auto bindings=std::make_shared<ResourceBindings>(device.Get(),pipeline.Layout());
+                        renderer.RetainUntilFinish([bindings](u64){});
+                        const Rasterizer::StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(part.range.capacity_vertices)*16,0};
+                        renderer.ExecuteGraphics(pipeline,*bindings,stream_state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
+                            blend,{6,part.instances,0,11+part.first_instance},{},nullptr,false,nullptr,&target);
+                    });
+                if(previous&&previous!=captured->data.handle.Get())
+                    throw std::runtime_error("Completed source instance slices did not reuse their arena");
+                previous=captured->data.handle.Get();
+                const u64 bytes=u64(part.range.capacity_vertices)*16;
+                auto readback=Buffer(device.Get(),bytes+8,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+                renderer.RetainUntilFinish([readback,captured](u64){});auto* list=renderer.RecordingList();
+                captured->data.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+                captured->filled_size.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+                list->CopyBufferRegion(readback.handle.Get(),0,captured->data.handle.Get(),0,bytes);
+                list->CopyBufferRegion(readback.handle.Get(),bytes,captured->filled_size.handle.Get(),0,8);
+                renderer.Finish();void* mapped{};D3D12_RANGE range{0,SIZE_T(bytes+8)},none{};
+                Check(readback.handle->Map(0,&range,&mapped));u64 filled{};
+                memcpy(&filled,static_cast<std::byte*>(mapped)+bytes,8);
+                bool equal=filled==u64(part.instances)*96;
+                for(u32 instance=0;instance<part.instances;++instance)for(u32 v=0;v<6;++v){
+                    const u32 expected[]{v,11+completed+instance,0x7fc12345u^(v/3),0x80000000u};
+                    equal&=memcmp(static_cast<std::byte*>(mapped)+(instance*6+v)*16,expected,16)==0;
+                }
+                readback.handle->Unmap(0,&none);
+                if(!equal)throw std::runtime_error("Partitioned source changed vertex/instance/primitive IDs, contents or filled count");
+                completed+=part.instances;
+            }
+            if(completed!=instances)throw std::runtime_error("Source partition omitted or replayed an original instance");
+        }
+        renderer.ValidateDebugMessages();puts("PASS source instance SO contents, nonzero first instance, partial/empty slice, counts and arena reuse");return 0;
+    }
     Tests::CheckGuestIndexExpansionGpu(device.Get(),renderer);
     Tests::CheckGuestIndexRestartGpu(device.Get(),renderer);
     if(std::string_view(argv[3])=="index-expansion"){

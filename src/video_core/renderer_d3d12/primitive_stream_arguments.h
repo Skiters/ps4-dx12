@@ -22,6 +22,21 @@ PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch_vertices,u32 input_vert
 // distinct from the auxiliary two-triangles-per-patch construction.
 PrimitiveStreamRange TessellatedPointStreamRange(u32 patch_vertices,u32 input_vertices,u32 instances,
     u32 vertex_words,u32 vertices_per_primitive,u32 segment_bound=64);
+struct PrimitiveStreamInstanceSlice {
+    PrimitiveStreamRange range;
+    u32 first_instance{},instances{};
+    bool last{};
+};
+// Partition only at original instance boundaries. No patch/vertex invocation
+// is retried and each instance keeps its own native PrimitiveId domain.
+class PrimitiveStreamInstances {
+    PrimitiveStreamRange one_;
+    u32 instances_,per_slice_,count_;
+public:
+    PrimitiveStreamInstances(const PrimitiveStreamRange& one,u32 instances,u64 budget=UINT32_MAX);
+    u32 Count()const{return count_;}
+    PrimitiveStreamInstanceSlice At(u32 index)const;
+};
 struct PrimitiveStreamPartition {
     PrimitiveStreamRange input;
     Shader::NativePointCapture::Plan capture;

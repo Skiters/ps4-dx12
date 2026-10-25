@@ -65,6 +65,25 @@ PrimitiveStreamRange TessellatedPointStreamRange(u32 patch,u32 vertices,u32 inst
     const u32 capacity=u32(std::max<u64>(primitive,patches*serialized_vertices_per_patch));
     return PrimitiveStreamRange::Make(stride,capacity,primitive,0,capacity);
 }
+PrimitiveStreamInstances::PrimitiveStreamInstances(const PrimitiveStreamRange& one,u32 instances,u64 budget)
+    :one_(PrimitiveStreamRange::Make(one.stride,one.capacity_vertices,one.vertices_per_primitive,one.first,one.limit)),
+     instances_(instances){
+    if(one.first||one.limit!=one.capacity_vertices||!budget)
+        throw std::invalid_argument("Instance capture requires a complete source bound and budget");
+    const u64 bytes=u64(one.stride)*one.capacity_vertices;
+    if(bytes>std::min<u64>(budget,UINT32_MAX))
+        throw std::overflow_error("One original instance exceeds the source capture budget");
+    per_slice_=u32(std::min<u64>(std::min<u64>(budget,UINT32_MAX)/bytes,UINT32_MAX));
+    count_=instances?u32((u64(instances)+per_slice_-1)/per_slice_):1;
+}
+PrimitiveStreamInstanceSlice PrimitiveStreamInstances::At(u32 index)const{
+    if(index>=count_)throw std::out_of_range("Instance capture partition exceeds complete coverage");
+    const u32 first=u32(u64(index)*per_slice_);
+    const u32 count=std::min(per_slice_,instances_-first);
+    const u32 capacity=u32(u64(one_.capacity_vertices)*std::max(1u,count));
+    return {PrimitiveStreamRange::Make(one_.stride,capacity,one_.vertices_per_primitive,0,capacity),
+        first,count,index+1==count_};
+}
 PrimitiveStreamPartitions::PrimitiveStreamPartitions(const PrimitiveStreamRange& input,u32 calls,u32 emissions,u64 budget)
     :input_(PrimitiveStreamRange::Make(input.stride,input.capacity_vertices,input.vertices_per_primitive,input.first,input.limit)),
     calls_(calls),emissions_(emissions){

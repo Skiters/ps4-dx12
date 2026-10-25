@@ -77,8 +77,8 @@ public:
     void Record(Rasterizer&,const GuestIndexExpansion&,Resource* source,u64 offset,
         u32 available,u32 element,Resource& output,u32 swap_mode=0);
     void RecordGenerated(Rasterizer&,const GuestIndexExpansion&,u32 first,Resource& output);
-    // Retain the GPU-computed count while selecting one original producer
-    // instance. Never copy the count back to CPU for capture scheduling.
+    // Retain the GPU-computed count while selecting an original producer
+    // instance range. Never copy the count back to CPU for capture scheduling.
     Resource InstanceArguments(Rasterizer&,Resource& arguments,const Rasterizer::DrawArguments&);
     // Stable segmented GPU expansion. Output count is written as DRAW_INDEXED
     // arguments; no host readback or dummy primitives are used.

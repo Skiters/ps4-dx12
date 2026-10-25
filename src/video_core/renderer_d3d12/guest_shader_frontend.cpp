@@ -128,7 +128,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             regs.vgt_gs_out_prim_type.GetPrimitiveType(0)==AmdGpu::GsOutputPrimitiveType::PointList;
     }
     if(logical==Shader::SwStage::Vertex)runtime.sw.vs.native_capture_base_instance=
-        profile_.native_point_capture&&!profile_.native_point_capture_stream_input;
+        profile_.native_point_capture;
     if(logical==Shader::SwStage::Vertex)runtime.sw.vs.native_point_expansion=
         hardware==Shader::HwStage::Vertex&&regs.primitive_type==AmdGpu::PrimitiveType::PointList&&
         regs.stage_enable.raw==AmdGpu::ShaderStageEnable::VgtStages::Vs;

@@ -11,7 +11,7 @@ namespace NativeDX12::Tests {
 inline void CheckStreamOutputLayout(){
     for(const auto [value,segments]:std::array<std::pair<float,u32>,8>{
         {{0,2},{1,2},{2,4},{3,4},{4,8},{8,16},{16,32},{32,64}}}){
-        Shader::TessellationFactorBounds bounds;bounds.unconditional=true;
+        Shader::TessellationFactorBounds bounds;bounds.guaranteed=63;
         for(u32 i=0;i<6;++i)bounds.Record(i,value);
         if(bounds.SegmentBound()!=segments)
             throw std::runtime_error("Constant tessellation bound lost partitioning rounding");
@@ -22,7 +22,7 @@ inline void CheckStreamOutputLayout(){
         if(bounds.SegmentBound()!=64)throw std::runtime_error("Dynamic factor incorrectly reduced source bound");
     }
     for(u32 invalid=0;invalid<4;++invalid){
-        Shader::TessellationFactorBounds bounds;bounds.unconditional=invalid!=0;
+        Shader::TessellationFactorBounds bounds;bounds.guaranteed=invalid?63:0;
         for(u32 i=0;i<(invalid==1?5u:6u);++i)bounds.Record(i,1.f);
         if(invalid==2)bounds.Record(0,std::numeric_limits<float>::infinity());
         if(invalid==3)bounds.Record(0,std::numeric_limits<float>::quiet_NaN());
@@ -51,6 +51,28 @@ inline void CheckStreamOutputLayout(){
         catch(const std::overflow_error&){if(invalid>1)throw;rejected=true;}
         catch(const std::invalid_argument&){if(invalid<2)throw;rejected=true;}
         if(!rejected)throw std::runtime_error("Invalid or oversized tessellated source bound was accepted");
+    }
+    const auto single_instance=TessellatedPointStreamRange(3,3,1,4,3,2);
+    const PrimitiveStreamInstances instances(single_instance,7,1536);
+    if(instances.Count()!=4)throw std::runtime_error("Source instance budget lost a partial final slice");
+    for(u32 i=0;i<4;++i){const auto part=instances.At(i);
+        if(part.first_instance!=i*2||part.instances!=(i==3?1u:2u)||part.last!=(i==3)||
+           part.range.capacity_vertices!=(i==3?24u:48u)||part.range.stride!=32)
+            throw std::runtime_error("Source instance partition lost complete ordered instance/patch coverage");
+    }
+    const PrimitiveStreamInstances huge(single_instance,UINT32_MAX,768);
+    if(huge.Count()!=UINT32_MAX||huge.At(UINT32_MAX-1).first_instance!=UINT32_MAX-1||
+       huge.At(UINT32_MAX-1).instances!=1||!huge.At(UINT32_MAX-1).last)
+        throw std::runtime_error("Large instance partition overflowed its ordinal/count");
+    const auto empty=PrimitiveStreamInstances(single_instance,0,768).At(0);
+    if(empty.instances||empty.first_instance||!empty.last||empty.range.capacity_vertices!=24)
+        throw std::runtime_error("Empty source draw lost its valid zero-instance submission");
+    for(u32 invalid=0;invalid<3;++invalid){bool rejected{};
+        try{if(invalid==0)(void)PrimitiveStreamInstances(single_instance,1,767);
+            else if(invalid==1)(void)instances.At(4);
+            else (void)PrimitiveStreamInstances(single_instance,1,0);}
+        catch(const std::exception&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Invalid instance source budget/range was admitted");
     }
     bool overflow{};try{(void)AuxiliaryPointStreamRange(3,UINT32_MAX,UINT32_MAX,4);}
     catch(const std::overflow_error&){overflow=true;}

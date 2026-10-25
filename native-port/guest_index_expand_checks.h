@@ -195,10 +195,10 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
             if(!rejected)throw std::runtime_error("Segmented expansion accepted aliased output/arguments");
             pass.RecordRestart(renderer,plan,available?&source:nullptr,available?offset:0,available,element,marker,draw,output,arguments,swap);
             if(capture_packet){
-                bool rejected{};try{(void)pass.InstanceArguments(renderer,arguments,{plan.input_count,2});}
+                bool rejected{};try{(void)pass.InstanceArguments(renderer,arguments,{plan.input_count,2,1});}
                 catch(const std::invalid_argument&){rejected=true;}
-                if(!rejected)throw std::runtime_error("Capture packet accepted multiple original instances");
-                instance_arguments=pass.InstanceArguments(renderer,arguments,{plan.input_count,1,0,37,-19});
+                if(!rejected)throw std::runtime_error("Capture packet accepted an unnormalized first index");
+                instance_arguments=pass.InstanceArguments(renderer,arguments,{plan.input_count,1+swap,0,37,-19});
                 if(instance_arguments.State(0)!=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT)
                     throw std::runtime_error("Capture packet did not publish its consumer state");
             }
@@ -214,7 +214,7 @@ inline void CheckGuestIndexRestartGpu(ID3D12Device* device,Rasterizer& renderer)
         renderer.Finish();std::vector<std::byte> expected(size_t(result_bytes),std::byte{0xcd});
         if(!expected_indices.empty())memcpy(expected.data(),expected_indices.data(),expected_indices.size()*4);
         const u32 args[]{UINT(expected_indices.size()),3,0,u32(-7),11};memcpy(expected.data()+output_bytes,args,sizeof(args));
-        if(capture_packet){const u32 one[]{UINT(expected_indices.size()),1,0,u32(-19),37};
+        if(capture_packet){const u32 one[]{UINT(expected_indices.size()),1+swap,0,u32(-19),37};
             memcpy(expected.data()+output_bytes+36,one,sizeof(one));}
         D3D12_RANGE range{0,SIZE_T(result_bytes)};Check(result.handle->Map(0,&range,&bytes));
         const bool equal=memcmp(bytes,expected.data(),expected.size())==0;result.handle->Unmap(0,&none);

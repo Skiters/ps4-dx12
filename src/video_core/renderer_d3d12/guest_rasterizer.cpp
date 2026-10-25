@@ -2184,9 +2184,12 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         default:required_factors=0;break;
         }
         const u32 segments=hull?hull->info.tessellation_bounds.SegmentBound(required_factors):64;
-        const auto range=capture->stream_tessellated?
-            TessellatedPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size,input_width,segments):
-            AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
+        const u32 source_vertices=draw.instances?draw.count:0;
+        const auto one_instance=capture->stream_tessellated?
+            TessellatedPointStreamRange(capture->stream_patch_vertices,source_vertices,1,geometry.in_vertex_data_size,input_width,segments):
+            AuxiliaryPointStreamRange(capture->stream_patch_vertices,source_vertices,1,geometry.in_vertex_data_size);
+        const PrimitiveStreamInstances source_instances(one_instance,draw.instances);
+        const auto range=source_instances.At(0).range;
         const u32 stride=range.stride;
         const auto one=Shader::NativePointCapture::Plan::Make(1,geometry.num_invocations,geometry.output_vertices,1);
         const u64 capture_budget=std::max<u64>(64*1024*1024,one.bytes);
@@ -2211,16 +2214,25 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 // views only after it has selected/initialized the targets.
                 prepare_replay(common);
                 auto arena=point_capture_->Reserve(*this,partitions.At(0).capture.bytes);
-                const auto stream=primitive_stream_->Capture(*this,stride,range.capacity_vertices,range.vertices_per_primitive,
+                for(u32 source_index=0;source_index<source_instances.Count();++source_index){
+                const auto source_part=source_instances.At(source_index);
+                auto producer_draw=draw;producer_draw.instances=source_part.instances;
+                producer_draw.first_instance+=source_part.first_instance;
+                auto producer_runtime=runtime;producer_runtime.base_instance=producer_draw.first_instance;
+                producer_runtime.capture_base_instance=runtime.base_instance;
+                const auto stream=primitive_stream_->Capture(*this,stride,source_part.range.capacity_vertices,range.vertices_per_primitive,
                     [&](PrimitiveStreamLease& lease){
                     auto bindings=common.ForkForReplay(stream_pipeline.Layout());
+                    BindGuestGraphicsRuntime(*bindings,producer_runtime);
                     RetainUntilFinish([bindings](u64){});
                     prepare_indices(*bindings);
                     if(index_view.resource){bindings->Retain(index_view.resource->handle.Get());bindings->RetainAllocation(index_view.resource->allocation);}
-                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*range.capacity_vertices,0};
-                    const StreamDrawArguments restarted{&restart_arguments,0};
+                    const StreamOutputBinding target{&lease.data,&lease.filled_size,0,u64(stride)*source_part.range.capacity_vertices,0};
+                    Resource instance_arguments;
+                    if(gpu_restart)instance_arguments=index_expand_->InstanceArguments(*this,restart_arguments,producer_draw);
+                    const StreamDrawArguments restarted{&instance_arguments,0};
                     ExecuteGraphics(stream_pipeline,*bindings,stream_state,{},nullptr,viewport.viewports,viewport.scissors,
-                        r.blend_constants,draw,{},index_view.resource?&index_view:nullptr,false,gpu_restart?&restarted:nullptr,&target);
+                        r.blend_constants,producer_draw,{},index_view.resource?&index_view:nullptr,false,gpu_restart?&restarted:nullptr,&target);
                 });
                 auto local_runtime=runtime;local_runtime.first_vertex=local_runtime.base_instance=local_runtime.indexed=0;
                 primitive_stream_->Replay(*this,stream,geometry.num_invocations,geometry.output_vertices,capture_budget,
@@ -2240,9 +2252,14 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                                 output_draw=replay;auto bindings=common.ForkForReplay(pipeline.Layout());
                                 BindGuestGraphicsRuntime(*bindings,local_runtime);RetainUntilFinish([bindings](u64){});
                                 NativePointCapturePass::BindReplay(*bindings,buffer,part.capture.bytes);
-                                submit_replay(*bindings,part.last,&actual_records);
+                                submit_replay(*bindings,source_part.last&&part.last,&actual_records);
                             },arena,&actual_records,&clear_dispatch);
                     });
+                // Reuse completed SO storage instead of retaining another
+                // multi-gigabyte source for each instance slice. The common
+                // logical bindings and image owners remain pinned throughout.
+                if(!source_part.last)Finish();
+                }
             },textures_,r.ta_bc_base.Address(),index_requests,true,logical_layout,writable_color_parents);
     }else if(capture){
         const auto& geometry=capture->producer.stages[u32(Shader::SwStage::Geometry)]->runtime.hw.gs;
