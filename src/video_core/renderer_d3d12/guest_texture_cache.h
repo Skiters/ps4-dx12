@@ -127,6 +127,8 @@ bool MatchesGuestMipLayout(const GuestTextureLayout&,const GuestTextureLayout&);
 bool CompatibleGuestAttachmentStorage(GuestTextureDesc source,GuestTextureDesc view);
 bool CompatibleGuestColorSubview(const GuestTextureDesc&,const GuestTextureLayout&,
     const GuestTextureDesc&,const GuestTextureLayout&);
+bool CompatibleGuestColorStorageSubview(const GuestTextureDesc&,const GuestTextureLayout&,
+    const GuestTextureDesc&,const GuestTextureLayout&);
 // A smaller readonly/DSV binding can retain a grown native depth allocation.
 // Its logical mip/layer selectors do not redefine the owner's guest layout.
 bool CompatibleGuestDepthSubview(const GuestTextureDesc&,const GuestTextureLayout&,

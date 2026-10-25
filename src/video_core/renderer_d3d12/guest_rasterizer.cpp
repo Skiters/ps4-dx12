@@ -1137,6 +1137,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     std::array<bool,8> color_buffer_overlap{},exact_color_buffer_writer{};
     std::array<bool,8> separate_color_targets{};
     std::array<bool,8> separate_color_storage{};
+    std::array<bool,8> shared_color_storage{};
     std::array<std::shared_ptr<const GuestTextureCache::CachedImageBindingPlan>,8> color_binding_plans{};
     std::array<bool,8> color_depth_alias{},separate_color_depth{},retired_color_targets{};
     std::array<bool,8> gpu_color_feedback;gpu_color_feedback.fill(true);
@@ -1188,6 +1189,13 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 if(image.is_written&&!disjoint&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_storage_feedback[i]|=!separate;
                     separate_color_storage[i]|=separate;
+                    if(!separate&&(ordered_mask&(1u<<i))){
+                        auto written=d;written.writable=true;
+                        if(!CompatibleGuestColorStorageSubview(descriptions[i],layouts[i],written,l)&&
+                           !CompatibleGuestColorStorageSubview(written,l,descriptions[i],layouts[i]))
+                            throw std::runtime_error("Shared ordered color/storage needs an exact native subresource mapping");
+                        shared_color_storage[i]=true;
+                    }
                 }
                 if(!image.is_written&&!disjoint&&!separate&&Overlap(d.address,l.guest_bytes,descriptions[i].address,layouts[i].guest_bytes)){
                     color_feedback[i]=true;
@@ -1255,9 +1263,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
             }
         }
     }
-    auto state=BuildGuestGraphicsState(r,std::span(formats.data(),target_count),depth_format,
-        r.ls_hs_config.hs_input_control_points,native_alpha_factor_);
     const u32 shader_ordered_mask=capture?capture->replay.ordered_color_mask:guest.ordered_color_mask;
+    auto state=BuildGuestGraphicsState(r,std::span(formats.data(),target_count),depth_format,
+        r.ls_hs_config.hs_input_control_points,native_alpha_factor_,shader_ordered_mask);
     if(state.ordered_color_mask!=shader_ordered_mask)
         throw std::logic_error("Native ordered color shader/state target masks disagree");
     if(state.discard)return;
@@ -1326,7 +1334,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // publish its future native class or metadata during physical prewarm.
         auto* source=textures_.FindCachedDepthRecreationSource(descriptions[i],layouts[i]);
         if(!source)source=textures_.FindIndependentUploadSource(descriptions[i],layouts[i]);
-        deferred_color_clear[i]=color_buffer_overlap[i]||separate_color_targets[i]||separate_color_storage[i]||color_depth_alias[i]||separate_color_depth[i]||
+        deferred_color_clear[i]=color_buffer_overlap[i]||separate_color_targets[i]||separate_color_storage[i]||shared_color_storage[i]||color_depth_alias[i]||separate_color_depth[i]||
             (source&&(source->desc.depth_target||source->desc.levels<descriptions[i].levels||
                 source->desc.layers<descriptions[i].layers));
         if(!deferred_color_clear[i])MaterializeColorClear(r.color_buffers[i],descriptions[i],layouts[i]);
@@ -1740,7 +1748,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 textures_.ConsumeMeta(buffer.CmaskAddress(),descriptions[i].first_layer);
             }
             if(!retired_color_targets[i]){
-                if(color_depth_alias[i]||separate_color_depth[i]||separate_color_targets[i]||separate_color_storage[i]){
+                if(color_depth_alias[i]||separate_color_depth[i]||separate_color_targets[i]||separate_color_storage[i]||shared_color_storage[i]){
                     if(!textures_.OwnIndependentShaderImage(entry))
                         throw std::runtime_error("Shared color attachment cannot retain independent source ownership");
                 }else if(color_buffer_overlap[i]){
@@ -1879,6 +1887,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         // clears. Ordered storage snapshots must include those clears.
         for(UINT i=0;i<target_count;++i)if(targets[i]){
             auto& entry=*targets[i];
+            if(shared_color_storage[i]&&(!bindings.HasShaderUav(entry.texture.handle.Get())||
+               !(state.ordered_color_mask&(1u<<i))))
+                throw std::runtime_error("Shared color/storage lost its bound writable native allocation");
             if(state.ordered_color_mask&(1u<<i)){
                 if(descriptions[i].samples==1){
                     const auto first=descriptions[i].first_layer;

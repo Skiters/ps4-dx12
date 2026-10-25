@@ -196,7 +196,7 @@ inline bool GuestPolygonPointGeometryState(const AmdGpu::Regs& regs){
 // PS4 RT slot numbers (including holes); no signature-derived placeholder formats.
 GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs&,
     std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth=DXGI_FORMAT_UNKNOWN,
-    UINT patch_control_points=0,bool native_alpha_factor=false);
+    UINT patch_control_points=0,bool native_alpha_factor=false,u32 shader_ordered_mask=0);
 bool GuestPrimitiveNeedsExpansion(AmdGpu::PrimitiveType type);
 std::vector<u32> ExpandGuestPrimitive(AmdGpu::PrimitiveType type,std::span<const u32> indices,
     bool restart=false,u32 restart_index=~0u,u32 patch_points=0,bool strip_last_provoking=false);

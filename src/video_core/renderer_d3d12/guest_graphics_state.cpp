@@ -164,7 +164,7 @@ D3D12_STENCIL_OP StencilOp(AmdGpu::StencilFunc func,const AmdGpu::StencilRefMask
 }
 }
 GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
-    std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth,UINT patch_points,bool native_alpha_factor) {
+    std::span<const DXGI_FORMAT> targets,DXGI_FORMAT depth,UINT patch_points,bool native_alpha_factor,u32 shader_ordered_mask) {
     if(targets.size()>8)throw std::invalid_argument("Native guest render-target slot count");
     GuestGraphicsState result;auto& p=result.pipeline;
     p.NumRenderTargets=UINT(targets.size());std::copy(targets.begin(),targets.end(),p.RTVFormats);
@@ -183,7 +183,8 @@ GuestGraphicsState BuildGuestGraphicsState(const AmdGpu::Regs& regs,
     u32 active_color_mask{};
     for (u32 i = 0; i < targets.size(); ++i)
         if (targets[i] != DXGI_FORMAT_UNKNOWN) active_color_mask |= 1u << i;
-    const u32 ordered_color_mask = GuestOrderedColorMask(regs, active_color_mask,native_alpha_factor);
+    const u32 ordered_color_mask = GuestOrderedColorMask(regs, active_color_mask,native_alpha_factor)|
+        (shader_ordered_mask&active_color_mask);
     bool needs_constant_color_rgb=false,needs_constant_alpha_rgb=false;
     for(UINT i=0;i<8;++i) {
         auto& rt=p.BlendState.RenderTarget[i];rt.SrcBlend=rt.SrcBlendAlpha=D3D12_BLEND_ONE;

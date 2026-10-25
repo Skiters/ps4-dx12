@@ -687,6 +687,18 @@ bool CompatibleGuestColorSubview(const GuestTextureDesc& source,const GuestTextu
     // guest role and allocation lifetime.
     return CompatibleGuestSampledStorage(owner,target)||CompatibleGuestShaderStorage(owner,target);
 }
+bool CompatibleGuestColorStorageSubview(const GuestTextureDesc& source,const GuestTextureLayout& physical,
+    const GuestTextureDesc& view,const GuestTextureLayout& requested){
+    // A typed R32 image can serve both storage and ordered color output. Prove
+    // the complete physical subresource mapping before sharing an allocation;
+    // ordinary RTV/UAV simultaneous access is still never used.
+    if(!((source.render_target&&view.writable)||(source.writable&&view.render_target))||
+       source.data_format!=4||view.data_format!=4||source.number_format!=view.number_format||
+       (source.number_format!=4&&source.number_format!=5&&source.number_format!=7)||
+       source.samples!=1||view.samples!=1)return false;
+    auto owner=source,target=view;owner.writable=target.writable=false;
+    return CompatibleGuestColorSubview(owner,physical,target,requested);
+}
 void MergeGuestColorAttachmentLayers(std::span<GuestTextureDesc> attachments){
     // CB slice_max bounds a view as well as the requested storage. The original
     // cache grows one compatible backing to the maximum requested layer count.
@@ -1286,8 +1298,10 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
     const bool mutable_readonly=IsDirectReadonlyWordClass(desc)&&writable_view.writable&&
         texture.handle&&(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)&&
         CompatibleGuestWritableStorage(written_source,writable_view)&&CanBindNativeWordFormat(*this,writable_view);
+    const bool color_storage=CompatibleGuestColorStorageSubview(desc,layout,writable_view,LayoutGuestTexture(writable_view))&&
+        CanBindNativeWordFormat(*this,writable_view);
     if(writable_view==desc)return Uav(mip);
-    if((!mutable_readonly&&!CompatibleGuestWritableStorage(desc,writable_view)&&
+    if((!mutable_readonly&&!color_storage&&!CompatibleGuestWritableStorage(desc,writable_view)&&
         !(desc.writable&&writable_view.writable&&desc.levels>=writable_view.levels&&
           CompatibleGuestShaderMipPrefixes(desc,layout,writable_view,LayoutGuestTexture(writable_view))))||
        writable_view.first_layer>=writable_view.layers||!writable_view.view_layers||
@@ -1302,7 +1316,8 @@ D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::Uav(const GuestTextur
 D3D12_UNORDERED_ACCESS_VIEW_DESC GuestTextureCache::Entry::OrderedColorUav(
     const GuestTextureDesc& attachment)const {
     if((!CompatibleGuestAttachmentStorage(desc,attachment)&&
-        !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
+        !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment))&&
+        !CompatibleGuestColorStorageSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))||!attachment.render_target||
        attachment.writable||attachment.depth_target||attachment.stencil_address||attachment.samples!=1||
        !(IsOrderedScalarClass(attachment)||IsOrderedIntegerClass(attachment)||IsOrderedPacked16Class(attachment)||(attachment.data_format==9&&(attachment.number_format==0||attachment.number_format==1))||
          (attachment.data_format==3&&(attachment.number_format==0||attachment.number_format==1||attachment.number_format==9))||
@@ -1375,7 +1390,8 @@ D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(uint32_t mip)const {
 }
 D3D12_RENDER_TARGET_VIEW_DESC GuestTextureCache::Entry::Rtv(const GuestTextureDesc& attachment,uint32_t mip)const{
     if(!CompatibleGuestAttachmentStorage(desc,attachment)&&
-       !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))
+       !CompatibleGuestColorSubview(desc,layout,attachment,LayoutGuestTexture(attachment))&&
+       !CompatibleGuestColorStorageSubview(desc,layout,attachment,LayoutGuestTexture(attachment)))
         throw std::invalid_argument("Incompatible native render target view");
     if(!texture.handle||!(texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
         throw std::invalid_argument("Native color parent lacks render target capability");
@@ -2180,6 +2196,10 @@ bool MatchesReferencePartialBlockExpansion(GuestTextureDesc source,const GuestTe
 }
 bool MatchesGuestUploadStorage(const GuestTextureCache::Entry& entry,const GuestTextureDesc& desc,
     const GuestTextureLayout& layout){
+    if(CompatibleGuestColorStorageSubview(entry.desc,entry.layout,desc,layout)&&
+       entry.texture.handle&&CanBindNativeWordFormat(entry,desc)&&
+       (entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)&&
+       (!desc.render_target||(entry.texture.handle->GetDesc().Flags&D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)))return true;
     if(CompatibleGuestColorSubview(entry.desc,entry.layout,desc,layout)&&
        CanBindNativeWordFormat(entry,desc)&&
        (!desc.render_target||(entry.texture.handle&&

@@ -14,9 +14,25 @@
 
 namespace NativeDX12 {
 namespace {
+u32 StorageColorMask(const AmdGpu::Regs& regs,const Shader::Info* info,u32 mrt_mask){
+    if(!info||regs.color_control.mode!=AmdGpu::ColorControl::OperationMode::Normal)return 0;
+    u32 result{};
+    const auto observe=[&](const AmdGpu::Image& image,bool depth){
+        if(!image||depth||image.GetDataFmt()!=AmdGpu::DataFormat::Format32)return;
+        for(u32 i=0;i<Shader::MaxColorBuffers;++i){const auto& color=regs.color_buffers[i];
+            if((mrt_mask&(1u<<i))&&color&&regs.color_target_mask.GetMask(i)&&
+               color.GetDataFmt()==AmdGpu::DataFormat::Format32&&color.NumSamples()==1&&
+               color.GetNumberFmt()==image.GetNumberFmt()&&
+               color.Address()==image.Address()&&GuestOrderedColorSupported(color))result|=1u<<i;
+        }
+    };
+    for(const auto& image:info->images)if(image.is_written)observe(image.GetSharp(*info),image.is_depth);
+    for(const auto& image:info->native_pipeline_writes)observe(image.sharp,image.is_depth);
+    return result;
+}
 void ConfigureOrderedColorTargets(Shader::RuntimeInfo& runtime, const AmdGpu::Regs& regs,
-                                  bool native_alpha_factor, u32 mrt_mask = ~0u) {
-    const u32 ordered_mask = GuestOrderedColorMask(regs, mrt_mask,native_alpha_factor);
+                                  bool native_alpha_factor, u32 mrt_mask = ~0u,const Shader::Info* info=nullptr) {
+    const u32 ordered_mask = GuestOrderedColorMask(regs, mrt_mask,native_alpha_factor)|StorageColorMask(regs,info,mrt_mask);
     for (u32 i = 0; i < Shader::MaxColorBuffers; ++i) {
         auto& target = runtime.hw.fs.ordered_color_targets[i];
         target = {};
@@ -141,7 +157,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             auto requested_runtime=runtime;
             if (logical == Shader::SwStage::Fragment) {
                 ConfigureOrderedColorTargets(requested_runtime, regs,profile_.native_alpha_blend_factor,
-                                             variant->info.mrt_mask);
+                                             variant->info.mrt_mask,&variant->info);
             }
             if(logical==Shader::SwStage::Fragment&&runtime.hw.fs.native_point_input_compaction){
                 const auto transport=BuildNativePointTransport(variant->info,regs.num_interp,
@@ -189,7 +205,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
         throw std::runtime_error("Guest shader translation failed");
     if (logical == Shader::SwStage::Fragment) {
         ConfigureOrderedColorTargets(mutable_runtime, regs,profile_.native_alpha_blend_factor,
-                                     stage->info.mrt_mask);
+                                     stage->info.mrt_mask,&stage->info);
     }
     if(logical==Shader::SwStage::Fragment&&mutable_runtime.hw.fs.native_point_input_compaction){
         const auto transport=BuildNativePointTransport(stage->info,regs.num_interp,
@@ -319,6 +335,13 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
             result.stages[static_cast<u32>(logical)] = &stage;
             context.stage_infos[static_cast<u32>(logical)] = &stage.info;
         }
+    }
+    // The final PS specialization includes storage writers from every stage.
+    // Its ordered output mask, not just fixed-function blend state, is authoritative.
+    if(const auto* fragment=result.stages[u32(SwStage::Fragment)]){
+        result.ordered_color_mask=0;
+        for(u32 i=0;i<Shader::MaxColorBuffers;++i)if(fragment->runtime.hw.fs.ordered_color_targets[i].enabled)
+            result.ordered_color_mask|=1u<<i;
     }
     if(regs.primitive_type==AmdGpu::PrimitiveType::RectList||
        regs.primitive_type==AmdGpu::PrimitiveType::QuadList) {

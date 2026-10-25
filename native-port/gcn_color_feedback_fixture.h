@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0,s32 separate_targets=0,bool independent_stencil=false,bool storage_writer=false,bool shared_storage=false){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -145,6 +145,57 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         regs.vs_program.settings.num_user_regs=4;
     }
     draw(seed,false);
+    if(shared_storage){
+        auto written=sampled;written.writable=true;
+        if(!raw_domain||!CompatibleGuestColorStorageSubview(target,layout,written,sampled_layout))
+            throw std::runtime_error("Shared storage fixture lost its exact native R32 mapping");
+        auto invalid=written;invalid.pitch*=2;
+        if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
+            throw std::runtime_error("Shared storage accepted incompatible pitch");
+        invalid=written;invalid.number_format=4;
+        if(CompatibleGuestColorStorageSubview(target,layout,invalid,sampled_layout))
+            throw std::runtime_error("Shared storage accepted a different typed image format");
+        invalid=written;invalid.samples=4;
+        if(CompatibleGuestColorStorageSubview(target,layout,invalid,LayoutGuestTexture(invalid)))
+            throw std::runtime_error("Shared storage accepted an MS image");
+        alignas(256) std::array<u32,128> store{},exterior{};
+        // A single invocation stores .5 at x=4, reads that write back, and
+        // exports half at x=0. Separate native copies lose one of these values.
+        initialize(store,{0xBEEB03FF,15,0x7e000284,0x7e020280,
+            0x7e0802ff,0x3f000000,0xf0200100,0x00000400,0xbf8c0000,
+            0xf0000100,0x00000400,0xbf8c0000,0x100808ff,0x3f000000,
+            0xf800000f,0x04040404,0xbf810000},0x434f4c5348415231ULL);
+        regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=1;
+        draw(store,true);draw(store,true); // exercise reuse as well as first binding
+        regs.generic_scissor.bottom_right_x=regs.generic_scissor.bottom_right_y=8;
+        sample(exterior,7,0x434f4c5348415232ULL);
+        const std::array<const std::array<u32,128>*,3> probes{&left,&right,&exterior};
+        const std::array<float,3> expected_values{.125f,.25f,.5f};
+        auto expected=physical;
+        for(UINT i=0;i<probes.size();++i){
+            cb.base_address=u32((base+61440)>>8);draw(*probes[i],true);
+            const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);const auto pl=LayoutGuestTexture(probe);
+            rasterizer.ReadMemory(probe.address,pl.guest_bytes);rasterizer.Finish();
+            for(UINT y=0;y<8;++y)for(UINT x=0;x<8;++x)
+                memcpy(expected.data()+61440+GuestPixelOffset(probe,pl,0,0,x,y),&expected_values[i],4);
+            rasterizer.ValidateDebugMessages();
+            if(memcmp(backing,expected.data(),65536))
+                throw std::runtime_error("Shared storage lost image contents, ordering or unrelated physical bytes");
+            physical=expected;
+        }
+        const auto raw=rasterizer.ObtainIndexBuffer(base+16384,raw_bytes,DXGI_FORMAT_R32_UINT);
+        if(!raw.resource||raw.bytes!=raw_bytes)throw std::runtime_error("Shared storage lost resident B");
+        auto rb=Buffer(device,raw_bytes,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        rasterizer.RetainUntilFinish([rb,lease=raw.allocation](u64){});const auto prior=raw.resource->State(0);
+        raw.resource->Transition(rasterizer.RecordingList(),D3D12_RESOURCE_STATE_COPY_SOURCE);
+        rasterizer.RecordingList()->CopyBufferRegion(rb.handle.Get(),0,raw.resource->handle.Get(),raw.offset,raw_bytes);
+        raw.resource->Transition(rasterizer.RecordingList(),prior);rasterizer.Finish();
+        void* bytes{};D3D12_RANGE range{0,raw_bytes};Check(rb.handle->Map(0,&range,&bytes));
+        const bool preserved=memcmp(bytes,physical.data()+16384,raw_bytes)==0;
+        D3D12_RANGE none{};rb.handle->Unmap(0,&none);
+        if(!preserved)throw std::runtime_error("Shared storage published I into independent B");
+        return;
+    }
     if(disjoint_mips||separate_targets){
         D3D12_FEATURE_DATA_D3D12_OPTIONS19 options{};
         if(disjoint_mips)Check(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19,&options,sizeof(options)));
