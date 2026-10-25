@@ -13,7 +13,7 @@ cbuffer Parameters : register(b0) {
     uint command_stride,runtime_low,runtime_high,has_count;
     uint row_pitch,index_available,index_swap,index_views;
     uint index_offset,index_low,index_high,index_stride;
-    uint index_groups;
+    uint index_groups,index_restart,index_marker;
 };
 [numthreads(1,1,1)]
 void build_dispatch() {
@@ -84,9 +84,11 @@ void decode_indices(uint3 id : SV_DispatchThreadID) {
     uint value=0;
     for(uint byte_index=0;byte_index<2;++byte_index){
         uint original=relative+byte_index;
-        uint selected=((original&~3u)+4<=available*2)?original^(index_swap==2?3u:2u):original;
+        uint selected=original;
+        if(index_swap==1)selected=original^1u;
+        else if(index_swap&&((original&~3u)+4<=available*2))selected=original^(index_swap==2?3u:2u);
         uint address=index_offset+first*2+selected;
         value|=((index_source.Load(address&~3u)>>((address&3)*8))&255)<<(byte_index*8);
     }
-    decoded_indices.Store(command*index_stride+element*4,value);
+    decoded_indices.Store(command*index_stride+element*4,index_restart&&value==index_marker?0xffffffffu:value);
 }

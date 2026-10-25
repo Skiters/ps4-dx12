@@ -62,7 +62,8 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
     auto& index_source=decode&&decode->source?*decode->source:null_template_;
     const u64 index_bytes=decode?GuestIndirectIndexDecode::OutputBytes(decode->available,plan.count):0;
     if(decode){
-        if(!decode->output||decode->swap_mode<2||decode->swap_mode>3||decode->offset%2||
+        if(!decode->output||decode->swap_mode>3||decode->offset%2||
+           (decode->restart&&(!decode->marker||decode->marker>0xffff))||
            (!decode->source&&(decode->available||decode->offset))||index_bytes>UINT32_MAX||
            u64((std::max(1u,decode->available)+127)/128)*plan.count>UINT32_MAX/128)
             throw std::invalid_argument("Invalid per-command indirect index decode");
@@ -122,7 +123,7 @@ void GuestIndirectPackPass::Record(Rasterizer& renderer,const GuestIndirectPackP
         plan.command_stride,u32(base),u32(base>>32),count?1u:0u,
         0,decode?decode->available:0,decode?decode->swap_mode:0,decode?1u:0u,
         decode?u32(decode->offset%4):0,u32(index_base),u32(index_base>>32),decode?std::max(1u,decode->available)*4:0,
-        decode?(std::max(1u,decode->available)+127)/128:0,0,0,0};
+        decode?(std::max(1u,decode->available)+127)/128:0,decode&&decode->restart?1u:0u,decode?decode->marker:0,0};
     list->SetComputeRoot32BitConstants(7,20,parameters,0);list->Dispatch(1,1,1);
     output_count.UavBarrier(list);dispatch.UavBarrier(list);
     dispatch.Transition(list,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);

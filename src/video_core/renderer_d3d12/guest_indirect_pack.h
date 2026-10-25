@@ -27,17 +27,21 @@ struct GuestIndirectPackPlan {
 // Caller owns private outputs and retains them through the final indirect draw.
 struct GuestIndirectIndexDecode {
     Resource* source{};u64 offset{};u32 available{},swap_mode{};
-    Resource* output{};
+    Resource* output{};bool restart{};u32 marker{};
     static u64 OutputBytes(u32 available,u32 count){
         const u64 stride=u64(std::max(1u,available))*4;
         if(count&&stride>UINT64_MAX/count)throw std::overflow_error("Indirect index arena size overflow");
         return stride*count;
     }
-    static bool Admit(AmdGpu::IndexType type,AmdGpu::IndexSwapMode swap,bool restart,u32 available,u32 count){
+    static bool Admit(AmdGpu::IndexType type,AmdGpu::IndexSwapMode swap,bool restart,u32 available,u32 count,u32 marker=~0u,bool strip=false){
         // Bound speculative per-command scratch. Larger workloads retain the
         // complete per-command path instead of truncating guest operations.
-        return !restart&&type==AmdGpu::IndexType::Index16&&
-            (swap==AmdGpu::IndexSwapMode::Swap32||swap==AmdGpu::IndexSwapMode::SwapWord)&&
+        const bool pairs=swap==AmdGpu::IndexSwapMode::Swap32||swap==AmdGpu::IndexSwapMode::SwapWord;
+        // A widened strip marker cannot collide with any16-bit guest index.
+        // Marker0 also cuts padded missing indices, so it needs expansion.
+        const bool widened_restart=restart&&strip&&marker&&marker<=0xffff&&
+            (swap!=AmdGpu::IndexSwapMode::None||marker!=0xffff);
+        return type==AmdGpu::IndexType::Index16&&((!restart&&pairs)||widened_restart)&&
             count&&u64(std::max(1u,available))*count<=16ull*1024*1024;
     }
 };

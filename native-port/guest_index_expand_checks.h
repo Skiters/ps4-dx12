@@ -47,7 +47,9 @@ inline void CheckGuestIndexExpansionPlan(){
         const auto mode=AmdGpu::IndexSwapMode(swap);
         require(GuestIndexExpansion::CanDecodeBatch(type,mode,false,10)==
             (swap!=0&&(type==AmdGpu::IndexType::Index32||swap==1)));
-        require(!GuestIndexExpansion::CanDecodeBatch(type,mode,true,10));
+        // Fixed32-bit strip cut survives element-local byte decoding unchanged.
+        require(GuestIndexExpansion::CanDecodeBatch(type,mode,true,10)==
+            (type==AmdGpu::IndexType::Index32&&swap!=0));
         require(!GuestIndexExpansion::CanDecodeBatch(type,mode,false,UINT32_MAX));
     }
     for(u32 count=0;count<3;++count)require(!GuestIndexExpansion::Make(P::TriangleFan,count).output_count);

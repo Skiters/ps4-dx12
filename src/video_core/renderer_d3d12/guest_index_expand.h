@@ -28,7 +28,9 @@ struct GuestIndexExpansion {
         // permutation stays within one element. For Index16, Swap32/SwapWord
         // pair adjacent elements relative to EACH command's own start/end.
         // Those need per-command expansion, not a whole-buffer permutation.
-        return !restart&&maximum<=UINT32_MAX/4&&swap!=AmdGpu::IndexSwapMode::None&&
+        // Index32 retains the fixed32-bit strip-cut value after decoding.
+        // The caller separately validates native topology/restart admission.
+        return (!restart||type==AmdGpu::IndexType::Index32)&&maximum<=UINT32_MAX/4&&swap!=AmdGpu::IndexSwapMode::None&&
             (type==AmdGpu::IndexType::Index32||
              (type==AmdGpu::IndexType::Index16&&swap==AmdGpu::IndexSwapMode::Swap16));
     }

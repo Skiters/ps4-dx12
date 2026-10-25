@@ -1484,7 +1484,9 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool strip_last_provoking=polygon_strip&&r.polygon_control.provoking_vtx_last==AmdGpu::ProvokingVtxLast::Last;
     const bool expand_primitive=GuestPrimitiveNeedsExpansion(r.primitive_type)||polygon_strip;
     const bool strip=state.topology==D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP||state.topology==D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
-    const bool custom_strip_restart=indexed&&r.enable_primitive_restart&&strip&&
+    const bool batch_index_decode=indexed&&batch&&GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,
+        r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size,batch->max_count,r.primitive_restart_index,strip);
+    const bool custom_strip_restart=indexed&&r.enable_primitive_restart&&strip&&!batch_index_decode&&
         r.primitive_restart_index!=(r.index_buffer_type.index_type==AmdGpu::IndexType::Index16?0xffffu:0xffffffffu);
     const bool rewrite_restart=indexed&&r.enable_primitive_restart&&
         (!strip||custom_strip_restart);
@@ -1507,11 +1509,11 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
     const bool gpu_swap=indexed&&!r.enable_primitive_restart&&!batch&&
         r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None;
     const bool batch_swap=indexed&&batch&&r.index_buffer_type.swap_mode!=AmdGpu::IndexSwapMode::None;
-    const bool batch_pair_swap=batch_swap&&GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,
-        r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size,batch->max_count);
-    if(batch_swap&&!batch_pair_swap&&!GuestIndexExpansion::CanDecodeBatch(r.index_buffer_type.index_type,
+    if(batch_swap&&!batch_index_decode&&!GuestIndexExpansion::CanDecodeBatch(r.index_buffer_type.index_type,
         r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size))
         throw std::logic_error("Indirect batch lost its element-local index decode contract");
+    if(batch_index_decode&&r.enable_primitive_restart)
+        state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF;
     std::optional<GuestIndexExpansion> gpu_expansion;
     const u32 guest_first_vertex=indexed?u32(draw.base_vertex):draw.first;
     if(gpu_restart||gpu_swap||(expand_primitive&&(!indexed||!r.enable_primitive_restart))){
@@ -1547,7 +1549,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         const auto [address,bytes]=index_range(element);
         resident_index_address=address;resident_index_bytes=bytes;
         resident_index_format=element==2?DXGI_FORMAT_R16_UINT:DXGI_FORMAT_R32_UINT;
-        if(batch_swap&&!batch_pair_swap&&bytes)gpu_expansion=GuestIndexExpansion::Copy(bytes/element);
+        if(batch_swap&&!batch_index_decode&&bytes)gpu_expansion=GuestIndexExpansion::Copy(bytes/element);
         if(bytes){const auto first=address&~VAddr(3),last=(address+bytes+3)&~VAddr(3);
             index_requests.push_back({first,last-first,false,false,true,u8(address-first),bytes});
             // Source selection happens after shader/attachment binding effects.
@@ -2229,7 +2231,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 textures_,r.ta_bc_base.Address());
         });
     }else if(batch){
-        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count,batch->with_runtime,batch_pair_swap);
+        const auto plan=GuestIndirectPackPlan::Make(indexed,batch->stride,batch->max_count,batch->with_runtime,batch_index_decode);
         ExecuteGuestGraphicsResources(device_.Get(),*this,pipeline,stages,push,runtime,
             [&](ResourceBindings& bindings){
                 // Select attachments/index storage and freeze the complete B
@@ -2265,7 +2267,7 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
                 const auto index_source=plan.index_views&&resident_index_bytes?
                     ObtainIndexBuffer(resident_index_address,resident_index_bytes,resident_index_format):IndexBinding{};
                 const GuestIndirectIndexDecode decode{index_source.resource,index_source.offset,
-                    resident_index_bytes/2,u32(r.index_buffer_type.swap_mode),&decoded};
+                    resident_index_bytes/2,u32(r.index_buffer_type.swap_mode),&decoded,bool(r.enable_primitive_restart),r.primitive_restart_index};
                 const auto source=BorrowPreparedShaderBuffer(batch->address,plan.source_bytes);
                 const auto counter=batch->count_address?std::optional{BorrowPreparedShaderBuffer(batch->count_address,4)}:std::nullopt;
                 indirect_pack_->Record(*this,plan,*source.resource,source.offset,
@@ -2377,7 +2379,9 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
     (void)GuestIndirectLayout::Make(indexed,address,offset,stride,0);
     const auto& r=gpu_.regs;
     const bool strip=r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip||r.primitive_type==AmdGpu::PrimitiveType::LineStrip;
-    const bool native_restart=!indexed||!r.enable_primitive_restart||(strip&&
+    const bool native_index_decode=indexed&&GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,
+        r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size,max_count,r.primitive_restart_index,strip);
+    const bool native_restart=!indexed||!r.enable_primitive_restart||native_index_decode||(strip&&
         r.primitive_restart_index==(r.index_buffer_type.index_type==AmdGpu::IndexType::Index16?0xffffu:0xffffffffu));
     bool native=ClassifyGuestDraw(r)==GuestDrawOperation::Rasterize&&!GuestPrimitiveNeedsExpansion(r.primitive_type)&&
         !(GuestPolygonPointGeometryState(r)&&r.primitive_type==AmdGpu::PrimitiveType::TriangleStrip)&&
@@ -2386,15 +2390,12 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
         native_restart&&(!indexed||r.index_buffer_type.swap_mode==AmdGpu::IndexSwapMode::None||
             GuestIndexExpansion::CanDecodeBatch(r.index_buffer_type.index_type,
                 r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size)||
-            GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,
-                r.index_buffer_type.swap_mode,r.enable_primitive_restart,r.max_index_size,max_count))&&
+            native_index_decode)&&
         (address+offset)%4==0&&count_address%4==0;
     if(native){
         // Private raw-buffer addressing is bounded; larger batches retain
         // the complete CPU path rather than clipping commands to fit.
-        try{const auto plan=GuestIndirectPackPlan::Make(indexed,stride,max_count,false,indexed&&
-            GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,r.index_buffer_type.swap_mode,
-                r.enable_primitive_restart,r.max_index_size,max_count));
+        try{const auto plan=GuestIndirectPackPlan::Make(indexed,stride,max_count,false,native_index_decode);
             if(address+offset>UINT64_MAX-plan.source_bytes)native=false;}
         catch(const std::overflow_error&){native=false;}
     }
@@ -2406,9 +2407,7 @@ void GuestRasterizer::DrawIndirect(bool indexed,VAddr address,u32 offset,u32 str
             const auto binding=pipelines_.RuntimeBinding(stages);
             const bool runtime=binding==GraphicsRuntimeBinding::Root;
             if(binding!=GraphicsRuntimeBinding::Unsupported){
-                try{(void)GuestIndirectPackPlan::Make(indexed,stride,max_count,runtime,indexed&&
-                    GuestIndirectIndexDecode::Admit(r.index_buffer_type.index_type,r.index_buffer_type.swap_mode,
-                        r.enable_primitive_restart,r.max_index_size,max_count));}
+                try{(void)GuestIndirectPackPlan::Make(indexed,stride,max_count,runtime,native_index_decode);}
                 catch(const std::overflow_error&){native=false;}
                 if(native){const NativeIndirectBatch batch{address+offset,count_address,stride,max_count,runtime};
                     DrawInternal(indexed,0,nullptr,vertex_sgpr,instance_sgpr,&batch);return;}

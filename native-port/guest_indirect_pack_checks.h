@@ -127,7 +127,8 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
 // Expected values use a byte-vector decoder, independent of the HLSL address
 // calculation. Full private arenas (including untouched tails) are compared.
 inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer){
-    for(const bool runtime_enabled:std::array{false,true})for(const u32 swap:std::array<u32,2>{2,3})
+    for(const bool runtime_enabled:std::array{false,true})for(const u32 swap:std::array<u32,4>{0,1,2,3})
+    for(const u32 marker:std::array<u32,3>{0,0x1717,0xffff})
     for(const u32 available:std::array<u32,3>{0,10,259})for(const u32 active:std::array<u32,4>{0,2,3,UINT32_MAX}){
         const auto plan=GuestIndirectPackPlan::Make(true,32,3,runtime_enabled,true);
         const u32 source_bytes=16+u32(plan.source_bytes),index_bytes=(2+available*2+3)&~3u;
@@ -141,6 +142,8 @@ inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer
             {6,1,available>3?available-3:UINT32_MAX,u32(-1),11}}};
         for(u32 i=0;i<3;++i)memcpy(static_cast<std::byte*>(mapped)+16+i*32,inputs[i].data(),20);
         for(u32 i=0;i<available*2;++i)static_cast<std::byte*>(mapped)[source_bytes+2+i]=std::byte(i*37+13);
+        if(available>2)memset(static_cast<std::byte*>(mapped)+source_bytes+2+4,0x17,2);
+        if(available>4)memset(static_cast<std::byte*>(mapped)+source_bytes+2+8,0xff,2);
         std::vector<std::byte> expected(total);memcpy(expected.data(),mapped,total);upload.handle->Unmap(0,nullptr);
         auto source=Buffer(device,source_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
         auto indices=Buffer(device,index_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
@@ -153,7 +156,7 @@ inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer
         for(auto [resource,bytes]:regions){resource->Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
             list->CopyBufferRegion(resource->handle.Get(),0,upload.handle.Get(),cursor,bytes);cursor+=bytes;}
         GraphicsRuntime runtime{};runtime.draw_id=UINT32_MAX;
-        GuestIndirectIndexDecode decode{&indices,2,available,swap,&decoded};
+        GuestIndirectIndexDecode decode{&indices,2,available,swap,&decoded,marker!=0,marker};
         {
             GuestIndirectPackPass pack(device);
             if(!active){
@@ -164,6 +167,7 @@ inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer
                 auto bad=decode;bad.output=&commands;reject(bad);
                 bad=decode;bad.offset=1;reject(bad);
                 bad=decode;bad.swap_mode=4;reject(bad);
+                bad=decode;bad.restart=true;bad.marker=0;reject(bad);
                 bad=decode;bad.source=&source;bad.offset=0;bad.output=&source;reject(bad);
             }
             pack.Record(renderer,plan,source,16,active==UINT32_MAX?nullptr:&source,0,runtime,
@@ -188,10 +192,11 @@ inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer
             auto words=inputs[command];words[2]=0;memcpy(args+16,words.data(),20);
             std::vector<std::byte> bytes(length*2);
             if(length)memcpy(bytes.data(),expected.data()+source_bytes+2+inputs[command][2]*2,bytes.size());
-            for(size_t i=0;i+3<bytes.size();i+=4){
+            if(swap==1)for(size_t i=0;i+1<bytes.size();i+=2)std::swap(bytes[i],bytes[i+1]);
+            if(swap>=2)for(size_t i=0;i+3<bytes.size();i+=4){
                 if(swap==2){std::swap(bytes[i],bytes[i+3]);std::swap(bytes[i+1],bytes[i+2]);}
                 else{std::swap(bytes[i],bytes[i+2]);std::swap(bytes[i+1],bytes[i+3]);}}
-            for(u32 i=0;i<length;++i){u16 value{};memcpy(&value,bytes.data()+i*2,2);const u32 word=value;
+            for(u32 i=0;i<length;++i){u16 value{};memcpy(&value,bytes.data()+i*2,2);const u32 word=marker&&value==marker?UINT32_MAX:value;
                 memcpy(expected.data()+decoded_at+command*std::max(1u,available)*4+i*4,&word,4);}
         }
         list=renderer.RecordingList();cursor=0;

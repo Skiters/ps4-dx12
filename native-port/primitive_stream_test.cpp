@@ -199,7 +199,84 @@ float4 main(uint id:SV_VertexID,uint instance:SV_InstanceID):SV_Position{
     Tests::CheckGuestIndirectPackGpu(device.Get(),renderer);
     Tests::CheckGuestIndirectIndexGpu(device.Get(),renderer);
     if(std::string_view(argv[3])=="indirect-pack"){
-        renderer.ValidateDebugMessages();puts("PASS: 40 GPU indirect pack cases, lifetime, states and guards");return 0;
+        renderer.ValidateDebugMessages();puts("PASS: GPU indirect command/index packing, lifetime, states and guards");return 0;
+    }
+    const auto strip_vertex=DXIL::CompileDxil(dxc,R"(
+struct V {float4 position:SV_Position;uint4 payload:CAPTURE0;};
+V main(uint vertex:TEXCOORD0,uint instance:TEXCOORD1){
+    V o;o.position=float4(0,0,0,1);o.payload=uint4(vertex,instance,0x7fc12345u,0x80000000u);return o;
+})",DXIL::Stage::Vertex);
+    if(!strip_vertex.success)throw std::runtime_error(strip_vertex.diagnostics);
+    for(const bool narrow:std::array{false,true})for(u32 swap=0;swap<4;++swap){
+        // Custom16-bit restart must not cut legitimate0xffff. Each indirect
+        // command receives its own widened IBV; strip parity resets at markers.
+        auto strip_state=state;strip_state.topology=D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+        strip_state.pipeline.IBStripCutValue=D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF;
+        const D3D12_SO_DECLARATION_ENTRY declaration{0,"CAPTURE",0,0,4,0};const UINT stride=16;
+        strip_state.pipeline.StreamOutput={&declaration,1,&stride,1,D3D12_SO_NO_RASTERIZED_STREAM};
+        const D3D12_INPUT_ELEMENT_DESC elements[]{
+            {"TEXCOORD",0,DXGI_FORMAT_R32_UINT,0,0,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
+            {"TEXCOORD",1,DXGI_FORMAT_R32_UINT,1,0,D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA,1}};
+        strip_state.pipeline.InputLayout={elements,2};
+        ShaderPipeline::GraphicsShaders shaders;shaders.vertex=strip_vertex.bytecode;shaders.geometry=reader_geometry.bytecode;
+        ShaderPipeline pipeline(device.Get(),dxc,shaders,strip_state.pipeline);
+        ResourceBindings bindings(device.Get(),pipeline.Layout());
+        const u32 marker=narrow?0x7777:UINT32_MAX,element=narrow?2:4;
+        const std::array<u32,13> logical{21,22,23,marker,0xffff,31,32,33,marker,41,42,43,44};
+        std::vector<std::byte> encoded(logical.size()*element);
+        for(size_t i=0;i<logical.size();++i)memcpy(encoded.data()+i*element,&logical[i],element);
+        if(swap==1)for(size_t i=0;i+1<encoded.size();i+=2)std::swap(encoded[i],encoded[i+1]);
+        if(swap>=2)for(size_t i=0;i+3<encoded.size();i+=4){
+            if(swap==2){std::swap(encoded[i],encoded[i+3]);std::swap(encoded[i+1],encoded[i+2]);}
+            else{std::swap(encoded[i],encoded[i+2]);std::swap(encoded[i+1],encoded[i+3]);}}
+        const auto plan=GuestIndirectPackPlan::Make(true,32,2,false,narrow);
+        auto upload=Buffer(device.Get(),920,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        void* mapped{};D3D12_RANGE none{};Check(upload.handle->Map(0,&none,&mapped));memset(mapped,0xcd,920);
+        memcpy(static_cast<std::byte*>(mapped)+element,encoded.data(),encoded.size());
+        for(u32 command=0;command<2;++command){const std::array<u32,5> args{13,command+1,1,command?u32(-1):2,7+command};
+            memcpy(static_cast<std::byte*>(mapped)+96+command*32,args.data(),20);}
+        const u64 zero=0;memcpy(static_cast<std::byte*>(mapped)+912,&zero,8);upload.handle->Unmap(0,nullptr);
+        auto commands=renderer.AcquireTransientBuffer(plan.command_bytes),count=renderer.AcquireTransientBuffer(4);
+        auto indices=renderer.AcquireTransientBuffer(GuestIndirectIndexDecode::OutputBytes(14,2));
+        auto output=Buffer(device.Get(),752,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto filled=Buffer(device.Get(),8,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto readback=Buffer(device.Get(),760,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto* list=renderer.RecordingList();list->CopyBufferRegion(output.handle.Get(),0,upload.handle.Get(),160,752);
+        list->CopyBufferRegion(filled.handle.Get(),0,upload.handle.Get(),912,8);
+        {
+            GuestIndirectPackPass pack(device.Get());GraphicsRuntime runtime{};
+            GuestIndirectIndexDecode decode{&upload,0,14,swap,&indices,true,marker};
+            if(!narrow){GuestIndexExpandPass expansion(device.Get());
+                expansion.Record(renderer,GuestIndexExpansion::Copy(14),&upload,0,14,4,indices,swap);}
+            pack.Record(renderer,plan,upload,96,nullptr,0,runtime,commands,nullptr,count,narrow?&decode:nullptr);
+        }
+        const Rasterizer::StreamDrawArguments packet{&commands,0,2,plan.command_stride,&count,0,nullptr,narrow?&indices:nullptr};
+        const Rasterizer::IndexBinding index_view{&indices,0,narrow?0u:56u,DXGI_FORMAT_R32_UINT};
+        auto vertex_data=Buffer(device.Get(),65538*4+128,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        Check(vertex_data.handle->Map(0,&none,&mapped));
+        for(u32 i=0;i<65538;++i)static_cast<u32*>(mapped)[i]=i;
+        for(u32 i=0;i<32;++i)static_cast<u32*>(mapped)[65538+i]=i;
+        vertex_data.handle->Unmap(0,nullptr);
+        const std::array<Rasterizer::VertexBinding,2> vertices{{{&vertex_data,0,65538*4,4},{&vertex_data,65538*4,128,4}}};
+        const Rasterizer::StreamOutputBinding target{&output,&filled,16,720,0};
+        const D3D12_VIEWPORT viewport{0,0,1,1,0,1};const D3D12_RECT scissor{0,0,1,1};const float blend[4]{};
+        renderer.ExecuteGraphics(pipeline,bindings,strip_state,{},nullptr,std::span(&viewport,1),std::span(&scissor,1),
+            blend,{0,0},vertices,&index_view,false,&packet,&target);
+        list=renderer.RecordingList();output.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        filled.Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        list->CopyBufferRegion(readback.handle.Get(),0,output.handle.Get(),0,752);
+        list->CopyBufferRegion(readback.handle.Get(),752,filled.handle.Get(),0,8);renderer.Finish();
+        std::array<std::byte,760> expected;expected.fill(std::byte{0xcd});u32 record{};
+        // D3D strip leading vertices progress0,1,...; odd triangles swap
+        // their final two vertices, retaining the original leading vertex.
+        const u32 triangles[]{21,22,23,0xffff,31,32,31,33,32,41,42,43,42,44,43};
+        for(u32 command=0;command<2;++command)for(u32 instance=0;instance<command+1;++instance)
+            for(const auto index:triangles){const std::array<u32,4> value{index+(command?u32(-1):2),7+command+instance,0x7fc12345u,0x80000000u};
+                memcpy(expected.data()+16+record++*16,value.data(),16);}
+        const u64 bytes=720;memcpy(expected.data()+752,&bytes,8);
+        D3D12_RANGE all{0,760};Check(readback.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),expected.size());readback.handle->Unmap(0,&none);
+        if(!equal)throw std::runtime_error("Indirect widened restart lost strip segments, parity,0xffff, instances or guards");
     }
     for(unsigned variant=0;variant<3;++variant){
         std::array<D3D12_SO_DECLARATION_ENTRY,2> declarations{{{0,"CAPTURE",0,0,4,0},{0,nullptr,0,0,1,0}}};
