@@ -5,6 +5,7 @@
 #include "rasterizer.h"
 #include <limits>
 #include <algorithm>
+#include <bit>
 #include <cstring>
 #include <dxcapi.h>
 #include <d3d12shader.h>
@@ -43,8 +44,8 @@ PrimitiveStreamRange AuxiliaryPointStreamRange(u32 patch,u32 vertices,u32 instan
     const u32 capacity=u32(primitives)*3;
     return PrimitiveStreamRange::Make(Shader::NativePointCapture::StreamRecordWords(words)*4,capacity,3,0,capacity);
 }
-PrimitiveStreamRange TessellatedPointStreamRange(u32 patch,u32 vertices,u32 instances,u32 words,u32 primitive){
-    if(!patch||patch>32||(primitive!=1&&primitive!=2&&primitive!=3))
+PrimitiveStreamRange TessellatedPointStreamRange(u32 patch,u32 vertices,u32 instances,u32 words,u32 primitive,u32 segments){
+    if(!patch||patch>32||(primitive!=1&&primitive!=2&&primitive!=3)||segments<2||segments>64||!std::has_single_bit(segments))
         throw std::invalid_argument("Invalid tessellated source patch or primitive width");
     // D3D hardware tessellation is bounded by factor64. Microsoft's fixed
     // function reference (bundled Mesa tessellator.hpp MAX_INDEX_COUNT) reserves
@@ -52,7 +53,9 @@ PrimitiveStreamRange TessellatedPointStreamRange(u32 patch,u32 vertices,u32 inst
     // GS input primitives duplicates their vertices: use the index bound for
     // every output topology, including point/line modes, rather than a unique
     // domain-point count.
-    constexpr u32 serialized_vertices_per_patch=64*64*2*3;
+    // Smaller bounds require a frontend proof covering every factor write.
+    // This sizes storage only: original HS/DS execute unchanged, once.
+    const u32 serialized_vertices_per_patch=segments*segments*2*3;
     const u32 stride=Shader::NativePointCapture::StreamRecordWords(words)*4;
     const u64 patches=u64(vertices/patch)*instances;
     // Check before multiplying; UINT32_MAX input counts and instance counts

@@ -32,6 +32,11 @@ void Visit(Info& info, const IR::Inst& inst) {
         break;
     case IR::Opcode::SetPatch: {
         const auto patch = inst.Arg(0).Patch();
+        if(patch<=IR::Patch::TessellationLodInteriorV){
+            const auto value=inst.Arg(1);
+            info.tessellation_bounds.Record(u32(patch),value.IsImmediate()&&value.Type()==IR::Type::F32?
+                std::optional<float>(value.F32()):std::nullopt);
+        }
         if (patch <= IR::Patch::TessellationLodBottom) {
             info.stores_tess_level_outer = true;
         } else if (patch <= IR::Patch::TessellationLodInteriorV) {
@@ -218,6 +223,11 @@ void Visit(Info& info, const IR::Inst& inst) {
 
 void CollectShaderInfoPass(IR::Program& program, const Profile& profile) {
     Info& info = program.info;
+    info.tessellation_bounds={};
+    info.tessellation_bounds.unconditional=program.post_order_blocks.size()==1&&
+        std::all_of(program.syntax_list.begin(),program.syntax_list.end(),[](const auto& node){
+            return node.type==IR::AbstractSyntaxNode::Type::Block||node.type==IR::AbstractSyntaxNode::Type::Return;
+        });
     for (IR::Block* const block : program.post_order_blocks) {
         for (IR::Inst& inst : block->Instructions()) {
             Visit(info, inst);

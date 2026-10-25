@@ -975,6 +975,7 @@ set(SHADER_RECOMPILER src/shader_recompiler/profile.h
                       src/shader_recompiler/recompiler.h
                       src/shader_recompiler/resource.h
                       src/shader_recompiler/info.h
+                       src/shader_recompiler/tessellation_bounds.h
                       src/shader_recompiler/params.h
                       src/shader_recompiler/runtime_info.h
                       src/shader_recompiler/specialization.h

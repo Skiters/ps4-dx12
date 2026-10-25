@@ -2153,8 +2153,10 @@ void GuestRasterizer::DrawInternal(bool indexed,u32 index_offset,const DrawArgum
         case AmdGpu::PrimitiveType::TriangleList:input_width=3;break;
         default:throw std::invalid_argument("Captured tessellation has an invalid generated primitive topology");
         }
+        const auto* hull=capture->stream_producer.stages[u32(Shader::SwStage::TessellationControl)];
+        const u32 segments=hull?hull->info.tessellation_bounds.SegmentBound():64;
         const auto range=capture->stream_tessellated?
-            TessellatedPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size,input_width):
+            TessellatedPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size,input_width,segments):
             AuxiliaryPointStreamRange(capture->stream_patch_vertices,draw.count,draw.instances,geometry.in_vertex_data_size);
         const u32 stride=range.stride;
         const auto one=Shader::NativePointCapture::Plan::Make(1,geometry.num_invocations,geometry.output_vertices,1);

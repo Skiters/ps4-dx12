@@ -18,6 +18,7 @@
 #include "shader_recompiler/params.h"
 #include "shader_recompiler/resource.h"
 #include "shader_recompiler/runtime_info.h"
+#include "shader_recompiler/tessellation_bounds.h"
 
 namespace Serialization {
 struct Archive;
@@ -137,6 +138,7 @@ struct Info : InfoPersistent {
     bool uses_shared_int64_atomics{};
     bool stores_tess_level_outer{};
     bool stores_tess_level_inner{};
+    TessellationFactorBounds tessellation_bounds;
     bool translation_failed{};
 
     std::array<Interpolation, IR::NumParams> fs_interpolation{};

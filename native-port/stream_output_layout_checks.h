@@ -3,10 +3,31 @@
 #include "video_core/renderer_d3d12/stream_output_layout.h"
 #include "video_core/renderer_d3d12/persistent_cache.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
+#include "shader_recompiler/tessellation_bounds.h"
 #include <array>
+#include <limits>
 
 namespace NativeDX12::Tests {
 inline void CheckStreamOutputLayout(){
+    for(const auto [value,segments]:std::array<std::pair<float,u32>,8>{
+        {{0,2},{1,2},{2,4},{3,4},{4,8},{8,16},{16,32},{32,64}}}){
+        Shader::TessellationFactorBounds bounds;bounds.unconditional=true;
+        for(u32 i=0;i<6;++i)bounds.Record(i,value);
+        if(bounds.SegmentBound()!=segments)
+            throw std::runtime_error("Constant tessellation bound lost partitioning rounding");
+        const auto range=TessellatedPointStreamRange(3,9,2,4,3,bounds.SegmentBound());
+        if(range.capacity_vertices!=6*segments*segments*6)
+            throw std::runtime_error("Constant tessellation source lost patch/instance coverage");
+        bounds.Record(0,std::nullopt);
+        if(bounds.SegmentBound()!=64)throw std::runtime_error("Dynamic factor incorrectly reduced source bound");
+    }
+    for(u32 invalid=0;invalid<4;++invalid){
+        Shader::TessellationFactorBounds bounds;bounds.unconditional=invalid!=0;
+        for(u32 i=0;i<(invalid==1?5u:6u);++i)bounds.Record(i,1.f);
+        if(invalid==2)bounds.Record(0,std::numeric_limits<float>::infinity());
+        if(invalid==3)bounds.Record(0,std::numeric_limits<float>::quiet_NaN());
+        if(bounds.SegmentBound()!=64)throw std::runtime_error("Unproven tessellation factors reduced source allocation");
+    }
     for(const u32 patch:std::array<u32,2>{3,4}){
         const auto complete=AuxiliaryPointStreamRange(patch,patch*2,2,4);
         const auto incomplete=AuxiliaryPointStreamRange(patch,patch-1,1,4);

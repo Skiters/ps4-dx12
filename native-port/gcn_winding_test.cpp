@@ -13,6 +13,8 @@
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_instructions.h"
 #include "shader_recompiler/backend/spirv/emit_spirv_quad_rect.h"
+#include "shader_recompiler/ir/program.h"
+#include "shader_recompiler/ir/passes/ir_passes.h"
 #include "common/serdes.h"
 #include "common/path_util.h"
 #include "video_core/cache_storage.h"
@@ -78,6 +80,32 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    if(mode=="tessellation-source-bounds"){
+        Shader::Info info{};info.hw_stage=Shader::HwStage::Hull;info.sw_stage=Shader::SwStage::TessellationControl;
+        Common::ObjectPool<Shader::IR::Inst> pool;
+        Shader::IR::Block entry(pool),conditional(pool);
+        for(u32 i=0;i<6;++i)entry.AppendNewInst(Shader::IR::Opcode::SetPatch,
+            {Shader::IR::Value(Shader::IR::Patch(i)),Shader::IR::Value(2.f)});
+        Shader::IR::Program program(info);program.post_order_blocks.push_back(&entry);
+        Shader::Optimization::CollectShaderInfoPass(program,Shader::Profile{});
+        if(info.tessellation_bounds.SegmentBound()!=4)
+            throw std::runtime_error("Straight-line constant HS lost its proven source bound");
+        Serialization::Archive saved;info.Serialize(saved);Serialization::Archive restored(saved.TakeOff());
+        Shader::Info cached{};cached.Deserialize(restored);
+        if(cached.tessellation_bounds.SegmentBound()!=4||!restored.IsEoS())
+            throw std::runtime_error("Shader cache lost the constant factor allocation proof");
+        const auto large=TessellatedPointStreamRange(1,10000,1,4,3,info.tessellation_bounds.SegmentBound());
+        if(large.capacity_vertices!=960000||u64(large.capacity_vertices)*large.stride!=30720000)
+            throw std::runtime_error("Proven low-factor source lost complete large-draw coverage");
+        bool rejected{};try{(void)TessellatedPointStreamRange(1,10000,1,4,3);}
+        catch(const std::overflow_error&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Unproven large source silently exceeded SO addressing");
+        program.post_order_blocks.push_back(&conditional);
+        Shader::Optimization::CollectShaderInfoPass(program,Shader::Profile{});
+        if(info.tessellation_bounds.SegmentBound()!=64)
+            throw std::runtime_error("Conditional HS incorrectly acquired a constant output proof");
+        std::puts("PASS tessellation factor collection, persistence and complete bounded allocation; GPU NOT_RUN");return 0;
+    }
     if(mode=="polygon-output-capacity"){
         if(!compile_shaders)throw std::invalid_argument("polygon-output-capacity requires explicit compile-shaders mode");
         for(u32 parameters:{8u,16u,24u})for(bool clip:{false,true})for(bool compact:{false,true}){
