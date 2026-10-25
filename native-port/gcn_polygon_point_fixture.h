@@ -59,7 +59,7 @@ void RunAuxPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gp
 template<class Program,class Initialize>
 void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool routed=false,
-    bool depth_clamped=false,bool depth_biased=false){
+    bool depth_clamped=false,bool depth_biased=false,bool high_parameter=false){
     alignas(256) std::array<u32,128> pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0xf800080f,0x00000000,0xbf810000},
         0x504f4c59504f494eull);
@@ -68,6 +68,18 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     for(u32 i=0;i<7;++i){routed_words.push_back(0xe0302000u|i*4);routed_words.push_back((128u<<24)|((4+i)<<8));}
     routed_words.insert(routed_words.end(),{0xbf8c007f,0xf80000dd,0x0a090008,0xf80008cf,0x07060504,0xbf810000});
     initialize(routed_vertex,routed_words,0x504f4c59524f5554ull);
+    alignas(256) std::array<u32,128> high_vertex{};
+    if(high_parameter){
+        std::vector<u32> words{0xBEEB03FF,15};
+        for(u32 i=0;i<4;++i){words.push_back(0xe0302000u|i*4);words.push_back((128u<<24)|((4+i)<<8));}
+        words.insert(words.end(),{0xbf8c007f,0x7e1002ff,0x3e800000,
+            0xf80003ff,0x08080808,0xf80000d1,0x00000007,
+            0xf80000ef,0x07070707,0xf80008cf,0x07060504,0xbf810000});
+        initialize(high_vertex,words,0x504f4c5948495631ull);
+        // Flat p0.x is supplied by original Param31, not by host location31.
+        initialize(pixel,{0xBEEB03FF,15,0xc8020002,0xf800080f,0x00000000,0xbf810000},
+            0x504f4c5948495031ull);
+    }
     struct Case {float xy[3][2];std::vector<std::array<u32,2>> pixels;};
     // Independent pixel coordinates for viewport [.5,8.5] in both axes.
     // Includes a new clipping edge and an original vertex exactly on it.
@@ -89,8 +101,13 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
             memcpy(memory+i*32+16,&size,4);memcpy(memory+i*32+20,&layer,4);memcpy(memory+i*32+24,&viewport,4);}
         auto& regs=gpu.regs;regs={};regs.stage_enable.raw=AmdGpu::ShaderStageEnable::Vs;
         regs.primitive_type=AmdGpu::PrimitiveType::TriangleList;regs.num_indices=3;
-        regs.vs_program.address=reinterpret_cast<u64>(routed?routed_vertex.data():vertex.data())>>8;
-        regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=routed?2:1;
+        regs.vs_program.address=reinterpret_cast<u64>(high_parameter?high_vertex.data():routed?routed_vertex.data():vertex.data())>>8;
+        regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=routed||high_parameter?2:1;
+        if(high_parameter){
+            regs.num_interp=1;regs.ps_inputs[0].input_offset=31;regs.ps_inputs[0].flat_shade=1;
+            regs.vs_output_control.vs_out_misc_enable=regs.vs_output_control.use_vtx_point_size=1;
+            regs.vs_output_control.vs_out_ccdist0_enable=1;regs.vs_output_control.clip_distance_enable=15;
+        }
         if(routed)regs.vs_output_control.vs_out_misc_enable=regs.vs_output_control.use_vtx_point_size=
             regs.vs_output_control.use_vtx_render_target_idx=regs.vs_output_control.use_vtx_viewport_idx=1;
         regs.ps_program.address=reinterpret_cast<u64>(pixel.data())>>8;regs.ps_program.settings.num_vgprs=1;

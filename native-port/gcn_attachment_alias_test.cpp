@@ -99,7 +99,7 @@ int main(int argc,char** argv){try{
         mode=="color-feedback-uint-owned"||mode=="color-feedback-uint-buffer-owned"||mode=="color-depth-shared-owned"||
         mode=="color-independent-class-owned"||mode=="color-depth-independent-owned"||mode=="color-depth-clear-owned"||mode=="color-depth-msaa-owned"||mode=="color-depth-sampled-owned"||mode=="color-retained-mips-owned"||mode=="color-grown-mips-owned"||mode=="color-shifted-mip-owned"||mode=="color-converted-rgba8-owned"||mode=="color-converted-snorm10-owned"||mode=="color-converted-rgba8-msaa-owned"||mode=="color-converted-snorm10-msaa-owned"||mode=="color-depth-compressed-clear-owned";
     const bool snorm_color=mode=="snorm-color-owned"||mode=="snorm-dual-source-owned"||
-        mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned"||mode=="polygon-aux-points-owned";
+        mode=="polygon-points-high-param-owned"||mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned"||mode=="polygon-aux-points-owned";
     const bool mixed_samples=mode=="mixed-samples-owned"||mode=="mixed-samples-matrix-owned";
     const bool owned=mode.ends_with("-owned");
     const bool packed_word_writer=mode=="writable-packed10-cached-r11-reverse-owned";
@@ -199,6 +199,7 @@ int main(int argc,char** argv){try{
     Shader::Profile profile{};profile.supported_spirv=0x00010500;profile.needs_buffer_offsets=true;
     profile.native_coherent_images=true;profile.max_viewport_width=profile.max_viewport_height=16384;
     profile.native_buffer_bounds=true;
+    profile.needs_clip_distance_emulation=mode=="polygon-points-high-param-owned";
     profile.support_int8=profile.support_int16=true;
     ReadonlyNumericProbeRasterizer rasterizer(device.Get(),gpu,profile,std::filesystem::path(argv[1]).wstring(),
         std::filesystem::path(argv[2]).wstring(),readonly_numeric);
@@ -221,8 +222,8 @@ int main(int argc,char** argv){try{
     }else if(snorm_color){
         if(mode=="polygon-aux-points-owned")
             RunAuxPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base);
-        else if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned")
-            RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned",mode=="polygon-points-depth-clamp-owned",mode=="polygon-points-depth-bias-owned");
+        else if(mode=="polygon-points-high-param-owned"||mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"||mode=="polygon-points-depth-bias-owned")
+            RunPolygonPointFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,mode=="polygon-points-routed-owned",mode=="polygon-points-depth-clamp-owned",mode=="polygon-points-depth-bias-owned",mode=="polygon-points-high-param-owned");
         else RunSnormAttachmentFixture(rasterizer,gpu,plain_vertex,initialize,memory,backing,base,
                 mode=="snorm-dual-source-owned");
     }else if(mixed_samples){
@@ -1593,7 +1594,7 @@ int main(int argc,char** argv){try{
         puts("PASS: 24 actual GCN packed16 mixed-constant draws, original guest words/swizzles, missing alpha, masks, MSAA1/2/4/8, layers and padding");
         return 0;
     }
-    if(mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"){
+    if(mode=="polygon-points-high-param-owned"||mode=="polygon-points-owned"||mode=="polygon-points-routed-owned"||mode=="polygon-points-depth-clamp-owned"){
         puts("PASS: actual GCN polygon points, clipped corners, original winding, exact additive counts, routing and backing guards");
         return 0;
     }

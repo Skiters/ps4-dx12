@@ -484,7 +484,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto uint4=ctx.TypeVector(u32_type,4);
     if(sized||routed_viewport||routed_layer)
         input_misc=ctx.Variable(ctx.TypeArray(uint4,three),spv::StorageClass::Input,
-            NativePolygonPointMiscLocation(vertex,config.emulated_clip,NativePolygonPointLiveParameters(fragment,fs)));
+            NativePolygonPointMiscLocation(vertex,config.emulated_clip,NativePolygonPointLiveParameters(fragment,fs),config.compact_parameters));
     if(routed_viewport){ctx.AddCapability(spv::Capability::MultiViewport);
         output_viewport=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);}
     if(routed_layer)output_layer=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
@@ -504,7 +504,9 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto add_varying=[&](u32 parameter,u32 location,u32 offset,u32 mask,Q qualifier,u32 output_width){
         const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
         const auto type=width==1?f32:ctx.TypeVector(f32,width);
-        const u32 input_location=parameter+u32(config.emulated_clip);
+        const u32 input_location=(config.compact_parameters?
+            NativePolygonPointParameterLocation(vertex,parameter,NativePolygonPointLiveParameters(fragment,fs)):
+            parameter)+u32(config.emulated_clip);
         const u32 output_location=location+u32(config.emulated_clip);
         if(input_location>=32||output_location>=32)
             throw std::runtime_error("Polygon point interface exceeds native varying locations");

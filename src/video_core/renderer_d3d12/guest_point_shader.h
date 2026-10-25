@@ -31,7 +31,22 @@ inline u32 NativePointMiscLocation(const Shader::Info& vertex,bool emulated_clip
     }
     throw Shader::NativePointCapture::Required("Native point interface needs a free generic varying slot");
 }
-inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip,u32 live_parameters=~0u){
+inline u32 NativePolygonPointParameterLocation(const Shader::Info& vertex,u32 parameter,u32 live_parameters){
+    if(parameter>=32)throw std::out_of_range("Invalid polygon parameter location");
+    u32 location{};
+    for(u32 i=0;i<parameter;++i)if((live_parameters&(1u<<i))&&
+        vertex.stores.GetAny(Shader::IR::Attribute::Param0+i))++location;
+    return location;
+}
+inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip,u32 live_parameters=~0u,
+    bool compact_parameters=false){
+    if(compact_parameters){
+        u32 location=u32(emulated_clip);
+        for(u32 i=0;i<32;++i)if((live_parameters&(1u<<i))&&
+            vertex.stores.GetAny(Shader::IR::Attribute::Param0+i))++location;
+        if(location<32)return location;
+        throw std::runtime_error("Polygon point payload needs a buffered varying transport");
+    }
     try{return NativePointMiscLocation(vertex,emulated_clip,live_parameters);}
     catch(const Shader::NativePointCapture::Required&){
         // Ordinary point capture consumes an original point-output GS. It
@@ -60,6 +75,7 @@ struct GuestPolygonPointConfig {
     u32 first_provoking{};
     bool depth_bias_enabled{},float_depth{true};
     float depth_bias{},slope_depth_bias{},depth_bias_clamp{};
+    bool compact_parameters{};
 };
 // Clip the completed triangle, then expand its surviving polygon vertices.
 // No guest shader is evaluated again for the generated clipping vertices.

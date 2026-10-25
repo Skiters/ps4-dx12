@@ -49,6 +49,11 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     if(hardware==Shader::HwStage::Vertex)
         runtime.hw.vs.native_polygon_point_transport=GuestPolygonPointGeometryState(regs);
     if(hardware==Shader::HwStage::Vertex&&runtime.hw.vs.native_polygon_point_transport){
+        // Auxiliary rectangle/quad TCS/TES still use their declared original
+        // locations. Direct VS and original TES can compact the GS interface.
+        runtime.hw.vs.native_polygon_point_compact_parameters=
+            regs.primitive_type!=AmdGpu::PrimitiveType::RectList&&
+            regs.primitive_type!=AmdGpu::PrimitiveType::QuadList;
         const auto* fragment=context.stage_infos[u32(Shader::SwStage::Fragment)];
         if(regs.num_interp>regs.ps_inputs.size())throw std::runtime_error("Invalid polygon fragment input count");
         if(fragment)for(u32 i=0;i<regs.num_interp;++i){
@@ -367,7 +372,7 @@ GuestGraphicsStages GuestShaderFrontend::BuildGraphics(const AmdGpu::Regs& regs,
              poly.NeedsBias(),regs.depth_buffer.z_info.format!=AmdGpu::DepthBuffer::ZFormat::Z16,
              poly.enable_polygon_offset_front?regs.poly_offset.front_offset:regs.poly_offset.back_offset,
              (poly.enable_polygon_offset_front?regs.poly_offset.front_scale:regs.poly_offset.back_scale)/16.f,
-             regs.poly_offset.depth_bias});
+             regs.poly_offset.depth_bias,!producer->auxiliary});
         auto found=auxiliary_.find(words);
         if(found==auxiliary_.end()){
             auto stage=std::make_unique<GuestShaderStage>();stage->id=ReserveStageId();stage->auxiliary=true;

@@ -703,7 +703,8 @@ void EmitContext::DefineVertexBlock() {
          info.stores.GetAny(IR::Attribute::ViewportIndex));
     if(polygon_misc)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePolygonPointMiscLocation(info,
         sw_stage==SwStage::Vertex&&profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
-        runtime_info.hw.vs.native_polygon_point_live_parameters));
+        runtime_info.hw.vs.native_polygon_point_live_parameters,
+        runtime_info.hw.vs.native_polygon_point_compact_parameters));
     else if(native_vs_points)native_point_misc=DefineOutput(U32[4],NativeDX12::NativePointMiscLocation(info,
         profile.needs_clip_distance_emulation&&info.stores.GetAny(IR::Attribute::ClipDistance),
         runtime_info.sw.vs.native_point_live_parameters,runtime_info.sw.vs.native_point_outputs));
@@ -748,8 +749,10 @@ void EmitContext::DefineOutputs() {
                     continue;
                 }
                 const u32 num_components = compact_points?width:info.stores.NumComponents(param);
+                const u32 location=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_compact_parameters?
+                    NativeDX12::NativePolygonPointParameterLocation(info,i,runtime_info.hw.vs.native_polygon_point_live_parameters):i;
                 const Id id{
-                    DefineOutput(F32[num_components], i + (needs_clip_distance_emulation ? 1 : 0))};
+                    DefineOutput(F32[num_components], location + (needs_clip_distance_emulation ? 1 : 0))};
                 Name(id, fmt::format("out_attr{}", i));
                 output_params[i] =
                     GetAttributeInfo(AmdGpu::NumberFormat::Float, id, num_components, true);
@@ -815,7 +818,9 @@ void EmitContext::DefineOutputs() {
                 continue;
             }
             const u32 num_components = info.stores.NumComponents(param);
-            const Id id{DefineOutput(F32[num_components], i)};
+            const u32 location=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_compact_parameters?
+                NativeDX12::NativePolygonPointParameterLocation(info,i,runtime_info.hw.vs.native_polygon_point_live_parameters):i;
+            const Id id{DefineOutput(F32[num_components], location)};
             Name(id, fmt::format("out_attr{}", i));
             output_params[i] =
                 GetAttributeInfo(AmdGpu::NumberFormat::Float, id, num_components, true);

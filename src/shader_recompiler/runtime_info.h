@@ -114,6 +114,7 @@ struct HwVertexRuntimeInfo {
     bool clip_disable{};
     u32 user_clip_plane_mask{};
     bool native_polygon_point_transport{};
+    bool native_polygon_point_compact_parameters{};
     u32 native_polygon_point_live_parameters{};
 
     bool operator==(const HwVertexRuntimeInfo& other) const noexcept = default;
