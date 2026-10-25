@@ -15,8 +15,9 @@ namespace NativeDX12 {
 struct NativeIndirectLayout {
     u64 offset,bytes;
     u32 stride,count;
-    static NativeIndirectLayout Make(bool indexed,u64 offset,u32 stride,u32 count,bool runtime_cbv=false){
-        const u32 size=(indexed?20:16)+(runtime_cbv?8:0);
+    static NativeIndirectLayout Make(bool indexed,u64 offset,u32 stride,u32 count,bool runtime_cbv=false,bool index_views=false){
+        if(index_views&&!indexed)throw std::invalid_argument("Indirect index views require indexed draws");
+        const u32 size=(indexed?20:16)+(runtime_cbv?8:0)+(index_views?16:0);
         if(!stride)stride=runtime_cbv?(size+7)&~7u:size;
         const u64 bytes=u64(stride)*count;
         if(stride<size||stride%4||offset%4||(runtime_cbv&&(stride%8||offset%8))||offset>UINT64_MAX-bytes)

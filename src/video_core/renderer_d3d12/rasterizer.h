@@ -31,7 +31,7 @@ class Rasterizer : public VideoCore::RasterizerInterface {
 protected:
     mutable Common::FairRecursiveMutex execution_mutex_;
     struct IndirectSignature {ComPtr<ID3D12CommandSignature> signature;ComPtr<ID3D12RootSignature> root;};
-    std::map<std::tuple<bool,u32,ID3D12RootSignature*>,IndirectSignature> indirect_draw_signatures_;
+    std::map<std::tuple<bool,bool,u32,ID3D12RootSignature*>,IndirectSignature> indirect_draw_signatures_;
     virtual std::vector<std::pair<VAddr,u64>> RetainedImageProtectionRanges()const{return {};}
 public:
     Common::FairRecursiveMutex& ExecutionMutex()const{return execution_mutex_;}
@@ -433,6 +433,9 @@ public:
         // Each command starts with a GPU address for b0/space31, then DRAW.
         // Caller proves every address lies in this retained constant buffer.
         Resource* runtime_constants{};
+        // Optional per-command IBV follows the root CBV, before DRAW_INDEXED.
+        // Its producer proves every GPU address/size is in this private arena.
+        Resource* index_commands_data{};
     };
     struct StreamOutputBinding {
         Resource* data{};Resource* filled_size{};

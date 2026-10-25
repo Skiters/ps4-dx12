@@ -93,6 +93,16 @@ function(native_host_passes target)
         DEPENDS "${_host_native}/guest_indirect_pack.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
         VERBATIM)
     target_sources(${target} PRIVATE "${_indirect_header}" "${_host_native}/guest_indirect_pack.cpp")
+    set(_indirect_index "${_host_generated}/guest_indirect_index.dxil")
+    set(_indirect_index_header "${_host_generated}/guest_indirect_index_shader.h")
+    add_custom_command(OUTPUT "${_indirect_index_header}" "${_indirect_index}"
+        COMMAND "${SHADPS4_DXC_EXECUTABLE}" -T cs_6_0 -E decode_indices -HV 2018 -WX -O3
+            -Fo "${_indirect_index}" "${_host_native}/guest_indirect_pack.hlsl"
+        COMMAND "${CMAKE_COMMAND}" "-DINPUT=${_indirect_index}" "-DOUTPUT=${_indirect_index_header}"
+            -DSYMBOL=NativeGuestIndirectIndex -P "${_host_root}/native-port/Embed-Binary.cmake"
+        DEPENDS "${_host_native}/guest_indirect_pack.hlsl" "${_host_root}/native-port/Embed-Binary.cmake"
+        VERBATIM)
+    target_sources(${target} PRIVATE "${_indirect_index_header}")
     set(_indirect_dispatch "${_host_generated}/guest_indirect_dispatch.dxil")
     set(_indirect_dispatch_header "${_host_generated}/guest_indirect_dispatch_shader.h")
     add_custom_command(OUTPUT "${_indirect_dispatch_header}" "${_indirect_dispatch}"

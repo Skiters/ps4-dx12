@@ -124,4 +124,82 @@ inline void CheckGuestIndirectPackGpu(ID3D12Device* device,Rasterizer& renderer)
         if(!equal)throw std::runtime_error("GPU guest indirect pack lost command/runtime/count/padding/guard contents");
     }
 }
+// Expected values use a byte-vector decoder, independent of the HLSL address
+// calculation. Full private arenas (including untouched tails) are compared.
+inline void CheckGuestIndirectIndexGpu(ID3D12Device* device,Rasterizer& renderer){
+    for(const bool runtime_enabled:std::array{false,true})for(const u32 swap:std::array<u32,2>{2,3})
+    for(const u32 available:std::array<u32,3>{0,10,259})for(const u32 active:std::array<u32,4>{0,2,3,UINT32_MAX}){
+        const auto plan=GuestIndirectPackPlan::Make(true,32,3,runtime_enabled,true);
+        const u32 source_bytes=16+u32(plan.source_bytes),index_bytes=(2+available*2+3)&~3u;
+        const u32 command_bytes=u32(plan.command_bytes)+16,runtime_bytes=u32(plan.runtime_bytes)+16;
+        const u32 decoded_bytes=u32(GuestIndirectIndexDecode::OutputBytes(available,3))+16;
+        const u32 total=source_bytes+index_bytes+command_bytes+runtime_bytes+decoded_bytes+20;
+        auto upload=Buffer(device,total,D3D12_HEAP_TYPE_UPLOAD,D3D12_RESOURCE_STATE_GENERIC_READ);
+        void* mapped{};D3D12_RANGE none{};Check(upload.handle->Map(0,&none,&mapped));memset(mapped,0x6d,total);
+        memcpy(mapped,&active,4);
+        const std::array<std::array<u32,5>,3> inputs{{{5,2,1,u32(-3),7},{4,1,2,2,9},
+            {6,1,available>3?available-3:UINT32_MAX,u32(-1),11}}};
+        for(u32 i=0;i<3;++i)memcpy(static_cast<std::byte*>(mapped)+16+i*32,inputs[i].data(),20);
+        for(u32 i=0;i<available*2;++i)static_cast<std::byte*>(mapped)[source_bytes+2+i]=std::byte(i*37+13);
+        std::vector<std::byte> expected(total);memcpy(expected.data(),mapped,total);upload.handle->Unmap(0,nullptr);
+        auto source=Buffer(device,source_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto indices=Buffer(device,index_bytes,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST);
+        auto commands=renderer.AcquireTransientBuffer(command_bytes),constants=renderer.AcquireTransientBuffer(runtime_bytes);
+        auto decoded=renderer.AcquireTransientBuffer(decoded_bytes),count=renderer.AcquireTransientBuffer(20);
+        auto result=Buffer(device,total,D3D12_HEAP_TYPE_READBACK,D3D12_RESOURCE_STATE_COPY_DEST);
+        const std::array<std::pair<Resource*,u32>,6> regions{{{&source,source_bytes},{&indices,index_bytes},
+            {&commands,command_bytes},{&constants,runtime_bytes},{&decoded,decoded_bytes},{&count,20}}};
+        auto* list=renderer.RecordingList();u32 cursor{};
+        for(auto [resource,bytes]:regions){resource->Transition(list,D3D12_RESOURCE_STATE_COPY_DEST);
+            list->CopyBufferRegion(resource->handle.Get(),0,upload.handle.Get(),cursor,bytes);cursor+=bytes;}
+        GraphicsRuntime runtime{};runtime.draw_id=UINT32_MAX;
+        GuestIndirectIndexDecode decode{&indices,2,available,swap,&decoded};
+        {
+            GuestIndirectPackPass pack(device);
+            if(!active){
+                const auto reject=[&](GuestIndirectIndexDecode bad){bool caught=false;
+                    try{pack.Record(renderer,plan,source,16,&source,0,runtime,commands,
+                        runtime_enabled?&constants:nullptr,count,&bad);}catch(const std::invalid_argument&){caught=true;}
+                    if(!caught)throw std::runtime_error("Indirect index decoder accepted malformed alias/offset/mode");};
+                auto bad=decode;bad.output=&commands;reject(bad);
+                bad=decode;bad.offset=1;reject(bad);
+                bad=decode;bad.swap_mode=4;reject(bad);
+                bad=decode;bad.source=&source;bad.offset=0;bad.output=&source;reject(bad);
+            }
+            pack.Record(renderer,plan,source,16,active==UINT32_MAX?nullptr:&source,0,runtime,
+                commands,runtime_enabled?&constants:nullptr,count,&decode);
+            if(source.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST||indices.State(0)!=D3D12_RESOURCE_STATE_COPY_DEST)
+                throw std::runtime_error("Indirect index packing leaked source states");
+        }
+        const u32 actual=std::min(active,3u),command_at=source_bytes+index_bytes;
+        const u32 runtime_at=command_at+command_bytes,decoded_at=runtime_at+runtime_bytes;
+        memcpy(expected.data()+total-20,&actual,4);
+        for(u32 command=0;command<actual;++command){
+            auto* args=expected.data()+command_at+command*plan.command_stride;
+            if(runtime_enabled){const u64 address=constants.handle->GetGPUVirtualAddress()+u64(command)*plan.runtime_stride;
+                memcpy(args,&address,8);args+=8;
+                auto copy=runtime;copy.first_vertex=inputs[command][3];copy.base_instance=inputs[command][4];
+                copy.indexed=1;copy.draw_id+=command;
+                auto* bytes=expected.data()+runtime_at+command*plan.runtime_stride;
+                memset(bytes,0,plan.runtime_stride);memcpy(bytes,&copy,sizeof(copy));}
+            const u32 length=std::min(inputs[command][0],available-std::min(inputs[command][2],available));
+            const u64 address=decoded.handle->GetGPUVirtualAddress()+u64(command)*std::max(1u,available)*4;
+            const D3D12_INDEX_BUFFER_VIEW view{address,length*4,DXGI_FORMAT_R32_UINT};memcpy(args,&view,16);
+            auto words=inputs[command];words[2]=0;memcpy(args+16,words.data(),20);
+            std::vector<std::byte> bytes(length*2);
+            if(length)memcpy(bytes.data(),expected.data()+source_bytes+2+inputs[command][2]*2,bytes.size());
+            for(size_t i=0;i+3<bytes.size();i+=4){
+                if(swap==2){std::swap(bytes[i],bytes[i+3]);std::swap(bytes[i+1],bytes[i+2]);}
+                else{std::swap(bytes[i],bytes[i+2]);std::swap(bytes[i+1],bytes[i+3]);}}
+            for(u32 i=0;i<length;++i){u16 value{};memcpy(&value,bytes.data()+i*2,2);const u32 word=value;
+                memcpy(expected.data()+decoded_at+command*std::max(1u,available)*4+i*4,&word,4);}
+        }
+        list=renderer.RecordingList();cursor=0;
+        for(auto [resource,bytes]:regions){resource->Transition(list,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            list->CopyBufferRegion(result.handle.Get(),cursor,resource->handle.Get(),0,bytes);cursor+=bytes;}
+        renderer.Finish();D3D12_RANGE all{0,total};Check(result.handle->Map(0,&all,&mapped));
+        const bool equal=!memcmp(mapped,expected.data(),total);result.handle->Unmap(0,&none);
+        if(!equal)throw std::runtime_error("Per-command indirect index decode/IBV/runtime/count/guards mismatch");
+    }
+}
 } // namespace NativeDX12::Tests

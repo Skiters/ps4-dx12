@@ -123,6 +123,7 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
            (stream_draw&&stream_draw->resource&&is_output(stream_draw->resource->handle.Get()))||
            (stream_draw&&stream_draw->count_resource&&is_output(stream_draw->count_resource->handle.Get()))||
            (stream_draw&&stream_draw->runtime_constants&&is_output(stream_draw->runtime_constants->handle.Get()))||
+           (stream_draw&&stream_draw->index_commands_data&&is_output(stream_draw->index_commands_data->handle.Get()))||
            std::any_of(vertices.begin(),vertices.end(),[&](const auto& vertex){return vertex.resource&&is_output(vertex.resource->handle.Get());}))
             throw std::invalid_argument("Internal stream output overlaps draw input or shader resources");
         if(stream_output->data->handle.Get()==stream_output->filled_size->handle.Get()&&
@@ -140,7 +141,9 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             throw std::invalid_argument("Invalid internal primitive stream draw arguments");
         const auto desc=stream_draw->resource->handle->GetDesc();
         const bool runtime=stream_draw->runtime_constants!=nullptr;
-        const auto layout=NativeIndirectLayout::Make(indices!=nullptr,stream_draw->offset,stream_draw->stride,stream_draw->max_count,runtime);
+        const bool index_views=stream_draw->index_commands_data!=nullptr;
+        if(index_views&&!indices)throw std::invalid_argument("Indirect IBV requires indexed rendering");
+        const auto layout=NativeIndirectLayout::Make(indices!=nullptr,stream_draw->offset,stream_draw->stride,stream_draw->max_count,runtime,index_views);
         if(desc.Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||layout.offset>desc.Width||layout.bytes>desc.Width-layout.offset)
             throw std::out_of_range("Internal primitive stream draw arguments exceed their buffer");
         // This private command buffer is distinct from shader data. Do not
@@ -177,11 +180,23 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
             if(owner.Get()!=device_.Get())throw std::invalid_argument("Indirect runtime belongs to another device");
             RetainUntilFinish([resource=constants.handle,allocation=constants.allocation](u64){});
         }
-        auto& cached=indirect_draw_signatures_[{indices!=nullptr,layout.stride,runtime_root}];
+        if(index_views){
+            const auto& arena=*stream_draw->index_commands_data;
+            if(!arena.handle||arena.handle->GetDesc().Dimension!=D3D12_RESOURCE_DIMENSION_BUFFER||
+               bindings.References(arena.handle.Get())||arena.handle.Get()==stream_draw->resource->handle.Get()||
+               (stream_draw->count_resource&&arena.handle.Get()==stream_draw->count_resource->handle.Get())||
+               (stream_draw->runtime_constants&&arena.handle.Get()==stream_draw->runtime_constants->handle.Get()))
+                throw std::invalid_argument("Indirect index arena overlaps inputs or shader bindings");
+            Check(arena.handle->GetDevice(IID_PPV_ARGS(&owner)));
+            if(owner.Get()!=device_.Get())throw std::invalid_argument("Indirect indices belong to another device");
+            RetainUntilFinish([arena](u64){});
+        }
+        auto& cached=indirect_draw_signatures_[{indices!=nullptr,index_views,layout.stride,runtime_root}];
         if(!cached.signature){
-            D3D12_INDIRECT_ARGUMENT_DESC arguments[2]{};UINT count=0;
+            D3D12_INDIRECT_ARGUMENT_DESC arguments[3]{};UINT count=0;
             if(runtime){auto& cbv=arguments[count++];cbv.Type=D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
                 cbv.ConstantBufferView.RootParameterIndex=bindings.Layout().GraphicsRuntimeParameter();}
+            if(index_views)arguments[count++].Type=D3D12_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW;
             auto& argument=arguments[count++];argument.Type=indices?
                 D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED:D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
             const D3D12_COMMAND_SIGNATURE_DESC signature{layout.stride,count,arguments,0};
@@ -357,6 +372,8 @@ void Rasterizer::ExecuteGraphics(const ShaderPipeline& pipeline,ResourceBindings
         std::map<Resource*,D3D12_RESOURCE_STATES> inputs;
         for(const auto& v:vertices)inputs[v.resource]|=D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
         if(indices)inputs[indices->resource]|=D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        if(stream_draw&&stream_draw->index_commands_data)
+            inputs[stream_draw->index_commands_data]|=D3D12_RESOURCE_STATE_INDEX_BUFFER;
         if(stream_draw)inputs[stream_draw->resource]|=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         if(stream_draw&&stream_draw->count_resource)inputs[stream_draw->count_resource]|=D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
         if(stream_draw&&stream_draw->runtime_constants)inputs[stream_draw->runtime_constants]|=D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
