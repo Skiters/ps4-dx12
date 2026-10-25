@@ -31,19 +31,36 @@ inline u32 NativePointMiscLocation(const Shader::Info& vertex,bool emulated_clip
     }
     throw Shader::NativePointCapture::Required("Native point interface needs a free generic varying slot");
 }
+inline std::array<Shader::NativePointOutput,32> NativePolygonPointOutputs(
+    const Shader::Info& vertex,u32 live_parameters){
+    std::array<Shader::NativePointOutput,32> outputs{};
+    std::array<u32,32> widths{};
+    for(u32 parameter=0;parameter<32;++parameter){
+        if(!(live_parameters&(1u<<parameter)))continue;
+        const u32 mask=vertex.stores.flags[Shader::Info::AttributeFlags::Index(
+            Shader::IR::Attribute::Param0+parameter)]&15u;
+        const u32 width=std::popcount(mask);
+        if(!width)continue;
+        // Keep each parameter in one row, packing only its exported lanes.
+        // Consumer reconstruction restores logical xyzw before interpolation.
+        for(u32 row=0;row<32;++row)if(widths[row]+width<=4){
+            outputs[parameter]={u8(parameter),u8(mask),u8(row),u8(widths[row])};
+            widths[row]+=width;
+            break;
+        }
+    }
+    return outputs;
+}
 inline u32 NativePolygonPointParameterLocation(const Shader::Info& vertex,u32 parameter,u32 live_parameters){
     if(parameter>=32)throw std::out_of_range("Invalid polygon parameter location");
-    u32 location{};
-    for(u32 i=0;i<parameter;++i)if((live_parameters&(1u<<i))&&
-        vertex.stores.GetAny(Shader::IR::Attribute::Param0+i))++location;
-    return location;
+    return NativePolygonPointOutputs(vertex,live_parameters)[parameter].location;
 }
 inline u32 NativePolygonPointMiscLocation(const Shader::Info& vertex,bool emulated_clip,u32 live_parameters=~0u,
     bool compact_parameters=false){
     if(compact_parameters){
         u32 location=u32(emulated_clip);
-        for(u32 i=0;i<32;++i)if((live_parameters&(1u<<i))&&
-            vertex.stores.GetAny(Shader::IR::Attribute::Param0+i))++location;
+        for(const auto& output:NativePolygonPointOutputs(vertex,live_parameters))if(output.mask)
+            location=std::max(location,u32(output.location)+1+u32(emulated_clip));
         if(location<32)return location;
         throw std::runtime_error("Polygon point payload needs a buffered varying transport");
     }

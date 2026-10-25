@@ -724,6 +724,9 @@ void EmitContext::DefineVertexBlock() {
 }
 
 void EmitContext::DefineOutputs() {
+    const bool polygon_compact=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_compact_parameters;
+    const auto polygon_outputs=NativeDX12::NativePolygonPointOutputs(info,
+        polygon_compact?runtime_info.hw.vs.native_polygon_point_live_parameters:0);
     switch (sw_stage) {
     case SwStage::Vertex: {
         DefineVertexBlock();
@@ -741,16 +744,15 @@ void EmitContext::DefineOutputs() {
             u32 num_attrs = 0u;
             for (u32 i = 0; i < IR::NumParams; i++) {
                 const IR::Attribute param{IR::Attribute::Param0 + i};
-                if(hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
+                if(!polygon_compact&&hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
                    !(runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<i)))continue;
                 const bool compact_points=hw_stage==HwStage::Vertex&&runtime_info.sw.vs.native_point_expansion;
-                const auto width=NativePointOutputWidth(runtime_info.sw.vs.native_point_outputs,i);
-                if (compact_points?!width:!info.stores.GetAny(param)) {
+                const auto width=NativePointOutputWidth(polygon_compact?polygon_outputs:runtime_info.sw.vs.native_point_outputs,i);
+                if ((compact_points||polygon_compact)?!width:!info.stores.GetAny(param)) {
                     continue;
                 }
-                const u32 num_components = compact_points?width:info.stores.NumComponents(param);
-                const u32 location=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_compact_parameters?
-                    NativeDX12::NativePolygonPointParameterLocation(info,i,runtime_info.hw.vs.native_polygon_point_live_parameters):i;
+                const u32 num_components = (compact_points||polygon_compact)?width:info.stores.NumComponents(param);
+                const u32 location=i;
                 const Id id{
                     DefineOutput(F32[num_components], location + (needs_clip_distance_emulation ? 1 : 0))};
                 Name(id, fmt::format("out_attr{}", i));
@@ -812,14 +814,14 @@ void EmitContext::DefineOutputs() {
         DefineVertexBlock();
         for (u32 i = 0; i < IR::NumParams; i++) {
             const IR::Attribute param{IR::Attribute::Param0 + i};
-            if(hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
+            if(!polygon_compact&&hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_transport&&
                !(runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<i)))continue;
-            if (!info.stores.GetAny(param)) {
+            const auto width=NativePointOutputWidth(polygon_outputs,i);
+            if (polygon_compact?!width:!info.stores.GetAny(param)) {
                 continue;
             }
-            const u32 num_components = info.stores.NumComponents(param);
-            const u32 location=hw_stage==HwStage::Vertex&&runtime_info.hw.vs.native_polygon_point_compact_parameters?
-                NativeDX12::NativePolygonPointParameterLocation(info,i,runtime_info.hw.vs.native_polygon_point_live_parameters):i;
+            const u32 num_components = polygon_compact?width:info.stores.NumComponents(param);
+            const u32 location=i;
             const Id id{DefineOutput(F32[num_components], location)};
             Name(id, fmt::format("out_attr{}", i));
             output_params[i] =

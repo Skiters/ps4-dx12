@@ -134,6 +134,37 @@ int main(int argc,char** argv){try{
             if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
                 throw std::runtime_error("Qualified polygon transport failed signed DXIL: "+compiled.diagnostics);
         }
+        for(bool clip:{false,true})for(bool pairs:{false,true}){
+            Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
+            fs.num_inputs=32;fs.native_point_input_compaction=true;
+            for(u32 p=0;p<32;++p){
+                const u32 mask=pairs?(p%2?10u:5u):(1u<<(p%4));
+                fs.inputs[p].param_index=u8(p);
+                fragment.fs_interpolation[p].primary=Shader::Qualifier::Smooth;
+                for(u32 c=0;c<4;++c)if(mask&(1u<<c)){
+                    vertex.stores.Set(Shader::IR::Attribute::Param0+p,c);
+                    fragment.loads.Set(Shader::IR::Attribute::Param0+p,c);
+                }
+            }
+            vertex.stores.Set(Shader::IR::Attribute::PointSize,0);
+            if(clip)vertex.stores.Set(Shader::IR::Attribute::ClipDistance,0);
+            const auto packed=NativePolygonPointOutputs(vertex,~0u);
+            for(u32 p=0;p<32;++p){
+                const auto& output=packed[p];
+                if(output.source!=p||output.mask!=(pairs?(p%2?10u:5u):(1u<<(p%4)))||
+                   output.location!=p/(pairs?2:4)||output.component!=(p%(pairs?2:4))*(pairs?2:1))
+                    throw std::runtime_error("Polygon producer lost a sparse component or packed row");
+            }
+            if(NativePolygonPointMiscLocation(vertex,clip,~0u,true)!=(pairs?16u:8u)+u32(clip))
+                throw std::runtime_error("Scalar polygon outputs exhausted the misc interface");
+            GuestPolygonPointConfig config;config.emulated_clip=clip;config.compact_parameters=true;
+            const auto words=EmitGuestPolygonPoints(vertex,&fragment,fs,config);
+            Shader::Backend::DX12::SpirvConvertOptions options{};
+            options.stage=Shader::Backend::DX12::SpirvStage::Geometry;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Packed polygon payload failed signed DXIL: "+compiled.diagnostics);
+        }
         for(bool emulated_clip:{false,true})for(bool compact_parameters:{false,true}){
             Shader::Info vertex{},fragment{};Shader::HwFragmentRuntimeInfo fs{};
             for(u32 p=0;p<32;++p)for(u32 c=0;c<4;++c)vertex.stores.Set(Shader::IR::Attribute::Param0+p,c);

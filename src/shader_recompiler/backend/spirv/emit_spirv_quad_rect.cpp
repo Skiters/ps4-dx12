@@ -488,7 +488,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     if(routed_viewport){ctx.AddCapability(spv::Capability::MultiViewport);
         output_viewport=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::ViewportIndex);}
     if(routed_layer)output_layer=ctx.Variable(u32_type,spv::StorageClass::Output,{},spv::BuiltIn::Layer);
-    struct Varying {Id type,input;u32 width;Q qualifier;u32 location,offset,mask;};
+    struct Varying {Id type,input;u32 width;Q qualifier;u32 location,offset,mask,input_width,input_offset,input_mask;};
     struct Output {Id type,variable;u32 width;};
     std::vector<Varying> varyings;
     std::array<Output,32> varying_outputs{};
@@ -501,24 +501,28 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     NativePointTransport transport;
     if(fragment&&fs.native_point_input_compaction)
         transport=BuildNativePointTransport(*fragment,input_count,[&](u32 i){return fs.inputs[i];});
+    const auto polygon_outputs=NativePolygonPointOutputs(vertex,NativePolygonPointLiveParameters(fragment,fs));
     const auto add_varying=[&](u32 parameter,u32 location,u32 offset,u32 mask,Q qualifier,u32 output_width){
         const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
-        const auto type=width==1?f32:ctx.TypeVector(f32,width);
-        const u32 input_location=(config.compact_parameters?
-            NativePolygonPointParameterLocation(vertex,parameter,NativePolygonPointLiveParameters(fragment,fs)):
-            parameter)+u32(config.emulated_clip);
+        const auto packed=polygon_outputs[parameter];
+        const u32 row=config.compact_parameters?packed.location:parameter;
+        const u32 input_width=config.compact_parameters?Shader::NativePointOutputWidth(polygon_outputs,row):width;
+        const auto type=input_width==1?f32:ctx.TypeVector(f32,input_width);
+        const u32 input_location=row+u32(config.emulated_clip);
         const u32 output_location=location+u32(config.emulated_clip);
         if(input_location>=32||output_location>=32)
             throw std::runtime_error("Polygon point interface exceeds native varying locations");
-        if(!Sirit::ValidId(varying_inputs[parameter]))
-            varying_inputs[parameter]=ctx.Variable(ctx.TypeArray(type,three),spv::StorageClass::Input,input_location);
+        if(!Sirit::ValidId(varying_inputs[row]))
+            varying_inputs[row]=ctx.Variable(ctx.TypeArray(type,three),spv::StorageClass::Input,input_location);
         auto& output=varying_outputs[location];
         if(!output.width){
             output.width=output_width;output.type=output_width==1?f32:ctx.TypeVector(f32,output_width);
             output.variable=ctx.Variable(output.type,spv::StorageClass::Output,output_location);
             output_components+=output_width;
         }
-        varyings.push_back({type,varying_inputs[parameter],width,qualifier,location,offset,mask});
+        varyings.push_back({type,varying_inputs[row],width,qualifier,location,offset,mask,input_width,
+            config.compact_parameters?u32(packed.component):0u,
+            config.compact_parameters?u32(packed.mask):(1u<<width)-1});
     };
     if(fragment&&fs.native_point_input_compaction){
         for(const auto& group:transport.outputs){
@@ -642,8 +646,11 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
             const auto value=input(varying.type,varying.input,
                 varying.qualifier==Q::Flat?provoking:ci(index));
             std::array<Id,4> channels{fzero,fzero,fzero,fzero};
-            for(u32 channel=0;channel<varying.width;++channel)
-                channels[channel]=varying.width==1?value:component(value,channel);
+            for(u32 channel=0;channel<varying.width;++channel){
+                if(!(varying.input_mask&(1u<<channel))){channels[channel]=ctx.OpUndef(f32);continue;}
+                const u32 lane=varying.input_offset+std::popcount(varying.input_mask&((1u<<channel)-1));
+                channels[channel]=varying.input_width==1?value:component(value,lane);
+            }
             ctx.OpStore(pointer(data[0],ci(index),field+1),ctx.OpCompositeConstruct(vec4,channels));
         }
         if(sized){const auto value=input(uint4,input_misc,ci(index));

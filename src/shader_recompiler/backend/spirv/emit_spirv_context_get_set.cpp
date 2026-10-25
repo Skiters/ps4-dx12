@@ -11,6 +11,7 @@
 #include "shader_recompiler/ir/microinstruction.h"
 #include "shader_recompiler/ir/patch.h"
 #include "shader_recompiler/runtime_info.h"
+#include "video_core/renderer_d3d12/guest_point_shader.h"
 
 #include <magic_enum/magic_enum.hpp>
 #include <bit>
@@ -317,6 +318,16 @@ void EmitSetAttribute(EmitContext& ctx, IR::Attribute attr, Id value, u32 elemen
         const u32 attr_index{u32(attr) - u32(IR::Attribute::Param0)};
         if(ctx.hw_stage==HwStage::Vertex&&ctx.runtime_info.hw.vs.native_polygon_point_transport&&
            !(ctx.runtime_info.hw.vs.native_polygon_point_live_parameters&(1u<<attr_index)))return;
+        if(ctx.hw_stage==HwStage::Vertex&&ctx.runtime_info.hw.vs.native_polygon_point_compact_parameters){
+            const auto transport=NativeDX12::NativePolygonPointOutputs(ctx.info,
+                ctx.runtime_info.hw.vs.native_polygon_point_live_parameters)[attr_index];
+            if(!(transport.mask&(1u<<element)))return;
+            const auto& output=ctx.output_params[transport.location];
+            const u32 component=transport.component+std::popcount(u32(transport.mask)&((1u<<element)-1));
+            ctx.OpStore(output.num_components==1?output.id:
+                ctx.OpAccessChain(output.pointer_type,output.id,ctx.ConstU32(component)),value);
+            return;
+        }
         if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture){
             const auto& output=ctx.output_params[attr_index];
             if(output.num_components)op_store(ctx.OpAccessChain(output.pointer_type,output.id,ctx.ConstU32(element)));

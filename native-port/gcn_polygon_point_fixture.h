@@ -59,7 +59,7 @@ void RunAuxPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gp
 template<class Program,class Initialize>
 void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
     const Program& vertex,Initialize initialize,std::byte* memory,std::byte* backing,u64 base,bool routed=false,
-    bool depth_clamped=false,bool depth_biased=false,bool high_parameter=false){
+    bool depth_clamped=false,bool depth_biased=false,bool high_parameter=false,bool packed_parameters=false){
     alignas(256) std::array<u32,128> pixel{};
     initialize(pixel,{0xBEEB03FF,15,0x7e0002ff,0x3e800000,0xf800080f,0x00000000,0xbf810000},
         0x504f4c59504f494eull);
@@ -75,10 +75,29 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         words.insert(words.end(),{0xbf8c007f,0x7e1002ff,0x3e800000,
             0xf80003ff,0x08080808,0xf80000d1,0x00000007,
             0xf80000ef,0x07070707,0xf80008cf,0x07060504,0xbf810000});
-        initialize(high_vertex,words,0x504f4c5948495631ull);
+        if(packed_parameters){
+            words.resize(10);
+            words.insert(words.end(),{0xbf8c007f,0x7e1002ff,0x3c000000}); // 1/128 per live lane.
+            for(u32 p=0;p<32;++p){
+                words.push_back(0xf8000000u|((32+p)<<4)|(1u<<(p%4)));
+                words.push_back(0x08080808);
+            }
+            words.insert(words.end(),{0xf80000d1,0x00000007,0xf80000ef,0x07070707,
+                0xf80008cf,0x07060504,0xbf810000});
+        }
+        initialize(high_vertex,words,packed_parameters?0x504f4c5950415631ull:0x504f4c5948495631ull);
         // Flat p0.x is supplied by original Param31, not by host location31.
         initialize(pixel,{0xBEEB03FF,15,0xc8020002,0xf800080f,0x00000000,0xbf810000},
             0x504f4c5948495031ull);
+        if(packed_parameters){
+            std::vector<u32> ps{0xBEEB03FF,15,0x7e000280}; // v0=0.
+            for(u32 p=0;p<32;++p){
+                ps.push_back(0xc8060002u|(p<<10)|((p%4)<<8)); // flat pN.lane -> v1.
+                ps.push_back(0x06000300); // v0=v0+v1, exactly 32/128.
+            }
+            ps.insert(ps.end(),{0xf800080f,0x00000000,0xbf810000});
+            initialize(pixel,ps,0x504f4c5950415031ull);
+        }
     }
     struct Case {float xy[3][2];std::vector<std::array<u32,2>> pixels;};
     // Independent pixel coordinates for viewport [.5,8.5] in both axes.
@@ -105,6 +124,8 @@ void RunPolygonPointFixture(GuestRasterizer& rasterizer,AmdGpu::Liverpool& gpu,
         regs.vs_program.settings.num_user_regs=4;regs.vs_program.settings.num_vgprs=routed||high_parameter?2:1;
         if(high_parameter){
             regs.num_interp=1;regs.ps_inputs[0].input_offset=31;regs.ps_inputs[0].flat_shade=1;
+            if(packed_parameters){regs.num_interp=32;for(u32 p=0;p<32;++p){
+                regs.ps_inputs[p].input_offset=p;regs.ps_inputs[p].flat_shade=1;}}
             regs.vs_output_control.vs_out_misc_enable=regs.vs_output_control.use_vtx_point_size=1;
             regs.vs_output_control.vs_out_ccdist0_enable=1;regs.vs_output_control.clip_distance_enable=15;
         }
