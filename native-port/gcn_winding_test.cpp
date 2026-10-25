@@ -633,6 +633,19 @@ int main(int argc,char** argv){try{
         const auto& restored_stage=restored.RestoreStage(saved);
         Storage::DataBase::Instance().FinishPreload();
         if(restored_stage.spirv!=stage->spirv||!saved.IsEoS())throw std::runtime_error("Winding metadata mismatch");
+        if(restored_stage.info.stores.flags!=stage->info.stores.flags)
+            throw std::runtime_error("Winding metadata lost its output interface");
+        if(stage->auxiliary){
+            // Identical bytecode must not silently accept contradictory metadata,
+            // and out-of-range component bits must fail before cache insertion.
+            for(const u8 mask:std::array<u8,2>{u8(stage->info.stores.flags[0]^1),0x80}){
+                auto conflicting=*stage;conflicting.info.stores.flags[0]=mask;
+                Serialization::Archive bad;frontend.SerializeStage(bad,conflicting);
+                Serialization::Archive input{bad.TakeOff()};bool rejected=false;
+                try{restored.RestoreStage(input);}catch(const std::runtime_error&){rejected=true;}
+                if(!rejected)throw std::runtime_error("Auxiliary cache accepted an invalid output interface");
+            }
+        }
         if(gcn_geometry&&stage->info.hw_stage==Shader::HwStage::Geometry){
             if(restored_stage.runtime.hw.gs.vs_copy.data()||restored_stage.runtime.hw.gs.vs_copy.size()||
                restored_stage.specialization.runtime_info.hw.gs.vs_copy.data()||
@@ -642,6 +655,16 @@ int main(int argc,char** argv){try{
                 throw std::runtime_error("Geometry metadata retained a borrowed copy pointer or mutated its live source");
         }
         resources.push_back({&stage->info,stage->bindings_start});
+    }
+    if(!compile_shaders&&guest.stages[u32(Shader::SwStage::TessellationEval)]&&
+       guest.stages[u32(Shader::SwStage::TessellationEval)]->auxiliary){
+        const auto warmed=restored.BuildGraphics(regs);
+        for(const auto logical:std::array{Shader::SwStage::TessellationEval,Shader::SwStage::Geometry}){
+            const auto* before=guest.stages[u32(logical)];const auto* after=warmed.stages[u32(logical)];
+            if(bool(before)!=bool(after)||(before&&(before->spirv!=after->spirv||
+               before->info.stores.flags!=after->info.stores.flags)))
+                throw std::runtime_error("Auxiliary cache warmup changed polygon-point shader linkage");
+        }
     }
     Shader::Backend::DX12::SpirvConvertOptions options;options.native_storage_buffer_uavs=true;options.runtime_viewport_flips=true;
     if(compile_shaders){

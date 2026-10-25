@@ -11,7 +11,7 @@
 
 namespace NativeDX12 {
 namespace {
-constexpr u32 StageVersion=43,PipelineVersion=6;
+constexpr u32 StageVersion=44,PipelineVersion=6;
 std::string DigestName(std::span<const std::byte> data){
     const auto digest=CacheDigest::Of(data);std::string name;
     constexpr char hex[]="0123456789abcdef";
@@ -107,6 +107,9 @@ void GuestShaderFrontend::SerializeStage(Serialization::Archive& ar,const GuestS
     Serialization::Writer save(ar);save.Write(StageVersion);save.Write(stage.auxiliary);
     if(stage.auxiliary){
         save.Write(stage.info.sw_stage);
+        // Auxiliary TES exports are consumed when a polygon-point GS is built
+        // after cache warmup. SPIR-V alone does not restore that interface.
+        save.Write(stage.info.stores);
     }else{
         const auto& variants=programs_.at(Key{stage.info.pgm_hash,stage.info.hw_stage,stage.info.sw_stage});
         const auto found=std::ranges::find_if(variants,[&](const auto& value){return value.second.get()==&stage;});
@@ -133,6 +136,9 @@ GuestShaderStage& GuestShaderFrontend::RestoreStage(Serialization::Archive& ar){
     auto stage=std::make_unique<GuestShaderStage>();load.Read(stage->auxiliary);size_t index{};
     if(stage->auxiliary){
         load.Read(stage->info.sw_stage);
+        load.Read(stage->info.stores);
+        if(std::ranges::any_of(stage->info.stores.flags,[](u8 mask){return (mask&~0xf)!=0;}))
+            throw std::runtime_error("Invalid cached auxiliary output component mask");
         if(stage->info.sw_stage!=Shader::SwStage::TessellationControl&&stage->info.sw_stage!=Shader::SwStage::TessellationEval&&
            stage->info.sw_stage!=Shader::SwStage::Geometry)
             throw std::runtime_error("Invalid native auxiliary stage");
@@ -165,7 +171,13 @@ GuestShaderStage& GuestShaderFrontend::RestoreStage(Serialization::Archive& ar){
        binary_name!=DigestName(std::as_bytes(std::span(stage->spirv))))
         throw std::runtime_error("Missing or stale native shader binary");
     if(stage->auxiliary){
-        const auto found=auxiliary_.find(stage->spirv);if(found!=auxiliary_.end())return *found->second;
+        const auto found=auxiliary_.find(stage->spirv);
+        if(found!=auxiliary_.end()){
+            if(found->second->info.sw_stage!=stage->info.sw_stage||
+               found->second->info.stores.flags!=stage->info.stores.flags)
+                throw std::runtime_error("Conflicting cached auxiliary output interface");
+            return *found->second;
+        }
         stage->id=ReserveStageId();const auto words=stage->spirv;
         return *auxiliary_.emplace(words,std::move(stage)).first->second;
     }
