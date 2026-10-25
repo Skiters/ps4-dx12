@@ -281,7 +281,7 @@ void EmitContext::DefineBufferProperties() {
 }
 
 void EmitContext::DefineAmdPerVertexAttribs() {
-    if (!profile.supports_amd_shader_explicit_vertex_parameter) {
+    if (!profile.supports_amd_shader_explicit_vertex_parameter||runtime_info.hw.fs.native_polygon_undefined_inputs) {
         return;
     }
     for (s32 i = 0; i < runtime_info.hw.fs.num_inputs; i++) {
@@ -478,6 +478,7 @@ void EmitContext::DefineInputs() {
             }
             const IR::Attribute param = IR::Attribute::Param0 + i;
             const auto [primary, auxiliary] = info.fs_interpolation[i];
+            if(runtime_info.hw.fs.native_polygon_undefined_inputs&&primary==Qualifier::PerVertex)continue;
             if(runtime_info.hw.fs.native_point_input_liveness&&!info.loads.GetAny(param))continue;
             u32 num_components = runtime_info.hw.fs.native_point_input_liveness&&primary!=Qualifier::PerVertex?
                 std::bit_width(u32(info.loads.flags[Info::AttributeFlags::Index(param)])):info.loads.NumComponents(param);

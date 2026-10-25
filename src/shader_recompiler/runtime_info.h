@@ -263,6 +263,7 @@ struct HwFragmentRuntimeInfo {
     bool clip_distance_emulation{false};
     bool native_point_input_liveness{false};
     bool native_point_input_compaction{false};
+    bool native_polygon_undefined_inputs{false};
     bool native_point_capture{false};
     std::array<u8,32> native_point_input_locations{},native_point_input_masks{},
         native_point_input_offsets{},native_point_input_widths{};
@@ -278,6 +279,7 @@ struct HwFragmentRuntimeInfo {
                clip_distance_emulation == other.clip_distance_emulation &&
                native_point_input_liveness == other.native_point_input_liveness &&
                native_point_input_compaction == other.native_point_input_compaction &&
+               native_polygon_undefined_inputs == other.native_polygon_undefined_inputs &&
                native_point_capture == other.native_point_capture &&
                native_point_input_locations == other.native_point_input_locations &&
                native_point_input_masks == other.native_point_input_masks &&

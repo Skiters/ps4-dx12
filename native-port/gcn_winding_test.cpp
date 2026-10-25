@@ -5,6 +5,7 @@
 #include "video_core/renderer_d3d12/guest_image_readback.h"
 #include "video_core/renderer_d3d12/guest_viewports.h"
 #include "video_core/renderer_d3d12/guest_point_shader.h"
+#include "video_core/renderer_d3d12/guest_point_transport.h"
 #include "video_core/renderer_d3d12/guest_point_capture.h"
 #include "video_core/renderer_d3d12/guest_attachment_retirement.h"
 #include "video_core/renderer_d3d12/primitive_stream_arguments.h"
@@ -80,6 +81,60 @@ int main(int argc,char** argv){try{
     if(argc!=4&&!compile_shaders)throw std::invalid_argument("Expected converter, DXC, winding mode and optional compile-shaders");
     auto mode=std::string_view(argv[3]);
     const auto artifact_mode=std::string(mode);
+    if(mode=="polygon-undefined-inputs"){
+        if(!compile_shaders)throw std::invalid_argument("polygon-undefined-inputs requires explicit compile-shaders mode");
+        using namespace Shader::Backend::SPIRV;
+        using A=Shader::IR::Attribute;
+        Shader::Info fragment{},vertex{};
+        fragment.hw_stage=Shader::HwStage::Fragment;fragment.sw_stage=Shader::SwStage::Fragment;
+        fragment.loads.Set(A::Param0,0);fragment.loads.Set(A::Param1,0);
+        fragment.fs_interpolation[0].primary=Shader::Qualifier::PerVertex;
+        fragment.fs_interpolation[1].primary=Shader::Qualifier::Smooth;
+        vertex.stores.Set(A::Param0,0);vertex.stores.Set(A::Param1,0);
+        for(u32 lane=0;lane<4;++lane)fragment.stores.Set(A::RenderTarget0,lane);
+        Shader::RuntimeInfo runtime{};runtime.hw_stage=fragment.hw_stage;runtime.sw_stage=fragment.sw_stage;
+        auto& fs=runtime.hw.fs;fs.num_inputs=2;fs.inputs[0].param_index=0;fs.inputs[1].param_index=1;
+        fs.native_point_input_compaction=fs.native_point_input_liveness=fs.native_polygon_undefined_inputs=true;
+        fs.color_buffers[0].num_format=AmdGpu::NumberFormat::Float;
+        fs.color_buffers[0].data_format=AmdGpu::DataFormat::Format32_32_32_32;
+        const auto get=[&](u32 i){return fs.inputs[i];};
+        const auto transport=BuildNativePointTransport(fragment,2,get,true);
+        if(transport.masks[0]||transport.masks[1]!=1||transport.locations[1]||
+           NativePolygonPointLiveParameters(&fragment,fs)!=2)
+            throw std::runtime_error("Undefined polygon input consumed a real varying or removed a defined input");
+        if(BuildNativePointTransport(fragment,2,get).masks[0]!=15)
+            throw std::runtime_error("Ordinary point PerVertex semantics were changed");
+        fs.native_point_input_locations=transport.locations;fs.native_point_input_masks=transport.masks;
+        fs.native_point_input_offsets=transport.offsets;fs.native_point_input_widths=transport.widths;
+        auto ordinary=fs;ordinary.native_polygon_undefined_inputs=false;
+        if(fs==ordinary)throw std::runtime_error("Polygon input contract is missing from the specialization key");
+        Shader::Profile profile{};profile.supported_spirv=0x00010500;
+        Shader::Backend::Bindings bindings{};EmitContext ctx(profile,runtime,fragment,bindings);
+        const auto main=ctx.OpFunction(ctx.TypeVoid(),spv::FunctionControlMask::MaskNone,ctx.TypeFunction(ctx.TypeVoid()));
+        ctx.AddExecutionMode(main,spv::ExecutionMode::OriginUpperLeft);
+        ctx.AddEntryPoint(spv::ExecutionModel::Fragment,main,"main",ctx.interfaces);ctx.AddLabel(ctx.OpLabel());
+        EmitSetAttribute(ctx,A::RenderTarget0,EmitGetAttribute(ctx,A::Param0,0,2),0);
+        EmitSetAttribute(ctx,A::RenderTarget0,EmitGetAttribute(ctx,A::BaryCoordSmooth,0,0),1);
+        EmitSetAttribute(ctx,A::RenderTarget0,EmitGetAttribute(ctx,A::Param1,0,0),2);
+        EmitSetAttribute(ctx,A::RenderTarget0,ctx.ConstF32(1.f),3);
+        ctx.OpReturn();ctx.OpFunctionEnd();const auto ps=ctx.Assemble();
+        u32 undefined{},stores{};
+        for(size_t offset=5;offset<ps.size();){const auto length=ps[offset]>>16;
+            if(!length||offset+length>ps.size())throw std::runtime_error("Malformed undefined-input fragment module");
+            undefined+=(ps[offset]&65535)==u32(spv::Op::OpUndef);stores+=(ps[offset]&65535)==u32(spv::Op::OpStore);
+            offset+=length;
+        }
+        if(!undefined||stores!=4)throw std::runtime_error("Undefined-input lowering removed shader stores or manufactured constants");
+        const auto gs=EmitGuestPolygonPoints(vertex,&fragment,fs,{});
+        for(const auto& [words,stage]:std::array{std::pair{ps,Shader::Backend::DX12::SpirvStage::Pixel},
+            std::pair{gs,Shader::Backend::DX12::SpirvStage::Geometry}}){
+            Shader::Backend::DX12::SpirvConvertOptions options{};options.stage=stage;
+            const auto compiled=Shader::Backend::DX12::ConvertSpirv(std::filesystem::path(argv[1]).wstring(),words,options);
+            if(!compiled.success||!compiled.validated||compiled.bytecode.empty())
+                throw std::runtime_error("Polygon undefined-input signed DXIL validation failed: "+compiled.diagnostics);
+        }
+        std::puts("PASS polygon undefined inputs, defined transport, stores and signed DXIL; GPU NOT_RUN");return 0;
+    }
     if(mode=="tessellation-source-bounds"){
         Shader::Info info{};info.hw_stage=Shader::HwStage::Hull;info.sw_stage=Shader::SwStage::TessellationControl;
         Common::ObjectPool<Shader::IR::Inst> pool;

@@ -532,7 +532,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
     const auto input_count=fs.num_inputs-u32(fs.clip_distance_emulation);
     NativePointTransport transport;
     if(fragment&&fs.native_point_input_compaction)
-        transport=BuildNativePointTransport(*fragment,input_count,[&](u32 i){return fs.inputs[i];});
+        transport=BuildNativePointTransport(*fragment,input_count,[&](u32 i){return fs.inputs[i];},true);
     const auto polygon_outputs=NativePolygonPointOutputs(vertex,NativePolygonPointLiveParameters(fragment,fs));
     const auto add_varying=[&](u32 parameter,u32 location,u32 offset,u32 mask,Q qualifier,u32 output_width){
         const u32 width=vertex.stores.NumComponents(A::Param0+parameter);
@@ -563,8 +563,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
             for(u32 i=0;i<input_count;++i)if(fragment->loads.GetAny(A::Param0+i)&&!fs.inputs[i].IsDefault()&&
                 fs.inputs[i].param_index==group.source&&transport.locations[i]==group.location&&
                 transport.offsets[i]==group.component){qualifier=fragment->fs_interpolation[i].primary;break;}
-            if(qualifier==Q::PerVertex)
-                throw std::runtime_error("Polygon point fill needs per-vertex barycentric transport");
+            if(qualifier==Q::PerVertex)continue;
             if(!qualifier)throw std::logic_error("Polygon point transport lost its interpolation source");
             const auto interpolation=*qualifier==Q::Flat?Q::Flat:*qualifier==Q::NoPerspective?Q::NoPerspective:Q::Smooth;
             add_varying(group.source,group.location,group.component,group.mask,interpolation,
@@ -577,7 +576,7 @@ std::vector<u32> EmitGuestPolygonPoints(const Shader::Info& vertex,const Shader:
             if(!fragment->loads.GetAny(A::Param0+input)||fs.inputs[input].param_index!=parameter||
                 (fs.inputs[input].is_default&&!fs.inputs[input].is_flat))continue;
             const auto q=fs.inputs[input].is_flat?Q::Flat:fragment->fs_interpolation[input].primary;
-            if(q==Q::PerVertex)throw std::runtime_error("Polygon point fill needs per-vertex barycentric transport");
+            if(q==Q::PerVertex)continue;
             const auto interpolation=q==Q::Flat?Q::Flat:q==Q::NoPerspective?Q::NoPerspective:Q::Smooth;
             if(qualifier&&*qualifier!=interpolation)
                 throw std::runtime_error("Polygon point fill requires the compact fragment transport");

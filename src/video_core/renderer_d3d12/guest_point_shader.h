@@ -78,7 +78,8 @@ inline u32 NativePolygonPointLiveParameters(const Shader::Info* fragment,const S
     u32 mask{};
     for(u32 i=0;i<fs.num_inputs-u32(fs.clip_distance_emulation);++i){
         const auto& input=fs.inputs[i];
-        if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||input.IsDefault())continue;
+        if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||input.IsDefault()||
+           fragment->fs_interpolation[i].primary==Shader::Qualifier::PerVertex)continue;
         if(input.param_index>=32)throw std::invalid_argument("Invalid polygon fragment parameter");
         mask|=1u<<input.param_index;
     }

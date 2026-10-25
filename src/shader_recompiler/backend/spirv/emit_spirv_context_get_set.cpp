@@ -80,6 +80,15 @@ Id EmitReadConstBuffer(EmitContext& ctx, u32 handle, Id index) {
 }
 
 Id EmitGetAttribute(EmitContext& ctx, IR::Attribute attr, u32 comp, u32 index) {
+    // Vulkan Rasterization / Barycentric Interpolation: PerVertexKHR and
+    // barycentric inputs are undefined for polygon modes other than FILL.
+    // Preserve that contract explicitly; no guest operation/draw is omitted.
+    // Pull-model W remains reciprocal clip W, independent of barycentrics.
+    if(ctx.sw_stage==SwStage::Fragment&&ctx.runtime_info.hw.fs.native_polygon_undefined_inputs&&
+       ((IR::IsParam(attr)&&!ctx.runtime_info.hw.fs.inputs[u32(attr)-u32(IR::Attribute::Param0)].IsDefault()&&
+         ctx.info.fs_interpolation[u32(attr)-u32(IR::Attribute::Param0)].primary==Qualifier::PerVertex)||
+        (IR::IsBarycentricCoord(attr)&&(attr!=IR::Attribute::BaryCoordPullModel||comp!=2))))
+        return ctx.OpUndef(ctx.F32[1]);
     if (IR::IsParam(attr)) {
         const u32 param_index{u32(attr) - u32(IR::Attribute::Param0)};
         if(ctx.sw_stage==SwStage::Geometry&&ctx.runtime_info.hw.gs.native_point_capture_stream_input){

@@ -9,7 +9,7 @@ struct NativePointTransport {
     std::array<u8,32> locations{},masks{},offsets{},widths{};
 };
 template<class GetInput>
-NativePointTransport BuildNativePointTransport(const Shader::Info& fragment,u32 count,GetInput get_input){
+NativePointTransport BuildNativePointTransport(const Shader::Info& fragment,u32 count,GetInput get_input,bool polygon_points=false){
     if(count>32)throw std::runtime_error("Invalid native point fragment input count");
     NativePointTransport result;
     std::array<Shader::Qualifier,32> primary{},auxiliary{};
@@ -21,6 +21,7 @@ NativePointTransport BuildNativePointTransport(const Shader::Info& fragment,u32 
         if(control.IsDefault()||!fragment.loads.GetAny(attribute))continue;
         if(control.param_index>=32)throw std::runtime_error("Invalid native point parameter source");
         const auto interpolation=fragment.fs_interpolation[input];
+        if(polygon_points&&interpolation.primary==Shader::Qualifier::PerVertex)continue;
         const u8 mask=interpolation.primary==Shader::Qualifier::PerVertex?15:
             fragment.loads.flags[Shader::Info::AttributeFlags::Index(attribute)];
         u32 location=32;
@@ -60,7 +61,8 @@ NativePointTransport BuildNativePointTransport(const Shader::Info& fragment,u32 
     }
     for(u32 input=0;input<count;++input){
         const auto control=get_input(input);
-        if(!control.IsDefault()&&fragment.loads.GetAny(Shader::IR::Attribute::Param0+input)){
+        if(!control.IsDefault()&&fragment.loads.GetAny(Shader::IR::Attribute::Param0+input)&&
+           !(polygon_points&&fragment.fs_interpolation[input].primary==Shader::Qualifier::PerVertex)){
             const auto& output=result.outputs[groups[input]];
             result.locations[input]=output.location;result.masks[input]=output.mask;
             result.offsets[input]=output.component;result.widths[input]=occupied[output.location];

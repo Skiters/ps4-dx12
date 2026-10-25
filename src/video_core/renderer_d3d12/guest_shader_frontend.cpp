@@ -74,12 +74,14 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
         if(regs.num_interp>regs.ps_inputs.size())throw std::runtime_error("Invalid polygon fragment input count");
         if(fragment)for(u32 i=0;i<regs.num_interp;++i){
             const auto& input=regs.ps_inputs[i];
-            if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||(input.use_default&&!input.flat_shade))continue;
+            if(!fragment->loads.GetAny(Shader::IR::Attribute::Param0+i)||(input.use_default&&!input.flat_shade)||
+               fragment->fs_interpolation[i].primary==Shader::Qualifier::PerVertex)continue;
             if(input.input_offset>=32)throw std::runtime_error("Invalid polygon fragment parameter");
             runtime.hw.vs.native_polygon_point_live_parameters|=1u<<input.input_offset;
         }
     }
     if(logical==Shader::SwStage::Fragment){
+        runtime.hw.fs.native_polygon_undefined_inputs=GuestPolygonPointGeometryState(regs);
         ConfigureOrderedColorTargets(runtime, regs,profile_.native_alpha_blend_factor);
         runtime.hw.fs.native_point_input_compaction=GuestPolygonPointGeometryState(regs)||
             (regs.stage_enable.IsStageEnabled(u32(Shader::HwStage::Geometry))&&
@@ -160,7 +162,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
             }
             if(logical==Shader::SwStage::Fragment&&runtime.hw.fs.native_point_input_compaction){
                 const auto transport=BuildNativePointTransport(variant->info,regs.num_interp,
-                    [&](u32 input){return runtime.hw.fs.inputs[input];});
+                    [&](u32 input){return runtime.hw.fs.inputs[input];},runtime.hw.fs.native_polygon_undefined_inputs);
                 requested_runtime.hw.fs.native_point_input_locations=transport.locations;
                 requested_runtime.hw.fs.native_point_input_masks=transport.masks;
                 requested_runtime.hw.fs.native_point_input_offsets=transport.offsets;
@@ -208,7 +210,7 @@ GuestShaderStage& GuestShaderFrontend::Translate(const AmdGpu::Regs& regs,
     }
     if(logical==Shader::SwStage::Fragment&&mutable_runtime.hw.fs.native_point_input_compaction){
         const auto transport=BuildNativePointTransport(stage->info,regs.num_interp,
-            [&](u32 input){return mutable_runtime.hw.fs.inputs[input];});
+            [&](u32 input){return mutable_runtime.hw.fs.inputs[input];},mutable_runtime.hw.fs.native_polygon_undefined_inputs);
         mutable_runtime.hw.fs.native_point_input_locations=transport.locations;
         mutable_runtime.hw.fs.native_point_input_masks=transport.masks;
         mutable_runtime.hw.fs.native_point_input_offsets=transport.offsets;
