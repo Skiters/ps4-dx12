@@ -14,7 +14,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const Initialize& initialize,bool raw_domain=false,bool integer_view=false,bool shared_depth=false,
     bool independent_class=false,bool independent_depth=false,bool shared_clear=false,bool shared_ms=false,bool shared_sampled=false,
     bool retained_mips=false,bool grown_mips=false,bool shifted_mip=false,UINT converted_color=0,bool compressed_color=false,
-    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0){
+    UINT converted_samples=1,UINT buffer_writer=0,bool disjoint_mips=false,s32 shifted_depth=0,s32 shifted_color=0){
     if(converted_samples!=1&&((!converted_color&&!buffer_writer)||converted_samples!=4))
         throw std::invalid_argument("Feedback fixture requires one or four samples");
     alignas(256) std::array<u32,128> seed{},left{},right{},writer_vertex{};
@@ -69,7 +69,11 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     AmdGpu::Image image{};image.base_address=(base+16384)>>8;
     image.type=u64(AmdGpu::ImageType::Color2D);image.width=image.height=7;image.pitch=15;
     if(converted_samples>1){image.type=u64(AmdGpu::ImageType::Color2DMsaa);image.last_level=2;}
-    if(independent_class)image.pitch=31;
+    if(independent_class&&!shifted_color)image.pitch=31;
+    if(shifted_color){
+        if(!independent_class||shifted_color%256)throw std::invalid_argument("Shifted color fixture requires an aligned independent image");
+        image.base_address=u64(s64(base+16384)+shifted_color)>>8;
+    }
     // GCN registers carry bits: loading UINT and then v_mul_f32 must interpret
     // the original FLOAT attachment bits, not numerically convert the texel.
     image.data_format=shared_ms?14:4;image.num_format=integer_view?4:7;image.tiling_index=u32(AmdGpu::TileMode::Thin1DThin);
@@ -83,7 +87,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     if(independent_class){
         if(!raw_domain||!GuestTextureCache::SeparateColorSampledImages(target,layout,sampled,sampled_layout))
             throw std::runtime_error("Independent color fixture lost its different BlockDim class");
-        auto same=sampled;same.pitch=target.pitch;
+        auto same=sampled;same.pitch=target.pitch;same.address=target.address;
         if(GuestTextureCache::SeparateColorSampledImages(target,layout,same,LayoutGuestTexture(same)))
             throw std::runtime_error("Compatible feedback was misclassified as independent pool reuse");
     }else if(!converted_color&&!retained_mips&&!grown_mips&&!CompatibleGuestColorSampledMapping(target,layout,sampled,sampled_layout))
@@ -102,7 +106,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
     const float xy[3][2]{{-1,-1},{3,-1},{-1,3}};
     for(u32 i=0;i<3;++i){const float p[]{xy[i][0],xy[i][1],.5f,1.f};memcpy(memory+i*32,p,sizeof(p));}
     if(independent_class){const float source=.75f;
-        memcpy(memory+16384+GuestPixelOffset(sampled,sampled_layout,0,0,0,0),&source,4);}
+        memcpy(memory+(sampled.address-base)+GuestPixelOffset(sampled,sampled_layout,0,0,0,0),&source,4);}
     if(retained_mips||grown_mips){
         if(!raw_domain||sampled.levels!=2||sampled_layout.mips.size()!=2)
             throw std::runtime_error("Retained mip fixture requires two mips and independent B");
@@ -281,7 +285,7 @@ void RunColorFeedbackGcnFixture(ID3D12Device* device,GuestRasterizer& rasterizer
         // I_color now contains1, physical B still contains.75. The distinct
         // image class must sample B, so the next CB write is.375, never.5.
         draw(left,true);
-        cb.base_address=u32((base+61440)>>8);image.pitch=15;
+        cb.base_address=u32((base+61440)>>8);image.pitch=15;image.base_address=target.address>>8;
         const auto probe=DescribeGuestColorBuffer(cb,gpu.last_cb_extent[0]);
         const auto probe_layout=LayoutGuestTexture(probe);
         draw(left,true); // Return to the preserved CB class: .375*.5=.1875.

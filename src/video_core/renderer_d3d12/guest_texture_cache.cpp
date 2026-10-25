@@ -2214,10 +2214,16 @@ bool GuestTextureCache::SeparateColorSampledImages(const GuestTextureDesc& color
     // ResolveOverlap treats equal addresses with different BlockDim or total
     // bits/sample as pool reuse, before format/depth conversion. Physical byte
     // overlap alone must not publish the old attachment into the new image's B.
-    return color.render_target&&!color.writable&&!color.depth_target&&!color.stencil_address&&
-        !sampled.writable&&!sampled.render_target&&!sampled.depth_target&&!sampled.stencil_address&&
-        color.address==sampled.address&&color_layout.block_extent&&sampled_layout.block_extent&&
-        !MatchesReferenceOverlapClass(color,color_layout,sampled,sampled_layout);
+    if(!color.render_target||color.writable||color.depth_target||color.stencil_address||
+       sampled.writable||sampled.render_target||sampled.depth_target||sampled.stencil_address||
+       !color_layout.block_extent||!sampled_layout.block_extent)return false;
+    if(color.address==sampled.address)
+        return !MatchesReferenceOverlapClass(color,color_layout,sampled,sampled_layout);
+    // The existing upload path also keeps chance-overlapping images separate.
+    // Do not turn that into feedback (and CPU publication) during draw admission.
+    return color.address>sampled.address?
+        !HasPossibleReferenceSubresourceBase(color,color_layout,sampled,sampled_layout):
+        !HasPossibleReferenceSubresourceBase(sampled,sampled_layout,color,color_layout);
 }
 bool GuestTextureCache::CanTransferColorFeedback(const GuestTextureDesc& color,
     const GuestTextureLayout& color_layout,const GuestTextureDesc& sampled,const GuestTextureLayout& sampled_layout){
